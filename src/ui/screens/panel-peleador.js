@@ -4,6 +4,7 @@ import { bandera } from '../flags.js';
 import { mediaDe, recordTexto, CATEGORIAS } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia } from '../../core/stats.js';
+import { atributosConEntrenador } from '../../core/coach.js';
 
 // Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
 // (renderDashboard, que mezclaba esto con el botón "Continuar" y se
@@ -69,16 +70,22 @@ function bloqueCinturones(jugador) {
     jugador.titulos.map((t) => el('span', { class: 'chip dorado', text: `🏆 ${t}` })));
 }
 
-function filaAtributo(clave, valor, aporte) {
-  const delta = aporte?.[clave];
+// El número grande es la BASE sin entrenador; el badge dorado es lo que él
+// aporta aparte. `jugador.atributos[clave]` ya viene horneado con ese aporte
+// sumado (así pelea, rankea y hace ofertas — ver coach.js), así que mostrarlo
+// tal cual Y ADEMÁS el "+N" al lado duplicaba el aporte visualmente (bug de
+// la revisión del Bloque 5: un "64 +6" que el jugador leía como 70, cuando el
+// atributo real es 64). `atributosConEntrenador` devuelve `{base, aporte}`
+// por clave con la invariante `base + aporte === jugador.atributos[clave]`.
+function filaAtributo(clave, { base, aporte }) {
   return el('div', {
-    class: `panel-peleador-atributo${delta ? ' con-aporte' : ''}`,
+    class: `panel-peleador-atributo${aporte ? ' con-aporte' : ''}`,
     dataset: { atributo: clave },
   }, [
     el('span', { class: 'nombre sutil', text: ETIQUETAS[clave].larga }),
     el('span', {}, [
-      el('b', { class: 'valor', text: String(valor) }),
-      delta ? el('span', { class: 'aporte-entrenador', text: ` +${delta}` }) : null,
+      el('b', { class: 'valor', text: String(base) }),
+      aporte ? el('span', { class: 'aporte-entrenador', text: ` +${aporte}` }) : null,
     ]),
   ]);
 }
@@ -86,14 +93,14 @@ function filaAtributo(clave, valor, aporte) {
 function bloqueAtributos(jugador) {
   const disciplina = getDisciplina(jugador.disciplina);
   const claves = disciplina.usaGrappling ? [...BASE, 'grappling'] : BASE;
-  const entrenador = entrenadorDe(jugador);
+  const desglose = atributosConEntrenador(jugador);
   return el('div', { class: 'panel' }, [
     el('div', { class: 'fila', style: 'justify-content:space-between;align-items:center;margin-bottom:8px' }, [
       el('div', { class: 'etiqueta', text: 'Atributos' }),
       el('div', { class: 'etiqueta dorado', style: 'letter-spacing:0.5px', text: '◐ aporte del entrenador' }),
     ]),
     el('div', { class: 'panel-peleador-atributos' },
-      claves.map((c) => filaAtributo(c, jugador.atributos[c], entrenador.aporte))),
+      claves.map((c) => filaAtributo(c, desglose[c]))),
   ]);
 }
 

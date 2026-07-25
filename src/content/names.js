@@ -14,14 +14,17 @@ export const APODOS = [
   'La Bestia', 'El Cirujano', 'El Fantasma', 'Corazón de León',
 ];
 
-/** Las 6 nacionalidades de la v1, cada una con su bandera y su escuela de boxeo. */
+// Las 6 nacionalidades de la v1, cada una con su escuela de boxeo. La bandera
+// YA NO es un campo de dato acá (era un emoji 🇦🇷 muerto que nadie leía): en
+// Windows esos emojis se ven como "AR" (bug reportado dos veces), así que la
+// UI siempre dibuja la bandera en SVG con `bandera(codigo)` de `src/ui/flags.js`.
 export const NACIONALIDADES = [
-  { codigo: 'AR', nombre: 'Argentina', gentilicio: 'argentino', bandera: '🇦🇷', escuela: 'Aguante, corazón y mandíbula de granito.' },
-  { codigo: 'MX', nombre: 'México', gentilicio: 'mexicano', bandera: '🇲🇽', escuela: 'Al cuerpo y para adelante. Nunca un paso atrás.' },
-  { codigo: 'US', nombre: 'Estados Unidos', gentilicio: 'estadounidense', bandera: '🇺🇸', escuela: 'Velocidad, show y grandes escenarios.' },
-  { codigo: 'ES', nombre: 'España', gentilicio: 'español', bandera: '🇪🇸', escuela: 'Oficio, temple y una izquierda paciente.' },
-  { codigo: 'IT', nombre: 'Italia', gentilicio: 'italiano', bandera: '🇮🇹', escuela: 'Estilo, elegancia y una defensa de museo.' },
-  { codigo: 'JP', nombre: 'Japón', gentilicio: 'japonés', bandera: '🇯🇵', escuela: 'Disciplina absoluta y precisión de relojero.' },
+  { codigo: 'AR', nombre: 'Argentina', gentilicio: 'argentino', escuela: 'Aguante, corazón y mandíbula de granito.' },
+  { codigo: 'MX', nombre: 'México', gentilicio: 'mexicano', escuela: 'Al cuerpo y para adelante. Nunca un paso atrás.' },
+  { codigo: 'US', nombre: 'Estados Unidos', gentilicio: 'estadounidense', escuela: 'Velocidad, show y grandes escenarios.' },
+  { codigo: 'ES', nombre: 'España', gentilicio: 'español', escuela: 'Oficio, temple y una izquierda paciente.' },
+  { codigo: 'IT', nombre: 'Italia', gentilicio: 'italiano', escuela: 'Estilo, elegancia y una defensa de museo.' },
+  { codigo: 'JP', nombre: 'Japón', gentilicio: 'japonés', escuela: 'Disciplina absoluta y precisión de relojero.' },
 ];
 
 /** Nombres típicos por nacionalidad, para que los rivales suenen creíbles. */

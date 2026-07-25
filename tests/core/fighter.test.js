@@ -182,17 +182,22 @@ describe('nacionalidades', () => {
     expect(NACIONALIDADES.map((n) => n.codigo).sort()).toEqual(['AR', 'ES', 'IT', 'JP', 'MX', 'US']);
   });
 
-  it('cada una tiene bandera y escuela', () => {
+  it('cada una tiene escuela', () => {
     for (const n of NACIONALIDADES) {
-      expect(n.bandera.length).toBeGreaterThan(0);
       expect(n.escuela.length).toBeGreaterThan(0);
       expect(NOMBRES_POR_PAIS[n.codigo].nombres.length).toBeGreaterThan(0);
     }
   });
 
-  it('el campo bandera sigue siendo dato crudo por nacionalidad (la UI dibuja SVG aparte)', () => {
-    expect(NACIONALIDADES.find((n) => n.codigo === 'AR').bandera).toBeTruthy();
-    expect(NACIONALIDADES.find((n) => n.codigo === 'JP').bandera).toBeTruthy();
+  // Regresión (revisión Bloque 5): NACIONALIDADES ya no tiene un campo
+  // `bandera` con el emoji — era dato muerto que nadie leía (la UI dibuja la
+  // bandera en SVG con bandera(codigo) de src/ui/flags.js) y, si alguien lo
+  // volvía a usar sin darse cuenta, resucitaba el bug que el usuario reportó
+  // dos veces (🇦🇷 se ve como "AR" en Windows).
+  it('no tiene un campo bandera con emoji (dato muerto, ver src/ui/flags.js)', () => {
+    for (const n of NACIONALIDADES) {
+      expect(n.bandera).toBeUndefined();
+    }
   });
 });
 

@@ -50,6 +50,35 @@ describe('renderPanelPeleador', () => {
     expect(filaCardio.classList.contains('con-aporte')).toBe(false);
   });
 
+  // Regresión de la revisión del Bloque 5: el aporte del entrenador se
+  // hornea en `jugador.atributos` (crearPeleador) para que la pelea, el
+  // ranking y las ofertas lo usen de verdad. El panel mostraba ese valor YA
+  // horneado y encima le sumaba el badge "+N" al lado, duplicando el aporte
+  // a la vista ("64 +6" cuando el atributo real es 64, no 70). El número
+  // grande tiene que ser la BASE sin entrenador; el badge, lo que él aporta.
+  it('el numero base que se pinta NO incluye el aporte del entrenador (no lo duplica)', () => {
+    // partidaBase() usa estilo 'tecnico', que trae a El Profesor Aldana con
+    // aporte real {tecnica: 6, iq: 2} ya horneado en jugador.atributos.
+    const p = partidaBase();
+    const { jugador } = p;
+    expect(jugador.entrenador).toBeTruthy();
+    const aporteTecnica = jugador.entrenador.aporte.tecnica;
+    expect(aporteTecnica).toBeGreaterThan(0);
+
+    renderPanelPeleador(cont, { partida: p });
+
+    const filaTecnica = cont.querySelector('[data-atributo="tecnica"]');
+    const baseMostrada = Number(filaTecnica.querySelector('.valor').textContent);
+
+    // La base pintada NO es el atributo horneado (no está duplicando el
+    // aporte encima de un valor que ya lo incluye)...
+    expect(baseMostrada).not.toBe(jugador.atributos.tecnica);
+    // ...y base + aporte da EXACTAMENTE el atributo real que usa la pelea
+    // (la invariante documentada en atributosConEntrenador, coach.js).
+    expect(baseMostrada + aporteTecnica).toBe(jugador.atributos.tecnica);
+    expect(filaTecnica.textContent).toContain(`+${aporteTecnica}`);
+  });
+
   it('sin peleas todavia, el ranking dice "Sin clasificar"', () => {
     const p = partidaBase();
     renderPanelPeleador(cont, { partida: p });
