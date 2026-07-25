@@ -109,23 +109,32 @@ export function aplicarCarta(jugador, carta) {
   return { jugador: nuevo, deltas, texto: formatearMods(deltas).join(' · ') };
 }
 
+// `indice` es la posición de la rama ganadora DENTRO de `opcion.probabilidades`
+// (por referencia al objeto elegido, no por texto: dos ramas pueden compartir
+// `texto`, o no tenerlo, y siguen siendo distinguibles por índice). La UI lo
+// usa para el roll con suspenso (animarRoll) en vez de adivinar comparando
+// strings, que falla ~50% de las veces cuando el texto se repite.
 export function resolverProbabilidad(rng, opcion) {
   const entradas = opcion.probabilidades.map((p) => ({ valor: p, peso: p.peso }));
   const elegida = rng.weighted(entradas);
-  return { resultado: elegida.mods, texto: elegida.texto };
+  return { resultado: elegida.mods, texto: elegida.texto, indice: opcion.probabilidades.indexOf(elegida) };
 }
 
 // Convierte los pesos de `opcion.probabilidades` en enteros que suman
 // exactamente 100, en el mismo orden, para que la UI muestre el porcentaje
 // real de cada desenlace. Si el peso total no divide redondo, el resto se lo
-// lleva la entrada de mayor peso (la primera, en caso de empate).
+// lleva la entrada de mayor peso (la primera, en caso de empate). Si NINGUNA
+// rama tiene peso positivo (todas en 0, o negativas que se clampean a 0), no
+// hay proporción real que repartir: se reparte parejo entre todas para que
+// la suma siga dando 100 en vez de 0.
 export function porcentajesDe(opcion) {
   const probs = opcion?.probabilidades;
   if (!probs || probs.length === 0) return [];
 
-  const pesos = probs.map((p) => Math.max(0, p.peso));
-  const totalPeso = pesos.reduce((a, b) => a + b, 0);
-  if (totalPeso <= 0) return pesos.map(() => 0);
+  const pesosCrudos = probs.map((p) => Math.max(0, p.peso));
+  const totalCrudo = pesosCrudos.reduce((a, b) => a + b, 0);
+  const pesos = totalCrudo > 0 ? pesosCrudos : probs.map(() => 1);
+  const totalPeso = totalCrudo > 0 ? totalCrudo : pesos.length;
 
   const porcentajes = pesos.map((peso) => Math.floor((peso / totalPeso) * 100));
   const resto = 100 - porcentajes.reduce((a, b) => a + b, 0);

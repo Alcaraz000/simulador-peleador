@@ -226,6 +226,27 @@ describe('resolverProbabilidad', () => {
     const unica = { probabilidades: [{ peso: 1, mods: { forma: 5 }, texto: 'única' }] };
     expect(resolverProbabilidad(createRng(3), unica).resultado.forma).toBe(5);
   });
+
+  it('el indice devuelto identifica la rama ganadora por referencia, no por texto (aunque el texto se repita o falte)', () => {
+    const conTextosIguales = {
+      probabilidades: [
+        { peso: 1, mods: { forma: 3 } },
+        { peso: 1, mods: { forma: -3 } },
+      ],
+    };
+    let vistoIndice0 = false;
+    let vistoIndice1 = false;
+    for (let s = 1; s <= 200; s++) {
+      const { resultado, indice } = resolverProbabilidad(createRng(s), conTextosIguales);
+      // la rama que dice el indice tiene que ser exactamente (misma referencia)
+      // la que se aplicó, no una adivinada por texto.
+      expect(conTextosIguales.probabilidades[indice].mods).toBe(resultado);
+      if (indice === 0) vistoIndice0 = true;
+      if (indice === 1) vistoIndice1 = true;
+    }
+    expect(vistoIndice0).toBe(true);
+    expect(vistoIndice1).toBe(true);
+  });
 });
 
 describe('porcentajesDe', () => {
@@ -250,6 +271,16 @@ describe('porcentajesDe', () => {
     expect(pct[0]).toBe(34);
     expect(pct[1]).toBe(33);
     expect(pct[2]).toBe(33);
+  });
+
+  it('con todos los pesos en cero, reparte parejo y la suma sigue dando 100', () => {
+    const tresEnCero = { probabilidades: [{ peso: 0 }, { peso: 0 }, { peso: 0 }] };
+    const pct = porcentajesDe(tresEnCero);
+    expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+    expect(pct).toEqual([34, 33, 33]);
+
+    const dosEnCero = { probabilidades: [{ peso: 0 }, { peso: 0 }] };
+    expect(porcentajesDe(dosEnCero).reduce((a, b) => a + b, 0)).toBe(100);
   });
 
   it('siempre suma exactamente 100 para todas las opciones con probabilidades del catalogo de eventos', () => {
