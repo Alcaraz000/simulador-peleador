@@ -122,6 +122,40 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain('Cinturón regional');
   });
 
+  // Funciones que traía renderDashboard (v1) y que renderPanelPeleador no
+  // cubría todavía: Fama, el cara a cara contra el archirrival, y el
+  // gimnasio/forma (Task 6.1 — "no perder ninguna función del dashboard").
+  it('muestra la fama del jugador', () => {
+    const p = partidaBase();
+    p.jugador.fama = 37;
+    renderPanelPeleador(cont, { partida: p });
+    expect(cont.textContent).toContain('Fama');
+    expect(cont.textContent).toContain('37');
+  });
+
+  it('sin archirrival todavia, no muestra ningun "vs"', () => {
+    const p = partidaBase();
+    renderPanelPeleador(cont, { partida: p });
+    expect(cont.textContent).not.toContain('vs ');
+  });
+
+  it('con archirrival, muestra su apodo y el cara a cara', () => {
+    const p = partidaBase();
+    const rival = p.mundo.roster[0];
+    p.rivalidades = [{
+      rivalId: rival.id, heat: 80, h2h: { v: 2, d: 1, e: 0 }, esArchirrival: true, hitos: [],
+    }];
+    renderPanelPeleador(cont, { partida: p });
+    expect(cont.textContent).toContain(`vs ${rival.apodo}`);
+    expect(cont.textContent).toContain('2-1');
+  });
+
+  it('muestra el gimnasio y la forma actual', () => {
+    const p = partidaBase();
+    renderPanelPeleador(cont, { partida: p });
+    expect(cont.textContent).toContain(p.jugador.gimnasio);
+  });
+
   it('dispara los callbacks de ficha, tienda e historial', () => {
     const p = partidaBase();
     let ficha = 0; let tienda = 0; let historial = 0;

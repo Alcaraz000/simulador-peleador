@@ -3,8 +3,9 @@ import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
 import { mediaDe, recordTexto, CATEGORIAS } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
-import { ETIQUETAS, rangoDeMedia } from '../../core/stats.js';
+import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
+import { h2hTexto } from '../../core/rivalry.js';
 
 // Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
 // (renderDashboard, que mezclaba esto con el botón "Continuar" y se
@@ -58,6 +59,11 @@ function cuadroMedia(jugador) {
         el('div', {
           class: 'etiqueta',
           text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
+        }),
+        el('div', {
+          class: 'etiqueta',
+          style: 'margin-top:2px',
+          text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
         }),
       ]),
     ]),
@@ -163,6 +169,26 @@ function bloqueHistorial(jugador) {
   ]);
 }
 
+// Fama y el cara a cara contra el archirrival: los traía renderDashboard
+// (v1, `recursos`) y no tenían casa todavía en el tablero v2. El archirrival
+// recién existe cuando hay al menos dos cruces con el mismo rival (ver
+// elegirArchirrival, rivalry.js), así que puede no haber ninguno.
+function bloqueRecursos(jugador, partida) {
+  const archi = (partida.rivalidades ?? []).find((r) => r.esArchirrival);
+  const datosArchi = archi ? partida.mundo.roster.find((p) => p.id === archi.rivalId) : null;
+
+  return el('div', { class: 'panel fila', style: 'gap:14px' }, [
+    el('div', { style: 'flex:1' }, [
+      el('div', { class: 'etiqueta', text: 'Fama' }),
+      el('div', { style: 'font-weight:800', text: String(jugador.fama) }),
+    ]),
+    datosArchi ? el('div', { style: 'flex:1' }, [
+      el('div', { class: 'etiqueta rojo', text: `vs ${datosArchi.apodo}` }),
+      el('div', { style: 'font-weight:800', text: h2hTexto(archi) }),
+    ]) : null,
+  ]);
+}
+
 function bloqueDinero(jugador) {
   return el('div', { class: 'panel fila', style: 'align-items:center;gap:10px' }, [
     el('div', { style: 'flex:1' }, [
@@ -200,6 +226,7 @@ export function renderPanelPeleador(region, {
     bloqueAtributos(jugador),
     bloqueRincon(jugador),
     historial,
+    bloqueRecursos(jugador, partida),
     dinero,
   ]));
 }
