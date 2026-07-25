@@ -41,7 +41,12 @@ export function guardar(partida, storage = storagePorDefecto()) {
 
 export function cargar(storage = storagePorDefecto()) {
   if (!storage) return null;
-  const texto = storage.getItem(CLAVE_GUARDADO);
+  let texto;
+  try {
+    texto = storage.getItem(CLAVE_GUARDADO);
+  } catch {
+    return null;
+  }
   if (!texto) return null;
   try {
     return deserializar(texto);
@@ -62,5 +67,9 @@ export function borrar(storage = storagePorDefecto()) {
 
 export function haySlot(storage = storagePorDefecto()) {
   if (!storage) return false;
-  return storage.getItem(CLAVE_GUARDADO) !== null;
+  try {
+    return storage.getItem(CLAVE_GUARDADO) !== null;
+  } catch {
+    return false;
+  }
 }

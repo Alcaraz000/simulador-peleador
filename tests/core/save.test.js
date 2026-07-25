@@ -80,6 +80,11 @@ describe('guardar / cargar', () => {
     expect(guardar(partidaDePrueba(), null)).toBe(false);
     expect(cargar(null)).toBeNull();
   });
+
+  it('cargar devuelve null si getItem tira error', () => {
+    const roto = { getItem: () => { throw new Error('SecurityError'); }, removeItem: () => {} };
+    expect(cargar(roto)).toBeNull();
+  });
 });
 
 describe('haySlot y borrar', () => {
@@ -89,5 +94,10 @@ describe('haySlot y borrar', () => {
     expect(haySlot(storage)).toBe(true);
     borrar(storage);
     expect(haySlot(storage)).toBe(false);
+  });
+
+  it('haySlot devuelve false si getItem tira error', () => {
+    const roto = { getItem: () => { throw new Error('SecurityError'); }, removeItem: () => {} };
+    expect(haySlot(roto)).toBe(false);
   });
 });
