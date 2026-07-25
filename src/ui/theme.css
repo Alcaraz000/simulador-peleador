@@ -531,6 +531,67 @@ h2 { font-size: 17px; font-weight: 800; }
   transition: left 0.05s linear;
 }
 
+/* Popup genérico (Task 5.3/5.4): overlay centrado sobre TODO (tablero,
+   creación), nunca una pantalla propia. Se usa para el picker de
+   nacionalidad y para la tienda entera. */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 4, 4, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+  animation: aparecer 0.15s ease both;
+}
+
+.popup-panel {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--superficie-alta);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.popup-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popup-titulo {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* Botón de cerrar (X): mismo criterio que .boton-tienda — área clickeable de
+   sobra para que el ícono nunca se vea cortado ni quede difícil de tocar. */
+.popup-cerrar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  color: var(--texto-medio);
+  cursor: pointer;
+}
+
+.popup-cerrar:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+
+.popup-cuerpo { margin-top: 12px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
