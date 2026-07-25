@@ -31,6 +31,7 @@ function snapshotDe(peleador) {
     nombre: peleador.nombre,
     apodo: peleador.apodo,
     estilo: peleador.estilo,
+    nacionalidad: peleador.nacionalidad,
     atributos: { ...peleador.atributos },
     especiales: { ...peleador.especiales },
     estado: { ...peleador.estado },

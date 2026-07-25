@@ -63,6 +63,12 @@ describe('crearPelea', () => {
     expect(pelea.snapshot.jugador.nombre).toBe('Jugador');
     expect(pelea.snapshot.rival.nombre).toBe('Rival');
   });
+
+  it('el snapshot incluye la nacionalidad de ambos (para la bandera del marcador)', () => {
+    const pelea = armar();
+    expect(pelea.snapshot.jugador.nacionalidad).toBe('AR');
+    expect(pelea.snapshot.rival.nacionalidad).toBe('MX');
+  });
 });
 
 describe('simularRound', () => {

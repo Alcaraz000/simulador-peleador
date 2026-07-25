@@ -1,7 +1,7 @@
 import { createRng } from './core/rng.js';
 import { crearPartida, siguienteBeat } from './core/career.js';
 import { crearPelea } from './core/fight.js';
-import { avanzarPelea, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
+import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
 import { resolverOpcion } from './core/events.js';
 import { aplicarResultado, rechazarOferta } from './core/offers.js';
@@ -25,7 +25,7 @@ import { renderTienda } from './ui/screens/shop.js';
 import { renderCareo } from './ui/screens/presser.js';
 import { renderSparring } from './ui/screens/sparring.js';
 import { renderNegociacion } from './ui/screens/negotiation.js';
-import { renderOferta, renderPlan, renderPelea, renderRincon, renderGolpeDeGracia } from './ui/screens/fight.js';
+import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderNoticias } from './ui/screens/news.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
@@ -410,53 +410,46 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderPlan(contenedor, { oferta, onElegirPlan: (plan) => pelear(oferta, plan) });
   }
 
+  // La pelea es UNA sola pantalla que va avanzando (Task 4.3): renderPelea es
+  // idempotente (arma el marcador una sola vez y lo reusa), así que acá solo
+  // hace falta orquestar QUÉ momentos narrar en cada paso — nunca reemplazar
+  // la pantalla entera. `avanzar` simula el round siguiente y narra sus
+  // momentos; si ese round termina en rincón o golpe de gracia, el panel de
+  // acción se encarga de mostrarlo (adentro de la misma pantalla) una vez
+  // que la narración termina.
   function pelear(oferta, plan) {
     const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
     let pelea = crearPelea({
       jugador: partida.jugador, rival,
       disciplina: partida.jugador.disciplina, nivel: oferta.nivelPelea, plan, rng,
     });
-    const log = [];
 
-    const pintarPelea = () => renderPelea(contenedor, {
-      pelea, eventos: log,
-      onSiguienteRound: avanzar,
-      onFin: () => cerrarPelea(oferta, pelea),
-    });
+    function pintar(momentos) {
+      renderPelea(contenedor, {
+        pelea,
+        momentos,
+        ventanaMs: VENTANA_MS,
+        onSeguir: avanzar,
+        onInstruccion: (id) => {
+          pelea = aplicarInstruccionRincon(pelea, id);
+          avanzar();
+        },
+        onGolpe: (datos) => {
+          const paso = resolverGolpeDeGracia(pelea, datos);
+          pelea = paso.pelea;
+          pintar(paso.eventos);
+        },
+        onFin: () => cerrarPelea(oferta, pelea),
+      });
+    }
 
     function avanzar() {
       const paso = avanzarPelea(pelea);
       pelea = paso.pelea;
-      log.push(...paso.eventos);
-      if (pelea.pendiente === 'golpe') return pintarGolpe();
-      if (pelea.pendiente === 'rincon') return pintarRincon();
-      pintarPelea();
+      pintar(paso.eventos);
     }
 
-    function pintarRincon() {
-      renderRincon(contenedor, {
-        pelea,
-        onInstruccion: (id) => {
-          pelea = aplicarInstruccionRincon(pelea, id);
-          pintarPelea();
-        },
-      });
-    }
-
-    function pintarGolpe() {
-      const info = abrirGolpeDeGracia(pelea);
-      renderGolpeDeGracia(contenedor, {
-        pelea, info, ventanaMs: VENTANA_MS,
-        onGolpe: (datos) => {
-          const paso = resolverGolpeDeGracia(pelea, datos);
-          pelea = paso.pelea;
-          log.push(...paso.eventos);
-          pintarPelea();
-        },
-      });
-    }
-
-    pintarPelea();
+    avanzar();
   }
 
   function cerrarPelea(oferta, pelea) {

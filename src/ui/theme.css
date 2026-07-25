@@ -478,6 +478,24 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .pelea-ko { animation: sacudon 0.45s ease; }
 
+/* Pantalla de pelea unificada (Task 4.3): marcador fijo, crónica y panel de
+   acción viven en el mismo esqueleto, montado una sola vez. */
+.pantalla-pelea .panel + .panel { margin-top: 8px; }
+
+.marcador-cabecera { justify-content: space-between; align-items: center; }
+.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; flex: 0 1 auto; }
+.marcador-derecha { flex-direction: row-reverse; text-align: right; }
+.marcador-vs { flex: 0 0 auto; }
+
+.marcador-barras { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.marcador-stat-cab { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; color: var(--texto-medio); }
+.marcador-stat-cab .valor { font-size: 12px; color: var(--texto); margin-left: auto; }
+.marcador-stat .barra { height: 6px; }
+
+.marcador-jurados, .marcador-golpes { margin-top: 10px; }
+
+.cronica-pelea .log { max-height: 220px; overflow-y: auto; }
+
 /* Silueta del rival (golpe de gracia, Task 4.4): las zonas son botones SVG
    accesibles por teclado (tabindex+role=button ya vienen del propio <g>). */
 .silueta-rival { display: block; width: 100%; }
