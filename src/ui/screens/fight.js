@@ -1,7 +1,6 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { PLANES } from '../../core/fight.js';
-import { INSTRUCCIONES_RINCON, ZONAS_GOLPE, estadoRincon } from '../../core/fight-interactive.js';
-import { recordTexto } from '../../core/fighter.js';
+import { INSTRUCCIONES_RINCON, estadoRincon } from '../../core/fight-interactive.js';
 
 const ETIQUETA_RIESGO = { bajo: 'Riesgo bajo', medio: 'Riesgo medio', alto: 'Riesgo alto' };
 
@@ -25,7 +24,12 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
       ]),
       el('div', { class: 'chip', style: 'margin-top:10px', text: `En juego: ${oferta.enJuego}` }),
       oferta.esRevancha ? el('div', { class: 'chip rojo', text: 'Revancha' }) : null,
-      oferta.esObligatoria ? el('div', { class: 'chip dorado', text: 'Defensa obligatoria' }) : null,
+      oferta.esObligatoria
+        ? el('div', {
+          class: 'chip dorado',
+          text: `Defensa obligatoria · ${Math.min(jugador.defensas + 1, oferta.defensasObligatorias)} de ${oferta.defensasObligatorias}`,
+        })
+        : null,
     ]),
     el('button', { class: 'boton', 'data-accion': 'aceptar', text: 'Aceptar la pelea', onClick: onAceptar }),
     el('button', { class: 'boton secundario', 'data-accion': 'rechazar', text: 'Rechazar', onClick: onRechazar }),
@@ -46,12 +50,26 @@ export function renderPlan(contenedor, { oferta, onElegirPlan }) {
   ]));
 }
 
+// Modo automático de la pelea: en vez de tener que tocar "Siguiente round" a
+// mano en cada asalto, este botón dispara el mismo avance solo, cada 1400 ms.
+// Como cada round termina siempre en una decisión (el rincón o el golpe de
+// gracia), el intervalo se limpia apenas aparece esa pantalla — el jugador
+// sigue eligiendo la estrategia, solo se ahorra el toque de "confirmar".
+// Se guarda en una variable de módulo y se limpia en cada mount para que
+// nunca queden temporizadores vivos corriendo de fondo.
+let autoTimer = null;
+export function detenerAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+
 export function renderPelea(contenedor, { pelea, eventos, onSiguienteRound, onFin }) {
+  detenerAuto();
   const { jugador, rival } = pelea.snapshot;
   const log = el('div', { class: 'log' }, eventos.map((e) => el('p', {
     class: ['ko', 'sumision', 'caida'].includes(e.tipo) ? 'destacado' : '',
     text: e.texto,
   })));
+  const terminoPorNocaut = pelea.terminada && ['ko', 'tko'].includes(pelea.resultado?.metodo);
 
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: pelea.terminada ? 'Fin de la pelea' : `Round ${pelea.roundActual} de ${pelea.rounds}` }),
@@ -63,17 +81,27 @@ export function renderPelea(contenedor, { pelea, eventos, onSiguienteRound, onFi
       el('div', { class: 'barra verde-barra' }, [el('i', { style: `width:${pelea.aguante.jugador}%` })]),
       el('div', { class: 'etiqueta', style: 'margin-top:8px', text: `Tarjetas ${pelea.tarjetas.jugador}-${pelea.tarjetas.rival}` }),
     ]),
-    el('div', { class: 'panel' }, [log]),
+    el('div', { class: `panel${terminoPorNocaut ? ' pelea-ko' : ''}` }, [log]),
     pelea.terminada
       ? el('div', { class: 'panel' }, [el('p', { class: 'dorado', text: pelea.resultado.texto })])
       : null,
     pelea.terminada
       ? el('button', { class: 'boton', 'data-accion': 'fin', text: 'Ver consecuencias', onClick: onFin })
       : el('button', { class: 'boton', 'data-accion': 'round', text: 'Siguiente round', onClick: onSiguienteRound }),
+    pelea.terminada
+      ? null
+      : el('button', {
+        class: 'boton secundario', 'data-accion': 'auto', text: 'Avanzar solo',
+        onClick: () => {
+          detenerAuto();
+          autoTimer = setInterval(() => onSiguienteRound(), 1400);
+        },
+      }),
   ]));
 }
 
 export function renderRincon(contenedor, { pelea, onInstruccion }) {
+  detenerAuto();
   const estado = estadoRincon(pelea);
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: `Fin del round ${pelea.roundActual - 1} · el rincón` }),
@@ -110,6 +138,7 @@ export function renderRincon(contenedor, { pelea, onInstruccion }) {
 }
 
 export function renderGolpeDeGracia(contenedor, { pelea, info, onGolpe, ventanaMs = 3200 }) {
+  detenerAuto();
   let resuelto = false;
   const desde = Date.now();
 

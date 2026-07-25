@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPelea } from '../../src/core/fight.js';
 import { abrirGolpeDeGracia, ZONAS_GOLPE } from '../../src/core/fight-interactive.js';
-import { renderOferta, renderPlan, renderPelea, renderRincon, renderGolpeDeGracia } from '../../src/ui/screens/fight.js';
+import {
+  renderOferta, renderPlan, renderPelea, renderRincon, renderGolpeDeGracia, detenerAuto,
+} from '../../src/ui/screens/fight.js';
 
 const jugador = crearPeleador({
   nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
@@ -27,6 +29,10 @@ beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
   cont = document.getElementById('app');
 });
+afterEach(() => {
+  detenerAuto();
+  vi.useRealTimers();
+});
 
 describe('renderOferta', () => {
   it('muestra rival, bolsa, riesgo y que esta en juego', () => {
@@ -36,6 +42,14 @@ describe('renderOferta', () => {
     expect(cont.textContent).toContain('US$ 25K');
     expect(cont.textContent.toLowerCase()).toContain('alto');
     expect(cont.textContent).toContain('Título regional');
+  });
+
+  it('en una defensa obligatoria muestra el progreso de defensas exigidas', () => {
+    const defensa = {
+      ...oferta, esObligatoria: true, defensasObligatorias: 3, enJuego: 'Cinturón regional',
+    };
+    renderOferta(cont, { oferta: defensa, jugador: { ...jugador, defensas: 1 }, onAceptar: () => {}, onRechazar: () => {} });
+    expect(cont.textContent).toContain('2 de 3');
   });
 
   it('aceptar y rechazar disparan sus callbacks', () => {
@@ -92,6 +106,68 @@ describe('renderPelea', () => {
     expect(cont.textContent).toContain('gana por KO');
     expect(cont.querySelector('[data-accion="fin"]')).toBeTruthy();
     expect(cont.querySelector('[data-accion="round"]')).toBeNull();
+  });
+
+  it('si termino por nocaut, el panel del log tiene la clase de sacudon', () => {
+    const terminada = {
+      ...pelea(), terminada: true,
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 4, texto: 'El Relámpago gana por KO en el round 4.' },
+    };
+    renderPelea(cont, { pelea: terminada, eventos: [], onSiguienteRound: () => {}, onFin: () => {} });
+    expect(cont.querySelector('.pelea-ko')).toBeTruthy();
+  });
+
+  it('si termino por decision, el panel del log NO tiene la clase de sacudon', () => {
+    const terminada = {
+      ...pelea(), terminada: true,
+      resultado: { ganador: 'jugador', metodo: 'decision', round: 8, texto: 'El Relámpago gana por decisión.' },
+    };
+    renderPelea(cont, { pelea: terminada, eventos: [], onSiguienteRound: () => {}, onFin: () => {} });
+    expect(cont.querySelector('.pelea-ko')).toBeNull();
+  });
+
+  it('ofrece un boton de avance automatico mientras la pelea sigue', () => {
+    renderPelea(cont, { pelea: pelea(), eventos: [], onSiguienteRound: () => {}, onFin: () => {} });
+    expect(cont.querySelector('[data-accion="auto"]')).toBeTruthy();
+  });
+
+  it('la pelea terminada no ofrece el boton de avance automatico', () => {
+    const terminada = {
+      ...pelea(), terminada: true,
+      resultado: { ganador: 'jugador', metodo: 'decision', round: 8, texto: 'El Relámpago gana por decisión.' },
+    };
+    renderPelea(cont, { pelea: terminada, eventos: [], onSiguienteRound: () => {}, onFin: () => {} });
+    expect(cont.querySelector('[data-accion="auto"]')).toBeNull();
+  });
+
+  it('el modo automatico dispara onSiguienteRound solo despues de 1400ms', () => {
+    vi.useFakeTimers();
+    let avances = 0;
+    renderPelea(cont, { pelea: pelea(), eventos: [], onSiguienteRound: () => { avances += 1; }, onFin: () => {} });
+    cont.querySelector('[data-accion="auto"]').click();
+    expect(avances).toBe(0);
+    vi.advanceTimersByTime(1400);
+    expect(avances).toBe(1);
+  });
+
+  it('detenerAuto corta el temporizador y no dispara mas avances', () => {
+    vi.useFakeTimers();
+    let avances = 0;
+    renderPelea(cont, { pelea: pelea(), eventos: [], onSiguienteRound: () => { avances += 1; }, onFin: () => {} });
+    cont.querySelector('[data-accion="auto"]').click();
+    detenerAuto();
+    vi.advanceTimersByTime(5000);
+    expect(avances).toBe(0);
+  });
+
+  it('al pasar al rincon el modo automatico se corta (no queda un temporizador vivo)', () => {
+    vi.useFakeTimers();
+    let avances = 0;
+    renderPelea(cont, { pelea: pelea(), eventos: [], onSiguienteRound: () => { avances += 1; }, onFin: () => {} });
+    cont.querySelector('[data-accion="auto"]').click();
+    renderRincon(cont, { pelea: { ...pelea(), pendiente: 'rincon' }, onInstruccion: () => {} });
+    vi.advanceTimersByTime(5000);
+    expect(avances).toBe(0);
   });
 });
 

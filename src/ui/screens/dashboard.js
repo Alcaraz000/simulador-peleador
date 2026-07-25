@@ -1,6 +1,6 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
-import { mediaDe, recordTexto } from '../../core/fighter.js';
+import { mediaDe, recordTexto, CATEGORIAS } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, etiquetaEstado } from '../../core/stats.js';
 import { etapaActual } from '../../core/career.js';
@@ -8,6 +8,7 @@ import { h2hTexto } from '../../core/rivalry.js';
 import { banderaDe } from '../../content/names.js';
 
 const BASE = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
+const MANO_TEXTO = { derecha: 'Derecha', zurda: 'Zurda' };
 
 function tileAtributo(clave, valor, subio) {
   return el('div', { class: 'tile', 'data-atributo': clave }, [
@@ -41,7 +42,10 @@ export function renderDashboard(contenedor, { partida, onSiguiente, onTienda = (
       el('div', { style: 'flex:1' }, [
         el('div', { class: 'etiqueta', text: 'Media' }),
         el('h1', { text: `${banderaDe(jugador.nacionalidad)} "${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
-        el('div', { class: 'etiqueta', text: `${jugador.categoria} · ${jugador.mano} · ${disciplina.nombre}` }),
+        el('div', {
+          class: 'etiqueta',
+          text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${disciplina.nombre}`,
+        }),
       ]),
       el('div', { class: 'etiqueta', text: 'Ficha' }),
     ]),

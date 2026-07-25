@@ -1,4 +1,4 @@
-import { ETIQUETAS, aplicarModificadores, clamp, LIMITES_ESTADO } from './stats.js';
+import { ETIQUETAS, aplicarModificadores, LIMITES_ESTADO } from './stats.js';
 import { bonusCartas } from './money.js';
 import { CARTAS_MEJORA } from '../content/cards-improve.js';
 

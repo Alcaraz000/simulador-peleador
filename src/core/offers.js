@@ -49,8 +49,13 @@ export function cinturonActual(jugador) {
 // Con cinturón puesto y ranking suficiente para el próximo, la chance de que le
 // ofrezcan esa pelea (en vez de una defensa del cinturón actual). Tiene que ser
 // alta: un campeón rankeado 1-2 va detrás del título más grande, no se queda
-// defendiendo el chico hasta que se le acaba la carrera.
-const PROB_ASCENSO_PRIORITARIO = 0.95;
+// defendiendo el chico hasta que se le acaba la carrera. Pero no puede ser TAN
+// alta que "defender el cinturón" deje de sentirse presente en la carrera: en
+// 0.95 casi el 20% de las carreras jugadas de punta a punta no ofrecían ninguna
+// defensa obligatoria. Medido sobre 150 semillas (Task 25): en 0.8 sigue
+// cumpliendo el >=90% de "consigue los tres cinturones" jugando perfecto, y
+// baja el "cero defensas en toda la carrera" a ~8% jugando de forma realista.
+const PROB_ASCENSO_PRIORITARIO = 0.8;
 
 function decidirNivel({ jugador, etapa, forzarTitulo, rng }) {
   if (etapa === 'juvenil' || etapa === 'amateur') {
@@ -143,6 +148,10 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     esRevancha,
     cinturonId: cinturon ? cinturon.id : null,
     famaBase: nivel.famaBase + (cinturon ? cinturon.famaExtra : 0),
+    // Solo tiene sentido en una defensa: cuántas defensas exitosas hacen falta
+    // para consolidarse en ese cinturón (ver CINTURONES). Se usa para mostrarle
+    // al jugador su progreso ("defensa 2 de 3") antes de la pelea.
+    defensasObligatorias: nivel.id === 'defensa' ? cinturon.defensasObligatorias : null,
     textoGancho: gancho,
   };
 }
@@ -207,6 +216,7 @@ export function aplicarResultado(jugador, { oferta, resultado }) {
     rivalId: oferta.rivalId,
     rivalNombre: oferta.rivalNombre,
     rivalApodo: oferta.rivalApodo,
+    rivalMedia: oferta.rivalMedia,
     resultado: gano ? 'v' : empate ? 'e' : 'd',
     metodo: resultado.metodo,
     round: resultado.round,

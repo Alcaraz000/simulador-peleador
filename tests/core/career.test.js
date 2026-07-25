@@ -31,12 +31,16 @@ function jugarTodo(partida, limite = 400) {
 function jugarGanandoTodo(partida, limite = 400) {
   let actual = partida;
   let guardia = 0;
+  let defensas = 0;
+  let ofertas = 0;
   while (!actual.terminada && guardia < limite) {
     guardia += 1;
     const paso = siguienteBeat(actual);
     actual = paso.partida;
     if (paso.beat && paso.beat.tipo === 'oferta') {
+      ofertas += 1;
       const { oferta } = paso.beat.datos;
+      if (oferta.nivel === 'defensa') defensas += 1;
       const resultado = aplicarResultado(actual.jugador, {
         oferta,
         resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
@@ -44,7 +48,7 @@ function jugarGanandoTodo(partida, limite = 400) {
       actual = { ...actual, jugador: resultado.jugador };
     }
   }
-  return actual;
+  return { partida: actual, defensas, ofertas };
 }
 
 describe('etapas', () => {
@@ -135,13 +139,14 @@ describe('ritmo de la carrera', () => {
     expect(tipos.has('evento') || tipos.has('redes')).toBe(true);
   });
 
-  it('siempre hay una oferta antes de una pelea', () => {
-    const { beats } = jugarTodo(nuevaPartida(4));
-    beats.forEach((beat, i) => {
-      if (beat.tipo !== 'pelea') return;
-      const previos = beats.slice(0, i).map((b) => b.tipo);
-      expect(previos).toContain('oferta');
-    });
+  // En este juego no existe un beat de tipo "pelea": toda pelea nace de aceptar
+  // un beat de tipo "oferta" (ver main.js). Esto verifica esa invariante de punta
+  // a punta: el historial de peleas del jugador tiene exactamente una entrada por
+  // cada oferta jugada, ni una pelea fantasma de más ni de menos.
+  it('cada pelea del historial vino de una oferta jugada (no hay peleas fantasma)', () => {
+    const { partida, ofertas } = jugarGanandoTodo(nuevaPartida(4));
+    expect(ofertas).toBeGreaterThan(0);
+    expect(partida.jugador.historial.length).toBe(ofertas);
   });
 
   it('el jugador llega cerca de los 39 al final', () => {
@@ -213,7 +218,7 @@ describe('ofertas de pelea por carrera', () => {
 
 describe('progresión de cinturones', () => {
   it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
-    const partida = jugarGanandoTodo(nuevaPartida(1));
+    const { partida } = jugarGanandoTodo(nuevaPartida(1));
     expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
     CINTURONES.forEach((cinturon) => {
       expect(partida.jugador.titulos).toContain(cinturon.nombre);
@@ -229,9 +234,23 @@ describe('progresión de cinturones', () => {
     const total = 150;
     let conLosTres = 0;
     for (let semilla = 1; semilla <= total; semilla += 1) {
-      const partida = jugarGanandoTodo(nuevaPartida(semilla));
+      const { partida } = jugarGanandoTodo(nuevaPartida(semilla));
       if (partida.jugador.titulos.length === CINTURONES.length) conLosTres += 1;
     }
     expect(conLosTres / total).toBeGreaterThanOrEqual(0.9);
+  });
+
+  // Guarda del lado opuesto: si `PROB_ASCENSO_PRIORITARIO` se acerca demasiado a 1,
+  // "defender el cinturón" deja de sentirse presente (el jugador siempre escala
+  // apenas puede y nunca ve una defensa obligatoria). Task 25 midió que en 0.95
+  // casi 1 de cada 5 carreras no ofrecía ninguna defensa; este test pone un piso.
+  it('sobre muchas semillas, casi siempre aparece al menos una defensa obligatoria', () => {
+    const total = 150;
+    let sinDefensas = 0;
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      const { defensas } = jugarGanandoTodo(nuevaPartida(semilla));
+      if (defensas === 0) sinDefensas += 1;
+    }
+    expect(sinDefensas / total).toBeLessThanOrEqual(0.1);
   });
 });

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida, siguienteBeat } from '../../src/core/career.js';
-import { crearPelea, simularRound } from '../../src/core/fight.js';
+import { crearPelea } from '../../src/core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia } from '../../src/core/fight-interactive.js';
 import { aplicarCarta } from '../../src/core/cards.js';
 import { resolverOpcion } from '../../src/core/events.js';
@@ -16,6 +16,7 @@ function jugarCarrera(semilla) {
     nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 38, esJugador: true,
   });
+  const tecnicaInicial = jugador.atributos.tecnica;
   let partida = crearPartida({ jugador, semilla });
   const rng = createRng(semilla + 1000);
   let peleas = 0;
@@ -76,7 +77,7 @@ function jugarCarrera(semilla) {
     }
   }
 
-  return { partida, peleas };
+  return { partida, peleas, tecnicaInicial };
 }
 
 describe('carrera completa de punta a punta', () => {
@@ -95,8 +96,8 @@ describe('carrera completa de punta a punta', () => {
   });
 
   it('el peleador mejora respecto del arranque', () => {
-    const { partida } = jugarCarrera(5);
-    expect(partida.jugador.atributos.tecnica).toBeGreaterThan(20);
+    const { partida, tecnicaInicial } = jugarCarrera(5);
+    expect(partida.jugador.atributos.tecnica).toBeGreaterThan(tecnicaInicial);
     expect(partida.jugador.historial.length).toBeGreaterThan(5);
   });
 

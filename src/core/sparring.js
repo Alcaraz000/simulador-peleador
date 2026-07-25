@@ -14,7 +14,6 @@ export function crearSparring(rng, { jugador, objetivos = OBJETIVOS_POR_DEFECTO 
     aciertos: 0,
     tiempos: [],
     terminado: false,
-    atributoObjetivo: jugador.disciplina === 'mma' ? 'velocidad' : 'velocidad',
   };
 }
 

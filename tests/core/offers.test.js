@@ -151,6 +151,25 @@ describe('cinturones', () => {
     expect(defensas).toBeGreaterThan(8);
   });
 
+  it('una oferta de defensa lleva cuántas defensas exige ese cinturón', () => {
+    let vista = false;
+    for (let s = 1; s <= 30; s++) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador({ ranking: 6, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+      });
+      if (oferta.esObligatoria) {
+        vista = true;
+        expect(oferta.defensasObligatorias).toBe(CINTURONES.find((c) => c.id === 'regional').defensasObligatorias);
+      }
+    }
+    expect(vista).toBe(true);
+  });
+
+  it('una oferta que no es defensa no lleva defensasObligatorias', () => {
+    const oferta = generarOferta(createRng(2), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(oferta.defensasObligatorias).toBeNull();
+  });
+
   it('un campeon que ya califica para el siguiente cinturon prioriza escalar por sobre defender', () => {
     // ranking 2 con solo el regional puesto: nacional pide ranking <= 5, asi que
     // ya califica. Escalar tiene que ganarle a estancarse defendiendo el chico.

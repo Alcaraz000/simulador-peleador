@@ -71,6 +71,12 @@ describe('renderDashboard', () => {
     expect(cont.textContent.toUpperCase()).toContain('JUVENIL');
   });
 
+  it('muestra la categoria y la mano con texto legible, no el id crudo', () => {
+    renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
+    expect(cont.textContent).toContain('Peso pluma · Derecha · Boxeo');
+    expect(cont.textContent).not.toContain('pluma · derecha');
+  });
+
   it('muestra la bandera de la nacionalidad', () => {
     renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
     expect(cont.textContent).toContain('🇦🇷');

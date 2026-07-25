@@ -10,6 +10,9 @@ export const ETIQUETAS = {
   grappling: { corta: 'GRA', larga: 'Grappling' },
   disciplinaPersonal: { corta: 'DIS', larga: 'Disciplina' },
   menton: { corta: 'MEN', larga: 'Mentón' },
+  forma: { corta: 'FOR', larga: 'Forma' },
+  fatiga: { corta: 'FAT', larga: 'Fatiga' },
+  moral: { corta: 'MOR', larga: 'Moral' },
 };
 
 export const LIMITES_ATRIBUTO = { min: 1, max: 99 };

@@ -55,6 +55,17 @@ describe('renderLegado', () => {
     expect(nueva).toBe(true);
   });
 
+  it('ofrece ver las estadisticas de la carrera', () => {
+    const jugador = jugadorConCarrera();
+    const partida = { ...crearPartida({ jugador, semilla: 1 }), jugador };
+    let vistas = false;
+    renderLegado(cont, {
+      legado: calcularLegado(partida), jugador, onNuevaCarrera: () => {}, onVerEstadisticas: () => { vistas = true; },
+    });
+    cont.querySelector('[data-accion="estadisticas"]').click();
+    expect(vistas).toBe(true);
+  });
+
   it('muestra la bandera del peleador y el trofeo de sus titulos', () => {
     const jugador = jugadorConCarrera();
     const partida = { ...crearPartida({ jugador, semilla: 1 }), jugador };

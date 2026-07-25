@@ -4,7 +4,7 @@ import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods } from './core/cards.js';
 import { resolverOpcion } from './core/events.js';
-import { generarOferta, aplicarResultado, rechazarOferta } from './core/offers.js';
+import { aplicarResultado, rechazarOferta } from './core/offers.js';
 import { crearNegociacion, jugarMovida, resultadoNegociacion } from './core/negotiation.js';
 import { crearCareo, responderCareo, resultadoCareo } from './core/presser.js';
 import { registrarGolpe, resultadoSparring } from './core/sparring.js';
@@ -14,6 +14,7 @@ import { tirarLesion, aplicarLesion } from './core/injuries.js';
 import { calcularLegado } from './core/legacy.js';
 import { guardar, cargar, borrar } from './core/save.js';
 import { clamp } from './core/stats.js';
+import { estadisticasDeCarrera } from './core/stats-carrera.js';
 
 import { renderCreacion } from './ui/screens/create.js';
 import { renderDashboard } from './ui/screens/dashboard.js';
@@ -26,6 +27,7 @@ import { renderOferta, renderPlan, renderPelea, renderRincon, renderGolpeDeGraci
 import { renderNoticias } from './ui/screens/news.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
+import { renderEstadisticas } from './ui/screens/stats.js';
 
 export const VERSION = '0.1.0';
 
@@ -303,6 +305,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         partida = null;
         arrancar();
       },
+      onVerEstadisticas: () => renderEstadisticas(contenedor, {
+        estadisticas: estadisticasDeCarrera(partida),
+        onCerrar: finDeCarrera,
+      }),
     });
   }
 

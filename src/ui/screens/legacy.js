@@ -1,7 +1,7 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { banderaDe } from '../../content/names.js';
 
-export function renderLegado(contenedor, { legado, jugador, onNuevaCarrera }) {
+export function renderLegado(contenedor, { legado, jugador, onNuevaCarrera, onVerEstadisticas = () => {} }) {
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: 'Fin de la carrera' }),
     el('h1', { text: `${banderaDe(jugador.nacionalidad)} "${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
@@ -54,6 +54,10 @@ export function renderLegado(contenedor, { legado, jugador, onNuevaCarrera }) {
         el('div', { class: 'etiqueta', text: `${l.puntaje}/100` }),
       ]),
     ])),
+    el('button', {
+      class: 'boton secundario', 'data-accion': 'estadisticas',
+      text: 'Ver estadísticas', onClick: onVerEstadisticas,
+    }),
     el('button', { class: 'boton', 'data-accion': 'nueva', text: 'Nueva carrera', onClick: onNuevaCarrera }),
   ]));
 }

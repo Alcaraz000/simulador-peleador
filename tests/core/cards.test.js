@@ -45,6 +45,12 @@ describe('formatearMods', () => {
   it('lista varios en orden de aparicion', () => {
     expect(formatearMods({ cardio: 5, potencia: -3 })).toEqual(['+5 Cardio', '-3 Potencia']);
   });
+
+  it('usa nombre legible tambien para forma, fatiga y moral (no el id crudo)', () => {
+    expect(formatearMods({ forma: 6 })).toEqual(['+6 Forma']);
+    expect(formatearMods({ fatiga: -4 })).toEqual(['-4 Fatiga']);
+    expect(formatearMods({ moral: 10 })).toEqual(['+10 Moral']);
+  });
 });
 
 describe('repartirMejoras', () => {
