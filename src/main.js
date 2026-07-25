@@ -17,6 +17,7 @@ import { clamp } from './core/stats.js';
 import { estadisticasDeCarrera } from './core/stats-carrera.js';
 import { fmtDinero } from './ui/dom.js';
 
+import { renderLogin } from './ui/screens/login.js';
 import { renderCreacion } from './ui/screens/create.js';
 import { renderDashboard } from './ui/screens/dashboard.js';
 import { renderTarjeta, renderResultadoTarjeta } from './ui/screens/card.js';
@@ -345,7 +346,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     });
   }
 
-  arrancar();
+  renderLogin(contenedor, { onEntrar: arrancar, storage });
 }
 
 if (typeof document !== 'undefined' && document.getElementById('app')) {
