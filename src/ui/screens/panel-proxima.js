@@ -1,19 +1,12 @@
 import { el, mount } from '../dom.js';
 import { bandera } from '../flags.js';
-import { fechaDe, semanasHastaPelea } from '../../core/calendario.js';
-import { ANIO_INICIAL } from '../../core/world.js';
+import { semanasHastaPelea } from '../../core/calendario.js';
 
-// Parte de arriba de la columna derecha: el calendario (siempre visible,
-// haya o no pelea firmada) y la próxima pelea. El jugador tiene que saber
-// siempre en qué momento del año está y cuánto falta para pelear de nuevo.
-
-function bloqueCalendario(partida) {
-  const fecha = fechaDe(partida.semanaGlobal, ANIO_INICIAL);
-  return el('div', { class: 'panel' }, [
-    el('div', { class: 'etiqueta', text: 'Calendario' }),
-    el('div', { style: 'font-weight:800;margin-top:4px;font-size:13px', text: fecha.texto }),
-  ]);
-}
+// Columna derecha: la próxima pelea (o el estado vacío si todavía no hay
+// nada firmado). El calendario (mes/semana) se mudó al centro del tablero
+// (revisión de la Task 6.1: es información permanente del jugador, y acá en
+// celular esta columna entera se colapsa detrás de un botón — justo donde
+// más cuesta orientarse). Ver panel-calendario.js.
 
 function bloqueVacio() {
   return el('div', { class: 'panel' }, [
@@ -54,7 +47,6 @@ function bloquePelea(partida, onVerRival) {
 }
 
 export function renderPanelProxima(region, { partida, onVerRival = () => {} }) {
-  const contenido = [bloqueCalendario(partida)];
-  contenido.push(partida.proximaPelea ? bloquePelea(partida, onVerRival) : bloqueVacio());
+  const contenido = [partida.proximaPelea ? bloquePelea(partida, onVerRival) : bloqueVacio()];
   mount(region, el('div', { class: 'stack' }, contenido));
 }

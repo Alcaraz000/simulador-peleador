@@ -32,13 +32,6 @@ beforeEach(() => {
 });
 
 describe('renderPanelProxima', () => {
-  it('muestra el calendario (mes y semana) sin importar si hay pelea firmada', () => {
-    const p = partidaBase();
-    renderPanelProxima(cont, { partida: p });
-    expect(cont.textContent).toContain('2026');
-    expect(cont.textContent).toContain('Semana');
-  });
-
   it('sin pelea firmada, muestra el estado vacío', () => {
     const p = partidaBase();
     p.proximaPelea = null;
