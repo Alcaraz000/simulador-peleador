@@ -84,8 +84,16 @@ describe('simularRound', () => {
   });
 
   it('acumula fatiga', () => {
-    const { pelea } = simularRound(armar({ plan: 'frente' }));
-    expect(pelea.fatiga.jugador).toBeGreaterThan(0);
+    const inicial = armar({ plan: 'frente' });
+    const fatigaInicial = inicial.fatiga.jugador;
+    const { pelea } = simularRound(inicial);
+    expect(pelea.fatiga.jugador).toBeGreaterThan(fatigaInicial);
+  });
+
+  it('el plan frente gasta mas fatiga que aguantar', () => {
+    const { pelea: peleaFrente } = simularRound(armar({ plan: 'frente' }));
+    const { pelea: peleaAguantar } = simularRound(armar({ plan: 'aguantar' }));
+    expect(peleaFrente.fatiga.jugador).toBeGreaterThan(peleaAguantar.fatiga.jugador);
   });
 
   it('suma tarjetas a alguien cada round', () => {
