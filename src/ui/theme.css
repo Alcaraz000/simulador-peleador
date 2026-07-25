@@ -1,0 +1,240 @@
+:root {
+  --fondo: #0d0708;
+  --superficie: #140b0c;
+  --superficie-alta: #160c0d;
+  --borde: #241416;
+  --borde-fuerte: #3a1e20;
+  --rojo: #ef4444;
+  --dorado: #f2c14e;
+  --verde: #8fd694;
+  --texto: #f1e2e2;
+  --texto-medio: #b08a8a;
+  --texto-sutil: #8a6a6a;
+  --radio: 10px;
+  --ancho: 430px;
+  --fuente: 'Bahnschrift', 'Segoe UI', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--fondo);
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 15px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  max-width: var(--ancho);
+  margin: 0 auto;
+  padding: 16px 14px 48px;
+}
+
+h1, h2, h3, .etiqueta {
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin: 0;
+}
+
+h1 { font-size: 22px; font-weight: 800; }
+h2 { font-size: 17px; font-weight: 800; }
+
+.etiqueta {
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--texto-sutil);
+}
+
+.panel {
+  background: var(--superficie-alta);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 13px 14px;
+}
+
+.tile {
+  background: var(--superficie);
+  border-radius: 8px;
+  padding: 8px 4px;
+  text-align: center;
+  overflow-wrap: break-word;
+}
+
+.tile .valor { font-size: 16px; font-weight: 800; }
+.tile .nombre { font-size: 7.5px; letter-spacing: 1px; color: var(--texto-sutil); }
+
+.fila { display: flex; gap: 6px; }
+/* min-width:0 pisa el "auto" por defecto de los hijos flex: sin esto, una fila
+   de 4-5 tiles (p. ej. el panel de recursos con "US$ 1,2M" de bolsa) puede
+   forzar el ancho del contenido y desbordar horizontalmente en 390px en vez
+   de achicarse / cortar la palabra. */
+.fila > * { flex: 1; min-width: 0; }
+.stack > * + * { margin-top: 8px; }
+
+.media-num {
+  font-size: 52px;
+  font-weight: 800;
+  color: var(--rojo);
+  line-height: 0.9;
+  letter-spacing: -2px;
+}
+
+.delta-sube { color: var(--verde); font-size: 10px; }
+.delta-baja { color: var(--rojo); font-size: 10px; }
+.dorado { color: var(--dorado); }
+.verde { color: var(--verde); }
+.rojo { color: var(--rojo); }
+.sutil { color: var(--texto-sutil); }
+.medio { color: var(--texto-medio); }
+
+.boton {
+  display: block;
+  width: 100%;
+  background: var(--rojo);
+  color: #1a0505;
+  border: none;
+  border-radius: 9px;
+  padding: 13px;
+  font-family: var(--fuente);
+  font-weight: 800;
+  font-size: 14px;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.boton.secundario { background: #241012; color: var(--texto); }
+.boton.verde-cta { background: var(--verde); color: #0c1a0e; }
+.boton:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.carta {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  /* Vertical 13px (no 11px): con una sola línea de texto (inputs, selects,
+     opciones sin desc) esto llega a los ~44px de alto recomendados para
+     tocar cómodo en celular. */
+  padding: 13px 12px;
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.carta:hover, .carta:focus-visible { border-color: var(--borde-fuerte); }
+.carta:disabled { opacity: 0.45; cursor: not-allowed; }
+.carta:disabled:hover { border-color: var(--borde); }
+.carta .titulo { font-weight: 800; letter-spacing: 0.5px; }
+.carta .desc { font-size: 12px; color: var(--texto-medio); margin-top: 3px; }
+/* Más específicas que ".carta .desc" a propósito: sin esto, .verde/.rojo/.dorado
+   combinadas con "desc" (p. ej. el golpe de gracia o la tienda) pierden el
+   duelo de especificidad CSS y todo sale gris. */
+.carta .desc.verde { color: var(--verde); }
+.carta .desc.rojo { color: var(--rojo); }
+.carta .desc.dorado { color: var(--dorado); }
+.carta .mods { font-size: 11px; color: var(--verde); margin-top: 6px; }
+
+.barra { height: 8px; background: #241012; border-radius: 4px; overflow: hidden; }
+.barra > i { display: block; height: 100%; background: var(--rojo); }
+.barra.dorada > i { background: linear-gradient(90deg, var(--dorado), var(--rojo)); }
+.barra.verde-barra > i { background: var(--verde); }
+
+.chip {
+  display: inline-block;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  background: #241012;
+  color: var(--texto-medio);
+  padding: 3px 8px;
+  border-radius: 20px;
+}
+
+.log { font-size: 13px; line-height: 1.6; }
+.log > p { margin: 0 0 6px; }
+.log > p.destacado { color: var(--dorado); font-weight: 700; }
+
+.grilla-paos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  justify-items: center;
+}
+
+.pao {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--superficie-alta);
+  border: 2px solid var(--borde);
+  cursor: pointer;
+}
+
+.pao.activo {
+  background: radial-gradient(circle, var(--dorado), var(--rojo));
+  border-color: #ffd76b;
+  box-shadow: 0 0 24px rgba(242, 193, 78, 0.55);
+}
+
+@media (min-width: 720px) {
+  #app { max-width: 560px; }
+}
+
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes latido {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+@keyframes sacudon {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(5px); }
+  60%      { transform: translateX(-3px); }
+  80%      { transform: translateX(2px); }
+}
+
+@keyframes destello {
+  from { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
+  to   { box-shadow: 0 0 26px rgba(242, 193, 78, 0.65); }
+}
+
+#app > .stack > * { animation: aparecer 0.22s ease both; }
+#app > .stack > *:nth-child(2) { animation-delay: 0.03s; }
+#app > .stack > *:nth-child(3) { animation-delay: 0.06s; }
+#app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
+
+.carta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+.carta:active { transform: translateY(0) scale(0.99); }
+
+.boton { transition: transform 0.1s ease, filter 0.15s ease; }
+.boton:hover { filter: brightness(1.08); }
+.boton:active { transform: scale(0.98); }
+
+.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+
+.delta-sube { animation: latido 0.5s ease 2; display: inline-block; }
+.log > p { animation: aparecer 0.25s ease both; }
+.log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
+.pao.activo { animation: latido 0.6s ease infinite; }
+
+.pelea-ko { animation: sacudon 0.45s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

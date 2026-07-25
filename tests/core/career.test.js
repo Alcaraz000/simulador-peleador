@@ -1,0 +1,351 @@
+import { describe, it, expect } from 'vitest';
+import { crearPeleador } from '../../src/core/fighter.js';
+import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
+import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
+
+function nuevaPartida(semilla = 1) {
+  const jugador = crearPeleador({
+    nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+    estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+  });
+  return crearPartida({ jugador, semilla });
+}
+
+function jugarTodo(partida, limite = 400) {
+  let actual = partida;
+  const beats = [];
+  let guardia = 0;
+  while (!actual.terminada && guardia < limite) {
+    guardia += 1;
+    const paso = siguienteBeat(actual);
+    actual = paso.partida;
+    if (paso.beat) beats.push(paso.beat);
+  }
+  return { partida: actual, beats };
+}
+
+// Juega una carrera entera aceptando y ganando cada oferta de pelea que aparece
+// (sin correr el motor de pelea completo: aplica directamente un resultado ganador
+// vía aplicarResultado). Sirve para verificar que la progresión de cinturones
+// funciona de punta a punta cuando al jugador le va bien.
+function jugarGanandoTodo(partida, limite = 400) {
+  let actual = partida;
+  let guardia = 0;
+  let defensas = 0;
+  let ofertas = 0;
+  while (!actual.terminada && guardia < limite) {
+    guardia += 1;
+    const paso = siguienteBeat(actual);
+    actual = paso.partida;
+    if (paso.beat && paso.beat.tipo === 'oferta') {
+      ofertas += 1;
+      const { oferta } = paso.beat.datos;
+      if (oferta.nivel === 'defensa') defensas += 1;
+      const resultado = aplicarResultado(actual.jugador, {
+        oferta,
+        resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+      });
+      actual = { ...actual, jugador: resultado.jugador };
+    }
+  }
+  return { partida: actual, defensas, ofertas };
+}
+
+describe('etapas', () => {
+  it('define las cuatro etapas en orden', () => {
+    expect(ETAPAS.map((e) => e.id)).toEqual(['juvenil', 'amateur', 'profesional', 'veterano']);
+  });
+
+  it('suman veinte bloques', () => {
+    expect(ETAPAS.reduce((a, e) => a + e.bloques, 0)).toBe(20);
+  });
+
+  it('la carrera cubre de los 15 a los ~39', () => {
+    const finEstimado = ETAPAS.reduce((edad, e) => edad + e.bloques * e.aniosPorBloque, 15);
+    expect(finEstimado).toBeGreaterThanOrEqual(38);
+    expect(finEstimado).toBeLessThanOrEqual(41);
+  });
+
+  it('en juvenil se pelea menos que en profesional', () => {
+    const juvenil = ETAPAS.find((e) => e.id === 'juvenil');
+    const pro = ETAPAS.find((e) => e.id === 'profesional');
+    expect(juvenil.probPelea).toBeLessThan(pro.probPelea);
+  });
+});
+
+describe('crearPartida', () => {
+  it('arranca en el bloque 1 de la etapa juvenil', () => {
+    const p = nuevaPartida();
+    expect(p.etapaIndice).toBe(0);
+    expect(p.bloque).toBe(1);
+    expect(p.terminada).toBe(false);
+    expect(p.legado).toBeNull();
+    expect(p.version).toBe(1);
+  });
+
+  it('crea el mundo con la disciplina y categoria del jugador', () => {
+    const p = nuevaPartida();
+    expect(p.mundo.disciplina).toBe('boxeo');
+    expect(p.mundo.categoria).toBe('pluma');
+    expect(p.mundo.roster.length).toBeGreaterThan(5);
+  });
+
+  it('el jugador arranca con 15 anios y sin rivalidades', () => {
+    const p = nuevaPartida();
+    expect(p.jugador.edad).toBe(15);
+    expect(p.rivalidades).toEqual([]);
+  });
+
+  it('es determinista con la misma semilla', () => {
+    expect(nuevaPartida(9).mundo.roster.map((r) => r.nombre))
+      .toEqual(nuevaPartida(9).mundo.roster.map((r) => r.nombre));
+  });
+});
+
+describe('siguienteBeat', () => {
+  it('el primer beat de cada bloque es una mejora', () => {
+    const { beat } = siguienteBeat(nuevaPartida());
+    expect(beat.tipo).toBe('mejora');
+    expect(beat.datos.cartas.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('no muta la partida original', () => {
+    const p = nuevaPartida();
+    const antes = JSON.stringify(p);
+    siguienteBeat(p);
+    expect(JSON.stringify(p)).toBe(antes);
+  });
+
+  it('marca terminada al agotar los bloques', () => {
+    const { partida } = jugarTodo(nuevaPartida());
+    expect(partida.terminada).toBe(true);
+  });
+});
+
+describe('ritmo de la carrera', () => {
+  it('produce entre 30 y 60 beats', () => {
+    for (const semilla of [1, 2, 3, 4, 5]) {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      expect(beats.length).toBeGreaterThanOrEqual(30);
+      expect(beats.length).toBeLessThanOrEqual(60);
+    }
+  });
+
+  it('incluye peleas, mejoras y eventos', () => {
+    const { beats } = jugarTodo(nuevaPartida(3));
+    const tipos = new Set(beats.map((b) => b.tipo));
+    expect(tipos).toContain('mejora');
+    expect(tipos).toContain('oferta');
+    expect(tipos.has('evento') || tipos.has('redes')).toBe(true);
+  });
+
+  // En este juego no existe un beat de tipo "pelea": toda pelea nace de aceptar
+  // un beat de tipo "oferta" (ver main.js). Esto verifica esa invariante de punta
+  // a punta: el historial de peleas del jugador tiene exactamente una entrada por
+  // cada oferta jugada, ni una pelea fantasma de más ni de menos.
+  it('cada pelea del historial vino de una oferta jugada (no hay peleas fantasma)', () => {
+    const { partida, ofertas } = jugarGanandoTodo(nuevaPartida(4));
+    expect(ofertas).toBeGreaterThan(0);
+    expect(partida.jugador.historial.length).toBe(ofertas);
+  });
+
+  it('el jugador llega cerca de los 39 al final', () => {
+    const { partida } = jugarTodo(nuevaPartida(6));
+    expect(partida.jugador.edad).toBeGreaterThanOrEqual(36);
+    expect(partida.jugador.edad).toBeLessThanOrEqual(42);
+  });
+});
+
+describe('etapaActual', () => {
+  it('empieza en juvenil y termina en veterano', () => {
+    const p = nuevaPartida();
+    expect(etapaActual(p).id).toBe('juvenil');
+    const { partida } = jugarTodo(p);
+    expect(['profesional', 'veterano']).toContain(etapaActual(partida).id);
+  });
+});
+
+describe('avanzarBloque', () => {
+  it('envejece al jugador y avanza el anio del mundo', () => {
+    const p = nuevaPartida();
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBeGreaterThan(p.jugador.edad);
+    expect(despues.mundo.anio).toBeGreaterThan(p.mundo.anio);
+  });
+
+  it('genera noticias del mundo', () => {
+    const despues = avanzarBloque(nuevaPartida());
+    expect(despues.noticias.length).toBeGreaterThan(0);
+  });
+
+  it('recupera lesiones con el paso de los bloques', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' };
+    expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
+  });
+
+  it('no muta la partida original', () => {
+    const p = nuevaPartida();
+    const antes = JSON.stringify(p);
+    avanzarBloque(p);
+    expect(JSON.stringify(p)).toBe(antes);
+  });
+
+  it('a partir de los 32 años el jugador empieza a perder velocidad y cardio', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1; // amateur: 1 año por bloque, asi el numero da redondo
+    p.jugador.edad = 31;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(32);
+    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+    expect(despues.jugador.atributos.cardio).toBeLessThan(cardioAntes);
+  });
+
+  it('antes del umbral de declive no pierde velocidad ni cardio', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 20;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+    expect(despues.jugador.atributos.cardio).toBe(cardioAntes);
+  });
+
+  it('con preparador contratado, el declive todavia no llegó a los 32', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 31;
+    p.jugador.staff = ['preparador'];
+    const velAntes = p.jugador.atributos.velocidad;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(32);
+    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+  });
+
+  it('con preparador contratado, el declive igual llega mas tarde en la carrera', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 34;
+    p.jugador.staff = ['preparador'];
+    const velAntes = p.jugador.atributos.velocidad;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+  });
+
+  it('mientras el jugador tiene el cinturon mundial puesto, el mundo no le anuncia un nuevo campeon', () => {
+    const p = nuevaPartida();
+    p.jugador.titulos = ['Cinturón mundial'];
+    p.mundo.campeonId = p.mundo.roster[0].id;
+    p.mundo.roster[0].edad = 41; // fuerza lo que seria una "vacante" si nadie lo protegiera
+    const despues = avanzarBloque(p);
+    expect(despues.noticias.some((n) => n.titular.includes('cinturón vacante'))).toBe(false);
+    expect(despues.noticias.some((n) => n.titular.includes('es el nuevo campeón'))).toBe(false);
+  });
+
+  it('sin el cinturon mundial, el mundo puede anunciar un nuevo campeon con normalidad', () => {
+    const p = nuevaPartida();
+    p.mundo.campeonId = p.mundo.roster[0].id;
+    p.mundo.roster[0].edad = 41;
+    const despues = avanzarBloque(p);
+    expect(despues.noticias.some((n) => n.titular.includes('cinturón vacante'))).toBe(true);
+  });
+});
+
+describe('ofertas de pelea bloqueadas por lesion', () => {
+  it('si esta lesionado grave y le tocaba pelea, avisa en vez de quedarse callado', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
+    p.jugador.estado.lesion = {
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 4, costo: 60000, texto: 'x',
+    };
+    let actual = p;
+    const tipos = [];
+    for (let i = 0; i < 12; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat) tipos.push(paso.beat.tipo);
+    }
+    expect(tipos).not.toContain('oferta');
+    expect(tipos).toContain('lesionSinOferta');
+  });
+
+  it('sin lesion grave, esa misma situacion ofrece pelea con normalidad', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2;
+    let actual = p;
+    const tipos = [];
+    for (let i = 0; i < 12; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat) tipos.push(paso.beat.tipo);
+    }
+    expect(tipos).toContain('oferta');
+    expect(tipos).not.toContain('lesionSinOferta');
+  });
+});
+
+describe('ofertas de pelea por carrera', () => {
+  // Guarda de ritmo para el eje de cinturones: si alguien vuelve a bajar probPelea
+  // (o a hacer incondicional el beat de noticias) sin medir el impacto, estos tests
+  // lo detectan. Ver el informe de la Task 17 para el porqué de estos números.
+  const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  it('nunca caen por debajo de 8 ofertas en toda la carrera', () => {
+    semillas.forEach((semilla) => {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
+      expect(ofertas).toBeGreaterThanOrEqual(8);
+    });
+  });
+
+  it('tipicamente caen entre 12 y 22 ofertas por carrera', () => {
+    semillas.forEach((semilla) => {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
+      expect(ofertas).toBeGreaterThanOrEqual(12);
+      expect(ofertas).toBeLessThanOrEqual(22);
+    });
+  });
+});
+
+describe('progresión de cinturones', () => {
+  it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
+    const { partida } = jugarGanandoTodo(nuevaPartida(1));
+    expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
+    CINTURONES.forEach((cinturon) => {
+      expect(partida.jugador.titulos).toContain(cinturon.nombre);
+    });
+  });
+
+  // No basta con una semilla favorable: esto garantiza que el eje de cinturones
+  // funciona de punta a punta para la gran mayoría de las carreras, no solo para
+  // una elegida a mano. Si `decidirNivel` (offers.js) vuelve a priorizar la defensa
+  // del cinturón actual por sobre escalar al siguiente cuando el ranking ya
+  // califica, este test lo detecta.
+  it('sobre muchas semillas, al menos el 90% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
+    const total = 150;
+    let conLosTres = 0;
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      const { partida } = jugarGanandoTodo(nuevaPartida(semilla));
+      if (partida.jugador.titulos.length === CINTURONES.length) conLosTres += 1;
+    }
+    expect(conLosTres / total).toBeGreaterThanOrEqual(0.9);
+  });
+
+  // Guarda del lado opuesto: si `PROB_ASCENSO_PRIORITARIO` se acerca demasiado a 1,
+  // "defender el cinturón" deja de sentirse presente (el jugador siempre escala
+  // apenas puede y nunca ve una defensa obligatoria). Task 25 midió que en 0.95
+  // casi 1 de cada 5 carreras no ofrecía ninguna defensa; este test pone un piso.
+  it('sobre muchas semillas, casi siempre aparece al menos una defensa obligatoria', () => {
+    const total = 150;
+    let sinDefensas = 0;
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      const { defensas } = jugarGanandoTodo(nuevaPartida(semilla));
+      if (defensas === 0) sinDefensas += 1;
+    }
+    expect(sinDefensas / total).toBeLessThanOrEqual(0.1);
+  });
+});
