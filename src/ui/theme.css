@@ -283,6 +283,17 @@ h2 { font-size: 17px; font-weight: 800; }
   #app { max-width: 560px; }
 }
 
+/* Panel de decisión (v2): vive en la región central del shell. La grilla es
+   siempre de 3, igual que .grilla-paos — se achica pero no se apila, así el
+   jugador compara las tres opciones de un vistazo aun en celular. */
+.panel-decision-grilla {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.panel-decision-desenlace .boton { margin-top: 4px; }
+
 /* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
    (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
    pelea + noticias) queda colapsada detrás de un botón en celular. */
