@@ -47,6 +47,43 @@ describe('serializar / deserializar', () => {
     const texto = JSON.stringify({ ...partidaDePrueba(), version: 99 });
     expect(() => deserializar(texto)).toThrow(/versi[oó]n/i);
   });
+
+  // VERSION_ESQUEMA no cambió entre v1 y v2 (mismo valor: 1), así que una
+  // partida v1 guardada de verdad pasaría el chequeo de arriba. Le faltan
+  // campos que el resto del juego v2 asume que existen (semanaGlobal en la
+  // partida; apellido y entrenador en el jugador) — sin este chequeo, cargarla
+  // no tira acá, pero rompe más adelante (calendario.js, panel-peleador.js,
+  // coach.js) con una pantalla en blanco o una excepción a mitad de partida.
+  // La forma de acá abajo es la de una partida v1 GUARDADA DE VERDAD (no un
+  // recorte del fixture v2): a los campos simplemente nunca les llegó a
+  // existir la key, no es que valgan null.
+  it('rechaza una partida v1 real (sin semanaGlobal, sin apellido, sin entrenador)', () => {
+    const partidaV1 = {
+      version: VERSION_ESQUEMA,
+      semilla: 1,
+      rngEstado: { s0: 1, s1: 2, s2: 3, s3: 4 },
+      jugador: {
+        nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR',
+        disciplina: 'boxeo', estilo: 'tecnico', categoria: 'pluma',
+      },
+      mundo: { roster: [], anio: 2024 },
+      rivalidades: [], noticias: [], etapaIndice: 0, bloque: 1, bloqueGlobal: 1,
+      cola: [], beatActual: null, historialBeats: 0, terminada: false, legado: null,
+    };
+    expect(() => deserializar(JSON.stringify(partidaV1))).toThrow(/esquema/i);
+  });
+
+  // El fixture v2 de este archivo (partidaDePrueba, usado en TODO este
+  // proyecto) no pasa `apellido` a crearPeleador a propósito: en v2 esa key
+  // SIEMPRE existe (crearPeleador la fija en `null` si no viene), y el
+  // chequeo de esquema tiene que aceptar eso — el punto no es que el
+  // apellido tenga contenido, sino que la FORMA sea la de v2, no la de v1.
+  it('acepta una partida v2 real (con semanaGlobal, apellido -aunque sea null- y entrenador)', () => {
+    const partida = partidaDePrueba();
+    expect(partida.jugador.apellido).toBeNull();
+    const texto = serializar(partida);
+    expect(() => deserializar(texto)).not.toThrow();
+  });
 });
 
 describe('guardar / cargar', () => {

@@ -13,6 +13,26 @@ export function serializar(partida) {
   return JSON.stringify({ ...partida, version: VERSION_ESQUEMA });
 }
 
+// VERSION_ESQUEMA no cambió entre la v1 (publicada) y la v2 (en desarrollo):
+// una partida v1 guardada de verdad PASA el chequeo de `version` de arriba
+// tal cual. Le faltan campos que el resto del juego v2 da por sentado que
+// existen (`semanaGlobal` en la partida — calendario.js; `apellido` y
+// `entrenador` en el jugador — panel-peleador.js/coach.js), y sin este
+// chequeo cargarla no explota ACÁ sino más adelante, a mitad de partida, con
+// una pantalla en blanco o una excepción. Se valida por PRESENCIA de la key,
+// no por su contenido: `apellido` en v2 puede legítimamente valer `null`
+// (crearPeleador la fija así si no se pasó un apellido), así que el punto no
+// es "tiene apellido cargado", es "tiene la FORMA de v2".
+function tieneEsquemaV2(datos) {
+  const jugador = datos.jugador;
+  return (
+    typeof datos.semanaGlobal === 'number'
+    && jugador !== null && typeof jugador === 'object'
+    && Object.prototype.hasOwnProperty.call(jugador, 'apellido')
+    && jugador.entrenador !== null && typeof jugador.entrenador === 'object'
+  );
+}
+
 export function deserializar(texto) {
   let datos;
   try {
@@ -25,6 +45,9 @@ export function deserializar(texto) {
   }
   if (datos.version !== VERSION_ESQUEMA) {
     throw new Error(`Versión de guardado incompatible: ${datos.version}`);
+  }
+  if (!tieneEsquemaV2(datos)) {
+    throw new Error('Partida guardada de un esquema anterior (v1): hace falta empezar una carrera nueva.');
   }
   return datos;
 }
