@@ -120,12 +120,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
   const persistir = () => { if (partida) guardar(partida, storage); };
 
-  function irADashboard() {
-    persistir();
+  function pintarDashboard() {
     renderDashboard(contenedor, {
       partida,
       onSiguiente: siguiente,
-      onTienda: () => abrirTienda(),
+      onTienda: () => abrirTienda(irADashboard, pintarDashboard),
       onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
       onCurar: () => {
         const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
@@ -133,6 +132,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         irADashboard();
       },
     });
+  }
+
+  function irADashboard() {
+    persistir();
+    pintarDashboard();
   }
 
   // `volver` es adónde ir al cerrar: por defecto al tablero v1. Los beats que
@@ -146,13 +150,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // La tienda se abre como POPUP desde el tablero (decisión #1 del brief),
   // nunca reemplazando la pantalla: `renderTienda` maneja su propio overlay
   // (abrirPopup) y se refresca en el lugar en cada compra vía el valor que
-  // devuelve `onComprar`, así que acá alcanza con un solo llamado.
-  function abrirTienda(volver = irADashboard) {
+  // devuelve `onComprar`. Eso alcanza para el CONTENIDO del popup, pero el
+  // tablero que queda VISIBLE DETRÁS (el panel izquierdo del shell, o la
+  // pantalla del dashboard v1) también tiene que reflejar la plata gastada
+  // en el momento — "el tablero nunca desaparece" y "los cambios se ven
+  // ocurrir" valen también con el popup abierto, no solo cuando se cierra.
+  // `refrescarTablero` es justo eso: lo que hay que repintar DETRÁS del
+  // popup en cada compra; cada llamador decide qué es "detrás" (el panel
+  // izquierdo del shell, o el dashboard entero si no hay shell).
+  function abrirTienda(volver = irADashboard, refrescarTablero = () => {}) {
     renderTienda({
       jugador: partida.jugador,
       onComprar: (id) => {
         const paso = comprar(partida.jugador, id);
-        if (paso.ok) partida = { ...partida, jugador: paso.jugador };
+        if (paso.ok) {
+          partida = { ...partida, jugador: paso.jugador };
+          refrescarTablero();
+        }
         return partida.jugador;
       },
       onCerrar: volver,
@@ -160,12 +174,18 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   // Arma los props de la columna izquierda del shell. `volver` es lo que se
-  // hace al cerrar la ficha/tienda abiertas desde acá.
-  function propsPanelIzquierda(volver) {
+  // hace al cerrar la ficha/tienda abiertas desde acá. `shell` es el shell
+  // YA MONTADO al que pertenece esta columna: onTienda lo necesita para
+  // poder refrescar SOLO `shell.regiones.izquierda` en cada compra, sin
+  // tocar el centro ni la derecha (la garantía del shell) ni el popup, que
+  // vive aparte, montado directo sobre document.body.
+  function propsPanelIzquierda(shell, volver) {
     return {
       partida,
       onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion, volver),
-      onTienda: () => abrirTienda(volver),
+      onTienda: () => abrirTienda(volver, () => {
+        renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, volver));
+      }),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial', volver),
     };
   }
@@ -175,7 +195,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // pintar ahí con `shell.montarCentro` / renderPanelDecision / renderSparring.
   function montarTablero(volver) {
     const shell = crearShell(contenedor);
-    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(volver));
+    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, volver));
 
     shell.montarDerecha(el('div', {}, [
       el('div', { dataset: { bloque: 'proxima' } }),
@@ -220,7 +240,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     // anima, y deja el texto del desenlace con un botón para seguir, en la
     // MISMA región central — nunca una pantalla nueva.
     function mostrarDesenlace({ titulo, texto, deltas = {}, deltasTexto = null }) {
-      renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(reconstruir));
+      renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, reconstruir));
       animarAtributos(shell.regiones.izquierda, deltas);
       shell.destacar('izquierda');
       centro(() => renderDesenlace(shell.regiones.centro, {
