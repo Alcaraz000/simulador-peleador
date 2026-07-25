@@ -19,14 +19,12 @@ import { el, fmtDinero } from './ui/dom.js';
 
 import { renderLogin } from './ui/screens/login.js';
 import { renderCreacion } from './ui/screens/create.js';
-import { renderDashboard } from './ui/screens/dashboard.js';
 import { renderResultadoTarjeta } from './ui/screens/card.js';
 import { renderTienda } from './ui/screens/shop.js';
 import { renderCareo } from './ui/screens/presser.js';
 import { renderSparring } from './ui/screens/sparring.js';
 import { renderNegociacion } from './ui/screens/negotiation.js';
 import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
-import { renderNoticias } from './ui/screens/news.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
 import { renderEstadisticas } from './ui/screens/stats.js';
@@ -36,6 +34,7 @@ import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
+import { renderPanelAvance } from './ui/screens/panel-avance.js';
 import { animarRoll } from './ui/components/roll.js';
 import { animarAtributos } from './ui/components/animar-numero.js';
 import { icono } from './ui/icons.js';
@@ -120,82 +119,51 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
   const persistir = () => { if (partida) guardar(partida, storage); };
 
-  function pintarDashboard() {
-    renderDashboard(contenedor, {
-      partida,
-      onSiguiente: siguiente,
-      onTienda: () => abrirTienda(irADashboard, pintarDashboard),
-      onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
-      onCurar: () => {
-        const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
-        if (paso.ok) partida = { ...partida, jugador: paso.peleador };
-        irADashboard();
-      },
-    });
+  // --- El tablero persistente (Task 6.1) -----------------------------------
+  // Antes, cada beat armaba su PROPIO shell (crearOrquestadorTablero se
+  // llamaba una vez por beat) y "entre beats" el juego volvía a
+  // renderDashboard (v1, pantalla completa): dos pantallas principales
+  // alternándose. Ahora hay UN solo shell para toda la sesión de carrera:
+  // `shellActual` se crea una vez y se reutiliza mientras siga montado; solo
+  // se reconstruye si algo de afuera reemplazó `contenedor` entero (ficha, o
+  // la pelea y su previa de oferta/negociación/careo/plan, que siguen siendo
+  // pantallas completas por decisión de diseño). `pintarCentro` recuerda
+  // SIEMPRE qué hay que pintar en el centro ahora mismo (la ficha ociosa, una
+  // decisión, el minijuego, o un desenlace), para poder reconstruir todo tal
+  // cual estaba si el jugador se va a una pantalla completa y vuelve.
+  let shellActual = null;
+  let pintarCentro = () => {};
+
+  function asegurarShell() {
+    if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
+    shellActual = crearShell(contenedor);
+    return shellActual;
   }
 
-  function irADashboard() {
-    persistir();
-    pintarDashboard();
-  }
-
-  // `volver` es adónde ir al cerrar: por defecto al tablero v1. Los beats que
-  // viven dentro del shell (mejora/evento/redes/sparring) pasan su propio
-  // `reconstruir` acá, para no perder la decisión pendiente (decisión #3 del
-  // brief: ir a una pantalla v1 descarta el shell, pero al volver se rearma).
-  function abrirFicha(jugador, seccion = 'atributos', volver = irADashboard) {
-    renderFicha(contenedor, { jugador, seccion, onCerrar: volver });
-  }
-
-  // La tienda se abre como POPUP desde el tablero (decisión #1 del brief),
-  // nunca reemplazando la pantalla: `renderTienda` maneja su propio overlay
-  // (abrirPopup) y se refresca en el lugar en cada compra vía el valor que
-  // devuelve `onComprar`. Eso alcanza para el CONTENIDO del popup, pero el
-  // tablero que queda VISIBLE DETRÁS (el panel izquierdo del shell, o la
-  // pantalla del dashboard v1) también tiene que reflejar la plata gastada
-  // en el momento — "el tablero nunca desaparece" y "los cambios se ven
-  // ocurrir" valen también con el popup abierto, no solo cuando se cierra.
-  // `refrescarTablero` es justo eso: lo que hay que repintar DETRÁS del
-  // popup en cada compra; cada llamador decide qué es "detrás" (el panel
-  // izquierdo del shell, o el dashboard entero si no hay shell).
-  function abrirTienda(volver = irADashboard, refrescarTablero = () => {}) {
-    renderTienda({
-      jugador: partida.jugador,
-      onComprar: (id) => {
-        const paso = comprar(partida.jugador, id);
-        if (paso.ok) {
-          partida = { ...partida, jugador: paso.jugador };
-          refrescarTablero();
-        }
-        return partida.jugador;
-      },
-      onCerrar: volver,
-    });
-  }
-
-  // Arma los props de la columna izquierda del shell. `volver` es lo que se
-  // hace al cerrar la ficha/tienda abiertas desde acá. `shell` es el shell
-  // YA MONTADO al que pertenece esta columna: onTienda lo necesita para
-  // poder refrescar SOLO `shell.regiones.izquierda` en cada compra, sin
-  // tocar el centro ni la derecha (la garantía del shell) ni el popup, que
-  // vive aparte, montado directo sobre document.body.
-  function propsPanelIzquierda(shell, volver) {
+  // Arma los props de la columna izquierda del shell. La ficha/tienda que se
+  // abren desde acá siempre vuelven al MISMO tablero (volverAlTablero): ya no
+  // hace falta que cada llamador decida "adónde volver" a mano.
+  function propsPanelIzquierda() {
     return {
       partida,
-      onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion, volver),
-      onTienda: () => abrirTienda(volver, () => {
-        renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, volver));
+      onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
+      onTienda: () => abrirTienda(() => {
+        renderPanelPeleador(shellActual.regiones.izquierda, propsPanelIzquierda());
       }),
-      onHistorial: (jugador) => abrirFicha(jugador, 'historial', volver),
+      onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
     };
   }
 
-  // Monta el shell + los 3 paneles del tablero (izquierda, derecha) sobre
-  // `contenedor`. La región central queda vacía: el que llama decide qué
-  // pintar ahí con `shell.montarCentro` / renderPanelDecision / renderSparring.
-  function montarTablero(volver) {
-    const shell = crearShell(contenedor);
-    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, volver));
+  // Asegura el shell y REFRESCA los paneles laterales con la partida actual
+  // (izquierda: peleador; derecha: próxima pelea + noticias). Se llama en
+  // cada transición del tablero (nuevo beat, o volver al estado ocioso) —
+  // nunca en cada micro-render dentro de un mismo beat (p. ej. cada golpe del
+  // sparring, o cada frame del roll de azar, repintan solo el centro
+  // directo). La región central queda como estaba: quien llama decide qué
+  // pintar ahí.
+  function montarTablero() {
+    const shell = asegurarShell();
+    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
 
     shell.montarDerecha(el('div', {}, [
       el('div', { dataset: { bloque: 'proxima' } }),
@@ -205,7 +173,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       partida,
       onVerRival: (rivalId) => {
         const rival = partida.mundo.roster.find((p) => p.id === rivalId);
-        if (rival) abrirFicha(rival, 'atributos', volver);
+        if (rival) abrirFicha(rival, 'atributos');
       },
     });
     renderPanelNoticias(shell.regiones.derecha.querySelector('[data-bloque="noticias"]'), {
@@ -216,42 +184,83 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     return shell;
   }
 
-  // Orquesta un beat que vive en el shell: mantiene el `shell` y "qué se está
-  // pintando en el centro ahora mismo" (tarjetas, el minijuego, o el
-  // desenlace) para poder reconstruir todo si el jugador se va a una
-  // pantalla v1 (ficha/tienda) y vuelve, sin perder en qué paso estaba.
-  function crearOrquestadorTablero() {
-    let shell;
-    let pintarCentro = () => {};
+  // Reconstruye el tablero tal cual estaba: asegura el shell, refresca los
+  // laterales, y repinta lo último que se puso en el centro (pintarCentro).
+  // Es el `onCerrar` de ficha/tienda: volver de ahí nunca pierde el beat
+  // pendiente ni cae en una pantalla vacía.
+  function volverAlTablero() {
+    montarTablero();
+    pintarCentro();
+  }
 
-    function reconstruir() {
-      shell = montarTablero(reconstruir);
-      pintarCentro();
-    }
+  // Registra QUÉ pintar en el centro ahora mismo y lo pinta ya (asegurando el
+  // shell y refrescando los laterales primero). Todo lo que ocurre "dentro
+  // del tablero" —el estado ocioso, cada beat, cada desenlace— pasa por acá
+  // exactamente una vez por transición.
+  function centro(pintar) {
+    pintarCentro = pintar;
+    volverAlTablero();
+  }
 
-    function centro(pintar) {
-      pintarCentro = pintar;
-      if (shell) pintarCentro();
-    }
+  // No hay pantalla de resultado (Task 3.2): esto reemplaza a
+  // renderResultadoTarjeta para mejora/evento/redes/sparring. Aplica los
+  // deltas al panel izquierdo YA repintado con los valores finales, los
+  // anima, y deja el texto del desenlace con un botón para seguir, en la
+  // MISMA región central — nunca una pantalla nueva.
+  function mostrarDesenlace({ titulo, texto, deltas = {}, deltasTexto = null }) {
+    const shell = asegurarShell();
+    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
+    animarAtributos(shell.regiones.izquierda, deltas);
+    shell.destacar('izquierda');
+    centro(() => renderDesenlace(shellActual.regiones.centro, {
+      titulo, texto, deltasTexto: deltasTexto ?? formatearMods(deltas), onContinuar: irADashboard,
+    }));
+  }
 
-    // No hay pantalla de resultado (Task 3.2): esto reemplaza a
-    // renderResultadoTarjeta para mejora/evento/redes/sparring. Aplica los
-    // deltas al panel izquierdo YA repintado con los valores finales, los
-    // anima, y deja el texto del desenlace con un botón para seguir, en la
-    // MISMA región central — nunca una pantalla nueva.
-    function mostrarDesenlace({ titulo, texto, deltas = {}, deltasTexto = null }) {
-      renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda(shell, reconstruir));
-      animarAtributos(shell.regiones.izquierda, deltas);
-      shell.destacar('izquierda');
-      centro(() => renderDesenlace(shell.regiones.centro, {
-        titulo, texto, deltasTexto: deltasTexto ?? formatearMods(deltas), onContinuar: irADashboard,
-      }));
-    }
+  // El estado "entre beats": lo que ANTES mostraba renderDashboard (v1,
+  // pantalla completa) ahora es un panel más en el centro del MISMO tablero
+  // (Task 6.1 — el tablero es la pantalla principal, siempre).
+  function irADashboard() {
+    persistir();
+    centro(() => renderPanelAvance(shellActual.regiones.centro, {
+      partida, onSiguiente: siguiente, onCurar: curar,
+    }));
+  }
 
-    return {
-      get shell() { return shell; },
-      reconstruir, centro, mostrarDesenlace,
-    };
+  function curar() {
+    const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
+    if (paso.ok) partida = { ...partida, jugador: paso.peleador };
+    irADashboard();
+  }
+
+  // `abrirFicha`/`abrirTienda` reemplazan `contenedor` entero (ficha) o abren
+  // un popup (tienda): al cerrar, siempre se vuelve al mismo tablero.
+  function abrirFicha(jugador, seccion = 'atributos') {
+    renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
+  }
+
+  // La tienda se abre como POPUP desde el tablero (decisión de la Task 5.4),
+  // nunca reemplazando la pantalla: `renderTienda` maneja su propio overlay
+  // (abrirPopup) y se refresca en el lugar en cada compra vía el valor que
+  // devuelve `onComprar`. Eso alcanza para el CONTENIDO del popup, pero el
+  // panel izquierdo que queda VISIBLE DETRÁS también tiene que reflejar la
+  // plata gastada en el momento — "el tablero nunca desaparece" y "los
+  // cambios se ven ocurrir" valen también con el popup abierto, no solo
+  // cuando se cierra. `refrescarTablero` es justo eso: lo que hay que
+  // repintar DETRÁS del popup en cada compra (el panel izquierdo).
+  function abrirTienda(refrescarTablero = () => {}) {
+    renderTienda({
+      jugador: partida.jugador,
+      onComprar: (id) => {
+        const paso = comprar(partida.jugador, id);
+        if (paso.ok) {
+          partida = { ...partida, jugador: paso.jugador };
+          refrescarTablero();
+        }
+        return partida.jugador;
+      },
+      onCerrar: volverAlTablero,
+    });
   }
 
   function siguiente() {
@@ -273,22 +282,43 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     return irADashboard();
   }
 
+  // 'lesionSinOferta' y 'noticias' son beats simples (nada que jugar, solo un
+  // aviso) que en la v1/pre-6.1 abrían su PROPIA pantalla completa
+  // (renderResultadoTarjeta / renderNoticias). Con "los beats van al centro"
+  // (brief de la Task 6.1) pasan a vivir en la misma región central del
+  // tablero, reusando renderDesenlace (mismo layout: título + texto + botón
+  // Seguir, sin deltas). Esto deja huérfano a renderNoticias (screens/news.js
+  // — se borra junto con sus tests); renderResultadoTarjeta sigue en uso en
+  // el rechazo de oferta y en el resultado post-pelea, así que no se toca.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
     const bloques = lesion?.bloquesRestantes ?? null;
-    renderResultadoTarjeta(contenedor, {
+    centro(() => renderDesenlace(shellActual.regiones.centro, {
       titulo: 'Sin ofertas',
       texto: lesion
         ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
         : 'Nadie te ofrece pelear mientras estás lesionado.',
-      deltas: [],
+      deltasTexto: [],
       onContinuar: irADashboard,
-    });
+    }));
+  }
+
+  function beatNoticias() {
+    // El feed de noticias (panel-noticias.js, columna derecha) ya está
+    // siempre visible y siempre actualizado en el tablero persistente: este
+    // beat solo le pone ritmo a la carrera (consume su turno) y avisa que
+    // circuló algo, en vez de forzar una pantalla aparte para lo mismo que ya
+    // se ve al lado.
+    centro(() => renderDesenlace(shellActual.regiones.centro, {
+      titulo: 'El mundo sigue girando',
+      texto: 'Circularon resultados y rumores de otros peleadores esta semana. Date una vuelta por las noticias, a la derecha.',
+      deltasTexto: [],
+      onContinuar: irADashboard,
+    }));
   }
 
   function beatMejora(beat) {
-    const orq = crearOrquestadorTablero();
-    orq.centro(() => renderPanelDecision(orq.shell.regiones.centro, {
+    centro(() => renderPanelDecision(shellActual.regiones.centro, {
       titulo: 'Campamento',
       bajada: 'El trabajo rindió',
       texto: 'El dado trajo tres mejoras. Elegí una.',
@@ -297,17 +327,15 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         const carta = beat.datos.cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
         partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-        orq.mostrarDesenlace({ titulo: 'Campamento', texto: carta.texto, deltas: aplicado.deltas });
+        mostrarDesenlace({ titulo: 'Campamento', texto: carta.texto, deltas: aplicado.deltas });
       },
     }));
-    orq.reconstruir();
   }
 
   function beatCarta(beat, titulo, nombreIcono) {
     const carta = beat.datos.carta;
-    const orq = crearOrquestadorTablero();
 
-    orq.centro(() => renderPanelDecision(orq.shell.regiones.centro, {
+    centro(() => renderPanelDecision(shellActual.regiones.centro, {
       titulo,
       bajada: carta.titulo,
       texto: carta.texto,
@@ -323,13 +351,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
         const aplicarYMostrar = () => {
           partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-          orq.mostrarDesenlace({
+          mostrarDesenlace({
             titulo, texto: resuelto.texto || carta.texto, deltas: resuelto.deltas, deltasTexto: resuelto.deltasTexto,
           });
         };
 
         if (opcion.probabilidades) {
-          const nodoTarjeta = orq.shell.regiones.centro.querySelector(`[data-opcion="${id}"]`);
+          const nodoTarjeta = shellActual.regiones.centro.querySelector(`[data-opcion="${id}"]`);
           animarRoll(nodoTarjeta, {
             indiceGanador: resuelto.indiceGanador,
             cantidad: opcion.probabilidades.length,
@@ -340,15 +368,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         aplicarYMostrar();
       },
     }));
-    orq.reconstruir();
   }
 
   function beatSparring(beat) {
     let sparring = beat.datos.sparring;
-    const orq = crearOrquestadorTablero();
 
     function pintarSparring() {
-      renderSparring(orq.shell.regiones.centro, {
+      renderSparring(shellActual.regiones.centro, {
         sparring,
         jugador: partida.jugador,
         onGolpe: (evento) => {
@@ -359,13 +385,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
           partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-          orq.mostrarDesenlace({ titulo: 'Sparring', texto: resultado.texto, deltas: aplicado.deltas });
+          mostrarDesenlace({ titulo: 'Sparring', texto: resultado.texto, deltas: aplicado.deltas });
         },
       });
     }
 
-    orq.centro(pintarSparring);
-    orq.reconstruir();
+    centro(pintarSparring);
   }
 
   function beatOferta(beat) {
@@ -499,10 +524,6 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
       onContinuar: irADashboard,
     });
-  }
-
-  function beatNoticias() {
-    renderNoticias(contenedor, { noticias: partida.noticias, onContinuar: irADashboard });
   }
 
   function finDeCarrera() {
