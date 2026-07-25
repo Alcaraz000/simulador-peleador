@@ -105,7 +105,7 @@ export function crearPeleador(opciones) {
     esJugador,
     nombre: apellido ?? nombre,
     apellido: apellido ?? null,
-    apodo: apodo ?? nick?.nombre ?? apodo,
+    apodo: apodo ?? nick?.nombre ?? null,
     apodoId: nick?.id ?? null,
     nacionalidad,
     disciplina, estilo, categoria,

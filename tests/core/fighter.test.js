@@ -150,6 +150,15 @@ describe('repartirOrigenes', () => {
     }
   });
 
+  it('los origenes legendarios no vienen nerfeados (mods netos altos)', () => {
+    const legendarios = ORIGENES.filter((o) => o.rareza === 'legendaria');
+    expect(legendarios.length).toBeGreaterThanOrEqual(1);
+    for (const origen of legendarios) {
+      const positivos = Object.values(origen.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+      expect(positivos).toBeGreaterThanOrEqual(8);
+    }
+  });
+
   it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
     const conteo = { normal: 0, rara: 0, legendaria: 0 };
     let total = 0;
