@@ -232,6 +232,28 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(typeof huboOferta).toBe('boolean');
   });
 
+  it('curar una lesion con dinero desde el tablero descuenta la plata y saca el aviso de lesion', () => {
+    const partida = nuevaPartida(4);
+    partida.jugador.dinero = 100000;
+    partida.jugador.estado.lesion = {
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+    };
+    iniciar(cont, prepararStorage(partida));
+
+    expect(cont.querySelector('.shell-centro').textContent).toContain('Mano fracturada');
+    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    expect(dineroAntes).toBe('US$ 100K');
+
+    cont.querySelector('.shell-centro [data-accion="curar"]').click();
+
+    // El aviso de lesión desaparece del centro...
+    expect(cont.querySelector('.shell-centro').textContent).not.toContain('Mano fracturada');
+    // ...y la plata del panel izquierdo ya refleja el costo pagado
+    // (100000 - 22000 = 78000), sin perder el tablero de vista.
+    expect(cont.querySelector('.shell-izquierda').textContent).toContain('US$ 78K');
+    expect(cont.querySelector('.shell')).toBeTruthy();
+  });
+
   it('abrir la ficha desde el estado ocioso y volver reconstruye el tablero (con el boton Continuar), no queda en blanco', () => {
     iniciar(cont, prepararStorage(nuevaPartida(2)));
 
