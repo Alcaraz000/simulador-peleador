@@ -21,6 +21,10 @@ const PATHS = {
   cruz: ['M18 6 6 18', 'M6 6l12 12'],
 
   // --- Creación del peleador (Task 5.3): un ícono por control/tarjeta ---
+  persona: [
+    'M12 12a4 4 0 1 0 0-8a4 4 0 0 0 0 8z',
+    'M4.5 21a7.5 7.5 0 0 1 15 0',
+  ],
   mano: [
     'M18 11V6a2 2 0 0 0-4 0',
     'M14 10V4a2 2 0 0 0-4 0v2',

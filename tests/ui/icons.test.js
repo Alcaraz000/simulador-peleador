@@ -17,7 +17,7 @@ describe('icono("tienda")', () => {
 // ("faltan más iconos"). Todos tienen que poder dibujarse sin tirar error.
 describe('set de íconos nuevo (creación + tienda)', () => {
   const nombres = [
-    'mano', 'etiqueta', 'blanco', 'balanza', 'origen',
+    'persona', 'mano', 'etiqueta', 'blanco', 'balanza', 'origen',
     'cerebro', 'maletin', 'auto', 'casa', 'estrella', 'ancla', 'globo',
   ];
 

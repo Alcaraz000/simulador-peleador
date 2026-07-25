@@ -592,6 +592,78 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .popup-cuerpo { margin-top: 12px; }
 
+/* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
+.popup-banderas-grilla {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.popup-bandera-boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.popup-bandera-boton:hover { border-color: var(--borde-fuerte); }
+.popup-bandera-boton.elegida { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
+.popup-bandera-nombre { text-align: center; }
+
+/* Creación del peleador (Task 5.3): paso 1 con controles parejos (46px),
+   cada uno con su ícono al lado — nunca emoji de bandera, siempre bandera()
+   de flags.js para nacionalidad. */
+.paso-titulo { margin-bottom: 10px; }
+.paso-titulo .etiqueta { display: inline; }
+
+.creacion-campo { display: flex; align-items: center; gap: 8px; }
+.creacion-campo > svg { flex: 0 0 auto; }
+
+.creacion-control {
+  width: 100%;
+  height: 46px;
+  box-sizing: border-box;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: 0 12px;
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+input.creacion-control { cursor: text; }
+
+.creacion-nacionalidad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.creacion-nacionalidad-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tarjeta ya elegida en un paso (origen/apodo/estilo): a diferencia de las
+   tarjetas de un beat (mejora/evento), acá NUNCA se deshabilitan al elegir
+   — el jugador tiene que poder volver atrás y elegir otra. El anillo dorado
+   marca cuál quedó elegida sin tapar el color propio de su rareza. */
+.tarjeta.tarjeta-elegida { outline: 2px solid var(--dorado); outline-offset: 2px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

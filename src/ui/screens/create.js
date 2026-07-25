@@ -1,99 +1,265 @@
 import { el, mount } from '../dom.js';
-import { CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio } from '../../core/fighter.js';
+import { icono } from '../icons.js';
+import { bandera } from '../flags.js';
+import { crearTarjeta } from '../components/card.js';
+import { abrirPopup } from '../components/popup.js';
+import { CATEGORIAS, crearPeleador, repartirOrigenes } from '../../core/fighter.js';
+import { repartirApodos } from '../../core/nicknames.js';
 import { estilosDisponibles } from '../../core/styles.js';
+import { crearEntrenadorDe } from '../../core/coach.js';
 import { DISCIPLINAS } from '../../core/disciplines.js';
 import { NACIONALIDADES } from '../../content/names.js';
 import { createRng } from '../../core/rng.js';
+import { formatearMods } from '../../core/cards.js';
 
-function opciones(select, items, valorActual) {
-  select.innerHTML = '';
-  for (const item of items) {
-    const opt = el('option', { value: item.valor, text: item.texto });
-    select.appendChild(opt);
-  }
-  if (valorActual && items.some((i) => i.valor === valorActual)) select.value = valorActual;
+// Creación del peleador (Task 5.3): ya no es un formulario seco de <select>s
+// de una sola pantalla — es una tirada de tarjetas que se revuelve de a un
+// paso. Paso 1 son los datos (dos filas, todos los controles a 46px); pasos
+// 2/3/4 son origen, apodo y estilo, cada uno con 2-4 tarjetas al azar (ver
+// repartirOrigenes/repartirApodos en el core). Nada se deshabilita al
+// elegir: el jugador puede volver a un paso ya resuelto y cambiar de idea.
+
+const MANOS = [
+  { valor: 'derecha', texto: 'Derecha' },
+  { valor: 'zurda', texto: 'Zurda' },
+];
+
+// Traduce los `mods` de un origen/apodo/estilo a las píldoras de efecto que
+// espera crearTarjeta. A diferencia de main.js (efectosDeMods de los beats),
+// acá no hay caso especial de fatiga: origen/apodo/estilo nunca la tocan.
+function efectosDeMods(mods = {}) {
+  return Object.entries(mods).map(([clave, valor]) => ({
+    texto: formatearMods({ [clave]: valor })[0],
+    signo: valor >= 0 ? 'positivo' : 'negativo',
+  }));
 }
 
-function campo(etiqueta, control) {
-  return el('label', { class: 'stack' }, [
-    el('div', { class: 'etiqueta', text: etiqueta }),
-    control,
+function tituloPaso(numero, texto) {
+  return el('div', { class: 'paso-titulo' }, [
+    el('span', { class: 'etiqueta dorado', text: `PASO ${numero}` }),
+    el('span', { class: 'etiqueta', text: ` · ${texto}` }),
   ]);
 }
 
-export function renderCreacion(contenedor, { onComenzar }) {
-  const nombre = el('input', { 'data-campo': 'nombre', class: 'carta', placeholder: 'Nombre y apellido' });
-  const apodo = el('input', { 'data-campo': 'apodo', class: 'carta', placeholder: 'Apodo' });
-  const nacionalidad = el('select', { 'data-campo': 'nacionalidad', class: 'carta' });
-  const disciplina = el('select', { 'data-campo': 'disciplina', class: 'carta' });
-  const categoria = el('select', { 'data-campo': 'categoria', class: 'carta' });
-  const estilo = el('select', { 'data-campo': 'estilo', class: 'carta' });
-  const origen = el('select', { 'data-campo': 'origen', class: 'carta' });
-  const mano = el('select', { 'data-campo': 'mano', class: 'carta' });
-  const error = el('div', { 'data-error': '', class: 'rojo', text: '' });
+// Fila icono + control, ambos a la misma altura (46px, ver theme.css
+// .creacion-control): el ícono es siempre un nodo ya armado (icono('mano')
+// o, para nacionalidad, la bandera SVG real del país elegido — nunca un
+// emoji de bandera).
+function filaConIcono(iconoNodo, control) {
+  return el('div', { class: 'creacion-campo' }, [iconoNodo, control]);
+}
 
-  opciones(nacionalidad, NACIONALIDADES.map((n) => ({ valor: n.codigo, texto: `${n.bandera} ${n.nombre}` })));
-  opciones(disciplina, Object.values(DISCIPLINAS).map((d) => ({ valor: d.id, texto: d.nombre })));
-  opciones(categoria, Object.values(CATEGORIAS).map((c) => ({ valor: c.id, texto: c.nombre })));
-  opciones(origen, ORIGENES.map((o) => ({ valor: o.id, texto: `${o.nombre} — ${o.descripcion}` })));
-  opciones(mano, [{ valor: 'derecha', texto: 'Derecha' }, { valor: 'zurda', texto: 'Zurda' }]);
+export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.now()) }) {
+  // Los pools de tarjetas al azar se sortean UNA sola vez al entrar a la
+  // creación (no en cada repintado, si no cambiarían de tarjeta cada vez
+  // que el jugador toca otra cosa del paso 1).
+  const origenesOfrecidos = repartirOrigenes(rng);
+  const apodosOfrecidos = repartirApodos(rng);
 
-  function refrescarEstilos() {
-    const disponibles = estilosDisponibles(disciplina.value).map((e) => ({ valor: e.id, texto: `${e.nombre} — ${e.descripcion}` }));
-    opciones(estilo, disponibles, estilo.value);
+  const estado = {
+    apellido: '',
+    mano: 'derecha',
+    disciplina: Object.keys(DISCIPLINAS)[0],
+    nacionalidad: NACIONALIDADES[0].codigo,
+    categoria: Object.keys(CATEGORIAS)[0],
+    revelado: 1, // hasta qué paso se reveló (1 a 4)
+    origenId: null,
+    apodoId: null,
+    estiloId: null,
+    error: '',
+  };
+
+  function pintar() { mount(contenedor, vista()); }
+
+  function validarApellido() {
+    if (estado.apellido.trim()) { estado.error = ''; return true; }
+    estado.error = 'Poné un apellido para empezar.';
+    return false;
   }
-  disciplina.addEventListener('change', refrescarEstilos);
-  refrescarEstilos();
 
-  function aleatorio() {
-    const rng = createRng(Date.now());
-    const sugerido = peleadorAleatorio(rng, { edad: 15 });
-    nombre.value = sugerido.nombre;
-    apodo.value = sugerido.apodo;
-    nacionalidad.value = sugerido.nacionalidad;
-    disciplina.value = sugerido.disciplina;
-    refrescarEstilos();
-    estilo.value = sugerido.estilo;
-    categoria.value = sugerido.categoria;
-    origen.value = sugerido.origen;
-    mano.value = sugerido.mano;
-    error.textContent = '';
+  function siguiente() {
+    if (!validarApellido()) { pintar(); return; }
+    estado.revelado = Math.max(estado.revelado, 2);
+    pintar();
+  }
+
+  function elegirOrigen(id) {
+    estado.origenId = id;
+    estado.revelado = Math.max(estado.revelado, 3);
+    pintar();
+  }
+
+  function elegirApodo(id) {
+    estado.apodoId = id;
+    estado.revelado = Math.max(estado.revelado, 4);
+    pintar();
+  }
+
+  function elegirEstilo(id) {
+    estado.estiloId = id;
+    pintar();
+  }
+
+  function abrirPickerNacionalidad() {
+    const grilla = el('div', { class: 'popup-banderas-grilla' },
+      NACIONALIDADES.map((n) => el('button', {
+        type: 'button',
+        'data-pais': n.codigo,
+        class: `popup-bandera-boton${estado.nacionalidad === n.codigo ? ' elegida' : ''}`,
+        onClick: () => {
+          estado.nacionalidad = n.codigo;
+          popup.cerrar();
+          pintar();
+        },
+      }, [
+        bandera(n.codigo, { ancho: 34 }),
+        el('div', { class: 'popup-bandera-nombre', text: n.nombre }),
+      ])));
+
+    const popup = abrirPopup({ titulo: 'Elegí tu nacionalidad', contenido: grilla });
   }
 
   function comenzar() {
-    if (!nombre.value.trim()) {
-      error.textContent = 'Poné un nombre para empezar.';
-      return;
-    }
+    if (!validarApellido()) { pintar(); return; }
     const peleador = crearPeleador({
-      nombre: nombre.value.trim(),
-      apodo: apodo.value.trim() || 'Sin apodo',
-      nacionalidad: nacionalidad.value,
-      disciplina: disciplina.value,
-      estilo: estilo.value,
-      categoria: categoria.value,
-      origen: origen.value,
-      mano: mano.value,
+      apellido: estado.apellido.trim(),
+      apodoId: estado.apodoId,
+      nacionalidad: estado.nacionalidad,
+      disciplina: estado.disciplina,
+      estilo: estado.estiloId,
+      categoria: estado.categoria,
+      origen: estado.origenId,
+      mano: estado.mano,
       esJugador: true,
       media: 38,
     });
     onComenzar(peleador);
   }
 
-  mount(contenedor, el('div', { class: 'stack' }, [
-    el('div', { class: 'etiqueta', text: 'Nueva carrera' }),
-    el('h1', { text: 'Creá tu peleador' }),
-    el('p', { class: 'medio', text: 'Tenés 15 años y todo por delante. Elegí de dónde venís.' }),
-    campo('Nombre', nombre),
-    campo('Apodo', apodo),
-    campo('Nacionalidad', nacionalidad),
-    campo('Disciplina', disciplina),
-    campo('Categoría', categoria),
-    campo('Estilo de pelea', estilo),
-    campo('Origen', origen),
-    campo('Mano hábil', mano),
-    error,
-    el('button', { class: 'boton secundario', 'data-accion': 'aleatorio', text: 'Sorprendeme', onClick: aleatorio }),
-    el('button', { class: 'boton', 'data-accion': 'comenzar', text: 'Empezar la carrera', onClick: comenzar }),
-  ]));
+  function pasoUno() {
+    const campoApellido = el('input', {
+      'data-campo': 'apellido', class: 'creacion-control', placeholder: 'Apellido',
+    });
+    campoApellido.value = estado.apellido;
+    campoApellido.addEventListener('input', () => { estado.apellido = campoApellido.value; });
+
+    const campoMano = el('select', { 'data-campo': 'mano', class: 'creacion-control' },
+      MANOS.map((m) => el('option', { value: m.valor, text: m.texto })));
+    campoMano.value = estado.mano;
+    campoMano.addEventListener('change', () => { estado.mano = campoMano.value; });
+
+    const campoDisciplina = el('select', { 'data-campo': 'disciplina', class: 'creacion-control' },
+      Object.values(DISCIPLINAS).map((d) => el('option', { value: d.id, text: d.nombre })));
+    campoDisciplina.value = estado.disciplina;
+    campoDisciplina.addEventListener('change', () => {
+      estado.disciplina = campoDisciplina.value;
+      pintar();
+    });
+
+    const campoCategoria = el('select', { 'data-campo': 'categoria', class: 'creacion-control' },
+      Object.values(CATEGORIAS).map((c) => el('option', { value: c.id, text: c.nombre })));
+    campoCategoria.value = estado.categoria;
+    campoCategoria.addEventListener('change', () => { estado.categoria = campoCategoria.value; });
+
+    const paisElegido = NACIONALIDADES.find((n) => n.codigo === estado.nacionalidad);
+    const botonNacionalidad = el('button', {
+      'data-campo': 'nacionalidad', type: 'button', class: 'creacion-control creacion-nacionalidad',
+      onClick: abrirPickerNacionalidad,
+    }, [
+      bandera(estado.nacionalidad, { ancho: 20 }),
+      el('span', { class: 'creacion-nacionalidad-nombre', text: paisElegido?.nombre ?? estado.nacionalidad }),
+      icono('flecha', { tamano: 12, color: 'var(--texto-sutil)' }),
+    ]);
+
+    const filaDatos = el('div', { class: 'stack' }, [
+      el('div', { class: 'fila' }, [
+        filaConIcono(icono('persona', { tamano: 16, color: 'var(--texto-sutil)' }), campoApellido),
+        filaConIcono(icono('mano', { tamano: 16, color: 'var(--texto-sutil)' }), campoMano),
+      ]),
+      el('div', { class: 'fila' }, [
+        filaConIcono(icono('guante', { tamano: 16, color: 'var(--texto-sutil)' }), campoDisciplina),
+        botonNacionalidad,
+        filaConIcono(icono('balanza', { tamano: 16, color: 'var(--texto-sutil)' }), campoCategoria),
+      ]),
+      estado.error ? el('div', { class: 'rojo', 'data-error': '', text: estado.error }) : null,
+      estado.revelado < 2
+        ? el('button', {
+          class: 'boton', type: 'button', 'data-accion': 'siguiente', text: 'Siguiente', onClick: siguiente,
+        })
+        : null,
+    ]);
+
+    return el('div', { class: 'panel', dataset: { paso: '1' } }, [tituloPaso(1, 'TUS DATOS'), filaDatos]);
+  }
+
+  function grillaTarjetas(items, { onElegir, elegidoId, iconoNombre }) {
+    return el('div', { class: 'panel-decision-grilla' }, items.map((item) => {
+      const nodo = crearTarjeta({
+        icono: icono(iconoNombre, { tamano: 20 }),
+        titulo: item.nombre,
+        descripcion: item.descripcion,
+        efectos: efectosDeMods(item.mods),
+        rareza: item.rareza,
+        onElegir: () => onElegir(item.id),
+      });
+      nodo.dataset.opcion = item.id;
+      if (elegidoId === item.id) nodo.classList.add('tarjeta-elegida');
+      return nodo;
+    }));
+  }
+
+  function pasoOrigen() {
+    const grilla = grillaTarjetas(origenesOfrecidos, {
+      onElegir: elegirOrigen, elegidoId: estado.origenId, iconoNombre: 'origen',
+    });
+    return el('div', { class: 'panel', dataset: { paso: '2' } }, [tituloPaso(2, 'ORIGEN'), grilla]);
+  }
+
+  function pasoApodo() {
+    const grilla = grillaTarjetas(apodosOfrecidos, {
+      onElegir: elegirApodo, elegidoId: estado.apodoId, iconoNombre: 'etiqueta',
+    });
+    return el('div', { class: 'panel', dataset: { paso: '3' } }, [tituloPaso(3, 'APODO'), grilla]);
+  }
+
+  function pasoEstilo() {
+    const estilos = estilosDisponibles(estado.disciplina);
+    const grilla = el('div', { class: 'panel-decision-grilla' }, estilos.map((e) => {
+      const entrenador = crearEntrenadorDe(e.id);
+      const descripcion = entrenador
+        ? `${e.descripcion} Tu entrenador: ${entrenador.nombre} — "${entrenador.frase}"`
+        : e.descripcion;
+      const nodo = crearTarjeta({
+        icono: icono('blanco', { tamano: 20 }),
+        titulo: e.nombre,
+        descripcion,
+        efectos: efectosDeMods(e.mods),
+        rareza: e.rareza,
+        onElegir: () => elegirEstilo(e.id),
+      });
+      nodo.dataset.opcion = e.id;
+      if (estado.estiloId === e.id) nodo.classList.add('tarjeta-elegida');
+      return nodo;
+    }));
+    return el('div', { class: 'panel', dataset: { paso: '4' } }, [tituloPaso(4, 'ESTILO (Y ENTRENADOR)'), grilla]);
+  }
+
+  function vista() {
+    const pasos = [pasoUno()];
+    if (estado.revelado >= 2) pasos.push(pasoOrigen());
+    if (estado.revelado >= 3) pasos.push(pasoApodo());
+    if (estado.revelado >= 4) pasos.push(pasoEstilo());
+    if (estado.estiloId) {
+      pasos.push(el('button', {
+        class: 'boton', type: 'button', 'data-accion': 'comenzar', text: 'Empezar la carrera', onClick: comenzar,
+      }));
+    }
+    return el('div', { class: 'stack' }, [
+      el('div', { class: 'etiqueta', text: 'Nueva carrera' }),
+      el('h1', { text: 'Creá tu peleador' }),
+      ...pasos,
+    ]);
+  }
+
+  pintar();
 }
