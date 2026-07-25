@@ -78,6 +78,36 @@ describe('avanzarMundo', () => {
     expect(a.sucesos).toEqual(b.sucesos);
   });
 
+  it('si el jugador es campeon, no corona a otro NPC cuando el titular pierde', () => {
+    // Fuerza a que el actual "campeón" del mundo (campeonId) pierda su combate
+    // en cuanto arranca la simulación: con jugadorEsCampeon:false esto SIEMPRE
+    // corona a otro. Con jugadorEsCampeon:true, el jugador tiene puesto ese
+    // cinturón y el mundo no debe tocarlo.
+    const mundo = crearMundo(createRng(30), opciones);
+    mundo.campeonId = mundo.roster[0].id;
+    mundo.roster[0].atributos = { ...mundo.roster[0].atributos, potencia: 1, velocidad: 1, tecnica: 1, defensa: 1, cardio: 1, iq: 1 };
+    const { sucesos, mundo: nuevo } = avanzarMundo(mundo, createRng(31), { aniosPasados: 1, jugadorEsCampeon: true });
+    expect(sucesos.some((s) => s.tipo === 'titulo')).toBe(false);
+    expect(nuevo.campeonId).toBe(mundo.campeonId);
+  });
+
+  it('si el jugador es campeon, no declara vacante aunque el titular se retire', () => {
+    const mundo = crearMundo(createRng(32), opciones);
+    mundo.campeonId = mundo.roster[0].id;
+    mundo.roster[0].edad = 41; // se retira este mismo avance
+    const { sucesos, mundo: nuevo } = avanzarMundo(mundo, createRng(33), { aniosPasados: 1, jugadorEsCampeon: true });
+    expect(sucesos.some((s) => s.texto.includes('cinturón vacante'))).toBe(false);
+    expect(nuevo.campeonId).toBe(mundo.campeonId);
+  });
+
+  it('sin jugadorEsCampeon (por defecto), el comportamiento de siempre sigue intacto', () => {
+    const mundo = crearMundo(createRng(32), opciones);
+    mundo.campeonId = mundo.roster[0].id;
+    mundo.roster[0].edad = 41;
+    const { sucesos } = avanzarMundo(mundo, createRng(33), { aniosPasados: 1 });
+    expect(sucesos.some((s) => s.texto.includes('cinturón vacante'))).toBe(true);
+  });
+
   it('clona titulares: mutar el mundo devuelto no afecta al original y viceversa', () => {
     const mundo = crearMundo(createRng(21), opciones);
     const { mundo: nuevo } = avanzarMundo(mundo, createRng(22), { aniosPasados: 1 });

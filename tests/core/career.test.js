@@ -190,6 +190,101 @@ describe('avanzarBloque', () => {
     avanzarBloque(p);
     expect(JSON.stringify(p)).toBe(antes);
   });
+
+  it('a partir de los 32 años el jugador empieza a perder velocidad y cardio', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1; // amateur: 1 año por bloque, asi el numero da redondo
+    p.jugador.edad = 31;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(32);
+    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+    expect(despues.jugador.atributos.cardio).toBeLessThan(cardioAntes);
+  });
+
+  it('antes del umbral de declive no pierde velocidad ni cardio', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 20;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+    expect(despues.jugador.atributos.cardio).toBe(cardioAntes);
+  });
+
+  it('con preparador contratado, el declive todavia no llegó a los 32', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 31;
+    p.jugador.staff = ['preparador'];
+    const velAntes = p.jugador.atributos.velocidad;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(32);
+    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+  });
+
+  it('con preparador contratado, el declive igual llega mas tarde en la carrera', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 34;
+    p.jugador.staff = ['preparador'];
+    const velAntes = p.jugador.atributos.velocidad;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+  });
+
+  it('mientras el jugador tiene el cinturon mundial puesto, el mundo no le anuncia un nuevo campeon', () => {
+    const p = nuevaPartida();
+    p.jugador.titulos = ['Cinturón mundial'];
+    p.mundo.campeonId = p.mundo.roster[0].id;
+    p.mundo.roster[0].edad = 41; // fuerza lo que seria una "vacante" si nadie lo protegiera
+    const despues = avanzarBloque(p);
+    expect(despues.noticias.some((n) => n.titular.includes('cinturón vacante'))).toBe(false);
+    expect(despues.noticias.some((n) => n.titular.includes('es el nuevo campeón'))).toBe(false);
+  });
+
+  it('sin el cinturon mundial, el mundo puede anunciar un nuevo campeon con normalidad', () => {
+    const p = nuevaPartida();
+    p.mundo.campeonId = p.mundo.roster[0].id;
+    p.mundo.roster[0].edad = 41;
+    const despues = avanzarBloque(p);
+    expect(despues.noticias.some((n) => n.titular.includes('cinturón vacante'))).toBe(true);
+  });
+});
+
+describe('ofertas de pelea bloqueadas por lesion', () => {
+  it('si esta lesionado grave y le tocaba pelea, avisa en vez de quedarse callado', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
+    p.jugador.estado.lesion = {
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 4, costo: 60000, texto: 'x',
+    };
+    let actual = p;
+    const tipos = [];
+    for (let i = 0; i < 12; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat) tipos.push(paso.beat.tipo);
+    }
+    expect(tipos).not.toContain('oferta');
+    expect(tipos).toContain('lesionSinOferta');
+  });
+
+  it('sin lesion grave, esa misma situacion ofrece pelea con normalidad', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2;
+    let actual = p;
+    const tipos = [];
+    for (let i = 0; i < 12; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat) tipos.push(paso.beat.tipo);
+    }
+    expect(tipos).toContain('oferta');
+    expect(tipos).not.toContain('lesionSinOferta');
+  });
 });
 
 describe('ofertas de pelea por carrera', () => {

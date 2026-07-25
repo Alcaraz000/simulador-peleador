@@ -42,3 +42,23 @@ export function noticiasDeSucesos(rng, sucesos, { anio }) {
 export function agregarNoticias(feed, nuevas, { maximo = 30 } = {}) {
   return [...nuevas, ...feed].slice(0, maximo);
 }
+
+// Etiqueta legible para mostrar en el feed (ui/screens/news.js): antes se
+// mostraba n.tipo crudo ("victoria", "escandalo") tal cual el id interno.
+const ETIQUETAS_TIPO = {
+  victoria: 'Resultado',
+  derrota: 'Resultado',
+  titulo: 'Título',
+  defensa: 'Título',
+  retiro: 'Retiro',
+  lesion: 'Lesión',
+  ranking: 'Ranking',
+  sponsor: 'Sponsor',
+  escandalo: 'Escándalo',
+  revancha: 'Rivalidad',
+  record: 'Récord',
+};
+
+export function etiquetaTipo(tipo) {
+  return ETIQUETAS_TIPO[tipo] ?? 'Noticia';
+}

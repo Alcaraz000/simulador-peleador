@@ -51,7 +51,7 @@ function declive(peleador, rng) {
   peleador.atributos.cardio = clamp(peleador.atributos.cardio - rng.int(0, 2), 1, 99);
 }
 
-export function avanzarMundo(mundo, rng, { aniosPasados = 1 } = {}) {
+export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = false } = {}) {
   const roster = clonarRoster(mundo.roster);
   const sucesos = [];
   let campeonId = mundo.campeonId;
@@ -92,7 +92,11 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1 } = {}) {
           ? `${ganador.nombre} noqueó a ${perdedor.nombre}.`
           : `${ganador.nombre} le ganó por puntos a ${perdedor.nombre}.`,
       });
-      if (perdedor.id === campeonId) {
+      // Mientras el jugador tiene puesto el cinturón mundial, el mundo no
+      // corona a nadie más: campeonId sigue apuntando a lo que apuntaba antes
+      // (no importa, no se muestra en ningún lado) y no se emite el suceso
+      // que el feed de noticias convertiría en "¡X es el nuevo campeón!".
+      if (!jugadorEsCampeon && perdedor.id === campeonId) {
         campeonId = ganador.id;
         ganador.titulos.push(`Título ${mundo.categoria}`);
         sucesos.push({
@@ -106,16 +110,20 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1 } = {}) {
   }
 
   const ordenado = recalcularRankings(roster);
-  const campeonSigueActivo = ordenado.some((p) => p.id === campeonId && !p.retirado);
-  if (!campeonSigueActivo) {
-    const nuevo = ordenado.find((p) => !p.retirado);
-    campeonId = nuevo ? nuevo.id : null;
-    if (nuevo) {
-      sucesos.push({
-        tipo: 'titulo',
-        peleadorId: nuevo.id,
-        texto: `${nuevo.nombre} queda como campeón con el cinturón vacante.`,
-      });
+  // Misma razón: si el jugador es el campeón, no hay vacante que declarar
+  // aunque el NPC que ocupaba campeonId se haya retirado en este avance.
+  if (!jugadorEsCampeon) {
+    const campeonSigueActivo = ordenado.some((p) => p.id === campeonId && !p.retirado);
+    if (!campeonSigueActivo) {
+      const nuevo = ordenado.find((p) => !p.retirado);
+      campeonId = nuevo ? nuevo.id : null;
+      if (nuevo) {
+        sucesos.push({
+          tipo: 'titulo',
+          peleadorId: nuevo.id,
+          texto: `${nuevo.nombre} queda como campeón con el cinturón vacante.`,
+        });
+      }
     }
   }
 

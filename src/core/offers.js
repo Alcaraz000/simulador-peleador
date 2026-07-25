@@ -33,6 +33,10 @@ export function puedeDisputar(jugador, cinturon) {
 
 const BOLSA_BASE = 3000;
 
+// Cuánto infla la bolsa el 'manager' (money.js): promete "bolsas más gordas"
+// además de reducir el riesgo de negociación.
+const BONUS_MANAGER_BOLSA = 0.12;
+
 export function evaluarRiesgo(jugador, rival) {
   const diferencia = mediaDe(rival) - mediaDe(jugador);
   if (diferencia >= 8) return 'alto';
@@ -106,10 +110,15 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
 
   const riesgo = evaluarRiesgo(jugador, rival);
   const multiplicadorCinturon = cinturon ? cinturon.multiplicador : 1;
-  const bolsa = Math.round(
+  const bolsaBase = Math.round(
     BOLSA_BASE * nivel.multiplicadorBolsa * multiplicadorCinturon
     * (1 + jugador.fama / 60) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
   );
+  // El manager (money.js) promete "bolsas más gordas" además de bajar el
+  // riesgo de negociación (ver REDUCCION_MANAGER en negotiation.js).
+  const bolsa = (jugador.staff ?? []).includes('manager')
+    ? Math.round(bolsaBase * (1 + BONUS_MANAGER_BOLSA))
+    : bolsaBase;
 
   const cruce = rivalidades.find((r) => r.rivalId === rival.id);
   const esRevancha = Boolean(cruce && (cruce.h2h.v + cruce.h2h.d + cruce.h2h.e) > 0);
@@ -197,15 +206,32 @@ export function aplicarResultado(jugador, { oferta, resultado }) {
 
   const famaDelta = gano ? oferta.famaBase : empate ? Math.round(oferta.famaBase / 3) : -Math.round(oferta.famaBase / 2);
   nuevo.fama = clamp(nuevo.fama + famaDelta, 0, 100);
-  nuevo.estado.moral = clamp(nuevo.estado.moral + (gano ? 10 : empate ? 0 : -12), 0, 100);
+  // El psicólogo deportivo (money.js) promete que "la mala racha te dura
+  // menos": amortigua el golpe de moral de una derrota (no toca el envión de
+  // ganar ni el empate).
+  const tienePsicologo = (jugador.staff ?? []).includes('psicologo');
+  const golpeDerrota = tienePsicologo ? -6 : -12;
+  nuevo.estado.moral = clamp(nuevo.estado.moral + (gano ? 10 : empate ? 0 : golpeDerrota), 0, 100);
 
   if (oferta.esTitulo) {
     if (gano) {
       if (oferta.esObligatoria) {
         nuevo.defensas += 1;
+        if (oferta.cinturonId) {
+          nuevo.defensasCinturon = {
+            ...nuevo.defensasCinturon,
+            [oferta.cinturonId]: (nuevo.defensasCinturon?.[oferta.cinturonId] ?? 0) + 1,
+          };
+        }
       } else if (!nuevo.titulos.includes(oferta.enJuego)) {
         nuevo.titulos.push(oferta.enJuego);
         titulosGanados.push(oferta.enJuego);
+        // Arranca un reinado nuevo de ese cinturón: el contador de defensas
+        // de ESTE cinturón se resetea (aunque `defensas`, el total de toda
+        // la carrera, sigue acumulando).
+        if (oferta.cinturonId) {
+          nuevo.defensasCinturon = { ...nuevo.defensasCinturon, [oferta.cinturonId]: 0 };
+        }
       }
     } else if (!empate) {
       nuevo.titulos = nuevo.titulos.filter((t) => t !== oferta.enJuego);

@@ -86,6 +86,13 @@ export function crearPeleador(opciones) {
     fama: 0,
     titulos: [],
     defensas: 0,
+    // Defensas exitosas del cinturón que tiene puesto AHORA MISMO, por id de
+    // cinturón (ver CINTURONES en offers.js). A diferencia de `defensas`
+    // (contador de por vida, usado en legacy.js/stats-carrera.js), este se
+    // resetea a 0 cada vez que conquista ese cinturón, así el chip de
+    // "defensa N de M" en la oferta (ui/screens/fight.js) siempre refleja el
+    // reinado actual y no arrastra defensas de un cinturón distinto.
+    defensasCinturon: {},
     ranking: null,
     gimnasio,
     staff: [],

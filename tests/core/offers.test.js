@@ -60,6 +60,12 @@ describe('generarOferta', () => {
     expect(famoso.bolsa).toBeGreaterThan(pobre.bolsa);
   });
 
+  it('con manager, la bolsa es mas gorda a igualdad de todo lo demas', () => {
+    const sinManager = generarOferta(createRng(20), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    const conManager = generarOferta(createRng(20), { jugador: jugador({ staff: ['manager'] }), mundo: mundo(), etapa: 'profesional' });
+    expect(conManager.bolsa).toBeGreaterThan(sinManager.bolsa);
+  });
+
   it('puede forzar una pelea de titulo', () => {
     const oferta = generarOferta(createRng(6), {
       jugador: jugador(), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
@@ -289,6 +295,52 @@ describe('aplicarResultado', () => {
       resultado: { ganador: 'jugador', metodo: 'decision', round: 12, texto: 'Ganó' },
     });
     expect(paso.jugador.defensas).toBe(1);
+  });
+
+  it('ganar un titulo resetea el contador de defensas de ese cinturon', () => {
+    const o = {
+      ...oferta(), esTitulo: true, esObligatoria: false, enJuego: 'Cinturón nacional', cinturonId: 'nacional',
+    };
+    const yo = jugador({ defensasCinturon: { regional: 3, nacional: 5 } });
+    const paso = aplicarResultado(yo, {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 5, texto: 'KO' },
+    });
+    expect(paso.jugador.defensasCinturon.nacional).toBe(0);
+    expect(paso.jugador.defensasCinturon.regional).toBe(3);
+  });
+
+  it('defender suma la defensa solo al cinturon en juego, no a los demas', () => {
+    const yo = jugador({
+      titulos: ['Cinturón regional'], defensasCinturon: { regional: 1 },
+    });
+    const o = {
+      ...oferta(), esObligatoria: true, esTitulo: true, enJuego: 'Cinturón regional', cinturonId: 'regional',
+    };
+    const paso = aplicarResultado(yo, {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'decision', round: 12, texto: 'Ganó' },
+    });
+    expect(paso.jugador.defensasCinturon.regional).toBe(2);
+    expect(paso.jugador.defensas).toBe(1);
+  });
+
+  it('con psicologo, la derrota golpea menos la moral', () => {
+    const sinPsicologo = aplicarResultado(jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } }), {
+      oferta: oferta(), mundo: mundo(),
+      resultado: { ganador: 'rival', metodo: 'ko', round: 3, texto: 'Perdió' },
+    });
+    const conPsicologo = aplicarResultado(
+      jugador({ staff: ['psicologo'], estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } }),
+      {
+        oferta: oferta(), mundo: mundo(),
+        resultado: { ganador: 'rival', metodo: 'ko', round: 3, texto: 'Perdió' },
+      },
+    );
+    const caidaSinPsicologo = 60 - sinPsicologo.jugador.estado.moral;
+    const caidaConPsicologo = 60 - conPsicologo.jugador.estado.moral;
+    expect(caidaConPsicologo).toBeLessThan(caidaSinPsicologo);
+    expect(caidaConPsicologo).toBeGreaterThan(0);
   });
 
   it('perder el titulo lo saca de la lista', () => {

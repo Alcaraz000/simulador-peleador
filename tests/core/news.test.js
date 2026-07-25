@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { PLANTILLAS } from '../../src/content/news-templates.js';
-import { generarNoticia, noticiasDeSucesos, agregarNoticias } from '../../src/core/news.js';
+import {
+  generarNoticia, noticiasDeSucesos, agregarNoticias, etiquetaTipo,
+} from '../../src/core/news.js';
 
 describe('plantillas', () => {
   it('cubre los diez tipos de noticia', () => {
@@ -63,6 +65,20 @@ describe('noticiasDeSucesos', () => {
 
   it('con lista vacia devuelve vacio', () => {
     expect(noticiasDeSucesos(createRng(1), [], { anio: 2030 })).toEqual([]);
+  });
+});
+
+describe('etiquetaTipo', () => {
+  it('devuelve una etiqueta legible para cada tipo real que emite el juego', () => {
+    for (const tipo of ['victoria', 'titulo', 'retiro', 'lesion', 'ranking', 'sponsor']) {
+      const etiqueta = etiquetaTipo(tipo);
+      expect(etiqueta).not.toBe(tipo);
+      expect(etiqueta.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('no explota con un tipo desconocido: devuelve algo legible igual', () => {
+    expect(etiquetaTipo('inventado').length).toBeGreaterThan(0);
   });
 });
 

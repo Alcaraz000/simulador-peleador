@@ -2,15 +2,42 @@ import { createRng } from './rng.js';
 import { crearMundo, avanzarMundo, rankingDelJugador } from './world.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
-import { generarOferta } from './offers.js';
+import { generarOferta, CINTURONES } from './offers.js';
 import { crearSparring } from './sparring.js';
 import { noticiasDeSucesos, agregarNoticias } from './news.js';
 import { recuperar, puedePelear } from './injuries.js';
-import { cobrarSponsor } from './money.js';
+import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 
 // Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
 export const PERIODO_NOTICIAS = 4;
+
+// El jugador también sufre el declive de "las piernas" por la edad, igual que
+// los NPC en world.js (ahí es un roll de rng; acá es determinístico para no
+// alterar la racha de tiradas que ya calibra el ritmo de la carrera). El
+// 'preparador físico' (money.js) cumple su promesa ("el declive de las
+// piernas llega más tarde") corriendo el umbral unos años.
+export const EDAD_DECLIVE_JUGADOR = 32;
+const DEMORA_DECLIVE_PREPARADOR = 3;
+const PERDIDA_VELOCIDAD_DECLIVE = 2;
+const PERDIDA_CARDIO_DECLIVE = 1;
+
+// Nombre del cinturón que el mundo narra como "el campeonato" (mundo.campeonId
+// en world.js): mientras el jugador lo tiene puesto, el mundo no debe coronar
+// ni declarar vacante a nadie más (ver avanzarMundo).
+const NOMBRE_CINTURON_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
+
+function declivePorEdadJugador(jugador) {
+  const umbral = tieneStaff(jugador, 'preparador')
+    ? EDAD_DECLIVE_JUGADOR + DEMORA_DECLIVE_PREPARADOR
+    : EDAD_DECLIVE_JUGADOR;
+  if (jugador.edad < umbral) return jugador.atributos;
+  return {
+    ...jugador.atributos,
+    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
+    cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
+  };
+}
 
 // Probabilidades por etapa recalibradas respecto del brief original. El primer ajuste
 // (Task 17, primera vuelta) tocó solo estas probabilidades para bajar el total de
@@ -107,6 +134,7 @@ export function avanzarBloque(partida) {
   nueva.jugador.edad += etapa.aniosPorBloque;
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
+  nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
   const recuperacion = recuperar(nueva.jugador, { bloques: 1 });
   nueva.jugador = recuperacion.peleador;
@@ -114,7 +142,10 @@ export function avanzarBloque(partida) {
   const sponsor = cobrarSponsor(nueva.jugador, rng);
   if (sponsor) nueva.jugador = sponsor.jugador;
 
-  const paso = avanzarMundo(nueva.mundo, rng, { aniosPasados: Math.round(etapa.aniosPorBloque) });
+  const paso = avanzarMundo(nueva.mundo, rng, {
+    aniosPasados: Math.round(etapa.aniosPorBloque),
+    jugadorEsCampeon: nueva.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL),
+  });
   nueva.mundo = paso.mundo;
 
   // El ranking del jugador se recalcula cada bloque: es lo que habilita
@@ -125,7 +156,9 @@ export function avanzarBloque(partida) {
   if (sponsor) {
     nuevas.unshift({
       id: `noticia_sponsor_${nueva.bloqueGlobal}`,
-      tipo: 'escandalo',
+      // Es una buena noticia (te firmó un sponsor): iba tipada 'escandalo'
+      // por error, lo que la mostraba como si fuera algo malo.
+      tipo: 'sponsor',
       titular: sponsor.texto,
       fecha: paso.mundo.anio,
     });
@@ -159,18 +192,25 @@ function armarCola(partida) {
     cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: partida.jugador }) } });
   }
 
-  if (rng.chance(etapa.probPelea) && puedePelear(partida.jugador)) {
-    const forzarTitulo = etapa.id === 'profesional'
-      && partida.jugador.titulos.length === 0
-      && (partida.jugador.ranking ?? 99) <= 3;
-    const oferta = generarOferta(rng, {
-      jugador: partida.jugador,
-      mundo: partida.mundo,
-      etapa: etapa.id,
-      rivalidades: partida.rivalidades,
-      forzarTitulo,
-    });
-    if (oferta) cola.push({ tipo: 'oferta', datos: { oferta } });
+  if (rng.chance(etapa.probPelea)) {
+    if (puedePelear(partida.jugador)) {
+      const forzarTitulo = etapa.id === 'profesional'
+        && partida.jugador.titulos.length === 0
+        && (partida.jugador.ranking ?? 99) <= 3;
+      const oferta = generarOferta(rng, {
+        jugador: partida.jugador,
+        mundo: partida.mundo,
+        etapa: etapa.id,
+        rivalidades: partida.rivalidades,
+        forzarTitulo,
+      });
+      if (oferta) cola.push({ tipo: 'oferta', datos: { oferta } });
+    } else {
+      // Le tocaba pelea pero está lesionado grave (ver puedePelear en
+      // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
+      // por qué no llegan ofertas.
+      cola.push({ tipo: 'lesionSinOferta', datos: { lesion: partida.jugador.estado.lesion } });
+    }
   }
 
   // El feed de noticias sigue actualizándose todos los bloques (via avanzarBloque),
