@@ -16,15 +16,52 @@ function cartaAplica(carta, { etapa, disciplina }) {
   return porEtapa && porDisciplina;
 }
 
+// Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.
+// El peso es por RAREZA, no por carta: si hay cinco cartas normales y una rara, la
+// rara sigue valiendo 25% en total (no 25% dividido entre cinco competidoras).
+const PESOS_RAREZA = { normal: 70, rara: 25, legendaria: 5 };
+
+function rarezaDe(carta) {
+  return carta.rareza ?? 'normal';
+}
+
+// Sortea `total` cartas sin repetir de `elegibles`, respetando los pesos de
+// rareza. Cada ronda recalcula el peso por carta como PESOS_RAREZA[rareza] /
+// (cantidad de cartas de esa rareza que quedan), así la rareza completa
+// mantiene su peso total sin importar cuántas cartas individuales la formen.
+// Si una rareza se queda sin cartas, el peso restante simplemente se reparte
+// entre las rarezas que sí tienen: nunca se devuelven menos cartas de las
+// pedidas por culpa de un hueco de rareza (mientras el catálogo alcance).
+function sortearPorRareza(rng, elegibles, total) {
+  let restantes = [...elegibles];
+  const elegidas = [];
+  while (elegidas.length < total && restantes.length > 0) {
+    const porRareza = {};
+    for (const carta of restantes) {
+      const rareza = rarezaDe(carta);
+      porRareza[rareza] = (porRareza[rareza] ?? 0) + 1;
+    }
+    const entradas = restantes.map((carta) => {
+      const rareza = rarezaDe(carta);
+      const peso = (PESOS_RAREZA[rareza] ?? PESOS_RAREZA.normal) / porRareza[rareza];
+      return { valor: carta, peso };
+    });
+    const elegida = rng.weighted(entradas);
+    elegidas.push(elegida);
+    restantes = restantes.filter((c) => c !== elegida);
+  }
+  return elegidas;
+}
+
 export function repartirMejoras(rng, { jugador, etapa, cantidad = 3, catalogo = null }) {
   const fuente = catalogo ?? CARTAS_MEJORA;
   const bonus = bonusCartas(jugador);
   const total = cantidad + bonus.opcionesExtra;
   const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina }));
-  const mezcladas = rng.shuffle(elegibles).slice(0, total);
+  const elegidas = sortearPorRareza(rng, elegibles, total);
 
-  if (bonus.bonusValor === 0) return mezcladas;
-  return mezcladas.map((carta) => {
+  if (bonus.bonusValor === 0) return elegidas;
+  return elegidas.map((carta) => {
     const mods = {};
     for (const [clave, valor] of Object.entries(carta.mods)) {
       mods[clave] = valor > 0 ? valor + bonus.bonusValor : valor;
@@ -65,4 +102,28 @@ export function resolverProbabilidad(rng, opcion) {
   const entradas = opcion.probabilidades.map((p) => ({ valor: p, peso: p.peso }));
   const elegida = rng.weighted(entradas);
   return { resultado: elegida.mods, texto: elegida.texto };
+}
+
+// Convierte los pesos de `opcion.probabilidades` en enteros que suman
+// exactamente 100, en el mismo orden, para que la UI muestre el porcentaje
+// real de cada desenlace. Si el peso total no divide redondo, el resto se lo
+// lleva la entrada de mayor peso (la primera, en caso de empate).
+export function porcentajesDe(opcion) {
+  const probs = opcion?.probabilidades;
+  if (!probs || probs.length === 0) return [];
+
+  const pesos = probs.map((p) => Math.max(0, p.peso));
+  const totalPeso = pesos.reduce((a, b) => a + b, 0);
+  if (totalPeso <= 0) return pesos.map(() => 0);
+
+  const porcentajes = pesos.map((peso) => Math.floor((peso / totalPeso) * 100));
+  const resto = 100 - porcentajes.reduce((a, b) => a + b, 0);
+
+  let indiceMayor = 0;
+  for (let i = 1; i < pesos.length; i++) {
+    if (pesos[i] > pesos[indiceMayor]) indiceMayor = i;
+  }
+  porcentajes[indiceMayor] += resto;
+
+  return porcentajes;
 }
