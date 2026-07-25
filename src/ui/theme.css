@@ -664,6 +664,76 @@ input.creacion-control { cursor: text; }
    marca cuál quedó elegida sin tapar el color propio de su rareza. */
 .tarjeta.tarjeta-elegida { outline: 2px solid var(--dorado); outline-offset: 2px; }
 
+/* Tienda como popup (Task 5.4). Reusa `.carta` como base (mismo botón, mismo
+   `.carta:disabled` de siempre) y le suma capas propias para que "no te
+   alcanza" y "ya lo tenés" NO se vean igual: antes los dos casos quedaban
+   apagados parejo y el precio de lo impagable seguía en VERDE (el color de
+   "sí podés"), así que no se leía como deshabilitado de verdad. */
+.tienda-seccion-titulo { margin: 14px 0 8px; }
+.tienda-seccion-titulo:first-child { margin-top: 0; }
+
+.tienda-disponible {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.tienda-item-icono {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #1f1113;
+  color: var(--dorado);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tienda-item-staff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tienda-item-info { flex: 1; min-width: 0; }
+.tienda-item-nombre { font-weight: 800; letter-spacing: 0.3px; }
+.tienda-item-desc { font-size: 11.5px; color: var(--texto-medio); margin-top: 2px; }
+
+.tienda-precio { flex: 0 0 auto; font-weight: 800; font-size: 12.5px; white-space: nowrap; }
+.tienda-precio.verde { color: var(--verde); }
+.tienda-precio.sutil { color: var(--texto-sutil); }
+.tienda-precio.dorado { display: flex; align-items: center; gap: 4px; color: var(--dorado); }
+
+/* "No te alcanza": apagado DE VERDAD — además de la opacidad reducida de
+   .carta:disabled, se le saca el color (grayscale) y el precio queda en gris
+   en vez de verde, para que nunca se confunda con "sí podés comprarlo". */
+.tienda-item.no-alcanza { filter: grayscale(0.65); }
+.tienda-item.no-alcanza .tienda-item-icono { color: var(--texto-sutil); background: #1a1010; }
+
+/* "Ya lo tenés": logrado, no apagado — se distingue con un borde dorado en
+   vez de con la opacidad de .carta:disabled (por eso pisa esa regla acá). */
+.tienda-item.comprado { opacity: 1; border-color: var(--dorado); }
+.tienda-item.comprado .tienda-item-icono { color: var(--dorado); }
+
+.tienda-lujos-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tienda-item-lujo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 14px 10px;
+}
+
+.tienda-item-lujo .tienda-item-icono { width: 42px; height: 42px; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

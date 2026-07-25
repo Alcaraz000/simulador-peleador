@@ -143,13 +143,17 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderFicha(contenedor, { jugador, seccion, onCerrar: volver });
   }
 
+  // La tienda se abre como POPUP desde el tablero (decisión #1 del brief),
+  // nunca reemplazando la pantalla: `renderTienda` maneja su propio overlay
+  // (abrirPopup) y se refresca en el lugar en cada compra vía el valor que
+  // devuelve `onComprar`, así que acá alcanza con un solo llamado.
   function abrirTienda(volver = irADashboard) {
-    renderTienda(contenedor, {
+    renderTienda({
       jugador: partida.jugador,
       onComprar: (id) => {
         const paso = comprar(partida.jugador, id);
         if (paso.ok) partida = { ...partida, jugador: paso.jugador };
-        abrirTienda(volver);
+        return partida.jugador;
       },
       onCerrar: volver,
     });
