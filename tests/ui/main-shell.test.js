@@ -136,12 +136,25 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     iniciar(cont, prepararPartidaGuardada('evento', 10));
     continuar();
 
+    // Referencias de nodo capturadas ANTES de elegir: son la garantía central
+    // del rediseño (spec: "el tablero nunca desaparece"). Si el shell se
+    // recrea en vez de reutilizarse, estas referencias quedan viejas y las
+    // comparaciones de identidad de abajo fallan aunque `.shell` exista.
+    const refIzquierda = cont.querySelector('.shell-izquierda');
+    const refDerecha = cont.querySelector('.shell-derecha');
+
     const grilla = cont.querySelector('.panel-decision-grilla');
     const tarjetaAzar = grilla.querySelector('[data-opcion="cambiar"]');
     expect(tarjetaAzar).toBeTruthy();
     expect(tarjetaAzar.querySelectorAll('.tarjeta-efecto').length).toBe(2);
 
     tarjetaAzar.click();
+
+    // Todavía en pleno roll (antes de vaciar los temporizadores): el tablero
+    // lateral tiene que seguir siendo EXACTAMENTE el mismo nodo.
+    expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
+    expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+
     vi.runAllTimers();
 
     // con prefers-reduced-motion el roll resuelve directo, pero de todos
@@ -150,6 +163,14 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(iluminados).toHaveLength(1);
 
     expect(cont.querySelector('.shell')).toBeTruthy();
+    // Después del roll y de mostrar el desenlace (que repinta el panel
+    // izquierdo con los valores finales y lo anima), el nodo `aside` de cada
+    // región lateral sigue siendo el mismo: solo cambió su CONTENIDO interno,
+    // nunca la región en sí ni el `.shell` que la contiene.
+    expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
+    expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+    expect(cont.querySelectorAll('.shell')).toHaveLength(1);
+
     const seguir = cont.querySelector('.panel-decision-desenlace .boton');
     expect(seguir).toBeTruthy();
     // el texto del desenlace tiene que ser una de las dos crónicas posibles
