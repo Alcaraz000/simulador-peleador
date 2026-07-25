@@ -8,6 +8,7 @@ import { noticiasDeSucesos, agregarNoticias } from './news.js';
 import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
+import { semanasDeBloque } from './calendario.js';
 
 // Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
 export const PERIODO_NOTICIAS = 4;
@@ -92,6 +93,12 @@ export function crearPartida({ jugador, semilla }) {
     etapaIndice: 0,
     bloque: 1,
     bloqueGlobal: 1,
+    // Calendario del tablero (v2): semana 1-indexada desde el arranque de la
+    // carrera (ver calendario.js). proximaPelea guarda la oferta que ya está
+    // "en camino" este bloque (aunque el jugador todavía no llegó a ese beat
+    // en la cola), para que el panel de próxima pelea pueda mostrarla.
+    semanaGlobal: 1,
+    proximaPelea: null,
     cola: [],
     beatActual: null,
     historialBeats: 0,
@@ -132,6 +139,7 @@ export function avanzarBloque(partida) {
   const etapa = etapaActual(nueva);
 
   nueva.jugador.edad += etapa.aniosPorBloque;
+  nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque);
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
@@ -173,6 +181,10 @@ function armarCola(partida) {
   const rng = rngDe(partida);
   const etapa = etapaActual(partida);
   const cola = [];
+  // Si este bloque trae una oferta de pelea, se guarda acá para que el
+  // tablero (panel-proxima.js) pueda mostrarla incluso antes de que el
+  // jugador llegue a ese beat puntual dentro de la cola.
+  let proximaPelea = null;
 
   cola.push({
     tipo: 'mejora',
@@ -204,7 +216,13 @@ function armarCola(partida) {
         rivalidades: partida.rivalidades,
         forzarTitulo,
       });
-      if (oferta) cola.push({ tipo: 'oferta', datos: { oferta } });
+      if (oferta) {
+        cola.push({ tipo: 'oferta', datos: { oferta } });
+        proximaPelea = {
+          oferta,
+          semanaObjetivo: (partida.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque),
+        };
+      }
     } else {
       // Le tocaba pelea pero está lesionado grave (ver puedePelear en
       // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
@@ -222,7 +240,7 @@ function armarCola(partida) {
     cola.push({ tipo: 'noticias', datos: {} });
   }
 
-  return { cola, rngEstado: rng.estado() };
+  return { cola, rngEstado: rng.estado(), proximaPelea };
 }
 
 export function siguienteBeat(partida) {
@@ -245,6 +263,7 @@ export function siguienteBeat(partida) {
     const armado = armarCola(nueva);
     nueva.cola = armado.cola;
     nueva.rngEstado = armado.rngEstado;
+    nueva.proximaPelea = armado.proximaPelea;
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
+import { semanasDeBloque, semanasHastaPelea } from '../../src/core/calendario.js';
 
 function nuevaPartida(semilla = 1) {
   const jugador = crearPeleador({
@@ -100,6 +101,12 @@ describe('crearPartida', () => {
     expect(nuevaPartida(9).mundo.roster.map((r) => r.nombre))
       .toEqual(nuevaPartida(9).mundo.roster.map((r) => r.nombre));
   });
+
+  it('arranca en la semana global 1 y sin ninguna pelea pendiente', () => {
+    const p = nuevaPartida();
+    expect(p.semanaGlobal).toBe(1);
+    expect(p.proximaPelea).toBeNull();
+  });
 });
 
 describe('siguienteBeat', () => {
@@ -171,6 +178,13 @@ describe('avanzarBloque', () => {
     const despues = avanzarBloque(p);
     expect(despues.jugador.edad).toBeGreaterThan(p.jugador.edad);
     expect(despues.mundo.anio).toBeGreaterThan(p.mundo.anio);
+  });
+
+  it('avanza semanaGlobal segun las semanas del bloque de la etapa actual', () => {
+    const p = nuevaPartida();
+    const etapa = etapaActual(p);
+    const despues = avanzarBloque(p);
+    expect(despues.semanaGlobal).toBe(p.semanaGlobal + semanasDeBloque(etapa.aniosPorBloque));
   });
 
   it('genera noticias del mundo', () => {
@@ -347,5 +361,52 @@ describe('progresión de cinturones', () => {
       if (defensas === 0) sinDefensas += 1;
     }
     expect(sinDefensas / total).toBeLessThanOrEqual(0.1);
+  });
+});
+
+describe('proximaPelea (calendario del tablero)', () => {
+  // Etapa "profesional": probPelea = 1, asi que el bloque siempre trae una
+  // oferta y podemos verificar que quedó guardada de forma confiable.
+  function partidaProfesional(semilla) {
+    const p = nuevaPartida(semilla);
+    p.etapaIndice = 2;
+    return p;
+  }
+
+  it('en cuanto se arma la cola con una oferta, la partida ya sabe cuál es la próxima pelea antes de llegar a ese beat', () => {
+    const p = partidaProfesional(2);
+    const primerPaso = siguienteBeat(p);
+
+    // El primer beat de un bloque siempre es "mejora": si el bloque trae una
+    // oferta más adelante en la cola, proximaPelea ya tiene que reflejarla.
+    expect(primerPaso.beat.tipo).toBe('mejora');
+    expect(primerPaso.partida.proximaPelea).not.toBeNull();
+
+    let actual = primerPaso.partida;
+    let beatOferta = null;
+    for (let i = 0; i < 5 && !beatOferta; i += 1) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat && paso.beat.tipo === 'oferta') beatOferta = paso.beat;
+    }
+
+    expect(beatOferta).not.toBeNull();
+    expect(primerPaso.partida.proximaPelea.oferta.id).toBe(beatOferta.datos.oferta.id);
+  });
+
+  it('semanasHastaPelea da un numero de semanas coherente cuando hay oferta guardada', () => {
+    const p = partidaProfesional(2);
+    const paso = siguienteBeat(p);
+    expect(paso.partida.proximaPelea).not.toBeNull();
+    const faltan = semanasHastaPelea(paso.partida);
+    expect(faltan).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(faltan)).toBe(true);
+  });
+
+  it('no muta partida.proximaPelea de la partida original', () => {
+    const p = partidaProfesional(2);
+    const antes = JSON.stringify(p.proximaPelea);
+    siguienteBeat(p);
+    expect(JSON.stringify(p.proximaPelea)).toBe(antes);
   });
 });
