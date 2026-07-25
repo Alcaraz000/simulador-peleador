@@ -323,7 +323,6 @@ function pintarRincon(accionNodo, { pelea, onInstruccion = () => {} }) {
 // podría disparar `onGolpe` con datos viejos aunque el panel ya cambió.
 function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTANA_MS }) {
   const info = abrirGolpeDeGracia(pelea);
-  const desde = Date.now();
   let resuelto = false;
   let ventanaTimer = null;
   let barra = null;
@@ -348,17 +347,22 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
     onGolpe(datos);
   }
 
+  // La ventana cubre SOLO la lectura (encontrar y elegir la zona): el rival
+  // groggy se recompone si tardás en verle el hueco. Una vez que ya
+  // elegiste dónde pegar, el desafío pasa a ser clavarla — lo aporta la
+  // flecha moviéndose en la barra — y ahí se corta este timer. Dos relojes
+  // corriendo a la vez (la ventana Y la barra) sería confuso, no tenso.
   ventanaTimer = setTimeout(() => {
     resolver({ zonaElegida: null, precision: 0, aTiempo: false });
   }, ventanaMs);
 
   function pintarPaso2(zonaId) {
+    limpiarVentana();
     const zona = ZONAS_GOLPE[zonaId];
     const controlador = crearBarraPrecision({
       dificultad: zona.dificultad,
       onResultado: ({ precision }) => {
-        const transcurrido = Date.now() - desde;
-        resolver({ zonaElegida: zonaId, precision, aTiempo: transcurrido < ventanaMs });
+        resolver({ zonaElegida: zonaId, precision, aTiempo: true });
       },
     });
     barra = controlador;
@@ -376,7 +380,10 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
     const svg = dibujarSilueta({
       postura: info.postura,
       zonas: info.zonas,
-      onElegirZona: (zonaId) => pintarPaso2(zonaId),
+      onElegirZona: (zonaId) => {
+        if (resuelto) return; // ya se resolvió (p. ej. la ventana se cerró justo antes del click)
+        pintarPaso2(zonaId);
+      },
     });
 
     mount(accionNodo, el('div', { class: 'stack' }, [

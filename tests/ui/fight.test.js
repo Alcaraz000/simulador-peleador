@@ -260,6 +260,29 @@ describe('renderPelea — golpe de gracia', () => {
     expect(golpe.aTiempo).toBe(false);
   });
 
+  it('la ventana cubre solo elegir la zona: tomarse tiempo en la barra no pierde el golpe', () => {
+    // Decisión del coordinador: dos relojes corriendo a la vez (la ventana Y
+    // la barra) es confuso, no tenso. Elegir la zona corta la ventana; a
+    // partir de ahí el único desafío es la flecha de la barra.
+    vi.useFakeTimers();
+    let golpe = null;
+    const pelea = peleaGroggy();
+    renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; }, ventanaMs: 1000 });
+    const info = abrirGolpeDeGracia(pelea);
+    vi.advanceTimersByTime(900); // justo antes de que se cierre la ventana
+    cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+
+    // Mucho mas que la ventana original: si los dos relojes siguieran
+    // corriendo, esto ya deberia haber disparado el timeout.
+    vi.advanceTimersByTime(5000);
+    expect(golpe).toBeNull();
+
+    cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    expect(golpe).not.toBeNull();
+    expect(golpe.aTiempo).toBe(true);
+    expect(golpe.zonaElegida).toBe(info.zonaAbierta);
+  });
+
   it('si se re-renderiza mientras la ventana del golpe esta pendiente, no queda un timer colgado', () => {
     vi.useFakeTimers();
     let llamadas = 0;
