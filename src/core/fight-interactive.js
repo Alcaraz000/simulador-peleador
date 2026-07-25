@@ -35,17 +35,50 @@ export const ZONAS_GOLPE = {
   higado: { id: 'higado', nombre: 'Hígado', dificultad: 0.3, danoBase: 34 },
 };
 
-// Pesos del sorteo de la zona que se abre. Compartidos entre `abrirGolpeDeGracia`
-// (previsualización) y `resolverGolpeDeGracia` (resolución real) para que ambos
-// lean la misma zona a partir del mismo estado de RNG.
-const PESOS_ZONA_ABIERTA = [
-  { valor: 'higado', peso: 5 },
-  { valor: 'sien', peso: 3 },
-  { valor: 'menton', peso: 1 },
-];
+// Posturas del rival groggy: cada una decide qué zona queda `abierto`
+// (la que se puede clavar), cuál `riesgoso` y cuál `tapado`. Exactamente una
+// zona abierta y una tapada por postura (el resto, riesgosa) — así el golpe
+// de gracia siempre tiene una lectura clara: "acá está la abertura".
+export const POSTURAS = {
+  guardia_alta: {
+    id: 'guardia_alta',
+    nombre: 'Guardia alta',
+    descripcion: 'Guardia bien alta. Tiene la cara cerrada, pero el cuerpo quedó solo.',
+    zonas: { menton: 'tapado', sien: 'riesgoso', higado: 'abierto' },
+  },
+  manos_abajo: {
+    id: 'manos_abajo',
+    nombre: 'Manos abajo',
+    descripcion: 'Se le cayeron las manos de puro cansancio. El mentón quedó servido.',
+    zonas: { menton: 'abierto', sien: 'tapado', higado: 'riesgoso' },
+  },
+  cubre_un_lado: {
+    id: 'cubre_un_lado',
+    nombre: 'Cubierto de un lado',
+    descripcion: 'Se cubre de un costado nada más. Del otro lado no tiene nada.',
+    zonas: { menton: 'riesgoso', sien: 'tapado', higado: 'abierto' },
+  },
+  contra_cuerdas: {
+    id: 'contra_cuerdas',
+    nombre: 'Contra las cuerdas',
+    descripcion: 'Está contra las cuerdas, encogido, buscando dónde esconderse.',
+    zonas: { menton: 'riesgoso', sien: 'abierto', higado: 'tapado' },
+  },
+};
 
-function sortearZonaAbierta(rng) {
-  return rng.weighted(PESOS_ZONA_ABIERTA);
+const LISTA_POSTURAS = Object.values(POSTURAS);
+
+// Compartido entre `abrirGolpeDeGracia` (previsualización) y
+// `resolverGolpeDeGracia` (resolución real): ambos arrancan del mismo estado
+// de RNG sin consumirlo (abrirGolpeDeGracia nunca persiste su rng), así que
+// sortean siempre la misma postura para una misma pelea.
+function sortearPostura(rng) {
+  return rng.pick(LISTA_POSTURAS).id;
+}
+
+function zonaAbiertaDe(posturaId) {
+  const { zonas } = POSTURAS[posturaId];
+  return Object.keys(zonas).find((z) => zonas[z] === 'abierto');
 }
 
 function clonar(pelea) {
@@ -117,12 +150,13 @@ export function aplicarInstruccionRincon(pelea, instruccionId) {
 export function abrirGolpeDeGracia(pelea) {
   const rng = createRng(pelea.semilla);
   rng.restaurar(pelea.rngEstado);
-  const zonaAbierta = sortearZonaAbierta(rng);
+  const postura = sortearPostura(rng);
+  const zonaAbierta = zonaAbiertaDe(postura);
   const zonas = Object.values(ZONAS_GOLPE).map((zona) => ({
     ...zona,
-    estado: zona.id === zonaAbierta ? 'abierto' : zona.id === 'menton' ? 'tapado' : 'riesgoso',
+    estado: POSTURAS[postura].zonas[zona.id],
   }));
-  return { zonaAbierta, zonas, ventanaMs: VENTANA_MS };
+  return { postura, zonaAbierta, zonas, ventanaMs: VENTANA_MS };
 }
 
 export function resolverGolpeDeGracia(pelea, { zonaElegida, precision, aTiempo }) {
@@ -147,7 +181,8 @@ export function resolverGolpeDeGracia(pelea, { zonaElegida, precision, aTiempo }
 
   const rng = createRng(nueva.semilla);
   rng.restaurar(nueva.rngEstado);
-  const zonaAbierta = sortearZonaAbierta(rng);
+  const postura = sortearPostura(rng);
+  const zonaAbierta = zonaAbiertaDe(postura);
   const zona = ZONAS_GOLPE[zonaElegida] ?? ZONAS_GOLPE.higado;
   const acerto = zonaElegida === zonaAbierta;
 
