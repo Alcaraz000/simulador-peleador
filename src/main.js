@@ -10,11 +10,12 @@ import { crearCareo, responderCareo, resultadoCareo } from './core/presser.js';
 import { registrarGolpe, resultadoSparring } from './core/sparring.js';
 import { registrarCruce, elegirArchirrival, subirHeat } from './core/rivalry.js';
 import { comprar } from './core/money.js';
-import { tirarLesion, aplicarLesion } from './core/injuries.js';
+import { tirarLesion, aplicarLesion, curarConDinero } from './core/injuries.js';
 import { calcularLegado } from './core/legacy.js';
 import { guardar, cargar, borrar } from './core/save.js';
 import { clamp } from './core/stats.js';
 import { estadisticasDeCarrera } from './core/stats-carrera.js';
+import { fmtDinero } from './ui/dom.js';
 
 import { renderCreacion } from './ui/screens/create.js';
 import { renderDashboard } from './ui/screens/dashboard.js';
@@ -46,6 +47,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onFicha: (jugador, seccion = 'atributos') => renderFicha(contenedor, {
         jugador, seccion, onCerrar: irADashboard,
       }),
+      onCurar: () => {
+        const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
+        if (paso.ok) partida = { ...partida, jugador: paso.peleador };
+        irADashboard();
+      },
     });
   }
 
@@ -75,8 +81,22 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'redes') return beatCarta(beat, 'Redes sociales');
     if (beat.tipo === 'sparring') return beatSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
+    if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
     if (beat.tipo === 'noticias') return beatNoticias();
     return irADashboard();
+  }
+
+  function beatLesionSinOferta(beat) {
+    const { lesion } = beat.datos;
+    const bloques = lesion?.bloquesRestantes ?? null;
+    renderResultadoTarjeta(contenedor, {
+      titulo: 'Sin ofertas',
+      texto: lesion
+        ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
+        : 'Nadie te ofrece pelear mientras estás lesionado.',
+      deltas: [],
+      onContinuar: irADashboard,
+    });
   }
 
   function beatMejora(beat) {
@@ -284,7 +304,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderResultadoTarjeta(contenedor, {
       titulo: 'Después de la pelea',
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,
-      deltas: [`Bolsa: ${oferta.bolsa}`],
+      deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
       onContinuar: irADashboard,
     });
   }

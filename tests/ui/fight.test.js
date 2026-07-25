@@ -46,10 +46,29 @@ describe('renderOferta', () => {
 
   it('en una defensa obligatoria muestra el progreso de defensas exigidas', () => {
     const defensa = {
-      ...oferta, esObligatoria: true, defensasObligatorias: 3, enJuego: 'Cinturón regional',
+      ...oferta, esObligatoria: true, defensasObligatorias: 3, enJuego: 'Cinturón regional', cinturonId: 'regional',
     };
-    renderOferta(cont, { oferta: defensa, jugador: { ...jugador, defensas: 1 }, onAceptar: () => {}, onRechazar: () => {} });
+    renderOferta(cont, {
+      oferta: defensa, jugador: { ...jugador, defensasCinturon: { regional: 1 } }, onAceptar: () => {}, onRechazar: () => {},
+    });
     expect(cont.textContent).toContain('2 de 3');
+  });
+
+  it('el progreso de defensas es del cinturon actual, no arrastra el de otro cinturon', () => {
+    // Regresión del bug real: el jugador ya defendió 2 veces el regional
+    // (saturado) y ahora está defendiendo el nacional por primera vez. El
+    // chip tiene que arrancar de nuevo en "1 de 3", no seguir en "2 de 2".
+    const defensaNacional = {
+      ...oferta, esObligatoria: true, defensasObligatorias: 3, enJuego: 'Cinturón nacional', cinturonId: 'nacional',
+    };
+    renderOferta(cont, {
+      oferta: defensaNacional,
+      jugador: { ...jugador, defensasCinturon: { regional: 2, nacional: 0 } },
+      onAceptar: () => {},
+      onRechazar: () => {},
+    });
+    expect(cont.textContent).toContain('1 de 3');
+    expect(cont.textContent).not.toContain('2 de 2');
   });
 
   it('aceptar y rechazar disparan sus callbacks', () => {

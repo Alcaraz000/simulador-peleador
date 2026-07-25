@@ -27,7 +27,9 @@ function tileRecurso(nombre, valor, clase = '') {
   ]);
 }
 
-export function renderDashboard(contenedor, { partida, onSiguiente, onTienda = () => {}, onFicha = () => {} }) {
+export function renderDashboard(contenedor, {
+  partida, onSiguiente, onTienda = () => {}, onFicha = () => {}, onCurar = () => {},
+}) {
   const { jugador } = partida;
   const etapa = etapaActual(partida);
   const disciplina = getDisciplina(jugador.disciplina);
@@ -81,6 +83,24 @@ export function renderDashboard(contenedor, { partida, onSiguiente, onTienda = (
     datosArchi ? tileRecurso(`vs ${datosArchi.apodo}`, h2hTexto(archi), 'rojo') : null,
   ].filter(Boolean));
 
+  const lesion = jugador.estado.lesion;
+  const panelLesion = lesion ? el('div', { class: 'panel', style: 'display:flex;align-items:center;gap:10px' }, [
+    icono('alerta', { color: '#e05252' }),
+    el('div', { style: 'flex:1' }, [
+      el('div', { class: 'rojo', style: 'font-weight:800', text: lesion.nombre }),
+      el('div', {
+        class: 'etiqueta',
+        text: `Te quedan ${lesion.bloquesRestantes} ${lesion.bloquesRestantes === 1 ? 'bloque' : 'bloques'} para recuperarte`,
+      }),
+    ]),
+    el('button', {
+      class: 'boton secundario', 'data-accion': 'curar',
+      disabled: jugador.dinero >= lesion.costo ? null : '',
+      style: 'width:auto;padding:10px 14px;flex:0 0 auto', onClick: onCurar,
+      text: `Curar · ${fmtDinero(lesion.costo)}`,
+    }),
+  ]) : null;
+
   const banner = el('div', { class: 'panel', style: 'display:flex;align-items:center;gap:10px' }, [
     el('div', { style: 'flex:1' }, [
       el('div', { class: 'dorado', style: 'font-weight:800;letter-spacing:1px', text: etapa.nombre.toUpperCase() }),
@@ -97,7 +117,7 @@ export function renderDashboard(contenedor, { partida, onSiguiente, onTienda = (
   });
 
   mount(contenedor, el('div', { class: 'stack' }, [
-    cabecera, historial, atributos, recursos, banner,
+    cabecera, panelLesion, historial, atributos, recursos, banner,
     el('div', { class: 'etiqueta', text: 'Lo que viene ahora' }),
     siguiente,
   ]));

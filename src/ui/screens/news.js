@@ -1,10 +1,11 @@
 import { el, mount } from '../dom.js';
+import { etiquetaTipo } from '../../core/news.js';
 
 export function renderNoticias(contenedor, { noticias, onContinuar }) {
   const items = noticias.slice(0, 8).map((n) => el('div', {
     class: 'panel', 'data-noticia': n.id,
   }, [
-    el('div', { class: 'etiqueta', text: `${n.fecha} · ${n.tipo}` }),
+    el('div', { class: 'etiqueta', text: `${n.fecha} · ${etiquetaTipo(n.tipo)}` }),
     el('div', { text: n.titular }),
   ]));
 

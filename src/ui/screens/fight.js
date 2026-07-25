@@ -27,7 +27,10 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
       oferta.esObligatoria
         ? el('div', {
           class: 'chip dorado',
-          text: `Defensa obligatoria · ${Math.min(jugador.defensas + 1, oferta.defensasObligatorias)} de ${oferta.defensasObligatorias}`,
+          // Defensas ya hechas de ESTE cinturón (jugador.defensasCinturon,
+          // ver offers.js), no el total histórico: si no, el número queda
+          // pegado al cinturón anterior en cuanto asciende (ver fix del bug).
+          text: `Defensa obligatoria · ${Math.min((jugador.defensasCinturon?.[oferta.cinturonId] ?? 0) + 1, oferta.defensasObligatorias)} de ${oferta.defensasObligatorias}`,
         })
         : null,
     ]),
@@ -50,13 +53,15 @@ export function renderPlan(contenedor, { oferta, onElegirPlan }) {
   ]));
 }
 
-// Modo automático de la pelea: en vez de tener que tocar "Siguiente round" a
-// mano en cada asalto, este botón dispara el mismo avance solo, cada 1400 ms.
-// Como cada round termina siempre en una decisión (el rincón o el golpe de
-// gracia), el intervalo se limpia apenas aparece esa pantalla — el jugador
-// sigue eligiendo la estrategia, solo se ahorra el toque de "confirmar".
-// Se guarda en una variable de módulo y se limpia en cada mount para que
-// nunca queden temporizadores vivos corriendo de fondo.
+// OJO: esto NO es un autoplay de varios rounds. Cada round termina siempre en
+// una decisión (el rincón o el golpe de gracia) y esas pantallas cortan el
+// temporizador (detenerAuto) para que el jugador siga eligiendo la
+// estrategia — así que el botón dispara el avance del round actual después
+// de una breve demora dramática, y ahí se frena solo. Si el texto dijera
+// "solo" a secas prometería un piloto automático que nunca llega a pasar de
+// un round por click; por eso "Adelantar round" en vez de "Avanzar solo".
+// El temporizador se guarda en una variable de módulo y se limpia en cada
+// mount para que nunca queden temporizadores vivos corriendo de fondo.
 let autoTimer = null;
 export function detenerAuto() {
   if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
@@ -91,7 +96,7 @@ export function renderPelea(contenedor, { pelea, eventos, onSiguienteRound, onFi
     pelea.terminada
       ? null
       : el('button', {
-        class: 'boton secundario', 'data-accion': 'auto', text: 'Avanzar solo',
+        class: 'boton secundario', 'data-accion': 'auto', text: 'Adelantar round',
         onClick: () => {
           detenerAuto();
           autoTimer = setInterval(() => onSiguienteRound(), 1400);

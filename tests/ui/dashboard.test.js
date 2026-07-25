@@ -88,4 +88,43 @@ describe('renderDashboard', () => {
     renderDashboard(cont, { partida: p, onSiguiente: () => {} });
     expect(cont.textContent).toContain('Cinturón regional');
   });
+
+  it('sin lesion no muestra panel de lesion ni boton de curar', () => {
+    renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
+    expect(cont.textContent.toLowerCase()).not.toContain('lesion');
+    expect(cont.querySelector('[data-accion="curar"]')).toBeNull();
+  });
+
+  it('con lesion muestra el nombre y los bloques que faltan', () => {
+    const p = partida();
+    p.jugador.estado.lesion = {
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+    };
+    renderDashboard(cont, { partida: p, onSiguiente: () => {} });
+    expect(cont.textContent).toContain('Mano fracturada');
+    expect(cont.textContent).toContain('2');
+  });
+
+  it('con lesion ofrece pagar para curarse por el costo que define la lesion', () => {
+    const p = partida();
+    p.jugador.dinero = 100000;
+    p.jugador.estado.lesion = {
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+    };
+    let curado = false;
+    renderDashboard(cont, { partida: p, onSiguiente: () => {}, onCurar: () => { curado = true; } });
+    expect(cont.textContent).toContain('US$ 22K');
+    cont.querySelector('[data-accion="curar"]').click();
+    expect(curado).toBe(true);
+  });
+
+  it('el boton de curar esta deshabilitado si no alcanza la plata', () => {
+    const p = partida();
+    p.jugador.dinero = 100;
+    p.jugador.estado.lesion = {
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+    };
+    renderDashboard(cont, { partida: p, onSiguiente: () => {} });
+    expect(cont.querySelector('[data-accion="curar"]').disabled).toBe(true);
+  });
 });
