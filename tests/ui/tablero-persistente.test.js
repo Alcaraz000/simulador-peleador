@@ -5,12 +5,18 @@
 // regiones laterales (`.shell-izquierda`/`.shell-derecha`), no por presencia
 // de un selector — un shell RECREADO también tendría esas clases.
 //
-// Excepción ya decidida (no se re-discute acá): la pelea y su previa
-// (oferta/negociación/careo/plan) y la ficha del peleador siguen siendo
-// pantallas completas que reemplazan `contenedor` — igual que la creación del
-// peleador y el fin de carrera. El tablero se RECONSTRUYE al volver de ahí
+// Excepciones ya decididas (no se re-discuten acá): la ficha del peleador, la
+// creación del peleador y el fin de carrera siguen siendo pantallas completas
+// que reemplazan `contenedor`. Lo mismo con la pipeline de negociación →
+// careo → plan → pelea, pero SOLO A PARTIR de aceptar una oferta (revisión
+// del coordinador tras la primera vuelta de esta task): la tarjeta de
+// aceptar/rechazar la oferta en sí vive DENTRO del tablero, como cualquier
+// otro beat de decisión — es, literalmente, el caso de uso que motivó el
+// rediseño (ver ranking/récord/dinero mientras se decide si conviene esa
+// bolsa). El tablero se RECONSTRUYE al volver de una pantalla completa
 // (mismo comportamiento, no la misma referencia de nodo); lo que no puede
-// pasar nunca es que "entre beats" aparezca renderDashboard.
+// pasar nunca es que "entre beats" —ni al decidir sobre una oferta— aparezca
+// renderDashboard u otra pantalla que lo reemplace.
 import {
   describe, it, expect, beforeEach, afterEach, vi,
 } from 'vitest';
@@ -50,10 +56,14 @@ function prepararStorage(partida) {
 // clickea y ACTO SEGUIDO resuelve lo que haya resultado de eso — nunca
 // devuelve 'idle' a ciegas justo después de clickear, porque ese click puede
 // haber disparado cualquier cosa (una decisión, sparring, un aviso, o una
-// oferta de pelea a pantalla completa). Devuelve una etiqueta de qué pasó,
-// para que el test sepa cuándo el shell se reconstruye a propósito (una
-// oferta, pantalla completa) y cuándo tiene que seguir siendo el mismo nodo.
-function resolverUnPaso(cont, { aceptarOfertas }) {
+// oferta de pelea). Devuelve una etiqueta de qué pasó, para que el test sepa
+// cuándo el shell se reconstruye a propósito (SOLO al aceptar una oferta —
+// ahí arranca la pipeline a pantalla completa) y cuándo tiene que seguir
+// siendo el mismo nodo (todo lo demás, incluida la tarjeta de la oferta y su
+// rechazo, que viven dentro del tablero). `detenerEnOferta` para en seco
+// apenas aparece la tarjeta de la oferta, SIN clickear aceptar/rechazar —
+// para que el test pueda inspeccionarla tal cual se le muestra al jugador.
+function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
   if (botonIdle) botonIdle.click();
 
@@ -93,17 +103,22 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
   const avisoDirecto = cont.querySelector('.panel-decision-desenlace .boton');
   if (avisoDirecto) { avisoDirecto.click(); return 'aviso'; }
 
-  const aceptar = cont.querySelector('[data-accion="aceptar"]');
-  const rechazar = cont.querySelector('[data-accion="rechazar"]');
+  // La tarjeta de aceptar/rechazar la oferta vive DENTRO del tablero (Task
+  // 6.1, revisión del coordinador): se busca escopada a `.shell-centro`, no
+  // en cualquier lado de `cont` — si alguna vez volviera a ser pantalla
+  // completa, este selector dejaría de encontrarla y el test fallaría acá.
+  const aceptar = cont.querySelector('.shell-centro [data-accion="aceptar"]');
+  const rechazar = cont.querySelector('.shell-centro [data-accion="rechazar"]');
   if (aceptar || rechazar) {
+    if (detenerEnOferta) return 'oferta';
     if (aceptarOfertas) {
       aceptar.click();
       jugarPeleaCompleta(cont);
       return 'pelea';
     }
     rechazar.click();
-    const continuar = cont.querySelector('[data-accion="continuar"]');
-    if (continuar) continuar.click();
+    const seguirDesenlace = cont.querySelector('.panel-decision-desenlace .boton');
+    if (seguirDesenlace) seguirDesenlace.click();
     return 'oferta-rechazada';
   }
 
@@ -199,37 +214,49 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell-centro').textContent.toUpperCase()).toContain('JUVENIL');
   });
 
-  it('durante una racha de beats el shell NUNCA se recrea (identidad de nodo); tras una oferta se reconstruye limpio', () => {
+  it('durante una racha de beats (incluidas ofertas rechazadas) el shell NUNCA se recrea, por identidad de nodo', () => {
     iniciar(cont, prepararStorage(nuevaPartida(3)));
 
-    let refIzquierda = cont.querySelector('.shell-izquierda');
-    let refDerecha = cont.querySelector('.shell-derecha');
+    const refIzquierda = cont.querySelector('.shell-izquierda');
+    const refDerecha = cont.querySelector('.shell-derecha');
     expect(refIzquierda).toBeTruthy();
     expect(refDerecha).toBeTruthy();
 
     let huboOferta = false;
+    // No se acepta ninguna oferta en este test (esa es la única transición
+    // que sigue llevando a pantalla completa): rechazar se resuelve DENTRO
+    // del tablero, así que la identidad tiene que sobrevivir a TODO el tramo.
     for (let i = 0; i < 25; i += 1) {
       const tipo = resolverUnPaso(cont, { aceptarOfertas: false });
       expect(tipo).not.toBeNull();
+      if (tipo === 'oferta-rechazada') huboOferta = true;
 
-      if (tipo === 'oferta-rechazada') {
-        huboOferta = true;
-        // Categoría "pantalla completa" (misma decisión que la ficha/pelea):
-        // se vuelve a un tablero funcionando, pero NO se exige la misma
-        // referencia de nodo — se abre un nuevo tramo a chequear desde acá.
-        expect(cont.querySelector('.shell')).toBeTruthy();
-        refIzquierda = cont.querySelector('.shell-izquierda');
-        refDerecha = cont.querySelector('.shell-derecha');
-        continue;
-      }
-
-      // idle / decision / sparring / aviso: SIEMPRE el mismo shell.
       expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
       expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
     }
     // No es un requisito del test que aparezca una oferta (depende de la
-    // semilla), pero si aparece, el chequeo de arriba la cubre.
+    // semilla), pero si aparece, el chequeo de arriba la cubre igual.
     expect(typeof huboOferta).toBe('boolean');
+  });
+
+  it('la tarjeta de aceptar/rechazar la oferta vive en el centro del tablero, con el calendario y el peleador visibles', () => {
+    iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+    let guardia = 0;
+    let tipo = null;
+    while (tipo !== 'oferta' && guardia < 30) {
+      guardia += 1;
+      tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+    }
+    expect(tipo).toBe('oferta');
+    expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
+
+    // El caso de uso que motivó el rediseño: decidir sobre la oferta viendo
+    // el tablero completo alrededor — el calendario (arriba, en el centro) y
+    // el peleador (ranking/récord/dinero, a la izquierda).
+    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Ranking');
   });
 
   it('curar una lesion con dinero desde el tablero descuenta la plata y saca el aviso de lesion', () => {

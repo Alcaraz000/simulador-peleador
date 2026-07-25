@@ -35,6 +35,7 @@ import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
 import { renderPanelAvance } from './ui/screens/panel-avance.js';
+import { renderCalendario } from './ui/screens/panel-calendario.js';
 import { animarRoll } from './ui/components/roll.js';
 import { animarAtributos } from './ui/components/animar-numero.js';
 import { icono } from './ui/icons.js';
@@ -155,15 +156,29 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   // Asegura el shell y REFRESCA los paneles laterales con la partida actual
-  // (izquierda: peleador; derecha: próxima pelea + noticias). Se llama en
-  // cada transición del tablero (nuevo beat, o volver al estado ocioso) —
-  // nunca en cada micro-render dentro de un mismo beat (p. ej. cada golpe del
-  // sparring, o cada frame del roll de azar, repintan solo el centro
-  // directo). La región central queda como estaba: quien llama decide qué
-  // pintar ahí.
+  // (izquierda: peleador; derecha: próxima pelea + noticias), más el
+  // calendario del centro. Se llama en cada transición del tablero (nuevo
+  // beat, o volver al estado ocioso) — nunca en cada micro-render dentro de
+  // un mismo beat (p. ej. cada golpe del sparring, o cada frame del roll de
+  // azar, repintan solo `centroContenido()` directo).
+  //
+  // La región central queda armada con DOS sub-nodos estables, igual que ya
+  // hace la derecha con próxima/noticias: `calendario` (siempre el mismo
+  // contenido mientras no cambie `semanaGlobal`, ver panel-calendario.js —
+  // pedido del coordinador: es información permanente del jugador, no puede
+  // vivir donde el celular la esconde) y `contenido`, donde va lo que sea que
+  // esté pasando ahora (el panel de avance, una decisión, el sparring). Quien
+  // pinta un beat nunca toca `shell.regiones.centro` directo: usa
+  // `centroContenido()`.
   function montarTablero() {
     const shell = asegurarShell();
     renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
+
+    shell.montarCentro(el('div', { class: 'stack' }, [
+      el('div', { dataset: { bloque: 'calendario' } }),
+      el('div', { dataset: { bloque: 'contenido' } }),
+    ]));
+    renderCalendario(shell.regiones.centro.querySelector('[data-bloque="calendario"]'), { partida });
 
     shell.montarDerecha(el('div', {}, [
       el('div', { dataset: { bloque: 'proxima' } }),
@@ -182,6 +197,15 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     });
 
     return shell;
+  }
+
+  // El sub-nodo de la región central donde va el contenido QUE CAMBIA (todo
+  // lo que antes apuntaba directo a `shellActual.regiones.centro`): debajo
+  // del calendario, siempre fijo arriba. Se relee en cada llamada (nunca se
+  // cachea en una variable) para no quedar con una referencia vieja si
+  // `montarTablero()` reconstruyó el esqueleto entre medio.
+  function centroContenido() {
+    return shellActual.regiones.centro.querySelector('[data-bloque="contenido"]');
   }
 
   // Reconstruye el tablero tal cual estaba: asegura el shell, refresca los
@@ -212,7 +236,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
     animarAtributos(shell.regiones.izquierda, deltas);
     shell.destacar('izquierda');
-    centro(() => renderDesenlace(shellActual.regiones.centro, {
+    centro(() => renderDesenlace(centroContenido(), {
       titulo, texto, deltasTexto: deltasTexto ?? formatearMods(deltas), onContinuar: irADashboard,
     }));
   }
@@ -222,7 +246,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (Task 6.1 — el tablero es la pantalla principal, siempre).
   function irADashboard() {
     persistir();
-    centro(() => renderPanelAvance(shellActual.regiones.centro, {
+    centro(() => renderPanelAvance(centroContenido(), {
       partida, onSiguiente: siguiente, onCurar: curar,
     }));
   }
@@ -288,12 +312,15 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (brief de la Task 6.1) pasan a vivir en la misma región central del
   // tablero, reusando renderDesenlace (mismo layout: título + texto + botón
   // Seguir, sin deltas). Esto deja huérfano a renderNoticias (screens/news.js
-  // — se borra junto con sus tests); renderResultadoTarjeta sigue en uso en
-  // el rechazo de oferta y en el resultado post-pelea, así que no se toca.
+  // — se borra junto con sus tests). `renderResultadoTarjeta` sigue en uso en
+  // el resultado post-pelea (cerrarPelea, pantalla completa junto con el
+  // resto de la pipeline de la pelea) — el rechazo de oferta se sumó a la
+  // lista de cosas que resuelven en el centro (ver beatOferta), así que ya no
+  // lo usa.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
     const bloques = lesion?.bloquesRestantes ?? null;
-    centro(() => renderDesenlace(shellActual.regiones.centro, {
+    centro(() => renderDesenlace(centroContenido(), {
       titulo: 'Sin ofertas',
       texto: lesion
         ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
@@ -309,7 +336,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     // beat solo le pone ritmo a la carrera (consume su turno) y avisa que
     // circuló algo, en vez de forzar una pantalla aparte para lo mismo que ya
     // se ve al lado.
-    centro(() => renderDesenlace(shellActual.regiones.centro, {
+    centro(() => renderDesenlace(centroContenido(), {
       titulo: 'El mundo sigue girando',
       texto: 'Circularon resultados y rumores de otros peleadores esta semana. Date una vuelta por las noticias, a la derecha.',
       deltasTexto: [],
@@ -318,7 +345,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   function beatMejora(beat) {
-    centro(() => renderPanelDecision(shellActual.regiones.centro, {
+    centro(() => renderPanelDecision(centroContenido(), {
       titulo: 'Campamento',
       bajada: 'El trabajo rindió',
       texto: 'El dado trajo tres mejoras. Elegí una.',
@@ -335,7 +362,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   function beatCarta(beat, titulo, nombreIcono) {
     const carta = beat.datos.carta;
 
-    centro(() => renderPanelDecision(shellActual.regiones.centro, {
+    centro(() => renderPanelDecision(centroContenido(), {
       titulo,
       bajada: carta.titulo,
       texto: carta.texto,
@@ -357,7 +384,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         };
 
         if (opcion.probabilidades) {
-          const nodoTarjeta = shellActual.regiones.centro.querySelector(`[data-opcion="${id}"]`);
+          const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
           animarRoll(nodoTarjeta, {
             indiceGanador: resuelto.indiceGanador,
             cantidad: opcion.probabilidades.length,
@@ -374,7 +401,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     let sparring = beat.datos.sparring;
 
     function pintarSparring() {
-      renderSparring(shellActual.regiones.centro, {
+      renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
         onGolpe: (evento) => {
@@ -393,20 +420,37 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     centro(pintarSparring);
   }
 
+  // Aceptar o rechazar una oferta es LA decisión más importante del juego
+  // (revisión del coordinador tras la Task 6.1): es donde más rinde ver el
+  // ranking, el récord, el dinero y el estado físico mientras se decide si
+  // conviene esa bolsa o si están para pelear por ese cinturón — el caso de
+  // uso que motivó todo el rediseño. Por eso vive en el centro del tablero
+  // como cualquier otro beat de decisión, reusando `renderOferta` tal cual
+  // (no le importa si `contenedor` es la pantalla entera o una región: solo
+  // monta un `.stack`). Rechazar también se resuelve DENTRO del tablero
+  // (reusa renderDesenlace, misma familia que lesionSinOferta/noticias). Al
+  // ACEPTAR es cuando arranca la pipeline a pantalla completa
+  // (negociación → careo → plan → pelea): esa sí sigue siendo pantallas
+  // grandes con su propia puesta en escena, decisión ya tomada.
   function beatOferta(beat) {
     const { oferta } = beat.datos;
-    renderOferta(contenedor, {
+    centro(() => renderOferta(centroContenido(), {
       oferta,
       jugador: partida.jugador,
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
+        const famaAntes = partida.jugador.fama;
         const paso = rechazarOferta(partida.jugador, oferta);
+        const deltaFama = paso.jugador.fama - famaAntes;
         partida = { ...partida, jugador: paso.jugador };
-        renderResultadoTarjeta(contenedor, {
-          titulo: 'Oferta rechazada', texto: paso.texto, deltas: [], onContinuar: irADashboard,
-        });
+        centro(() => renderDesenlace(centroContenido(), {
+          titulo: 'Oferta rechazada',
+          texto: paso.texto,
+          deltasTexto: deltaFama !== 0 ? [`${deltaFama > 0 ? '+' : ''}${deltaFama} Fama`] : [],
+          onContinuar: irADashboard,
+        }));
       },
-    });
+    }));
   }
 
   function negociar(oferta) {

@@ -196,6 +196,37 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.panel-decision-desenlace .boton')).toBeTruthy();
   });
 
+  // Revisión del coordinador tras la Task 6.1: aceptar o rechazar una oferta
+  // es la decisión más importante del juego, y es donde más rinde ver el
+  // tablero (ranking, récord, dinero, estado físico) mientras se decide. Deja
+  // de ser pantalla completa; vive en el centro como cualquier otro beat de
+  // decisión. Solo AL ACEPTAR arranca la pipeline a pantalla completa
+  // (negociación → careo → plan → pelea), que sigue intacta.
+  it('oferta: la tarjeta de aceptar/rechazar vive en el centro del tablero (con calendario y peleador visibles); rechazar resuelve ahi mismo', () => {
+    iniciar(cont, prepararPartidaGuardada('oferta'));
+    continuar();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
+    expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeTruthy();
+
+    const refIzquierda = cont.querySelector('.shell-izquierda');
+    const refDerecha = cont.querySelector('.shell-derecha');
+
+    cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
+
+    // Rechazar resuelve DENTRO del mismo tablero (mismo nodo): nunca se
+    // desmonta, a diferencia de lo que pasaba antes de esta revisión.
+    expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
+    expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
+    expect(seguir).toBeTruthy();
+    seguir.click();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill lleva al desenlace, sin pantalla aparte', () => {
     iniciar(cont, prepararPartidaGuardada('sparring'));
     continuar();
