@@ -1,6 +1,6 @@
 import { createRng } from './rng.js';
 import { clamp } from './stats.js';
-import { simularRound, PLANES } from './fight.js';
+import { simularRound } from './fight.js';
 
 export const UMBRAL_GROGGY = 22;
 export const VENTANA_MS = 3200;
@@ -34,6 +34,19 @@ export const ZONAS_GOLPE = {
   sien: { id: 'sien', nombre: 'Sien', dificultad: 0.5, danoBase: 42 },
   higado: { id: 'higado', nombre: 'Hígado', dificultad: 0.3, danoBase: 34 },
 };
+
+// Pesos del sorteo de la zona que se abre. Compartidos entre `abrirGolpeDeGracia`
+// (previsualización) y `resolverGolpeDeGracia` (resolución real) para que ambos
+// lean la misma zona a partir del mismo estado de RNG.
+const PESOS_ZONA_ABIERTA = [
+  { valor: 'higado', peso: 5 },
+  { valor: 'sien', peso: 3 },
+  { valor: 'menton', peso: 1 },
+];
+
+function sortearZonaAbierta(rng) {
+  return rng.weighted(PESOS_ZONA_ABIERTA);
+}
 
 function clonar(pelea) {
   return {
@@ -104,11 +117,7 @@ export function aplicarInstruccionRincon(pelea, instruccionId) {
 export function abrirGolpeDeGracia(pelea) {
   const rng = createRng(pelea.semilla);
   rng.restaurar(pelea.rngEstado);
-  const zonaAbierta = rng.weighted([
-    { valor: 'higado', peso: 5 },
-    { valor: 'sien', peso: 3 },
-    { valor: 'menton', peso: 1 },
-  ]);
+  const zonaAbierta = sortearZonaAbierta(rng);
   const zonas = Object.values(ZONAS_GOLPE).map((zona) => ({
     ...zona,
     estado: zona.id === zonaAbierta ? 'abierto' : zona.id === 'menton' ? 'tapado' : 'riesgoso',
@@ -138,7 +147,7 @@ export function resolverGolpeDeGracia(pelea, { zonaElegida, precision, aTiempo }
 
   const rng = createRng(nueva.semilla);
   rng.restaurar(nueva.rngEstado);
-  const { zonaAbierta } = abrirGolpeDeGracia(pelea);
+  const zonaAbierta = sortearZonaAbierta(rng);
   const zona = ZONAS_GOLPE[zonaElegida] ?? ZONAS_GOLPE.higado;
   const acerto = zonaElegida === zonaAbierta;
 

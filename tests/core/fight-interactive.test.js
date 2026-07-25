@@ -124,6 +124,19 @@ describe('golpe de gracia', () => {
     expect(info.ventanaMs).toBeGreaterThan(0);
   });
 
+  it('la zona que muestra la ventana siempre coincide con la que se resuelve como acierto', () => {
+    for (let semilla = 1; semilla <= 30; semilla++) {
+      const pelea = { ...armar({ semilla }), aguante: { jugador: 80, rival: 60 }, pendiente: 'golpe' };
+      const info = abrirGolpeDeGracia(pelea);
+      const { eventos } = resolverGolpeDeGracia(pelea, {
+        zonaElegida: info.zonaAbierta, precision: 0.6, aTiempo: true,
+      });
+      const ultimo = eventos[eventos.length - 1];
+      expect(ultimo.texto).toMatch(/la manda al|conecta al/);
+      expect(ultimo.texto).not.toMatch(/pega donde puede|encuentra la guardia/);
+    }
+  });
+
   it('acertar la zona abierta con buena precision suele terminar la pelea', () => {
     let kos = 0;
     for (let semilla = 1; semilla <= 20; semilla++) {
