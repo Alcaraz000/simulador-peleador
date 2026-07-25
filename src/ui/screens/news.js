@@ -5,8 +5,12 @@ export function renderNoticias(contenedor, { noticias, onContinuar }) {
   const items = noticias.slice(0, 8).map((n) => el('div', {
     class: 'panel', 'data-noticia': n.id,
   }, [
-    el('div', { class: 'etiqueta', text: `${n.fecha} · ${etiquetaTipo(n.tipo)}` }),
-    el('div', { text: n.titular }),
+    el('div', { class: 'fila', style: 'justify-content:space-between;align-items:center' }, [
+      el('div', { class: 'etiqueta', text: `${n.fecha} · ${etiquetaTipo(n.tipo)}` }),
+      n.nueva ? el('span', { class: 'chip rojo', text: 'ÚLTIMO MOMENTO' }) : null,
+    ]),
+    el('div', { style: 'font-weight:700;margin-top:4px', text: n.titular }),
+    n.cuerpo ? el('p', { class: 'medio', style: 'margin:4px 0 0;font-size:12.5px', text: n.cuerpo }) : null,
   ]));
 
   mount(contenedor, el('div', { class: 'stack' }, [

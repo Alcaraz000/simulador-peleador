@@ -392,6 +392,36 @@ h2 { font-size: 17px; font-weight: 800; }
   border-radius: 9px;
 }
 
+/* Próxima pelea + noticias: columna derecha (v2) */
+.panel-noticias-boton {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--texto);
+  padding: 0 0 8px;
+  font-family: var(--fuente);
+  cursor: pointer;
+}
+
+.panel-noticias-lista { display: flex; flex-direction: column; gap: 8px; }
+.panel-noticias-lista > * + * { margin-top: 0; }
+
+.noticia-item { padding: 10px 11px; }
+.noticia-item.nueva { border-color: var(--rojo); }
+
+/* Alto fijo con scroll interno: no crece indefinidamente con la carrera. */
+.panel-noticias-lista { padding-right: 2px; }
+.panel-noticias-lista::-webkit-scrollbar { width: 6px; }
+.panel-noticias-lista::-webkit-scrollbar-thumb { background: var(--borde-fuerte); border-radius: 3px; }
+
+@media (max-width: 899.98px) {
+  .panel-noticias-lista { display: none; }
+  .panel-noticias.panel-noticias-abierta .panel-noticias-lista { display: flex; margin-top: 8px; }
+}
+
 @keyframes aparecer {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }

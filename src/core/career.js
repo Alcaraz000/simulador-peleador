@@ -28,6 +28,16 @@ const PERDIDA_CARDIO_DECLIVE = 1;
 // ni declarar vacante a nadie más (ver avanzarMundo).
 const NOMBRE_CINTURON_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
 
+// La noticia de sponsor se arma acá mismo (no sale de PLANTILLAS en
+// news-templates.js: el titular ya viene armado desde money.js). El cuerpo
+// es atmosférico, sin marcadores, para cumplir el mismo contrato de
+// "toda noticia tiene titular y cuerpo" que las demás.
+const CUERPOS_SPONSOR = [
+  'La plata entra sola: para eso están los contratos de imagen.',
+  'Nada como un buen cheque para bajar la presión antes de la próxima pelea.',
+  'El mánager ya está pidiendo que le manden el logo para el pantalón.',
+];
+
 function declivePorEdadJugador(jugador) {
   const umbral = tieneStaff(jugador, 'preparador')
     ? EDAD_DECLIVE_JUGADOR + DEMORA_DECLIVE_PREPARADOR
@@ -168,7 +178,12 @@ export function avanzarBloque(partida) {
       // por error, lo que la mostraba como si fuera algo malo.
       tipo: 'sponsor',
       titular: sponsor.texto,
+      // No consume del rng compartido (ver el comentario en noticiasDeSucesos,
+      // news.js): el ritmo de la carrera está calibrado contra esa secuencia
+      // exacta, y esto es solo variedad de texto, no una decisión de juego.
+      cuerpo: CUERPOS_SPONSOR[nueva.bloqueGlobal % CUERPOS_SPONSOR.length],
       fecha: paso.mundo.anio,
+      nueva: true,
     });
   }
   nueva.noticias = agregarNoticias(nueva.noticias, nuevas);
