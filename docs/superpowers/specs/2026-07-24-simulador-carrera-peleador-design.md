@@ -94,9 +94,20 @@ regula cuántas decisiones ofrece para llegar a **~30-40 momentos jugables por
 carrera**.
 
 ### 4.3 Dashboard (pantalla principal)
-Siempre a la vista, en una sola pantalla tipo tablero (referencia visual: *Potrero*):
-tu peleador y récord, **MEDIA**, stats con números, estado (forma/fatiga/lesión/
-moral), dinero, fama, y "qué viene ahora" (la próxima decisión o pelea).
+Una sola pantalla tipo tablero (referencia visual: *Potrero*), mobile-first, de arriba
+a abajo:
+
+- **Cabecera del peleador (tocable):** MEDIA grande, apodo/nombre, categoría · mano ·
+  disciplina, gimnasio · año · edad y forma actual. Al tocarla abre la **ficha** con
+  dos opciones: **Ver atributos** (completos) y **Ver historial**.
+- **Historial unificado (tocable):** un solo bloque con el récord (V–D), total de
+  peleas, KOs y la última pelea; al tocarlo abre el **historial** completo.
+- **Atributos compactos:** una sola fila con los 6 stats (flechita ▲ donde subieron);
+  los completos se ven desde la ficha del peleador.
+- **Recursos:** títulos, ranking, fama, dinero ganado y head-to-head vs el archirrival.
+- **Banner de contexto:** etapa/torneo actual con su frase + acceso a la tienda.
+- **"Lo que viene ahora":** la próxima decisión u oferta de pelea.
+- **Botonera:** Entrenar · Redes · Tienda.
 
 ---
 
@@ -296,6 +307,9 @@ jugar y superar tu marca.
 - Las 4 etapas con ritmo comprimido.
 - El motor de tarjetas completo: mejora / decisión-evento / redes / careo / oferta-pelea.
 - Estilos/builds bien marcados.
+- Los **6 minijuegos** (careo, golpe de gracia, el rincón, tienda, negociación de la
+  bolsa, sparring). Ver §14.
+- Identidad visual **"Sangre y gloria"** (ver §13).
 - Peleas round-por-round rápidas con drama.
 - Elenco de parodias + rivales inventados + archirrival emergente + rivalidades que
   encendés.
@@ -315,11 +329,15 @@ jugar y superar tu marca.
 
 ## 13. Estética y tecnología
 
-**Estética:** referencia *Potrero* — oscura, minimalista, tarjetas, tipografía
-condensada en mayúsculas, un color de acento para lo positivo, íconos SVG (sin
-emojis), prolija y moderna. **Responsive** (celular + computadora). Feedback visual
-con "juice" tasteful: pop de stat al subir (flechita ▲), suspenso del dado, remate de
-KO, cierre vistoso — sin caer en lo recargado.
+**Identidad visual — "Sangre y gloria" (aprobada).** Base casi negra; **rojo boxeo**
+como acento principal (identidad, CTAs, MEDIA, cabeceras); **dorado/ámbar** para lo de
+campeón (títulos, elementos aspiracionales); **verde** solo para deltas positivos (▲,
+dinero ganado) y estados "en punto". Estructura tipo *Potrero*: oscura, minimalista,
+tarjetas, tipografía **condensada en mayúsculas**. Íconos **SVG estilo Lucide** (sin
+emojis). **Mobile-first** y responsive (celu + compu). Feedback visual con "juice"
+tasteful: pop de stat al subir (▲), suspenso del dado, remate de KO, cierre vistoso —
+sin recargar. (Tipografía de display concreta: pendiente; en los mockups se usó
+Bahnschrift como placeholder.)
 
 **Tecnología:** web **estática, 100% del lado del cliente**, sin backend ni cuentas;
 guardado en el navegador (localStorage). Publicable por link gratis y también
@@ -328,9 +346,63 @@ en el plan; preferencia por JS puro / framework liviano).
 
 ---
 
-## 14. Decisiones pendientes / abiertas
+## 14. Minijuegos
+
+Para que la partida no sea "solo leer y clickear tarjetas": **seis minijuegos cortos**
+con variaciones, integrados al ciclo y conectados entre sí y con los stats/staff. Todos
+en la identidad "Sangre y gloria". Los mockups aprobados quedaron en
+`.superpowers/brainstorm/`.
+
+### 14.1 Careo / rueda de prensa (pre-pelea grande)
+Duelo psicológico antes de las peleas importantes. Barras de **HYPE** y de **ventaja
+mental**. El juego muestra el **"tell" del rival** (qué lo desestabiliza y qué lo
+agranda); respondés eligiendo el **tono** (provocador, frío/técnico, humilde, canchero)
+durante ~3 rondas. Estrategia: generar hype (cobrar más, llenar el estadio) o buscar
+ventaja mental para la pelea. Alimenta rivalidades.
+
+### 14.2 El golpe de gracia (durante la pelea)
+Se abre cuando el rival queda **groggy**. Dos pasos rápidos contra una **ventana que se
+drena**: (1) leer la **zona abierta** (el mentón suele estar tapado; sien riesgosa;
+cuerpo/hígado abierto según su guardia) y (2) clavar una **barra de precisión**. Acertar
+= KO/derribo espectacular. **Si NO llegás a tiempo** (se agota la ventana): el rival se
+recompone, perdés la chance, gastás gas/energía y puede contragolpear.
+
+### 14.3 El rincón (entre rounds)
+Entre asaltos, con un **timer de descanso** corto. Ves el estado (tarjetas, tu fatiga vs
+la del rival, cortes) y tu entrenador te lee la situación. Elegís una instrucción
+(**pisá el acelerador** / **boxeá y respirá** / **todo al cuerpo**…) que ajusta el plan.
+Encadena: "todo al cuerpo" hace más probable que después se abra el golpe de gracia.
+
+### 14.4 La tienda (gestión)
+Pantalla propia para gastar el dinero. **Staff** que mejora de verdad: entrenador de
+elite (mejores cartas de mejora), kinesiólogo (menos lesiones), psicólogo (la mala racha
+dura menos), súper mánager (mejores ofertas/bolsas), preparador físico (el declive llega
+más tarde). **Lujos** (auto, casa, mansión, isla…) que suben estatus/fama y el **legado
+económico** final. Lo no pagable aparece atenuado; lo comprado, marcado. La plata no se
+lleva a la próxima carrera.
+
+### 14.5 Negociación de la bolsa (antes de firmar)
+Regateo **push-your-luck** con el promotor. La bolsa y las condiciones (título, cláusula
+de revancha, % de taquilla) crecen con cada apretón, pero baja la **paciencia del
+promotor**; cada opción muestra el **riesgo real** de que se levante y pierdas la oferta.
+El staff (Súper Mánager) baja los riesgos.
+
+### 14.6 Sparring / reflejos (en el entrenamiento)
+Drill corto y opcional de manoplas: **arranca con un botón "Empezar"** (estado de listo),
+y después pegás el pao que se prende lo más rápido posible. Marcadores de combo, tiempo
+de reacción y progreso; el desempeño da un **bonus de stats** (perfecto / bien / flojo).
+El drill puede variar (reflejos, esquivas, resistencia).
+
+### Candidatos para después
+**Corte de peso** (dar el peso sin vaciarte) y **torneo relámpago** (llave de celdas por
+destapar): quedaron fuera de la v1, anotados para más adelante.
+
+---
+
+## 15. Decisiones pendientes / abiertas
 
 - **Nombre del juego** (hoy "SimuladorPeleador" como nombre de trabajo).
+- **Tipografía de display** concreta (Bahnschrift fue placeholder en los mockups).
 - Categorías de peso exactas para la v1 (1 o 2, y cuáles).
 - Set inicial de estilos/builds a implementar en v1 y su balance.
 - Tamaño del elenco de parodias para la v1.

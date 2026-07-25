@@ -1,0 +1,13 @@
+# Mockups del companion de brainstorming (no versionar)
+.superpowers/
+
+# Dependencias
+node_modules/
+
+# Builds
+dist/
+build/
+
+# Sistema
+.DS_Store
+Thumbs.db
