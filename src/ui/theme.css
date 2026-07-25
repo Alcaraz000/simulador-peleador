@@ -478,6 +478,41 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .pelea-ko { animation: sacudon 0.45s ease; }
 
+/* Silueta del rival (golpe de gracia, Task 4.4): las zonas son botones SVG
+   accesibles por teclado (tabindex+role=button ya vienen del propio <g>). */
+.silueta-rival { display: block; width: 100%; }
+.silueta-zona { cursor: pointer; }
+.silueta-zona:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
+.silueta-zona:hover circle { filter: brightness(1.25); }
+
+/* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
+   elegida, flecha en movimiento que hay que frenar con un click. */
+.barra-precision-pista {
+  position: relative;
+  height: 28px;
+  background: #241012;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.barra-precision-pista .franja { position: absolute; top: 0; bottom: 0; }
+.barra-precision-pista .franja.al-aire { background: #3a1a1a; }
+.barra-precision-pista .franja.roza { background: #7a5a12; }
+.barra-precision-pista .franja-verde { position: absolute; top: 0; bottom: 0; background: #2f8a3a; }
+
+.barra-precision-flecha {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+  transform: translateX(-50%);
+  transition: left 0.05s linear;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
