@@ -58,6 +58,7 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
     jugador: nuevo,
     rivalidades: nuevasRivalidades,
     texto,
+    deltas: paso.deltas,
     deltasTexto: [...deltasTexto, ...extras],
   };
 }

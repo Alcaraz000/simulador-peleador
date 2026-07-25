@@ -227,4 +227,11 @@ describe('resolverOpcion', () => {
     const b = resolverOpcion(createRng(13), { jugador: jugador(), carta, opcionId: 'riesgo' });
     expect(a.texto).toBe(b.texto);
   });
+
+  it('expone los deltas crudos ademas de deltasTexto, sin romper deltasTexto', () => {
+    const yo = jugador();
+    const paso = resolverOpcion(createRng(5), { jugador: yo, carta, opcionId: 'directo' });
+    expect(paso.deltas).toEqual({ cardio: 5 });
+    expect(paso.deltasTexto).toEqual(['+5 Cardio']);
+  });
 });
