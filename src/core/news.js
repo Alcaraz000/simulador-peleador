@@ -72,23 +72,35 @@ const CUERPOS_SUCESO_GENERICO = [
   'La noticia corre rápido entre gimnasios y promotores.',
 ];
 
+// Hash chico y estable de un texto. Sirve para elegir variante de cuerpo sin
+// azar y sin contadores de módulo: la misma noticia siempre trae el mismo
+// párrafo, en cualquier corrida y después de cargar una partida guardada.
+function hashTexto(texto) {
+  let h = 0;
+  for (let i = 0; i < texto.length; i += 1) {
+    h = (h * 31 + texto.charCodeAt(i)) % 100000;
+  }
+  return h;
+}
+
 // El cuerpo de estas noticias no usa `rng`: aunque la firma la recibe (por
 // compatibilidad y porque en teoría podría necesitarla), consumir tiradas acá
 // correría toda la secuencia de azar del resto de la carrera (avanzarMundo se
 // llama en cada bloque, con varios sucesos cada vez) — el ritmo de la carrera
 // está calibrado bloque a bloque contra esa secuencia (ver el comentario
 // sobre ETAPAS en career.js). La variedad de cuerpos no necesita azar de
-// verdad: alcanza con no repetir siempre la primera variante.
+// verdad: alcanza con que no salga siempre la misma variante.
 export function noticiasDeSucesos(rng, sucesos, { anio }) {
-  return sucesos.map((suceso) => {
+  return sucesos.map((suceso, indice) => {
     contador += 1;
     const tipo = MAPA_SUCESOS[suceso.tipo] ?? 'victoria';
     const variantesCuerpo = CUERPOS_SUCESO[tipo] ?? CUERPOS_SUCESO_GENERICO;
+    const variante = (hashTexto(suceso.texto) + indice) % variantesCuerpo.length;
     return {
       id: `noticia_${contador}`,
       tipo,
       titular: suceso.texto,
-      cuerpo: variantesCuerpo[contador % variantesCuerpo.length],
+      cuerpo: variantesCuerpo[variante],
       fecha: anio,
       nueva: true,
     };

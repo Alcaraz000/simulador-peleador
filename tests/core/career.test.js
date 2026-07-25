@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
-import { semanasDeBloque, semanasHastaPelea } from '../../src/core/calendario.js';
+import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
+import { ANIO_INICIAL } from '../../src/core/world.js';
 
 function nuevaPartida(semilla = 1) {
   const jugador = crearPeleador({
@@ -408,5 +409,27 @@ describe('proximaPelea (calendario del tablero)', () => {
     const antes = JSON.stringify(p.proximaPelea);
     siguienteBeat(p);
     expect(JSON.stringify(p.proximaPelea)).toBe(antes);
+  });
+});
+
+describe('el año del mundo sigue al calendario', () => {
+  // Los bloques duran 1 a 1.3 años. Si el mundo acumulara años enteros por su
+  // cuenta terminaría varios años atrás del calendario del tablero y de la
+  // edad del jugador, y el tablero mostraría dos años distintos a la vez.
+  it('coincide con fechaDe(semanaGlobal) bloque a bloque durante toda la carrera', () => {
+    let actual = nuevaPartida(7);
+    for (let i = 0; i < 20 && !actual.terminada; i += 1) {
+      actual = avanzarBloque(actual);
+      expect(actual.mundo.anio).toBe(fechaDe(actual.semanaGlobal, ANIO_INICIAL).anio);
+    }
+  });
+
+  it('al final de una carrera completa el mundo avanzó tantos años como el jugador', () => {
+    const inicial = nuevaPartida(8);
+    const { partida } = jugarTodo(inicial);
+    const aniosDelMundo = partida.mundo.anio - ANIO_INICIAL;
+    const aniosDelJugador = partida.jugador.edad - inicial.jugador.edad;
+    // Tolerancia de un año: el calendario redondea semanas a años enteros.
+    expect(Math.abs(aniosDelMundo - aniosDelJugador)).toBeLessThanOrEqual(1);
   });
 });

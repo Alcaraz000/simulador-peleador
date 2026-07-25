@@ -1,5 +1,5 @@
 import { createRng } from './rng.js';
-import { crearMundo, avanzarMundo, rankingDelJugador } from './world.js';
+import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './world.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { generarOferta, CINTURONES } from './offers.js';
@@ -8,7 +8,7 @@ import { noticiasDeSucesos, agregarNoticias } from './news.js';
 import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
-import { semanasDeBloque } from './calendario.js';
+import { semanasDeBloque, fechaDe } from './calendario.js';
 
 // Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
 export const PERIODO_NOTICIAS = 4;
@@ -163,6 +163,10 @@ export function avanzarBloque(partida) {
   const paso = avanzarMundo(nueva.mundo, rng, {
     aniosPasados: Math.round(etapa.aniosPorBloque),
     jugadorEsCampeon: nueva.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL),
+    // El año lo manda el calendario, no el conteo del mundo: los bloques duran
+    // 1 a 1.3 años y acumular enteros dejaba al mundo ~4 años atrás del
+    // tablero y de la edad del jugador al final de la carrera.
+    anio: fechaDe(nueva.semanaGlobal, ANIO_INICIAL).anio,
   });
   nueva.mundo = paso.mundo;
 

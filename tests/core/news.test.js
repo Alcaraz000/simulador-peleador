@@ -79,6 +79,32 @@ describe('noticiasDeSucesos', () => {
   it('con lista vacia devuelve vacio', () => {
     expect(noticiasDeSucesos(createRng(1), [], { anio: 2030 })).toEqual([]);
   });
+
+  it('el mismo suceso siempre trae el mismo cuerpo, aunque cambie el rng', () => {
+    const suceso = [{ tipo: 'retiro', peleadorId: 'c', texto: 'Z se retira a los 38 años.' }];
+    const a = noticiasDeSucesos(createRng(1), suceso, { anio: 2030 })[0];
+    const b = noticiasDeSucesos(createRng(999), suceso, { anio: 2044 })[0];
+    expect(b.cuerpo).toBe(a.cuerpo);
+  });
+
+  it('sucesos distintos del mismo tipo reparten variantes de cuerpo, no repiten siempre la primera', () => {
+    const sucesos = Array.from({ length: 12 }, (_, i) => ({
+      tipo: 'victoria', peleadorId: `p${i}`, texto: `Peleador ${i} ganó por nocaut.`,
+    }));
+    const cuerpos = new Set(noticiasDeSucesos(createRng(1), sucesos, { anio: 2030 }).map((n) => n.cuerpo));
+    expect(cuerpos.size).toBeGreaterThanOrEqual(2);
+  });
+
+  it('no consume tiradas del rng compartido (la secuencia de la carrera no se corre)', () => {
+    const sucesos = [
+      { tipo: 'victoria', peleadorId: 'a', texto: 'X noqueó a Y.' },
+      { tipo: 'retiro', peleadorId: 'c', texto: 'Z se retira.' },
+    ];
+    const rng = createRng(5);
+    const antes = rng.estado();
+    noticiasDeSucesos(rng, sucesos, { anio: 2030 });
+    expect(rng.estado()).toEqual(antes);
+  });
 });
 
 describe('etiquetaTipo', () => {
