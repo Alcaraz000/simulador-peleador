@@ -9,32 +9,36 @@ import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor } from './money.js';
 import { clamp } from './stats.js';
 
-// Probabilidades por etapa ajustadas respecto del brief original: con 20 bloques
-// fijos y un beat de 'mejora' + uno de 'noticias' obligatorios en cada uno, el piso
-// ya son 40 beats garantizados. Ajustar solo probEvento de profesional (como sugería
-// el Step 4) no alcanza para bajar de 60: incluso poniendo en cero TODO el contenido
-// opcional de profesional, juvenil+amateur+veterano solos ya rondan 51-61 beats con
-// sus probabilidades originales. Hubo que recalibrar las cuatro etapas (ver informe
-// de la Task 17 para el detalle numérico y la búsqueda que lo respalda).
+// Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
+export const PERIODO_NOTICIAS = 4;
+
+// Probabilidades por etapa recalibradas respecto del brief original. El primer ajuste
+// (Task 17, primera vuelta) tocó solo estas probabilidades para bajar el total de
+// beats a 30-60, pero dejó el eje de cinturones casi inalcanzable (~5 ofertas de pelea
+// en toda la carrera). La causa real era el beat de 'noticias' incondicional en cada
+// bloque (comiéndose 20 de los 40 beats de piso). Con 'noticias' periódico
+// (PERIODO_NOTICIAS) el presupuesto se liberó y estas probabilidades se recalibraron
+// de nuevo con doble objetivo: 30-60 beats totales Y 12-22 ofertas de pelea por
+// carrera (nunca menos de 8). Ver el informe de la Task 17 para el detalle numérico.
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,
-    probPelea: 0.04, probEvento: 0.05, probRedes: 0, probSparring: 0.05,
+    probPelea: 0.18, probEvento: 0.22, probRedes: 0, probSparring: 0.22,
     frase: 'Nadie sabe quién sos. Todavía.',
   },
   {
     id: 'amateur', nombre: 'Amateur', bloques: 3, aniosPorBloque: 1, edadDesde: 18,
-    probPelea: 0.09, probEvento: 0.06, probRedes: 0.03, probSparring: 0.04,
+    probPelea: 0.4, probEvento: 0.28, probRedes: 0.15, probSparring: 0.18,
     frase: 'El ascenso no consagra ídolos. Ganate el salto.',
   },
   {
     id: 'profesional', nombre: 'Profesional', bloques: 11, aniosPorBloque: 1.3, edadDesde: 21,
-    probPelea: 0.45, probEvento: 0.09, probRedes: 0.07, probSparring: 0.04,
+    probPelea: 1, probEvento: 0.2, probRedes: 0.15, probSparring: 0.08,
     frase: 'Acá se cobra y se sangra. Bienvenido.',
   },
   {
     id: 'veterano', nombre: 'Veterano', bloques: 3, aniosPorBloque: 1.3, edadDesde: 36,
-    probPelea: 0.08, probEvento: 0.07, probRedes: 0.04, probSparring: 0.01,
+    probPelea: 0.55, probEvento: 0.3, probRedes: 0.15, probSparring: 0.03,
     frase: 'Cada pelea puede ser la última. Elegí bien.',
   },
 ];
@@ -169,7 +173,14 @@ function armarCola(partida) {
     if (oferta) cola.push({ tipo: 'oferta', datos: { oferta } });
   }
 
-  cola.push({ tipo: 'noticias', datos: {} });
+  // El feed de noticias sigue actualizándose todos los bloques (via avanzarBloque),
+  // pero el BEAT que se lo muestra al jugador como pantalla propia no: si apareciera
+  // en cada uno de los 20 bloques, consumiría la mitad del presupuesto de ritmo sin
+  // ser una decisión jugable. Se muestra cada PERIODO_NOTICIAS bloques, así el jugador
+  // igual se pone al día periódicamente sin que sea el 50% de la carrera.
+  if (partida.bloqueGlobal % PERIODO_NOTICIAS === 0) {
+    cola.push({ tipo: 'noticias', datos: {} });
+  }
 
   return { cola, rngEstado: rng.estado() };
 }
@@ -205,8 +216,11 @@ export function siguienteBeat(partida) {
 }
 
 export function totalBeatsEstimado() {
-  return ETAPAS.reduce((total, etapa) => {
-    const porBloque = 2 + etapa.probSparring + etapa.probEvento + etapa.probRedes + etapa.probPelea;
+  const totalBloques = ETAPAS.reduce((a, e) => a + e.bloques, 0);
+  const noticias = Math.floor(totalBloques / PERIODO_NOTICIAS);
+  const opcionales = ETAPAS.reduce((total, etapa) => {
+    const porBloque = 1 + etapa.probSparring + etapa.probEvento + etapa.probRedes + etapa.probPelea;
     return total + etapa.bloques * porBloque;
   }, 0);
+  return noticias + opcionales;
 }

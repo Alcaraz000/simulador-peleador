@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
+import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 
 function nuevaPartida(semilla = 1) {
   const jugador = crearPeleador({
@@ -21,6 +22,29 @@ function jugarTodo(partida, limite = 400) {
     if (paso.beat) beats.push(paso.beat);
   }
   return { partida: actual, beats };
+}
+
+// Juega una carrera entera aceptando y ganando cada oferta de pelea que aparece
+// (sin correr el motor de pelea completo: aplica directamente un resultado ganador
+// vía aplicarResultado). Sirve para verificar que la progresión de cinturones
+// funciona de punta a punta cuando al jugador le va bien.
+function jugarGanandoTodo(partida, limite = 400) {
+  let actual = partida;
+  let guardia = 0;
+  while (!actual.terminada && guardia < limite) {
+    guardia += 1;
+    const paso = siguienteBeat(actual);
+    actual = paso.partida;
+    if (paso.beat && paso.beat.tipo === 'oferta') {
+      const { oferta } = paso.beat.datos;
+      const resultado = aplicarResultado(actual.jugador, {
+        oferta,
+        resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+      });
+      actual = { ...actual, jugador: resultado.jugador };
+    }
+  }
+  return actual;
 }
 
 describe('etapas', () => {
@@ -160,5 +184,39 @@ describe('avanzarBloque', () => {
     const antes = JSON.stringify(p);
     avanzarBloque(p);
     expect(JSON.stringify(p)).toBe(antes);
+  });
+});
+
+describe('ofertas de pelea por carrera', () => {
+  // Guarda de ritmo para el eje de cinturones: si alguien vuelve a bajar probPelea
+  // (o a hacer incondicional el beat de noticias) sin medir el impacto, estos tests
+  // lo detectan. Ver el informe de la Task 17 para el porqué de estos números.
+  const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+  it('nunca caen por debajo de 8 ofertas en toda la carrera', () => {
+    semillas.forEach((semilla) => {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
+      expect(ofertas).toBeGreaterThanOrEqual(8);
+    });
+  });
+
+  it('tipicamente caen entre 12 y 22 ofertas por carrera', () => {
+    semillas.forEach((semilla) => {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
+      expect(ofertas).toBeGreaterThanOrEqual(12);
+      expect(ofertas).toBeLessThanOrEqual(22);
+    });
+  });
+});
+
+describe('progresión de cinturones', () => {
+  it('ganando todas las ofertas de pelea, el jugador puede conseguir los tres cinturones', () => {
+    const partida = jugarGanandoTodo(nuevaPartida(1));
+    expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
+    CINTURONES.forEach((cinturon) => {
+      expect(partida.jugador.titulos).toContain(cinturon.nombre);
+    });
   });
 });
