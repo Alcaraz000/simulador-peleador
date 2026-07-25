@@ -77,6 +77,15 @@ describe('avanzarMundo', () => {
     const b = avanzarMundo(mundo, createRng(13), { aniosPasados: 2 });
     expect(a.sucesos).toEqual(b.sucesos);
   });
+
+  it('clona titulares: mutar el mundo devuelto no afecta al original y viceversa', () => {
+    const mundo = crearMundo(createRng(21), opciones);
+    const { mundo: nuevo } = avanzarMundo(mundo, createRng(22), { aniosPasados: 1 });
+    nuevo.titulares.push({ nombre: 'Título de prueba' });
+    expect(mundo.titulares).toEqual([]);
+    mundo.titulares.push({ nombre: 'Otro título' });
+    expect(nuevo.titulares).toHaveLength(1);
+  });
 });
 
 describe('recalcularRankings', () => {

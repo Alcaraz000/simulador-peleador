@@ -120,7 +120,13 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1 } = {}) {
   }
 
   return {
-    mundo: { ...mundo, roster: ordenado, anio: mundo.anio + Math.round(aniosPasados), campeonId },
+    mundo: {
+      ...mundo,
+      roster: ordenado,
+      anio: mundo.anio + Math.round(aniosPasados),
+      campeonId,
+      titulares: [...mundo.titulares],
+    },
     sucesos,
   };
 }
