@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Construir la rebanada jugable (v1) de un simulador de carrera de deportes de combate: una carrera completa de ~15 a ~39 años, jugable en una sentada, con motor de tarjetas, peleas round-por-round, 6 minijuegos y pantalla de legado.
+**Goal:** Construir la rebanada jugable (v1) de un simulador de carrera de **boxeo**: una carrera completa de ~15 a ~39 años, jugable en una sentada, eligiendo entre 6 nacionalidades (cada una con sus leyendas-parodia), con motor de tarjetas, peleas round-por-round, 6 minijuegos, **progresión de cinturones** (ganar título → defensas obligatorias → perderlo o retenerlo) y pantalla de legado con estadísticas.
 
 **Architecture:** Núcleo de lógica puro en `src/core/` (funciones sin efectos secundarios, todo el azar inyectado vía un RNG con semilla) más una capa fina de render DOM en `src/ui/`. El estado de la carrera es un único objeto serializable; cada "beat" jugable lo transforma y se autoguarda en `localStorage`. La pelea es una máquina de estados que se avanza round por round, lo que permite intercalar los minijuegos interactivos.
 
@@ -14,14 +14,16 @@
 
 - **Sin backend, sin cuentas.** 100% del lado del cliente; guardado en `localStorage`. Publicable como sitio estático por link.
 - **Sin dependencias nativas.** Solo librerías JS puras (el usuario no tiene Visual Studio Build Tools). Nada que requiera compilación en `npm install`.
-- **Sin emojis en la UI.** Íconos SVG inline estilo Lucide, definidos en `src/ui/icons.js`.
+- **Emojis permitidos** (decisión del 2026-07-25, revierte la restricción anterior): se usan **banderas** de nacionalidad (🇺🇸 🇲🇽 🇦🇷 🇪🇸 🇮🇹 🇯🇵) y algún emoji puntual con sentido (🏆 para títulos). El resto de la iconografía sigue siendo **SVG inline estilo Lucide** en `src/ui/icons.js` — los emojis complementan, no reemplazan.
 - **Paleta "Sangre y gloria"** (valores exactos, en `theme.css` como tokens): fondo `#0d0708`, superficie `#140b0c`, superficie elevada `#160c0d`, borde `#241416`, borde fuerte `#3a1e20`, acento rojo `#ef4444`, acento dorado `#f2c14e`, positivo verde `#8fd694`, texto `#f1e2e2`, texto atenuado `#b08a8a`, texto sutil `#8a6a6a`.
 - **Tipografía condensada en mayúsculas** para títulos y etiquetas; `font-family: 'Bahnschrift', 'Segoe UI', system-ui, sans-serif`.
 - **Mobile-first.** Ancho de contenido máximo `430px` centrado; debe funcionar en celular y computadora.
 - **Números claros a la vista** (cifras exactas, no barras vagas), con flecha `▲` cuando un atributo sube.
 - **Voz argentina/latina, tono realista con humor.** Textos verosímiles, sin eventos absurdos.
 - **Todo el azar pasa por el RNG con semilla** (`createRng`). Ninguna función de `src/core/` llama a `Math.random()` directamente. Los tests dependen de esto.
-- **v1:** disciplinas Boxeo y MMA; género masculino; categorías Pluma y Mediano.
+- **v1: SOLO BOXEO.** MMA queda fuera de esta versión (el código mantiene la abstracción `disciplines.js` para sumarlo después, pero `DISCIPLINAS` solo contiene `boxeo`). Género masculino; categorías Pluma y Mediano.
+- **6 nacionalidades exactas:** Estados Unidos, México, Argentina, España, Italia, Japón. Cada una con sus propias leyendas-parodia.
+- **Los cinturones son el eje de la progresión:** ganar título → defensas obligatorias → perderlo o retirarse invicto. Tres niveles: regional → nacional → mundial.
 - **Nomenclatura para evitar colisión:** el campo `disciplina` del peleador es el deporte (`'boxeo' | 'mma'`). El atributo especial "Disciplina" (constancia personal) se llama `disciplinaPersonal` en el código y se muestra como "DISCIPLINA" en la UI.
 - **Commits frecuentes**, uno por tarea como mínimo, con mensaje en español.
 
@@ -36,7 +38,7 @@
 | `src/main.js` | Bootstrap: carga/crea partida, enrutador por estado, autoguardado. |
 | `src/core/rng.js` | RNG con semilla (mulberry32) y helpers de azar. |
 | `src/core/stats.js` | Atributos, MEDIA, estado (forma/fatiga/moral), aplicación de modificadores. |
-| `src/core/disciplines.js` | Boxeo y MMA: pesos de atributos, desenlaces posibles, rounds. |
+| `src/core/disciplines.js` | Boxeo (única disciplina de la v1): pesos de atributos, desenlaces, rounds. |
 | `src/core/styles.js` | Estilos/builds, sus modificadores y la tabla de cruces. |
 | `src/core/fighter.js` | Creación del peleador, categorías de peso, físico. |
 | `src/core/roster.js` | Generación de rivales de categoría + carga del elenco de parodias. |
@@ -614,11 +616,12 @@ git commit -m "feat: atributos, MEDIA y estado del peleador"
 **Interfaces:**
 - Consumes: `ATRIBUTOS` de `src/core/stats.js`.
 - Produces (`disciplines.js`):
-  - `DISCIPLINAS: Record<'boxeo'|'mma', Disciplina>` donde `Disciplina` = `{ id, nombre, usaGrappling: boolean, pesos: object, desenlaces: string[], roundsPorNivel: {amateur:number, profesional:number, titulo:number} }`
+  - `DISCIPLINAS: Record<'boxeo', Disciplina>` — **solo boxeo en la v1**. `Disciplina` = `{ id, nombre, usaGrappling: boolean, pesos: object, desenlaces: string[], roundsPorNivel: {amateur:number, profesional:number, titulo:number} }`
   - `getDisciplina(id: string): Disciplina` — tira error si no existe.
   - `pesosDe(id: string): object`
 - Produces (`styles.js`):
-  - `ESTILOS: Record<string, Estilo>` con ids `noqueador`, `tecnico`, `grappler`, `menton`; `Estilo` = `{ id, nombre, descripcion, disciplinas: string[], mods: object, fuerteContra: string[], debilContra: string[] }`
+  - `ESTILOS: Record<string, Estilo>` con ids `noqueador`, `tecnico`, `menton`; `Estilo` = `{ id, nombre, descripcion, disciplinas: string[], mods: object, fuerteContra: string[], debilContra: string[] }`
+  - Ciclo de ventajas: **técnico > noqueador > mentón de hierro > técnico**.
   - `estilosDisponibles(disciplinaId: string): Estilo[]`
   - `ventajaDeEstilo(estiloA: string, estiloB: string): number` — `+0.06`, `-0.06` o `0`.
 
@@ -631,21 +634,13 @@ import { describe, it, expect } from 'vitest';
 import { DISCIPLINAS, getDisciplina, pesosDe } from '../../src/core/disciplines.js';
 
 describe('disciplinas', () => {
-  it('define boxeo y mma', () => {
-    expect(Object.keys(DISCIPLINAS).sort()).toEqual(['boxeo', 'mma']);
+  it('la v1 solo tiene boxeo', () => {
+    expect(Object.keys(DISCIPLINAS)).toEqual(['boxeo']);
   });
 
-  it('boxeo no usa grappling y mma si', () => {
+  it('boxeo no usa grappling', () => {
     expect(DISCIPLINAS.boxeo.usaGrappling).toBe(false);
-    expect(DISCIPLINAS.mma.usaGrappling).toBe(true);
-  });
-
-  it('boxeo no le da peso al grappling', () => {
     expect(pesosDe('boxeo').grappling ?? 0).toBe(0);
-  });
-
-  it('mma le da peso al grappling', () => {
-    expect(pesosDe('mma').grappling).toBeGreaterThan(0);
   });
 
   it('los pesos de cada disciplina suman 1', () => {
@@ -655,9 +650,10 @@ describe('disciplinas', () => {
     }
   });
 
-  it('solo mma admite sumision', () => {
-    expect(DISCIPLINAS.mma.desenlaces).toContain('sumision');
+  it('boxeo no admite sumision', () => {
     expect(DISCIPLINAS.boxeo.desenlaces).not.toContain('sumision');
+    expect(DISCIPLINAS.boxeo.desenlaces).toContain('ko');
+    expect(DISCIPLINAS.boxeo.desenlaces).toContain('decision');
   });
 
   it('las peleas de titulo tienen mas rounds que las amateur', () => {
@@ -667,6 +663,7 @@ describe('disciplinas', () => {
   });
 
   it('getDisciplina tira error con un id desconocido', () => {
+    expect(() => getDisciplina('mma')).toThrow(/mma/);
     expect(() => getDisciplina('karate')).toThrow(/karate/);
   });
 });
@@ -679,18 +676,13 @@ import { describe, it, expect } from 'vitest';
 import { ESTILOS, estilosDisponibles, ventajaDeEstilo } from '../../src/core/styles.js';
 
 describe('estilos', () => {
-  it('define los cuatro estilos de la v1', () => {
-    expect(Object.keys(ESTILOS).sort()).toEqual(['grappler', 'menton', 'noqueador', 'tecnico']);
+  it('define los tres estilos de la v1', () => {
+    expect(Object.keys(ESTILOS).sort()).toEqual(['menton', 'noqueador', 'tecnico']);
   });
 
-  it('el grappler es exclusivo de mma', () => {
-    expect(ESTILOS.grappler.disciplinas).toEqual(['mma']);
-    expect(estilosDisponibles('boxeo').map((e) => e.id)).not.toContain('grappler');
-    expect(estilosDisponibles('mma').map((e) => e.id)).toContain('grappler');
-  });
-
-  it('boxeo ofrece tres estilos', () => {
+  it('los tres estan disponibles en boxeo', () => {
     expect(estilosDisponibles('boxeo')).toHaveLength(3);
+    expect(estilosDisponibles('boxeo').map((e) => e.id).sort()).toEqual(['menton', 'noqueador', 'tecnico']);
   });
 
   it('cada estilo tiene al menos un bonus y un malus', () => {
@@ -724,6 +716,10 @@ Expected: FAIL — no se pueden resolver los módulos.
 - [ ] **Step 3: Implementar `src/core/disciplines.js`**
 
 ```js
+/**
+ * v1: solo boxeo. La estructura queda preparada para sumar MMA más adelante
+ * (usaGrappling, desenlaces y roundsPorNivel ya contemplan ese caso).
+ */
 export const DISCIPLINAS = {
   boxeo: {
     id: 'boxeo',
@@ -732,14 +728,6 @@ export const DISCIPLINAS = {
     pesos: { potencia: 0.20, velocidad: 0.18, tecnica: 0.20, defensa: 0.17, cardio: 0.13, iq: 0.12 },
     desenlaces: ['ko', 'tko', 'decision', 'descalificacion'],
     roundsPorNivel: { amateur: 3, profesional: 8, titulo: 12 },
-  },
-  mma: {
-    id: 'mma',
-    nombre: 'MMA',
-    usaGrappling: true,
-    pesos: { potencia: 0.16, velocidad: 0.14, tecnica: 0.16, defensa: 0.13, cardio: 0.13, iq: 0.12, grappling: 0.16 },
-    desenlaces: ['ko', 'tko', 'sumision', 'decision', 'descalificacion'],
-    roundsPorNivel: { amateur: 3, profesional: 3, titulo: 5 },
   },
 };
 
@@ -757,42 +745,37 @@ export function pesosDe(id) {
 - [ ] **Step 4: Implementar `src/core/styles.js`**
 
 ```js
+/**
+ * Ciclo de ventajas (piedra-papel-tijera):
+ * técnico > noqueador > mentón de hierro > técnico
+ */
 export const ESTILOS = {
   noqueador: {
     id: 'noqueador',
     nombre: 'Noqueador',
     descripcion: 'Una mano y se termina. Peligroso temprano, se funde tarde.',
-    disciplinas: ['boxeo', 'mma'],
+    disciplinas: ['boxeo'],
     mods: { potencia: 7, menton: 2, cardio: -4, tecnica: -3 },
-    fuerteContra: ['grappler'],
+    fuerteContra: ['menton'],
     debilContra: ['tecnico'],
   },
   tecnico: {
     id: 'tecnico',
     nombre: 'Técnico',
     descripcion: 'Preciso y escurridizo. Gana por puntos y desgaste.',
-    disciplinas: ['boxeo', 'mma'],
+    disciplinas: ['boxeo'],
     mods: { tecnica: 6, defensa: 4, velocidad: 2, potencia: -5, menton: -2 },
     fuerteContra: ['noqueador'],
     debilContra: ['menton'],
-  },
-  grappler: {
-    id: 'grappler',
-    nombre: 'Grappler',
-    descripcion: '控 controla, lleva al piso y busca la sumisión.',
-    disciplinas: ['mma'],
-    mods: { grappling: 9, cardio: 3, velocidad: -3, potencia: -3 },
-    fuerteContra: ['menton'],
-    debilContra: ['noqueador'],
   },
   menton: {
     id: 'menton',
     nombre: 'Mentón de hierro',
     descripcion: 'Aguanta todo y quiebra al rival en rounds largos.',
-    disciplinas: ['boxeo', 'mma'],
+    disciplinas: ['boxeo'],
     mods: { menton: 9, cardio: 5, velocidad: -4, tecnica: -3 },
     fuerteContra: ['tecnico'],
-    debilContra: ['grappler'],
+    debilContra: ['noqueador'],
   },
 };
 
@@ -816,22 +799,11 @@ export function ventajaDeEstilo(estiloA, estiloB) {
 Run: `npx vitest run tests/core/disciplines.test.js tests/core/styles.test.js`
 Expected: PASS (15 tests).
 
-- [ ] **Step 6: Corregir el caracter suelto en la descripcion del grappler**
-
-En `src/core/styles.js`, la descripción del grappler debe ser exactamente:
-
-```js
-    descripcion: 'Controla, lleva al piso y busca la sumisión.',
-```
-
-Run: `npx vitest run tests/core/styles.test.js`
-Expected: PASS.
-
-- [ ] **Step 7: Commit**
+- [ ] **Step 6: Commit**
 
 ```bash
 git add src/core/disciplines.js src/core/styles.js tests/core/disciplines.test.js tests/core/styles.test.js
-git commit -m "feat: disciplinas (boxeo/MMA) y estilos de pelea con cruces"
+git commit -m "feat: boxeo y los tres estilos de pelea con su ciclo de ventajas"
 ```
 
 ---
@@ -845,7 +817,7 @@ git commit -m "feat: disciplinas (boxeo/MMA) y estilos de pelea con cruces"
 
 **Interfaces:**
 - Consumes: `crearAtributos`, `crearEstado`, `calcularMedia`, `aplicarModificadores` de `stats.js`; `getDisciplina`, `pesosDe` de `disciplines.js`; `ESTILOS`, `estilosDisponibles` de `styles.js`; `createRng` de `rng.js`.
-- Produces (`names.js`): `NOMBRES: string[]`, `APELLIDOS: string[]`, `APODOS: string[]`, `NACIONALIDADES: Array<{codigo,nombre,gentilicio}>`, `GIMNASIOS: string[]`.
+- Produces (`names.js`): `NOMBRES: string[]`, `APELLIDOS: string[]`, `APODOS: string[]`, `GIMNASIOS: string[]`, `NACIONALIDADES: Array<{codigo,nombre,gentilicio,bandera,escuela}>` (**exactamente 6**: AR, MX, US, ES, IT, JP), `NOMBRES_POR_PAIS: Record<codigo,{nombres,apellidos}>`, `banderaDe(codigo): string`.
 - Produces (`fighter.js`):
   - `CATEGORIAS: Record<'pluma'|'mediano', {id,nombre,pesoMin,pesoMax,alturaMedia}>`
   - `ORIGENES: Array<{id,nombre,descripcion,mods}>` — 4 orígenes/infancias.
@@ -890,6 +862,7 @@ import {
   CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
+import { NACIONALIDADES, NOMBRES_POR_PAIS, banderaDe } from '../../src/content/names.js';
 
 const base = {
   nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR',
@@ -937,8 +910,8 @@ describe('crearPeleador', () => {
     expect(conMods).toBeTruthy();
   });
 
-  it('rechaza un estilo que no corresponde a la disciplina', () => {
-    expect(() => crearPeleador({ ...base, disciplina: 'boxeo', estilo: 'grappler' })).toThrow(/grappler/);
+  it('rechaza un estilo inexistente', () => {
+    expect(() => crearPeleador({ ...base, estilo: 'grappler' })).toThrow(/grappler/);
   });
 
   it('rechaza una categoria desconocida', () => {
@@ -950,9 +923,31 @@ describe('crearPeleador', () => {
     expect(p.atributos.grappling).toBe(1);
   });
 
-  it('en mma el grappling arranca util', () => {
-    const p = crearPeleador({ ...base, disciplina: 'mma', estilo: 'grappler' });
-    expect(p.atributos.grappling).toBeGreaterThan(30);
+  it('acepta las seis nacionalidades y guarda el codigo', () => {
+    for (const codigo of ['AR', 'MX', 'US', 'ES', 'IT', 'JP']) {
+      expect(crearPeleador({ ...base, nacionalidad: codigo }).nacionalidad).toBe(codigo);
+    }
+  });
+});
+
+describe('nacionalidades', () => {
+  it('son exactamente seis', () => {
+    expect(NACIONALIDADES).toHaveLength(6);
+    expect(NACIONALIDADES.map((n) => n.codigo).sort()).toEqual(['AR', 'ES', 'IT', 'JP', 'MX', 'US']);
+  });
+
+  it('cada una tiene bandera y escuela', () => {
+    for (const n of NACIONALIDADES) {
+      expect(n.bandera.length).toBeGreaterThan(0);
+      expect(n.escuela.length).toBeGreaterThan(0);
+      expect(NOMBRES_POR_PAIS[n.codigo].nombres.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('banderaDe devuelve la bandera correcta', () => {
+    expect(banderaDe('AR')).toBe('🇦🇷');
+    expect(banderaDe('JP')).toBe('🇯🇵');
+    expect(banderaDe('XX')).toBeTruthy();
   });
 });
 
@@ -965,10 +960,18 @@ describe('peleadorAleatorio', () => {
   });
 
   it('respeta las opciones forzadas', () => {
-    const p = peleadorAleatorio(createRng(3), { disciplina: 'mma', categoria: 'mediano' });
-    expect(p.disciplina).toBe('mma');
+    const p = peleadorAleatorio(createRng(3), { categoria: 'mediano', nacionalidad: 'JP' });
+    expect(p.disciplina).toBe('boxeo');
     expect(p.categoria).toBe('mediano');
-    expect(ESTILOS[p.estilo].disciplinas).toContain('mma');
+    expect(p.nacionalidad).toBe('JP');
+    expect(ESTILOS[p.estilo].disciplinas).toContain('boxeo');
+  });
+
+  it('usa nombres acordes a la nacionalidad', () => {
+    const p = peleadorAleatorio(createRng(11), { nacionalidad: 'JP' });
+    const { nombres, apellidos } = NOMBRES_POR_PAIS.JP;
+    expect(nombres.some((n) => p.nombre.startsWith(n))).toBe(true);
+    expect(apellidos.some((a) => p.nombre.endsWith(a))).toBe(true);
   });
 
   it('acepta un nivel objetivo de media', () => {
@@ -1026,16 +1029,29 @@ export const APODOS = [
   'La Bestia', 'El Cirujano', 'El Fantasma', 'Corazón de León',
 ];
 
+/** Las 6 nacionalidades de la v1, cada una con su bandera y su escuela de boxeo. */
 export const NACIONALIDADES = [
-  { codigo: 'AR', nombre: 'Argentina', gentilicio: 'argentino' },
-  { codigo: 'MX', nombre: 'México', gentilicio: 'mexicano' },
-  { codigo: 'US', nombre: 'Estados Unidos', gentilicio: 'estadounidense' },
-  { codigo: 'BR', nombre: 'Brasil', gentilicio: 'brasileño' },
-  { codigo: 'GB', nombre: 'Reino Unido', gentilicio: 'británico' },
-  { codigo: 'RU', nombre: 'Rusia', gentilicio: 'ruso' },
-  { codigo: 'CU', nombre: 'Cuba', gentilicio: 'cubano' },
-  { codigo: 'JP', nombre: 'Japón', gentilicio: 'japonés' },
+  { codigo: 'AR', nombre: 'Argentina', gentilicio: 'argentino', bandera: '🇦🇷', escuela: 'Aguante, corazón y mandíbula de granito.' },
+  { codigo: 'MX', nombre: 'México', gentilicio: 'mexicano', bandera: '🇲🇽', escuela: 'Al cuerpo y para adelante. Nunca un paso atrás.' },
+  { codigo: 'US', nombre: 'Estados Unidos', gentilicio: 'estadounidense', bandera: '🇺🇸', escuela: 'Velocidad, show y grandes escenarios.' },
+  { codigo: 'ES', nombre: 'España', gentilicio: 'español', bandera: '🇪🇸', escuela: 'Oficio, temple y una izquierda paciente.' },
+  { codigo: 'IT', nombre: 'Italia', gentilicio: 'italiano', bandera: '🇮🇹', escuela: 'Estilo, elegancia y una defensa de museo.' },
+  { codigo: 'JP', nombre: 'Japón', gentilicio: 'japonés', bandera: '🇯🇵', escuela: 'Disciplina absoluta y precisión de relojero.' },
 ];
+
+/** Nombres típicos por nacionalidad, para que los rivales suenen creíbles. */
+export const NOMBRES_POR_PAIS = {
+  AR: { nombres: ['Lucas', 'Matías', 'Nahuel', 'Facundo', 'Ramiro'], apellidos: ['Ortiz', 'Sosa', 'Quiroga', 'Peralta', 'Ledesma'] },
+  MX: { nombres: ['Julio', 'Rafa', 'Ernesto', 'Salvador', 'Ramón'], apellidos: ['Vargas', 'Chávez', 'Montoya', 'Barrera', 'Zúñiga'] },
+  US: { nombres: ['Ray', 'Tyrell', 'Marcus', 'Jayden', 'Dontrell'], apellidos: ['Carter', 'Brooks', 'Hayes', 'Wallace', 'Freeman'] },
+  ES: { nombres: ['Álvaro', 'Iker', 'Sergio', 'Rubén', 'Nacho'], apellidos: ['Cifuentes', 'Bermúdez', 'Olmedo', 'Cortés', 'Rueda'] },
+  IT: { nombres: ['Marco', 'Salvatore', 'Enzo', 'Nico', 'Gianni'], apellidos: ['Ricci', 'Fontana', 'Moretti', 'Bellini', 'Rizzo'] },
+  JP: { nombres: ['Kenji', 'Hiro', 'Takumi', 'Ryo', 'Daiki'], apellidos: ['Takeda', 'Yamamoto', 'Ishida', 'Kurosawa', 'Nakano'] },
+};
+
+export function banderaDe(codigo) {
+  return NACIONALIDADES.find((n) => n.codigo === codigo)?.bandera ?? '🥊';
+}
 
 export const GIMNASIOS = [
   'La Catedral', 'El Galpón', 'Sudor y Fierro', 'Club Atlético Progreso',
@@ -1049,7 +1065,7 @@ export const GIMNASIOS = [
 import { crearAtributos, crearEstado, calcularMedia, aplicarModificadores, clamp } from './stats.js';
 import { getDisciplina, pesosDe } from './disciplines.js';
 import { ESTILOS, estilosDisponibles } from './styles.js';
-import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, GIMNASIOS } from '../content/names.js';
+import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, NOMBRES_POR_PAIS, GIMNASIOS } from '../content/names.js';
 
 export const CATEGORIAS = {
   pluma: { id: 'pluma', nombre: 'Peso pluma', pesoMin: 55, pesoMax: 57, alturaMedia: 170 },
@@ -1145,15 +1161,16 @@ export function crearPeleador(opciones) {
 }
 
 export function peleadorAleatorio(rng, opciones = {}) {
-  const disciplina = opciones.disciplina ?? rng.pick(['boxeo', 'mma']);
+  const disciplina = opciones.disciplina ?? 'boxeo';
   const categoria = opciones.categoria ?? rng.pick(Object.keys(CATEGORIAS));
   const estilo = opciones.estilo ?? rng.pick(estilosDisponibles(disciplina)).id;
   const nacionalidad = opciones.nacionalidad ?? rng.pick(NACIONALIDADES).codigo;
   const cat = CATEGORIAS[categoria];
   const altura = opciones.altura ?? cat.alturaMedia + rng.int(-6, 6);
+  const pool = NOMBRES_POR_PAIS[nacionalidad] ?? { nombres: NOMBRES, apellidos: APELLIDOS };
 
   return crearPeleador({
-    nombre: opciones.nombre ?? `${rng.pick(NOMBRES)} ${rng.pick(APELLIDOS)}`,
+    nombre: opciones.nombre ?? `${rng.pick(pool.nombres)} ${rng.pick(pool.apellidos)}`,
     apodo: opciones.apodo ?? rng.pick(APODOS),
     nacionalidad,
     disciplina,
@@ -1209,7 +1226,7 @@ git commit -m "feat: creacion de peleador, categorias, origenes y generacion ale
 
 **Interfaces:**
 - Consumes: `peleadorAleatorio`, `crearPeleador`, `CATEGORIAS` de `fighter.js`; `createRng`.
-- Produces (`parodies.js`): `PARODIAS: Array<Parodia>` con al menos 8 entradas. `Parodia` = `{ id, nombre, apodo, referencia, nacionalidad, disciplina, categoria, estilo, personalidad, rol: 'activo'|'leyenda', media: number, edad: number, frase: string }`.
+- Produces (`parodies.js`): `PARODIAS: Array<Parodia>` con **al menos 15 entradas, todas de boxeo**, cubriendo las 6 nacionalidades (cada país con sus máximas leyendas retiradas + al menos un activo). `Parodia` = `{ id, nombre, apodo, referencia, nacionalidad, disciplina, categoria, estilo, personalidad, rol: 'activo'|'leyenda', media: number, edad: number, frase: string }`. Son personajes inventados con nombres-chiste; `referencia` existe solo para que se entienda el guiño.
 - Produces (`roster.js`):
   - `PERSONALIDADES: string[]` = `['respetuoso','provocador','tramposo','showman','mentor','agresivo','mercenario']`
   - `parodiasDe(disciplina, categoria, rol?): Parodia[]`
@@ -1226,13 +1243,43 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { PARODIAS } from '../../src/content/parodies.js';
 import {
-  PERSONALIDADES, parodiasDe, crearDesdeParodia, crearRoster, leyendasDe,
+  PERSONALIDADES, parodiasDe, crearDesdeParodia, crearRoster, leyendasDe, leyendasDeNacionalidad,
 } from '../../src/core/roster.js';
 import { mediaDe } from '../../src/core/fighter.js';
 
 describe('parodias', () => {
-  it('tiene al menos ocho personajes', () => {
-    expect(PARODIAS.length).toBeGreaterThanOrEqual(8);
+  it('tiene al menos quince personajes', () => {
+    expect(PARODIAS.length).toBeGreaterThanOrEqual(15);
+  });
+
+  it('las seis nacionalidades tienen leyendas propias', () => {
+    for (const codigo of ['AR', 'MX', 'US', 'ES', 'IT', 'JP']) {
+      const leyendas = leyendasDeNacionalidad(codigo);
+      expect(leyendas.length).toBeGreaterThanOrEqual(1);
+      for (const l of leyendas) {
+        expect(l.nacionalidad).toBe(codigo);
+        expect(l.rol).toBe('leyenda');
+      }
+    }
+  });
+
+  it('cada nacionalidad tiene al menos un peleador en actividad', () => {
+    for (const codigo of ['AR', 'MX', 'US', 'ES', 'IT', 'JP']) {
+      const activos = PARODIAS.filter((p) => p.nacionalidad === codigo && p.rol === 'activo');
+      expect(activos.length).toBeGreaterThanOrEqual(1);
+    }
+  });
+
+  it('en la v1 todas son de boxeo', () => {
+    for (const p of PARODIAS) expect(p.disciplina).toBe('boxeo');
+  });
+
+  it('las leyendas son mas fuertes que los activos', () => {
+    const media = (rol) => {
+      const grupo = PARODIAS.filter((p) => p.rol === rol);
+      return grupo.reduce((a, p) => a + p.media, 0) / grupo.length;
+    };
+    expect(media('leyenda')).toBeGreaterThan(media('activo'));
   });
 
   it('cada parodia declara a quien parodia', () => {
@@ -1296,9 +1343,9 @@ describe('crearRoster', () => {
   });
 
   it('todos comparten disciplina y categoria', () => {
-    const roster = crearRoster(createRng(2), { disciplina: 'mma', categoria: 'mediano', cantidad: 8 });
+    const roster = crearRoster(createRng(2), { disciplina: 'boxeo', categoria: 'mediano', cantidad: 8 });
     for (const p of roster) {
-      expect(p.disciplina).toBe('mma');
+      expect(p.disciplina).toBe('boxeo');
       expect(p.categoria).toBe('mediano');
     }
   });
@@ -1348,160 +1395,44 @@ Expected: FAIL — no se pueden resolver los módulos.
 
 ```js
 /**
- * Elenco fijo de parodias obvias de iconos del deporte.
- * Son personajes inventados con nombres-chiste: no representan a personas reales.
+ * Elenco fijo de parodias obvias de íconos del boxeo, agrupadas por nacionalidad.
+ * Son personajes INVENTADOS con nombres-chiste: no representan a personas reales
+ * ni usan su imagen. El campo `referencia` existe solo para que se entienda el guiño.
+ *
+ * Cada país tiene sus máximas leyendas (rol 'leyenda', retiradas, récords a superar)
+ * y al menos un peleador en actividad (rol 'activo', rival posible del jugador).
  */
 export const PARODIAS = [
-  {
-    id: 'tyzon',
-    nombre: 'Dyke Tyzon',
-    apodo: 'El Ciclón',
-    referencia: 'Mike Tyson',
-    nacionalidad: 'US',
-    disciplina: 'boxeo',
-    categoria: 'pluma',
-    estilo: 'noqueador',
-    personalidad: 'agresivo',
-    rol: 'activo',
-    media: 78,
-    edad: 26,
-    frase: 'Todos tienen un plan hasta que les apago la luz.',
-  },
-  {
-    id: 'mcconnor',
-    nombre: 'Conor McConnor',
-    apodo: 'El Bocón',
-    referencia: 'Conor McGregor',
-    nacionalidad: 'GB',
-    disciplina: 'mma',
-    categoria: 'pluma',
-    estilo: 'noqueador',
-    personalidad: 'provocador',
-    rol: 'activo',
-    media: 76,
-    edad: 28,
-    frase: 'No vine a pelear, vine a cobrar. Y de paso te duermo.',
-  },
-  {
-    id: 'alla',
-    nombre: 'Muhammad Allá',
-    apodo: 'El Más Grande',
-    referencia: 'Muhammad Ali',
-    nacionalidad: 'US',
-    disciplina: 'boxeo',
-    categoria: 'mediano',
-    estilo: 'tecnico',
-    personalidad: 'showman',
-    rol: 'leyenda',
-    media: 88,
-    edad: 52,
-    frase: 'Flotá como mariposa, cobrá como abeja reina.',
-  },
-  {
-    id: 'nurmagomedon',
-    nombre: 'Jabib Nurmagomedón',
-    apodo: 'El Oso',
-    referencia: 'Khabib Nurmagomedov',
-    nacionalidad: 'RU',
-    disciplina: 'mma',
-    categoria: 'pluma',
-    estilo: 'grappler',
-    personalidad: 'respetuoso',
-    rol: 'activo',
-    media: 80,
-    edad: 29,
-    frase: 'Mandá tu ubicación. Voy tranquilo.',
-  },
-  {
-    id: 'canolo',
-    nombre: 'Canolo Álvarez',
-    apodo: 'El Pelirrojo',
-    referencia: 'Canelo Álvarez',
-    nacionalidad: 'MX',
-    disciplina: 'boxeo',
-    categoria: 'mediano',
-    estilo: 'tecnico',
-    personalidad: 'mercenario',
-    rol: 'activo',
-    media: 82,
-    edad: 30,
-    frase: 'Si la bolsa es buena, subo con cualquiera.',
-  },
-  {
-    id: 'silvo',
-    nombre: 'Anderson Silvo',
-    apodo: 'La Araña',
-    referencia: 'Anderson Silva',
-    nacionalidad: 'BR',
-    disciplina: 'mma',
-    categoria: 'mediano',
-    estilo: 'tecnico',
-    personalidad: 'mentor',
-    rol: 'leyenda',
-    media: 85,
-    edad: 47,
-    frase: 'La técnica no envejece, pibe. Las piernas sí.',
-  },
-  {
-    id: 'mayweder',
-    nombre: 'Floyd Mayweder',
-    apodo: 'El Intocable',
-    referencia: 'Floyd Mayweather',
-    nacionalidad: 'US',
-    disciplina: 'boxeo',
-    categoria: 'pluma',
-    estilo: 'tecnico',
-    personalidad: 'provocador',
-    rol: 'leyenda',
-    media: 87,
-    edad: 49,
-    frase: 'Cero derrotas. Contá de nuevo: cero.',
-  },
-  {
-    id: 'monzonte',
-    nombre: 'Carlos Monzonte',
-    apodo: 'El Escopeta',
-    referencia: 'Carlos Monzón',
-    nacionalidad: 'AR',
-    disciplina: 'boxeo',
-    categoria: 'mediano',
-    estilo: 'menton',
-    personalidad: 'agresivo',
-    rol: 'leyenda',
-    media: 86,
-    edad: 55,
-    frase: 'Acá se viene a aguantar. El que aguanta, gana.',
-  },
-  {
-    id: 'jonez',
-    nombre: 'Jon Jonez',
-    apodo: 'Huesos',
-    referencia: 'Jon Jones',
-    nacionalidad: 'US',
-    disciplina: 'mma',
-    categoria: 'mediano',
-    estilo: 'grappler',
-    personalidad: 'tramposo',
-    rol: 'activo',
-    media: 84,
-    edad: 31,
-    frase: 'Los controles antidoping y yo tenemos una relación complicada.',
-  },
-  {
-    id: 'pacman',
-    nombre: 'Manny Paquito',
-    apodo: 'El Huracán',
-    referencia: 'Manny Pacquiao',
-    nacionalidad: 'JP',
-    disciplina: 'boxeo',
-    categoria: 'pluma',
-    estilo: 'noqueador',
-    personalidad: 'respetuoso',
-    rol: 'activo',
-    media: 79,
-    edad: 33,
-    frase: 'Ocho categorías. Y todavía tengo hambre.',
-  },
+  // 🇺🇸 Estados Unidos
+  { id: 'tyzon', nombre: 'Dyke Tyzon', apodo: 'El Ciclón', referencia: 'Mike Tyson', nacionalidad: 'US', disciplina: 'boxeo', categoria: 'mediano', estilo: 'noqueador', personalidad: 'agresivo', rol: 'activo', media: 82, edad: 26, frase: 'Todos tienen un plan hasta que les apago la luz.' },
+  { id: 'alla', nombre: 'Muhammad Allá', apodo: 'El Más Grande', referencia: 'Muhammad Ali', nacionalidad: 'US', disciplina: 'boxeo', categoria: 'mediano', estilo: 'tecnico', personalidad: 'showman', rol: 'leyenda', media: 90, edad: 52, frase: 'Floto como mariposa y cobro como abeja reina.' },
+  { id: 'mayweder', nombre: 'Floyd Mayweder', apodo: 'El Intocable', referencia: 'Floyd Mayweather', nacionalidad: 'US', disciplina: 'boxeo', categoria: 'pluma', estilo: 'tecnico', personalidad: 'provocador', rol: 'leyenda', media: 88, edad: 49, frase: 'Cero derrotas. Contá de nuevo: cero.' },
+  { id: 'robinson', nombre: 'Shugar Ray Robinsón', apodo: 'Azúcar', referencia: 'Sugar Ray Robinson', nacionalidad: 'US', disciplina: 'boxeo', categoria: 'mediano', estilo: 'tecnico', personalidad: 'mentor', rol: 'leyenda', media: 91, edad: 61, frase: 'Antes de vos, el estilo lo inventé yo.' },
+
+  // 🇲🇽 México
+  { id: 'chaves', nombre: 'Julio César Cháves', apodo: 'El César', referencia: 'Julio César Chávez', nacionalidad: 'MX', disciplina: 'boxeo', categoria: 'pluma', estilo: 'menton', personalidad: 'agresivo', rol: 'leyenda', media: 89, edad: 54, frase: 'Ochenta y siete peleas sin perder. Buscá el dato.' },
+  { id: 'canolo', nombre: 'Canolo Álvarez', apodo: 'El Pelirrojo', referencia: 'Canelo Álvarez', nacionalidad: 'MX', disciplina: 'boxeo', categoria: 'mediano', estilo: 'tecnico', personalidad: 'mercenario', rol: 'activo', media: 84, edad: 30, frase: 'Si la bolsa es buena, subo con cualquiera.' },
+  { id: 'oliveros', nombre: 'Rubén Oliveros', apodo: 'Las Púas', referencia: 'Rubén "Púas" Olivares', nacionalidad: 'MX', disciplina: 'boxeo', categoria: 'pluma', estilo: 'noqueador', personalidad: 'showman', rol: 'leyenda', media: 86, edad: 57, frase: 'Fiesta toda la noche y nocaut a la tarde.' },
+
+  // 🇦🇷 Argentina
+  { id: 'monzonte', nombre: 'Carlos Monzonte', apodo: 'El Escopeta', referencia: 'Carlos Monzón', nacionalidad: 'AR', disciplina: 'boxeo', categoria: 'mediano', estilo: 'menton', personalidad: 'agresivo', rol: 'leyenda', media: 89, edad: 55, frase: 'Acá se viene a aguantar. El que aguanta, gana.' },
+  { id: 'maravia', nombre: 'Sergio "Maravía" Martino', apodo: 'Maravía', referencia: 'Sergio "Maravilla" Martínez', nacionalidad: 'AR', disciplina: 'boxeo', categoria: 'mediano', estilo: 'tecnico', personalidad: 'respetuoso', rol: 'activo', media: 81, edad: 32, frase: 'Las manos abajo y la cabeza en otro lado. Probá pegarme.' },
+  { id: 'lecho', nombre: 'Nicolino Lecho', apodo: 'El Intocable de Mendoza', referencia: 'Nicolino Locche', nacionalidad: 'AR', disciplina: 'boxeo', categoria: 'pluma', estilo: 'tecnico', personalidad: 'showman', rol: 'leyenda', media: 87, edad: 58, frase: 'Yo no esquivo golpes: los invito a pasar de largo.' },
+
+  // 🇪🇸 España
+  { id: 'legran', nombre: 'José Legrán', apodo: 'El Puma de Baracoa', referencia: 'José Legrá', nacionalidad: 'ES', disciplina: 'boxeo', categoria: 'pluma', estilo: 'tecnico', personalidad: 'showman', rol: 'leyenda', media: 85, edad: 56, frase: 'Bailo, pego y me voy sin despeinarme.' },
+  { id: 'perico', nombre: 'Perico Fernándes', apodo: 'El Chaval', referencia: 'Perico Fernández', nacionalidad: 'ES', disciplina: 'boxeo', categoria: 'pluma', estilo: 'noqueador', personalidad: 'provocador', rol: 'leyenda', media: 83, edad: 53, frase: 'De la calle al título. Sin escalas.' },
+  { id: 'diez', nombre: 'Poli Díez', apodo: 'El Potro de Vallecas', referencia: 'Poli Díaz', nacionalidad: 'ES', disciplina: 'boxeo', categoria: 'pluma', estilo: 'menton', personalidad: 'tramposo', rol: 'activo', media: 78, edad: 28, frase: 'Yo peleo como vivo: sin frenos.' },
+
+  // 🇮🇹 Italia
+  { id: 'benvenuto', nombre: 'Nino Benvenuto', apodo: 'El Elegante', referencia: 'Nino Benvenuti', nacionalidad: 'IT', disciplina: 'boxeo', categoria: 'mediano', estilo: 'tecnico', personalidad: 'respetuoso', rol: 'leyenda', media: 87, edad: 57, frase: 'El boxeo es una conversación. Yo hablo más claro.' },
+  { id: 'marchiano', nombre: 'Rocky Marchiano', apodo: 'El Martillo', referencia: 'Rocky Marciano', nacionalidad: 'IT', disciplina: 'boxeo', categoria: 'mediano', estilo: 'menton', personalidad: 'mentor', rol: 'leyenda', media: 90, edad: 60, frase: 'Me retiré invicto. Vos fijate qué hacés con tu vida.' },
+  { id: 'carnero', nombre: 'Primo Carnero', apodo: 'La Montaña', referencia: 'Primo Carnera', nacionalidad: 'IT', disciplina: 'boxeo', categoria: 'mediano', estilo: 'menton', personalidad: 'mercenario', rol: 'activo', media: 79, edad: 29, frase: 'Soy grande, lento y te voy a alcanzar igual.' },
+
+  // 🇯🇵 Japón
+  { id: 'inue', nombre: 'Naoya Inue', apodo: 'El Monstruo', referencia: 'Naoya Inoue', nacionalidad: 'JP', disciplina: 'boxeo', categoria: 'pluma', estilo: 'noqueador', personalidad: 'respetuoso', rol: 'activo', media: 85, edad: 27, frase: 'No hablo mucho. Los rounds tampoco duran mucho.' },
+  { id: 'harata', nombre: 'Fighting Harata', apodo: 'El Puño del Sol', referencia: 'Fighting Harada', nacionalidad: 'JP', disciplina: 'boxeo', categoria: 'pluma', estilo: 'menton', personalidad: 'agresivo', rol: 'leyenda', media: 86, edad: 59, frase: 'Presión desde la campana hasta la campana.' },
+  { id: 'sendo', nombre: 'Takeshi Sendo', apodo: 'El Jabalí de Naniwa', referencia: 'Takeshi Sendo', nacionalidad: 'JP', disciplina: 'boxeo', categoria: 'mediano', estilo: 'menton', personalidad: 'provocador', rol: 'activo', media: 80, edad: 28, frase: 'Vení para acá que esto recién empieza.' },
 ];
 ```
 
@@ -1523,6 +1454,11 @@ export function parodiasDe(disciplina, categoria, rol = null) {
 
 export function leyendasDe(disciplina) {
   return PARODIAS.filter((p) => p.rol === 'leyenda' && p.disciplina === disciplina);
+}
+
+/** Las máximas leyendas de un país — se usan en noticias, récords a superar y menciones. */
+export function leyendasDeNacionalidad(codigo) {
+  return PARODIAS.filter((p) => p.rol === 'leyenda' && p.nacionalidad === codigo);
 }
 
 export function crearDesdeParodia(parodia) {
@@ -1607,6 +1543,7 @@ git commit -m "feat: elenco de parodias y roster de categoria con rankings"
   - `crearMundo(rng, {disciplina, categoria, cantidad?}): Mundo` donde `Mundo` = `{ roster: Peleador[], anio: number, campeonId: string|null, titulares: object[] }`
   - `avanzarMundo(mundo, rng, {aniosPasados: number}): {mundo: Mundo, sucesos: Suceso[]}` — no muta; los rivales pelean entre sí, envejecen, se retiran, cambia el ranking. `Suceso` = `{ tipo: 'victoria'|'titulo'|'retiro'|'lesion'|'ascenso', peleadorId, rivalId?, texto: string }`
   - `recalcularRankings(roster): Peleador[]`
+  - `rankingDelJugador(mundo, jugador): number` — puesto del jugador (que no vive en el roster) según su MEDIA ajustada por récord. **Es lo que habilita las peleas de título**: sin esto el jugador nunca calificaría para disputar un cinturón.
   - `buscarRival(mundo, {excluirIds?: string[], rankingCerca?: number}): Peleador|null`
 - Produces (`rivalry.js`):
   - `crearRivalidad(peleadorId, rivalId): Rivalidad` = `{ rivalId, heat: number, h2h: {v:number,d:number,e:number}, esArchirrival: boolean, hitos: string[] }`
@@ -1620,7 +1557,7 @@ git commit -m "feat: elenco de parodias y roster de categoria con rankings"
 ```js
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
-import { crearMundo, avanzarMundo, recalcularRankings, buscarRival } from '../../src/core/world.js';
+import { crearMundo, avanzarMundo, recalcularRankings, buscarRival, rankingDelJugador } from '../../src/core/world.js';
 import { mediaDe } from '../../src/core/fighter.js';
 
 const opciones = { disciplina: 'boxeo', categoria: 'pluma', cantidad: 10 };
@@ -1706,6 +1643,34 @@ describe('recalcularRankings', () => {
     for (let i = 1; i < activos.length; i++) {
       expect(mediaDe(activos[i - 1])).toBeGreaterThanOrEqual(mediaDe(activos[i]));
     }
+  });
+});
+
+describe('rankingDelJugador', () => {
+  it('un peleador flojo queda ultimo', () => {
+    const m = mundo();
+    const flojo = { ...m.roster[0], atributos: { ...m.roster[0].atributos, potencia: 1, velocidad: 1, tecnica: 1, defensa: 1, cardio: 1, iq: 1 }, record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    expect(rankingDelJugador(m, flojo)).toBeGreaterThan(5);
+  });
+
+  it('un peleador crack queda primero', () => {
+    const m = mundo();
+    const crack = { ...m.roster[0], atributos: { potencia: 99, velocidad: 99, tecnica: 99, defensa: 99, cardio: 99, iq: 99, grappling: 1 }, record: { v: 30, d: 0, e: 0, ko: 25, sub: 0, dec: 5 } };
+    expect(rankingDelJugador(m, crack)).toBe(1);
+  });
+
+  it('ganar peleas mejora el puesto', () => {
+    const m = mundo();
+    const base = { ...m.roster[5], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const ganador = { ...base, record: { v: 12, d: 0, e: 0, ko: 8, sub: 0, dec: 4 } };
+    expect(rankingDelJugador(m, ganador)).toBeLessThanOrEqual(rankingDelJugador(m, base));
+  });
+
+  it('siempre devuelve un puesto valido', () => {
+    const m = mundo();
+    const puesto = rankingDelJugador(m, m.roster[3]);
+    expect(puesto).toBeGreaterThanOrEqual(1);
+    expect(puesto).toBeLessThanOrEqual(m.roster.length + 1);
   });
 });
 
@@ -1879,6 +1844,8 @@ export function h2hTexto(rivalidad) {
 import { crearRoster } from './roster.js';
 import { mediaDe } from './fighter.js';
 import { clamp } from './stats.js';
+// `rankingDelJugador` (más abajo) es lo que habilita las peleas de título:
+// sin ranking, el jugador nunca calificaría para disputar un cinturón.
 
 export const EDAD_RETIRO = 40;
 export const ANIO_INICIAL = 2026;
@@ -2001,6 +1968,21 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1 } = {}) {
   };
 }
 
+/**
+ * Ranking del jugador dentro de su categoría: cuántos activos del roster lo superan.
+ * El jugador no vive en el roster, así que su puesto se calcula comparando MEDIA
+ * y ajustando por su récord (ganar te acerca a la cima).
+ */
+export function rankingDelJugador(mundo, jugador) {
+  const activos = mundo.roster.filter((p) => !p.retirado);
+  if (activos.length === 0) return 1;
+  const miMedia = mediaDe(jugador);
+  const bonusRecord = jugador.record.v - jugador.record.d * 2;
+  const puntaje = miMedia + clamp(bonusRecord, -12, 12);
+  const mejores = activos.filter((p) => mediaDe(p) > puntaje).length;
+  return clamp(mejores + 1, 1, activos.length + 1);
+}
+
 export function buscarRival(mundo, { excluirIds = [], rankingCerca = null } = {}) {
   const candidatos = mundo.roster.filter(
     (p) => !p.retirado && !p.esJugador && !excluirIds.includes(p.id),
@@ -2107,8 +2089,8 @@ describe('crearPelea', () => {
 
   it('usa los rounds que corresponden al nivel', () => {
     expect(armar({ nivel: 'amateur' }).rounds).toBe(3);
+    expect(armar({ nivel: 'profesional' }).rounds).toBe(8);
     expect(armar({ nivel: 'titulo' }).rounds).toBe(12);
-    expect(armar({ disciplina: 'mma', nivel: 'titulo' }).rounds).toBe(5);
   });
 
   it('rechaza un plan desconocido', () => {
@@ -2196,8 +2178,8 @@ describe('desenlace', () => {
       }
       return ganadas;
     };
-    expect(contar('tecnico')).toBeGreaterThan(contar('grappler') - 100);
-    expect(contar('tecnico')).toBeGreaterThanOrEqual(20);
+    // tecnico le gana al noqueador; menton pierde contra el noqueador
+    expect(contar('tecnico')).toBeGreaterThan(contar('menton'));
   });
 
   it('es determinista con la misma semilla', () => {
@@ -3218,6 +3200,9 @@ git commit -m "feat: lesiones indulgentes con recuperacion por bloques o dinero"
 - Consumes: `buscarRival`, `mediaDe`, `clamp`, `createRng`.
 - Produces (`offers.js`):
   - `NIVELES: Record<'local'|'regional'|'eliminatoria'|'titulo'|'defensa', {id,nombre,nivelPelea,multiplicadorBolsa,famaBase}>`
+  - **`CINTURONES: Array<{id,nombre,rankingMax,multiplicador,famaExtra,defensasObligatorias}>`** — progresión `regional → nacional → mundial`. Es el eje de la carrera.
+  - `proximoCinturon(jugador): Cinturon|null` · `puedeDisputar(jugador, cinturon): boolean` · `cinturonActual(jugador): Cinturon|null`
+  - Reglas: si el jugador tiene cinturón puesto, cada tanto le cae una **defensa obligatoria**; si está lo bastante rankeado y le falta un cinturón, le llega la **pelea de título**. Ganar suma el título; perderlo lo saca de la lista; defender suma a `defensas`.
   - `generarOferta(rng, {jugador, mundo, etapa, rivalidades?, forzarTitulo?}): Oferta|null`
   - `Oferta` = `{ id, rivalId, rivalNombre, rivalApodo, rivalMedia, rivalRecord: string, rivalEstilo, nivel, nivelPelea, bolsa, riesgo: 'bajo'|'medio'|'alto', enJuego: string, esTitulo: boolean, esObligatoria: boolean, esRevancha: boolean, textoGancho: string }`
   - `evaluarRiesgo(jugador, rival): 'bajo'|'medio'|'alto'`
@@ -3236,7 +3221,10 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador, mediaDe } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
-import { NIVELES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado } from '../../src/core/offers.js';
+import {
+  NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
+  proximoCinturon, puedeDisputar, cinturonActual,
+} from '../../src/core/offers.js';
 
 function jugador(extra = {}) {
   return {
@@ -3319,6 +3307,72 @@ describe('generarOferta', () => {
     const a = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
     const b = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
     expect(a).toEqual(b);
+  });
+});
+
+describe('cinturones', () => {
+  it('define la progresion regional -> nacional -> mundial', () => {
+    expect(CINTURONES.map((c) => c.id)).toEqual(['regional', 'nacional', 'mundial']);
+  });
+
+  it('cada escalon exige mejor ranking y paga mas', () => {
+    for (let i = 1; i < CINTURONES.length; i++) {
+      expect(CINTURONES[i].rankingMax).toBeLessThan(CINTURONES[i - 1].rankingMax);
+      expect(CINTURONES[i].multiplicador).toBeGreaterThan(CINTURONES[i - 1].multiplicador);
+    }
+  });
+
+  it('proximoCinturon devuelve el primero que falta', () => {
+    expect(proximoCinturon(jugador()).id).toBe('regional');
+    expect(proximoCinturon(jugador({ titulos: ['Cinturón regional'] })).id).toBe('nacional');
+    expect(proximoCinturon(jugador({ titulos: CINTURONES.map((c) => c.nombre) }))).toBeNull();
+  });
+
+  it('puedeDisputar depende del ranking', () => {
+    const regional = CINTURONES[0];
+    expect(puedeDisputar(jugador({ ranking: 3 }), regional)).toBe(true);
+    expect(puedeDisputar(jugador({ ranking: 20 }), regional)).toBe(false);
+    expect(puedeDisputar(jugador({ ranking: 1 }), null)).toBe(false);
+  });
+
+  it('cinturonActual devuelve el mas alto que tiene puesto', () => {
+    expect(cinturonActual(jugador())).toBeNull();
+    expect(cinturonActual(jugador({ titulos: ['Cinturón regional', 'Cinturón nacional'] })).id).toBe('nacional');
+  });
+
+  it('un rankeado alto recibe oferta de titulo', () => {
+    let conTitulo = 0;
+    for (let s = 1; s <= 20; s++) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador({ ranking: 2, fama: 50 }), mundo: mundo(), etapa: 'profesional',
+      });
+      if (oferta.esTitulo) conTitulo++;
+    }
+    expect(conTitulo).toBeGreaterThan(10);
+  });
+
+  it('un campeon recibe defensas obligatorias', () => {
+    let defensas = 0;
+    for (let s = 1; s <= 30; s++) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador({ ranking: 2, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+      });
+      if (oferta.esObligatoria) defensas++;
+    }
+    expect(defensas).toBeGreaterThan(8);
+  });
+
+  it('la pelea de titulo paga mucho mas que una comun', () => {
+    const comun = generarOferta(createRng(3), { jugador: jugador({ ranking: 15 }), mundo: mundo(), etapa: 'profesional' });
+    const titulo = generarOferta(createRng(3), { jugador: jugador({ ranking: 1 }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true });
+    expect(titulo.bolsa).toBeGreaterThan(comun.bolsa * 2);
+  });
+
+  it('la oferta de titulo nombra el cinturon en juego', () => {
+    const oferta = generarOferta(createRng(4), { jugador: jugador({ ranking: 1 }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true });
+    expect(oferta.enJuego).toBe('Cinturón regional');
+    expect(oferta.cinturonId).toBe('regional');
+    expect(oferta.textoGancho.toLowerCase()).toContain('cinturón');
   });
 });
 
@@ -3594,6 +3648,27 @@ export const NIVELES = {
   defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2, famaBase: 10 },
 };
 
+/**
+ * Progresión de cinturones. Se pelea por el siguiente que no tenés,
+ * en orden; cada uno exige más ranking y paga más.
+ */
+export const CINTURONES = [
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 8, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 5, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 3, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
+];
+
+/** El próximo cinturón que el jugador puede disputar, o null si los tiene todos. */
+export function proximoCinturon(jugador) {
+  return CINTURONES.find((c) => !jugador.titulos.includes(c.nombre)) ?? null;
+}
+
+/** ¿Puede pelear por ese cinturón según su ranking? */
+export function puedeDisputar(jugador, cinturon) {
+  if (!cinturon) return false;
+  return (jugador.ranking ?? 99) <= cinturon.rankingMax;
+}
+
 const BOLSA_BASE = 3000;
 
 export function evaluarRiesgo(jugador, rival) {
@@ -3603,19 +3678,37 @@ export function evaluarRiesgo(jugador, rival) {
   return 'medio';
 }
 
-function nivelPara(etapa, { esCampeon, forzarTitulo }) {
-  if (forzarTitulo) return NIVELES.titulo;
-  if (esCampeon) return NIVELES.defensa;
-  if (etapa === 'juvenil' || etapa === 'amateur') return NIVELES.local;
-  if (etapa === 'veterano') return NIVELES.eliminatoria;
-  return NIVELES.regional;
+/** El cinturón más alto que el jugador tiene puesto (el que se defiende). */
+export function cinturonActual(jugador) {
+  const puestos = CINTURONES.filter((c) => jugador.titulos.includes(c.nombre));
+  return puestos.length > 0 ? puestos[puestos.length - 1] : null;
+}
+
+function decidirNivel({ jugador, etapa, forzarTitulo, rng }) {
+  if (etapa === 'juvenil' || etapa === 'amateur') {
+    return { nivel: NIVELES.local, cinturon: null };
+  }
+
+  // Si tiene cinturón puesto, cada tanto le cae una defensa obligatoria.
+  const puesto = cinturonActual(jugador);
+  if (puesto && rng.chance(0.55)) {
+    return { nivel: NIVELES.defensa, cinturon: puesto };
+  }
+
+  // Si está rankeado lo suficiente, puede pelear por el próximo cinturón.
+  const proximo = proximoCinturon(jugador);
+  if (proximo && (forzarTitulo || puedeDisputar(jugador, proximo))) {
+    return { nivel: NIVELES.titulo, cinturon: proximo };
+  }
+
+  if (etapa === 'veterano') return { nivel: NIVELES.eliminatoria, cinturon: null };
+  return { nivel: (jugador.ranking ?? 99) <= 6 ? NIVELES.eliminatoria : NIVELES.regional, cinturon: null };
 }
 
 let contadorOferta = 0;
 
 export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], forzarTitulo = false }) {
-  const esCampeon = jugador.titulos.length > 0;
-  const nivel = nivelPara(etapa, { esCampeon, forzarTitulo });
+  const { nivel, cinturon } = decidirNivel({ jugador, etapa, forzarTitulo, rng });
 
   const archirrival = rivalidades.find((r) => r.esArchirrival);
   const rankingObjetivo = clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12);
@@ -3626,23 +3719,29 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
   if (!rival) return null;
 
   const riesgo = evaluarRiesgo(jugador, rival);
+  const multiplicadorCinturon = cinturon ? cinturon.multiplicador : 1;
   const bolsa = Math.round(
-    BOLSA_BASE * nivel.multiplicadorBolsa * (1 + jugador.fama / 60) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
+    BOLSA_BASE * nivel.multiplicadorBolsa * multiplicadorCinturon
+    * (1 + jugador.fama / 60) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
   );
 
   const cruce = rivalidades.find((r) => r.rivalId === rival.id);
   const esRevancha = Boolean(cruce && (cruce.h2h.v + cruce.h2h.d + cruce.h2h.e) > 0);
   const esTitulo = nivel.id === 'titulo' || nivel.id === 'defensa';
   const enJuego = esTitulo
-    ? (jugador.titulos[0] ?? `Título ${mundo.categoria}`)
-    : nivel.id === 'eliminatoria' ? 'Puesto de retador' : `Subís al ranking si ganás`;
+    ? cinturon.nombre
+    : nivel.id === 'eliminatoria' ? 'Puesto de retador' : 'Subís al ranking si ganás';
 
   contadorOferta += 1;
-  const gancho = esRevancha
-    ? `${rival.apodo} quiere la revancha. Vos sabés lo que pasó la última vez.`
-    : rival.esParodia
-      ? `${rival.nombre} te nombró en una entrevista. El teléfono no para.`
-      : `"${rival.apodo}" ${rival.nombre} te quiere cruzar.`;
+  const gancho = nivel.id === 'defensa'
+    ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${rival.apodo} es el retador oficial.`
+    : nivel.id === 'titulo'
+      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${rival.apodo} tiene lo que querés.`
+      : esRevancha
+        ? `${rival.apodo} quiere la revancha. Vos sabés lo que pasó la última vez.`
+        : rival.esParodia
+          ? `${rival.nombre} te nombró en una entrevista. El teléfono no para.`
+          : `"${rival.apodo}" ${rival.nombre} te quiere cruzar.`;
 
   return {
     id: `of_${contadorOferta}`,
@@ -3661,7 +3760,8 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     esTitulo,
     esObligatoria: nivel.id === 'defensa',
     esRevancha,
-    famaBase: nivel.famaBase,
+    cinturonId: cinturon ? cinturon.id : null,
+    famaBase: nivel.famaBase + (cinturon ? cinturon.famaExtra : 0),
     textoGancho: gancho,
   };
 }
@@ -4191,9 +4291,9 @@ describe('catalogo de mejoras', () => {
     }
   });
 
-  it('las cartas de grappling son solo de mma', () => {
+  it('ninguna carta de la v1 toca el grappling', () => {
     for (const carta of CARTAS_MEJORA) {
-      if ('grappling' in carta.mods) expect(carta.disciplinas).toEqual(['mma']);
+      expect('grappling' in carta.mods).toBe(false);
     }
   });
 });
@@ -4350,8 +4450,8 @@ export const CARTAS_MEJORA = [
   { id: 'altura', titulo: 'Campamento en la altura', texto: 'Aire fino, piernas de acero.', mods: { cardio: 6, forma: -3 }, etapas: ['profesional', 'veterano'], disciplinas: TODAS },
   { id: 'descanso', titulo: 'Una semana sin tocar el gimnasio', texto: 'El entrenador insiste: el cuerpo también se construye descansando.', mods: { forma: 10, fatiga: -20, potencia: -1 }, etapas: SIEMPRE, disciplinas: TODAS },
   { id: 'contragolpe', titulo: 'Timing de contragolpe', texto: 'Esperar el error ajeno y castigarlo.', mods: { tecnica: 3, iq: 3, potencia: -1 }, etapas: ['amateur', 'profesional', 'veterano'], disciplinas: TODAS },
-  { id: 'derribos', titulo: 'Cientos de derribos', texto: 'Entrás, levantás, caés. Repetir.', mods: { grappling: 5, cardio: -1 }, etapas: SIEMPRE, disciplinas: ['mma'] },
-  { id: 'jiujitsu', titulo: 'Jiu-jitsu con el profe viejo', texto: 'Te enseña a ahorcar sin fuerza. Pura palanca.', mods: { grappling: 6, potencia: -2 }, etapas: SIEMPRE, disciplinas: ['mma'] },
+  { id: 'gancho_higado', titulo: 'El gancho al hígado, mil veces', texto: 'Al cuerpo se gana. El que no respira, no pelea.', mods: { potencia: 3, tecnica: 2, velocidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS },
+  { id: 'jab', titulo: 'El jab como religión', texto: 'Todo empieza y termina con la mano de adelante.', mods: { tecnica: 3, velocidad: 3, potencia: -2 }, etapas: SIEMPRE, disciplinas: TODAS },
   { id: 'veterania', titulo: 'Trucos de veterano', texto: 'Ya no corrés como antes, pero sabés dónde pararte.', mods: { iq: 6, tecnica: 2, velocidad: -3 }, etapas: ['veterano'], disciplinas: TODAS },
 ];
 ```
@@ -5880,7 +5980,7 @@ Expected: FAIL — no se puede resolver el módulo.
 
 ```js
 import { createRng } from './rng.js';
-import { crearMundo, avanzarMundo } from './world.js';
+import { crearMundo, avanzarMundo, rankingDelJugador } from './world.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { generarOferta } from './offers.js';
@@ -5928,7 +6028,7 @@ export function crearPartida({ jugador, semilla }) {
     version: 1,
     semilla,
     rngEstado: rng.estado(),
-    jugador,
+    jugador: { ...jugador, ranking: rankingDelJugador(mundo, jugador) },
     mundo,
     rivalidades: [],
     noticias: [],
@@ -5986,6 +6086,10 @@ export function avanzarBloque(partida) {
 
   const paso = avanzarMundo(nueva.mundo, rng, { aniosPasados: Math.round(etapa.aniosPorBloque) });
   nueva.mundo = paso.mundo;
+
+  // El ranking del jugador se recalcula cada bloque: es lo que habilita
+  // las peleas de título y las defensas obligatorias.
+  nueva.jugador.ranking = rankingDelJugador(nueva.mundo, nueva.jugador);
 
   const nuevas = noticiasDeSucesos(rng, paso.sucesos, { anio: paso.mundo.anio });
   if (sponsor) {
@@ -7022,25 +7126,26 @@ describe('renderCreacion', () => {
     expect(cont.querySelector('[data-campo="origen"]')).toBeTruthy();
   });
 
-  it('no usa emojis', () => {
+  it('ofrece exactamente las seis nacionalidades con su bandera', () => {
     renderCreacion(cont, { onComenzar: () => {} });
-    expect(cont.innerHTML).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+    const select = cont.querySelector('[data-campo="nacionalidad"]');
+    expect(select.options).toHaveLength(6);
+    const textos = [...select.options].map((o) => o.textContent).join(' ');
+    for (const bandera of ['🇦🇷', '🇲🇽', '🇺🇸', '🇪🇸', '🇮🇹', '🇯🇵']) {
+      expect(textos).toContain(bandera);
+    }
   });
 
-  it('los estilos cambian con la disciplina', () => {
+  it('solo ofrece boxeo como disciplina', () => {
     renderCreacion(cont, { onComenzar: () => {} });
-    const disciplina = cont.querySelector('[data-campo="disciplina"]');
+    const select = cont.querySelector('[data-campo="disciplina"]');
+    expect([...select.options].map((o) => o.value)).toEqual(['boxeo']);
+  });
+
+  it('ofrece los tres estilos de boxeo', () => {
+    renderCreacion(cont, { onComenzar: () => {} });
     const estilo = cont.querySelector('[data-campo="estilo"]');
-
-    disciplina.value = 'boxeo';
-    disciplina.dispatchEvent(new Event('change'));
-    const boxeo = [...estilo.options].map((o) => o.value);
-    expect(boxeo).not.toContain('grappler');
-
-    disciplina.value = 'mma';
-    disciplina.dispatchEvent(new Event('change'));
-    const mma = [...estilo.options].map((o) => o.value);
-    expect(mma).toContain('grappler');
+    expect([...estilo.options].map((o) => o.value).sort()).toEqual(['menton', 'noqueador', 'tecnico']);
   });
 
   it('el boton sorprendeme completa el formulario', () => {
@@ -7112,14 +7217,11 @@ describe('renderDashboard', () => {
     expect(cont.querySelectorAll('[data-atributo]')).toHaveLength(6);
   });
 
-  it('en mma muestra grappling', () => {
-    const jugador = crearPeleador({
-      nombre: 'X', apodo: 'X', nacionalidad: 'AR', disciplina: 'mma',
-      estilo: 'grappler', categoria: 'pluma', origen: 'barrio', media: 55, esJugador: true,
-    });
-    renderDashboard(cont, { partida: crearPartida({ jugador, semilla: 1 }), onSiguiente: () => {} });
+  it('en boxeo no muestra grappling', () => {
+    renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
     const nombres = [...cont.querySelectorAll('[data-atributo]')].map((n) => n.dataset.atributo);
-    expect(nombres).toContain('grappling');
+    expect(nombres).not.toContain('grappling');
+    expect(nombres).toContain('iq');
   });
 
   it('formatea el dinero', () => {
@@ -7153,9 +7255,16 @@ describe('renderDashboard', () => {
     expect(cont.textContent.toUpperCase()).toContain('JUVENIL');
   });
 
-  it('no usa emojis', () => {
+  it('muestra la bandera de la nacionalidad', () => {
     renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
-    expect(cont.innerHTML).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+    expect(cont.textContent).toContain('🇦🇷');
+  });
+
+  it('muestra los cinturones cuando los tiene', () => {
+    const p = partida();
+    p.jugador.titulos = ['Cinturón regional'];
+    renderDashboard(cont, { partida: p, onSiguiente: () => {} });
+    expect(cont.textContent).toContain('Cinturón regional');
   });
 });
 ```
@@ -7202,7 +7311,7 @@ export function renderCreacion(contenedor, { onComenzar }) {
   const mano = el('select', { 'data-campo': 'mano', class: 'carta' });
   const error = el('div', { 'data-error': '', class: 'rojo', text: '' });
 
-  opciones(nacionalidad, NACIONALIDADES.map((n) => ({ valor: n.codigo, texto: n.nombre })));
+  opciones(nacionalidad, NACIONALIDADES.map((n) => ({ valor: n.codigo, texto: `${n.bandera} ${n.nombre}` })));
   opciones(disciplina, Object.values(DISCIPLINAS).map((d) => ({ valor: d.id, texto: d.nombre })));
   opciones(categoria, Object.values(CATEGORIAS).map((c) => ({ valor: c.id, texto: c.nombre })));
   opciones(origen, ORIGENES.map((o) => ({ valor: o.id, texto: `${o.nombre} — ${o.descripcion}` })));
@@ -7279,6 +7388,7 @@ import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, etiquetaEstado } from '../../core/stats.js';
 import { etapaActual } from '../../core/career.js';
 import { h2hTexto } from '../../core/rivalry.js';
+import { banderaDe } from '../../content/names.js';
 
 const BASE = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
 
@@ -7313,13 +7423,16 @@ export function renderDashboard(contenedor, { partida, onSiguiente, onTienda = (
       el('div', { class: 'media-num', 'data-media': '', text: String(mediaDe(jugador)), style: 'flex:0 0 auto' }),
       el('div', { style: 'flex:1' }, [
         el('div', { class: 'etiqueta', text: 'Media' }),
-        el('h1', { text: `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
+        el('h1', { text: `${banderaDe(jugador.nacionalidad)} "${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
         el('div', { class: 'etiqueta', text: `${jugador.categoria} · ${jugador.mano} · ${disciplina.nombre}` }),
       ]),
       el('div', { class: 'etiqueta', text: 'Ficha' }),
     ]),
     el('div', { class: 'etiqueta', style: 'margin-top:8px' , text:
       `${jugador.gimnasio} · ${partida.mundo.anio} · ${Math.floor(jugador.edad)} años · forma: ${etiquetaEstado('forma', jugador.estado.forma)}` }),
+    jugador.titulos.length > 0
+      ? el('div', { style: 'margin-top:8px' }, jugador.titulos.map((t) => el('span', { class: 'chip dorado', text: `🏆 ${t}` })))
+      : null,
   ]);
 
   const historial = el('div', {
@@ -7448,9 +7561,12 @@ describe('renderTarjeta', () => {
     expect(cont.querySelectorAll('[data-opcion]')).toHaveLength(2);
   });
 
-  it('no usa emojis', () => {
-    renderTarjeta(cont, { titulo: 'T', texto: 't', opciones, onElegir: () => {} });
-    expect(cont.innerHTML).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+  it('acepta una etiqueta opcional por opcion', () => {
+    renderTarjeta(cont, {
+      titulo: 'T', texto: 't', onElegir: () => {},
+      opciones: [{ id: 'a', titulo: 'X', etiqueta: 'PROVOCADOR' }, { id: 'b', titulo: 'Y' }],
+    });
+    expect(cont.textContent).toContain('PROVOCADOR');
   });
 });
 
@@ -8342,11 +8458,12 @@ describe('renderLegado', () => {
     expect(nueva).toBe(true);
   });
 
-  it('no usa emojis', () => {
+  it('muestra la bandera del peleador y el trofeo de sus titulos', () => {
     const jugador = jugadorConCarrera();
     const partida = { ...crearPartida({ jugador, semilla: 1 }), jugador };
     renderLegado(cont, { legado: calcularLegado(partida), jugador, onNuevaCarrera: () => {} });
-    expect(cont.innerHTML).not.toMatch(/[\u{1F300}-\u{1FAFF}]/u);
+    expect(cont.textContent).toContain('🇦🇷');
+    expect(cont.textContent).toContain('🏆');
   });
 });
 
@@ -8612,11 +8729,12 @@ export function renderFicha(contenedor, { jugador, seccion = 'atributos', onCerr
 
 ```js
 import { el, mount, fmtDinero } from '../dom.js';
+import { banderaDe } from '../../content/names.js';
 
 export function renderLegado(contenedor, { legado, jugador, onNuevaCarrera }) {
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: 'Fin de la carrera' }),
-    el('h1', { text: `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
+    el('h1', { text: `${banderaDe(jugador.nacionalidad)} "${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
     el('div', { class: 'panel' }, [
       el('div', { class: 'fila' }, [
         el('div', { class: 'tile' }, [
@@ -8637,8 +8755,8 @@ export function renderLegado(contenedor, { legado, jugador, onNuevaCarrera }) {
         ]),
       ]),
       legado.titulos.length > 0
-        ? el('div', { class: 'mods', style: 'margin-top:8px', text: legado.titulos.join(' · ') })
-        : null,
+        ? el('div', { style: 'margin-top:8px' }, legado.titulos.map((t) => el('span', { class: 'chip dorado', text: `🏆 ${t}` })))
+        : el('div', { class: 'etiqueta', style: 'margin-top:8px', text: 'Nunca se colgó un cinturón.' }),
     ]),
     legado.archirrival ? el('div', { class: 'panel' }, [
       el('div', { class: 'etiqueta rojo', text: 'Archirrival' }),
@@ -9045,6 +9163,419 @@ Expected: genera `dist/` sin errores. Ese directorio es lo que se publica por li
 git add src/ui/screens/news.js src/ui/screens/legacy.js src/ui/screens/profile.js src/main.js tests/ui/legacy.test.js tests/integration/partida.test.js
 git commit -m "feat: noticias, pantalla de legado y armado completo del juego"
 ```
+
+---
+
+## Task 25: Barrida final — debug, UX/UI, animaciones y estadísticas
+
+Esta tarea se ejecuta **con el juego ya funcionando de punta a punta**. Es la pasada de pulido.
+
+**Files:**
+- Create: `src/core/stats-carrera.js`
+- Create: `src/ui/screens/stats.js`
+- Modify: `src/ui/theme.css` (animaciones)
+- Modify: `src/ui/screens/legacy.js` (sumar el bloque de estadísticas)
+- Modify: `src/ui/screens/fight.js` (auto-avance de rounds y remate animado)
+- Modify: `src/main.js` (lo que haga falta según los bugs encontrados)
+- Test: `tests/core/stats-carrera.test.js`
+
+**Interfaces:**
+- Produces (`stats-carrera.js`):
+  - `estadisticasDeCarrera(partida): Estadisticas` = `{ peleas, victorias, derrotas, empates, porcentajeKO, rachaMasLarga, mejorRacha: {desde,hasta}, rivalMasDuro: {nombre,apodo}|null, bolsaMayor: number, roundsPeleados: number, edadDebut: number, edadRetiro: number, titulosGanados: number, defensasExitosas: number, promedioRoundPorPelea: number }`
+  - `rachaActual(historial): number`
+- Produces (`stats.js`): `renderEstadisticas(contenedor, {estadisticas, onCerrar}): void`
+
+- [ ] **Step 1: Barrida de debug — jugar y anotar**
+
+Correr `npm test` (todo verde) y después `npm run dev`. Jugar **dos carreras completas** de punta a punta y anotar en una lista todo lo que aparezca:
+- Errores en la consola del navegador (cualquiera, aunque no rompa).
+- Pantallas donde el juego se traba, no avanza o pierde el estado.
+- Textos cortados, superpuestos o que se salen de la pantalla en ancho de celular (usar el modo responsive del navegador a 390px).
+- Números que se ven mal formateados (`NaN`, `undefined`, decimales largos, `US$ 0`).
+- Cualquier momento donde no se entienda qué hay que hacer.
+
+Escribir la lista en el mensaje del commit final de esta tarea. **No pasar al Step 2 hasta que la lista esté hecha.**
+
+- [ ] **Step 2: Arreglar cada bug encontrado**
+
+Por cada punto de la lista: escribir primero un test que lo reproduzca (si es lógica) o arreglarlo directo (si es visual), y verificar. Correr `npm test` después de cada arreglo.
+
+- [ ] **Step 3: Escribir el test de estadísticas de carrera**
+
+Crear `tests/core/stats-carrera.test.js`:
+
+```js
+import { describe, it, expect } from 'vitest';
+import { crearPeleador } from '../../src/core/fighter.js';
+import { crearPartida } from '../../src/core/career.js';
+import { estadisticasDeCarrera, rachaActual } from '../../src/core/stats-carrera.js';
+
+function pelea(resultado, extra = {}) {
+  return {
+    rivalId: 'r1', rivalNombre: 'Dyke Tyzon', rivalApodo: 'El Ciclón',
+    resultado, metodo: 'ko', round: 3, bolsa: 10000, enJuego: 'Ranking', esTitulo: false,
+    ...extra,
+  };
+}
+
+function partidaCon(historial, extra = {}) {
+  const jugador = {
+    ...crearPeleador({
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 60, esJugador: true,
+    }),
+    historial,
+    edad: 39,
+    ...extra,
+  };
+  jugador.record = {
+    v: historial.filter((p) => p.resultado === 'v').length,
+    d: historial.filter((p) => p.resultado === 'd').length,
+    e: historial.filter((p) => p.resultado === 'e').length,
+    ko: historial.filter((p) => p.resultado === 'v' && p.metodo === 'ko').length,
+    sub: 0,
+    dec: historial.filter((p) => p.resultado === 'v' && p.metodo === 'decision').length,
+  };
+  return { ...crearPartida({ jugador, semilla: 1 }), jugador };
+}
+
+describe('rachaActual', () => {
+  it('cuenta victorias seguidas al final', () => {
+    expect(rachaActual([pelea('d'), pelea('v'), pelea('v')])).toBe(2);
+  });
+
+  it('una derrota al final corta la racha', () => {
+    expect(rachaActual([pelea('v'), pelea('v'), pelea('d')])).toBe(0);
+  });
+
+  it('sin historial devuelve cero', () => {
+    expect(rachaActual([])).toBe(0);
+  });
+});
+
+describe('estadisticasDeCarrera', () => {
+  it('cuenta peleas, victorias y derrotas', () => {
+    const e = estadisticasDeCarrera(partidaCon([pelea('v'), pelea('v'), pelea('d')]));
+    expect(e.peleas).toBe(3);
+    expect(e.victorias).toBe(2);
+    expect(e.derrotas).toBe(1);
+  });
+
+  it('calcula el porcentaje de KO sobre las victorias', () => {
+    const e = estadisticasDeCarrera(partidaCon([
+      pelea('v', { metodo: 'ko' }), pelea('v', { metodo: 'decision' }),
+    ]));
+    expect(e.porcentajeKO).toBe(50);
+  });
+
+  it('encuentra la racha mas larga aunque no sea la actual', () => {
+    const e = estadisticasDeCarrera(partidaCon([
+      pelea('v'), pelea('v'), pelea('v'), pelea('d'), pelea('v'),
+    ]));
+    expect(e.rachaMasLarga).toBe(3);
+  });
+
+  it('reporta la bolsa mas grande', () => {
+    const e = estadisticasDeCarrera(partidaCon([pelea('v', { bolsa: 5000 }), pelea('v', { bolsa: 90000 })]));
+    expect(e.bolsaMayor).toBe(90000);
+  });
+
+  it('suma los rounds peleados y el promedio', () => {
+    const e = estadisticasDeCarrera(partidaCon([pelea('v', { round: 4 }), pelea('d', { round: 12 })]));
+    expect(e.roundsPeleados).toBe(16);
+    expect(e.promedioRoundPorPelea).toBe(8);
+  });
+
+  it('cuenta titulos y defensas', () => {
+    const e = estadisticasDeCarrera(partidaCon(
+      [pelea('v', { esTitulo: true, enJuego: 'Cinturón regional' })],
+      { titulos: ['Cinturón regional'], defensas: 2 },
+    ));
+    expect(e.titulosGanados).toBe(1);
+    expect(e.defensasExitosas).toBe(2);
+  });
+
+  it('identifica al rival mas duro (el de mayor media enfrentado)', () => {
+    const e = estadisticasDeCarrera(partidaCon([
+      pelea('v', { rivalNombre: 'Flojo', rivalApodo: 'El Flojo', rivalMedia: 50 }),
+      pelea('d', { rivalNombre: 'Dyke Tyzon', rivalApodo: 'El Ciclón', rivalMedia: 88 }),
+    ]));
+    expect(e.rivalMasDuro.nombre).toBe('Dyke Tyzon');
+  });
+
+  it('con carrera vacia no explota', () => {
+    const e = estadisticasDeCarrera(partidaCon([]));
+    expect(e.peleas).toBe(0);
+    expect(e.porcentajeKO).toBe(0);
+    expect(e.promedioRoundPorPelea).toBe(0);
+    expect(e.rivalMasDuro).toBeNull();
+  });
+});
+```
+
+- [ ] **Step 4: Correr el test para verificar que falla**
+
+Run: `npx vitest run tests/core/stats-carrera.test.js`
+Expected: FAIL — no se puede resolver el módulo.
+
+- [ ] **Step 5: Implementar `src/core/stats-carrera.js`**
+
+```js
+export function rachaActual(historial) {
+  let racha = 0;
+  for (let i = historial.length - 1; i >= 0; i--) {
+    if (historial[i].resultado !== 'v') break;
+    racha += 1;
+  }
+  return racha;
+}
+
+function rachaMasLargaDe(historial) {
+  let mejor = 0;
+  let actual = 0;
+  for (const pelea of historial) {
+    if (pelea.resultado === 'v') {
+      actual += 1;
+      mejor = Math.max(mejor, actual);
+    } else {
+      actual = 0;
+    }
+  }
+  return mejor;
+}
+
+export function estadisticasDeCarrera(partida) {
+  const { jugador } = partida;
+  const historial = jugador.historial ?? [];
+  const victorias = historial.filter((p) => p.resultado === 'v');
+  const derrotas = historial.filter((p) => p.resultado === 'd');
+  const empates = historial.filter((p) => p.resultado === 'e');
+  const porKO = victorias.filter((p) => p.metodo === 'ko' || p.metodo === 'tko');
+  const roundsPeleados = historial.reduce((a, p) => a + (p.round ?? 0), 0);
+
+  const rivalMasDuro = historial.reduce((mejor, p) => {
+    if (typeof p.rivalMedia !== 'number') return mejor;
+    if (!mejor || p.rivalMedia > mejor.rivalMedia) return p;
+    return mejor;
+  }, null);
+
+  return {
+    peleas: historial.length,
+    victorias: victorias.length,
+    derrotas: derrotas.length,
+    empates: empates.length,
+    porcentajeKO: victorias.length === 0 ? 0 : Math.round((porKO.length / victorias.length) * 100),
+    rachaActual: rachaActual(historial),
+    rachaMasLarga: rachaMasLargaDe(historial),
+    rivalMasDuro: rivalMasDuro
+      ? { nombre: rivalMasDuro.rivalNombre, apodo: rivalMasDuro.rivalApodo, media: rivalMasDuro.rivalMedia }
+      : null,
+    bolsaMayor: historial.reduce((a, p) => Math.max(a, p.bolsa ?? 0), 0),
+    roundsPeleados,
+    promedioRoundPorPelea: historial.length === 0 ? 0 : Math.round(roundsPeleados / historial.length),
+    edadDebut: 15,
+    edadRetiro: Math.floor(jugador.edad),
+    titulosGanados: historial.filter((p) => p.esTitulo && p.resultado === 'v').length,
+    defensasExitosas: jugador.defensas ?? 0,
+  };
+}
+```
+
+- [ ] **Step 6: Correr el test para verificar que pasa**
+
+Run: `npx vitest run tests/core/stats-carrera.test.js`
+Expected: PASS (12 tests).
+
+- [ ] **Step 7: Guardar `rivalMedia` en el historial**
+
+Para que `rivalMasDuro` funcione en una partida real, `aplicarResultado` en `src/core/offers.js` debe guardar la media del rival. En el objeto que hace `nuevo.historial.push({...})`, agregar:
+
+```js
+    rivalMedia: oferta.rivalMedia,
+```
+
+Run: `npx vitest run tests/core/offers.test.js`
+Expected: PASS.
+
+- [ ] **Step 8: Implementar `src/ui/screens/stats.js`**
+
+```js
+import { el, mount, fmtDinero } from '../dom.js';
+
+function tile(nombre, valor, clase = '') {
+  return el('div', { class: 'tile' }, [
+    el('div', { class: `valor ${clase}`, text: String(valor) }),
+    el('div', { class: 'nombre', text: nombre }),
+  ]);
+}
+
+export function renderEstadisticas(contenedor, { estadisticas: e, onCerrar }) {
+  mount(contenedor, el('div', { class: 'stack' }, [
+    el('div', { class: 'etiqueta', text: 'Los números de tu carrera' }),
+    el('h1', { text: 'Estadísticas' }),
+    el('div', { class: 'fila' }, [
+      tile('Peleas', e.peleas),
+      tile('Ganadas', e.victorias, 'verde'),
+      tile('Perdidas', e.derrotas, 'rojo'),
+      tile('Empates', e.empates),
+    ]),
+    el('div', { class: 'fila' }, [
+      tile('% KO', `${e.porcentajeKO}%`, 'dorado'),
+      tile('Mejor racha', e.rachaMasLarga),
+      tile('Rounds', e.roundsPeleados),
+      tile('Prom. rounds', e.promedioRoundPorPelea),
+    ]),
+    el('div', { class: 'fila' }, [
+      tile('🏆 Títulos', e.titulosGanados, 'dorado'),
+      tile('Defensas', e.defensasExitosas),
+      tile('Mejor bolsa', fmtDinero(e.bolsaMayor), 'verde'),
+    ]),
+    el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta', text: 'Carrera' }),
+      el('div', { text: `Debutaste a los ${e.edadDebut} y colgaste los guantes a los ${e.edadRetiro}.` }),
+      e.rivalMasDuro
+        ? el('div', { class: 'medio', style: 'margin-top:6px', text: `El rival más duro que enfrentaste: "${e.rivalMasDuro.apodo}" ${e.rivalMasDuro.nombre} (media ${e.rivalMasDuro.media}).` })
+        : null,
+    ]),
+    el('button', { class: 'boton', 'data-accion': 'cerrar', text: 'Volver', onClick: onCerrar }),
+  ]));
+}
+```
+
+- [ ] **Step 9: Enganchar las estadísticas en la pantalla de legado**
+
+En `src/ui/screens/legacy.js`, agregar un parámetro `onVerEstadisticas` y, justo antes del botón "Nueva carrera", un botón:
+
+```js
+    el('button', {
+      class: 'boton secundario', 'data-accion': 'estadisticas',
+      text: 'Ver estadísticas', onClick: onVerEstadisticas,
+    }),
+```
+
+En `src/main.js`, dentro de `finDeCarrera()`, pasar el callback:
+
+```js
+      onVerEstadisticas: () => renderEstadisticas(contenedor, {
+        estadisticas: estadisticasDeCarrera(partida),
+        onCerrar: finDeCarrera,
+      }),
+```
+
+agregando arriba los imports `import { estadisticasDeCarrera } from './core/stats-carrera.js';` y `import { renderEstadisticas } from './ui/screens/stats.js';`.
+
+Run: `npm test`
+Expected: PASS.
+
+- [ ] **Step 10: Animaciones en `src/ui/theme.css`**
+
+Agregar al final del archivo. Todas respetan `prefers-reduced-motion`:
+
+```css
+@keyframes aparecer {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+
+@keyframes latido {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+@keyframes sacudon {
+  0%, 100% { transform: translateX(0); }
+  20%      { transform: translateX(-6px); }
+  40%      { transform: translateX(5px); }
+  60%      { transform: translateX(-3px); }
+  80%      { transform: translateX(2px); }
+}
+
+@keyframes destello {
+  from { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
+  to   { box-shadow: 0 0 26px rgba(242, 193, 78, 0.65); }
+}
+
+#app > .stack > * { animation: aparecer 0.22s ease both; }
+#app > .stack > *:nth-child(2) { animation-delay: 0.03s; }
+#app > .stack > *:nth-child(3) { animation-delay: 0.06s; }
+#app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
+
+.carta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+.carta:active { transform: translateY(0) scale(0.99); }
+
+.boton { transition: transform 0.1s ease, filter 0.15s ease; }
+.boton:hover { filter: brightness(1.08); }
+.boton:active { transform: scale(0.98); }
+
+.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+
+.delta-sube { animation: latido 0.5s ease 2; display: inline-block; }
+.log > p { animation: aparecer 0.25s ease both; }
+.log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
+.pao.activo { animation: latido 0.6s ease infinite; }
+
+.pelea-ko { animation: sacudon 0.45s ease; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+```
+
+- [ ] **Step 11: Auto-avance de rounds en la pelea**
+
+El botón "Siguiente round" en cada asalto corta el ritmo. En `src/ui/screens/fight.js`, dentro de `renderPelea`, agregar un modo automático: un botón `[data-accion="auto"]` que dispara `onSiguienteRound()` cada 1400 ms hasta que la pelea se detenga o aparezca un pendiente. Guardar el intervalo en una variable de módulo y limpiarlo en cada `mount`, para que no queden temporizadores vivos:
+
+```js
+let autoTimer = null;
+export function detenerAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+}
+```
+
+Llamar `detenerAuto()` al principio de `renderPelea`, `renderRincon` y `renderGolpeDeGracia`. El botón "auto" hace:
+
+```js
+      autoTimer = setInterval(() => onSiguienteRound(), 1400);
+```
+
+Al terminar la pelea, agregar la clase `pelea-ko` al panel del log si el desenlace fue `ko`/`tko`, para que dispare la animación de sacudón.
+
+Run: `npm test`
+Expected: PASS (los tests de `fight.test.js` siguen andando porque el botón de round manual no cambia).
+
+- [ ] **Step 12: Repaso de UX en celular**
+
+Con `npm run dev` y el navegador en 390px de ancho, recorrer todas las pantallas y confirmar:
+- Ningún texto se corta ni desborda horizontalmente.
+- Todos los botones se pueden tocar cómodos (mínimo 44px de alto).
+- Los estados de "cargando"/"pensando" del dado se entienden.
+- El botón principal de cada pantalla se ve sin hacer scroll cuando es posible.
+
+Arreglar lo que falle en `theme.css`.
+
+- [ ] **Step 13: Verificación final completa**
+
+Run: `npm test`
+Expected: PASS — toda la suite.
+
+Run: `npm run build`
+Expected: `dist/` generado sin errores ni warnings.
+
+Jugar una carrera completa más en el navegador y confirmar que se puede: crear peleador con bandera, entrenar, pelear, **ganar un cinturón**, **defenderlo**, perderlo o retenerlo, retirarse y ver legado + estadísticas.
+
+- [ ] **Step 14: Commit**
+
+```bash
+git add -A
+git commit -m "feat: barrida final — estadisticas de carrera, animaciones y arreglos de UX"
+```
+
+En el cuerpo del commit, listar los bugs encontrados en el Step 1 y cómo se resolvieron.
 
 ---
 
