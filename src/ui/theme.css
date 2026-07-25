@@ -335,6 +335,63 @@ h2 { font-size: 17px; font-weight: 800; }
   .shell-boton-derecha { display: none; }
 }
 
+/* Tablero: columna izquierda (v2) */
+.panel-peleador-cabecera { cursor: pointer; }
+
+.rango-media {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rango-media-num { font-size: 24px; font-weight: 800; line-height: 1; }
+
+.panel-peleador-atributos { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+
+.panel-peleador-atributo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+
+.panel-peleador-atributo.con-aporte { background: #1a1408; }
+.panel-peleador-atributo .valor { font-size: 13px; }
+.aporte-entrenador { font-size: 9.5px; color: var(--dorado); font-weight: 800; }
+
+.tu-rincon .rincon-iniciales {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: #2a1618;
+  color: var(--dorado);
+  font-weight: 800;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Botón de tienda: centrado con padding de sobra para que el ícono nunca se
+   vea cortado (corrección puntual del diseño v2). */
+.boton-tienda {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  flex: 0 0 auto;
+  border-radius: 9px;
+}
+
 @keyframes aparecer {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
