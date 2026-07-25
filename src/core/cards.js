@@ -48,12 +48,15 @@ export function elegirPorRareza(rng, elegibles) {
   return rng.weighted(entradas);
 }
 
-// Sortea `total` cartas sin repetir de `elegibles`, respetando los pesos de
-// rareza (ver elegirPorRareza). Si una rareza se queda sin cartas a mitad de
-// camino, el peso restante se reparte entre las que sí tienen: nunca se
-// devuelven menos cartas de las pedidas por culpa de un hueco de rareza
-// (mientras el catálogo alcance en total).
-function sortearPorRareza(rng, elegibles, total) {
+// Sortea `total` elementos sin repetir de `elegibles`, respetando los pesos
+// de rareza (ver elegirPorRareza). Si una rareza se queda sin elementos a
+// mitad de camino, el peso restante se reparte entre las que sí tienen:
+// nunca se devuelven menos elementos de los pedidos por culpa de un hueco de
+// rareza (mientras el catálogo alcance en total). Genérico a propósito: lo
+// usa `repartirMejoras` acá abajo, y también `repartirOrigenes` (fighter.js)
+// y `repartirApodos` (nicknames.js) — un solo algoritmo de reparto por
+// rareza para todo el juego, no uno por catálogo.
+export function sortearPorRareza(rng, elegibles, total) {
   let restantes = [...elegibles];
   const elegidas = [];
   while (elegidas.length < total && restantes.length > 0) {

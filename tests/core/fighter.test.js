@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import {
-  CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto,
+  CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto, repartirOrigenes,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
 import { NACIONALIDADES, NOMBRES_POR_PAIS } from '../../src/content/names.js';
@@ -69,6 +69,101 @@ describe('crearPeleador', () => {
     for (const codigo of ['AR', 'MX', 'US', 'ES', 'IT', 'JP']) {
       expect(crearPeleador({ ...base, nacionalidad: codigo }).nacionalidad).toBe(codigo);
     }
+  });
+
+  it('todo peleador nuevo trae su entrenador puesto, segun el estilo', () => {
+    const p = crearPeleador({ ...base, estilo: 'tecnico' });
+    expect(p.entrenador).toBeTruthy();
+    expect(Object.keys(p.entrenador).sort()).toEqual(['aporte', 'escuela', 'frase', 'iniciales', 'nombre']);
+  });
+});
+
+describe('crearPeleador con apellido (v2: ya no pide nombre completo)', () => {
+  it('si viene apellido, el nombre queda igual al apellido y se guarda aparte', () => {
+    const p = crearPeleador({ ...base, nombre: undefined, apellido: 'Ortiz' });
+    expect(p.nombre).toBe('Ortiz');
+    expect(p.apellido).toBe('Ortiz');
+  });
+
+  it('si viene nombre (legacy: NPCs y tests existentes), todo sigue igual que hoy', () => {
+    const p = crearPeleador(base);
+    expect(p.nombre).toBe('Lucas Ortiz');
+    expect(p.apellido).toBeNull();
+  });
+
+  it('apellido gana si vienen los dos', () => {
+    const p = crearPeleador({ ...base, apellido: 'Sosa' });
+    expect(p.nombre).toBe('Sosa');
+  });
+});
+
+describe('crearPeleador con apodoId (catalogo de apodos con mods)', () => {
+  it('el peleador queda armado con apellido + apodo elegido', () => {
+    const p = crearPeleador({
+      ...base, nombre: undefined, apodo: undefined, apellido: 'Ortiz', apodoId: 'relampago',
+    });
+    expect(p.apellido).toBe('Ortiz');
+    expect(p.nombre).toBe('Ortiz');
+    expect(p.apodo).toBe('El Relámpago');
+    expect(p.apodoId).toBe('relampago');
+  });
+
+  it('aplica los mods del apodo', () => {
+    const sinApodo = crearPeleador({ ...base, estilo: 'tecnico' });
+    const conApodo = crearPeleador({ ...base, estilo: 'tecnico', apodo: undefined, apodoId: 'dinamita' });
+    expect(conApodo.atributos.potencia).toBeGreaterThan(sinApodo.atributos.potencia);
+  });
+
+  it('un apodoId desconocido tira error', () => {
+    expect(() => crearPeleador({ ...base, apodoId: 'no-existe' })).toThrow(/no-existe/);
+  });
+
+  it('sin apodoId, no rompe (comportamiento legacy: apodo es solo texto)', () => {
+    const p = crearPeleador(base);
+    expect(p.apodo).toBe('El Relámpago');
+    expect(p.apodoId).toBeNull();
+  });
+});
+
+describe('repartirOrigenes', () => {
+  it('devuelve exactamente dos', () => {
+    expect(repartirOrigenes(createRng(1))).toHaveLength(2);
+  });
+
+  it('nunca repite un origen', () => {
+    for (let semilla = 1; semilla <= 100; semilla += 1) {
+      const origenes = repartirOrigenes(createRng(semilla));
+      expect(new Set(origenes.map((o) => o.id)).size).toBe(origenes.length);
+    }
+  });
+
+  it('es determinista', () => {
+    const a = repartirOrigenes(createRng(4));
+    const b = repartirOrigenes(createRng(4));
+    expect(a.map((o) => o.id)).toEqual(b.map((o) => o.id));
+  });
+
+  it('ORIGENES tiene al menos 6 opciones con rarezas', () => {
+    expect(ORIGENES.length).toBeGreaterThanOrEqual(6);
+    for (const origen of ORIGENES) {
+      expect(['normal', 'rara', 'legendaria']).toContain(origen.rareza);
+    }
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    let total = 0;
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      for (const origen of repartirOrigenes(createRng(semilla))) {
+        conteo[origen.rareza] += 1;
+        total += 1;
+      }
+    }
+    const pct = (n) => (100 * conteo[n]) / total;
+    expect(pct('normal')).toBeGreaterThan(55);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(40);
+    expect(pct('legendaria')).toBeLessThan(15);
   });
 });
 
