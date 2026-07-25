@@ -399,6 +399,11 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
 }
 
 function pintarAccionResuelta(raiz, accionNodo, props) {
+  // El narrador ya terminó (por eso se llegó acá): su limpieza deja de ser
+  // necesaria. `pintarGolpe` registra la suya propia si corresponde; los
+  // demás paneles (seguir/rincón/resultado) no manejan timers.
+  raiz._limpiarAccion = null;
+
   const { pelea } = props;
   if (pelea.terminada) return pintarResultado(accionNodo, props);
   if (pelea.pendiente === 'rincon') return pintarRincon(accionNodo, props);
@@ -416,6 +421,7 @@ function pintarCronicaYAccion(raiz, props, miGeneracion) {
   const vigente = () => raiz.dataset.generacion === String(miGeneracion);
 
   let controlador = null;
+  let narracionTerminada = false;
   pintarSaltar(accionNodo, () => { if (controlador) controlador.saltar(); });
 
   controlador = narrar(logNodo, momentos, {
@@ -424,11 +430,26 @@ function pintarCronicaYAccion(raiz, props, miGeneracion) {
       actualizarMarcador(marcadorNodo, mezclarSnapshot(pelea, momento.snapshot));
     },
     onFin: () => {
+      narracionTerminada = true;
       if (!vigente()) return;
       actualizarMarcador(marcadorNodo, pelea);
       pintarAccionResuelta(raiz, accionNodo, props);
     },
   });
+
+  // Mientras narra, el timer vivo es el del narrador (no hay uno propio acá:
+  // es `narrar()` quien programa el setTimeout de cada paso). `saltar()` lo
+  // limpia y completa la narración de inmediato — sus callbacks quedan
+  // neutralizados por `vigente()` si esto ya no es la generación actual.
+  //
+  // Si la narración YA terminó de forma sincrónica (lista vacía, modo
+  // 'todo', reduced-motion) `onFin` corrió arriba y `pintarAccionResuelta`
+  // ya dejó registrada la limpieza que corresponda (la del golpe de gracia,
+  // o ninguna) — no hay que pisarla con la del narrador, que ya no tiene
+  // nada corriendo.
+  if (!narracionTerminada) {
+    raiz._limpiarAccion = () => { if (controlador) controlador.saltar(); };
+  }
 }
 
 /**
@@ -449,21 +470,31 @@ function pintarCronicaYAccion(raiz, props, miGeneracion) {
 export function renderPelea(contenedor, props) {
   const { pelea } = props;
   let raiz = contenedor.querySelector(`.${CLASE_RAIZ}`);
+  const yaExistia = Boolean(raiz);
   if (!raiz) {
     raiz = construirEsqueleto(pelea);
     mount(contenedor, raiz);
-  } else if (typeof raiz._limpiarAccion === 'function') {
-    // Cancela cualquier timer del panel de acción anterior (típicamente la
-    // ventana del golpe de gracia y su barra de precisión) antes de pintar
-    // el estado nuevo: nunca debería llegar a pasar en el flujo normal
-    // (cada llamada nueva la dispara un callback del panel anterior, que ya
-    // se limpió solo al resolver), pero es la red de seguridad.
+  }
+
+  // La generación se bumpea ANTES de limpiar: si `_limpiarAccion` termina
+  // llamando a algo que dispara `onFin`/`onGolpe` de la instancia anterior
+  // (p. ej. el narrador vía `saltar()`), ese callback ya se encuentra con
+  // `vigente()` en falso y no pinta nada — así se puede reusar `saltar()`
+  // como mecanismo de limpieza sin necesidad de que narrador.js exponga un
+  // "cancelar en silencio" aparte.
+  generacionGlobal += 1;
+  raiz.dataset.generacion = String(generacionGlobal);
+
+  if (yaExistia && typeof raiz._limpiarAccion === 'function') {
+    // Cancela cualquier timer del panel de acción anterior: el narrador
+    // todavía narrando (deja de pasar momentos y no dispara onFin/onPaso de
+    // más) o la ventana del golpe de gracia y su barra de precisión. Nunca
+    // debería llegar a pasar en el flujo normal (cada llamada nueva la
+    // dispara un callback del panel anterior, que ya se limpió solo al
+    // resolver), pero es la red de seguridad.
     raiz._limpiarAccion();
     raiz._limpiarAccion = null;
   }
-
-  generacionGlobal += 1;
-  raiz.dataset.generacion = String(generacionGlobal);
 
   actualizarEtiquetaRound(raiz, pelea);
   actualizarMarcador(raiz.querySelector('[data-bloque="marcador"]'), pelea);

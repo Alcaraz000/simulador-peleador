@@ -3,7 +3,7 @@ import {
 } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPelea, simularRound, tarjetasJurados } from '../../src/core/fight.js';
+import { crearPelea, simularRound, tarjetasJurados, PLANES } from '../../src/core/fight.js';
 import { abrirGolpeDeGracia, ZONAS_GOLPE } from '../../src/core/fight-interactive.js';
 import {
   renderOferta, renderPlan, renderPelea, actualizarMarcador,
@@ -62,6 +62,17 @@ describe('renderPlan', () => {
     renderPlan(cont, { oferta, onElegirPlan: noop });
     expect(cont.querySelectorAll('[data-plan]')).toHaveLength(3);
     expect(cont.textContent.toLowerCase()).toContain('entrenador');
+  });
+
+  it('cada tarjeta muestra la descripcion con voz de entrenador (segunda persona) del plan', () => {
+    renderPlan(cont, { oferta, onElegirPlan: noop });
+    for (const plan of Object.values(PLANES)) {
+      expect(cont.textContent).toContain(plan.descripcion);
+    }
+    // "seco" a la v1: ya no queda el copy neutro sin voz.
+    expect(cont.textContent).not.toContain('Presión sin descanso. Más daño, más gasto.');
+    expect(cont.textContent).not.toContain('Distancia y precisión. Equilibrado.');
+    expect(cont.textContent).not.toContain('Defensa primero, buscando el error del rival.');
   });
 
   it('devuelve el plan elegido', () => {
@@ -185,6 +196,30 @@ describe('renderPelea — narracion y avance de round', () => {
     expect(marcador.querySelector('[data-stat="aguante-rival"] .valor').textContent).toBe('90');
     vi.advanceTimersByTime(700);
     expect(marcador.querySelector('[data-stat="aguante-rival"] .valor').textContent).toBe('80');
+  });
+
+  it('si se re-renderiza a mitad de la narracion, el timer viejo se cancela (no quedan dos corriendo)', () => {
+    // Regresión pedida por el revisor del Bloque 4: el timer de narrar() no
+    // estaba registrado en la limpieza de la pantalla, así que un segundo
+    // renderPelea a mitad de narración dejaba dos timers vivos en paralelo.
+    vi.useFakeTimers();
+    const pelea = peleaBase();
+    const momentos1 = [
+      { round: 1, tipo: 'jab', texto: 'Uno.' },
+      { round: 1, tipo: 'flavor', texto: 'Dos.' },
+      { round: 1, tipo: 'campana', texto: 'Tres.' },
+    ];
+    renderPelea(cont, { pelea, momentos: momentos1, onSeguir: noop });
+    expect(vi.getTimerCount()).toBe(1); // el paso siguiente de la narracion vieja
+
+    const momentos2 = [
+      { round: 2, tipo: 'jab', texto: 'Otra.' },
+      { round: 2, tipo: 'campana', texto: 'Y otra.' },
+    ];
+    renderPelea(cont, { pelea, momentos: momentos2, onSeguir: noop });
+
+    // Si el timer viejo no se hubiera cancelado, acá habria dos corriendo.
+    expect(vi.getTimerCount()).toBe(1);
   });
 });
 

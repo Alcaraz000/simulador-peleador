@@ -4,23 +4,26 @@ import { calcularMedia, clamp } from './stats.js';
 import { createRng } from './rng.js';
 import { LINEAS } from '../content/fight-lines.js';
 
+// Las descripciones son la voz del entrenador armando el plan con vos, no un
+// resumen seco de los mods: qué buscás con ese enfoque y qué resignás para
+// conseguirlo (misma voz que INSTRUCCIONES_RINCON en fight-interactive.js).
 export const PLANES = {
   frente: {
     id: 'frente',
     nombre: 'Ir al frente',
-    descripcion: 'Presión sin descanso. Más daño, más gasto.',
+    descripcion: 'Presión de punta a punta: lo vas a buscar a fuerza de tirar. Vas a gastar más gas y quedar más servido atrás.',
     mods: { agresion: 0.12, gasto: 1.5, defensa: -0.08 },
   },
   afuera: {
     id: 'afuera',
     nombre: 'Boxear de afuera',
-    descripcion: 'Distancia y precisión. Equilibrado.',
+    descripcion: 'Jugás con la distancia, tocás y salís. Parejo en todo, sin resignar defensa ni gas.',
     mods: { agresion: 0, gasto: 1.0, defensa: 0.04 },
   },
   aguantar: {
     id: 'aguantar',
     nombre: 'Aguantar y contragolpear',
-    descripcion: 'Defensa primero, buscando el error del rival.',
+    descripcion: 'Te cerrás atrás y esperás que se equivoque. Tirás menos, pero cada contragolpe pesa más.',
     mods: { agresion: -0.08, gasto: 0.7, defensa: 0.12 },
   },
 };
