@@ -283,6 +283,58 @@ h2 { font-size: 17px; font-weight: 800; }
   #app { max-width: 560px; }
 }
 
+/* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
+   (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
+   pelea + noticias) queda colapsada detrás de un botón en celular. */
+#app:has(.shell) { max-width: none; padding: 0; }
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 14px 48px;
+}
+
+.shell-region { min-width: 0; }
+
+.shell-centro { display: flex; flex-direction: column; gap: 10px; }
+
+.shell-derecha { display: none; }
+.shell.shell-derecha-abierta .shell-derecha { display: flex; flex-direction: column; gap: 10px; }
+
+.shell-boton-derecha {
+  display: block;
+  width: 100%;
+  background: var(--superficie-alta);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: 11px;
+  font-family: var(--fuente);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@keyframes destaque-shell {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 2px var(--dorado), 0 0 20px rgba(242, 193, 78, 0.45); }
+}
+
+.shell-destacada { animation: destaque-shell 0.9s ease; border-radius: 12px; }
+
+@media (min-width: 900px) {
+  .shell { flex-direction: row; align-items: flex-start; }
+  .shell-izquierda { flex: 0 0 242px; }
+  .shell-centro { flex: 1 1 auto; min-width: 0; }
+  .shell-derecha { flex: 0 0 262px; display: flex !important; flex-direction: column; gap: 10px; }
+  .shell-boton-derecha { display: none; }
+}
+
 @keyframes aparecer {
   from { opacity: 0; transform: translateY(6px); }
   to   { opacity: 1; transform: none; }
