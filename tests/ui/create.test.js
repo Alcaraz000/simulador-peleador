@@ -34,10 +34,11 @@ describe('renderCreacion', () => {
     expect([...select.options].map((o) => o.value)).toEqual(['boxeo']);
   });
 
-  it('ofrece los tres estilos de boxeo', () => {
+  it('ofrece los estilos de boxeo disponibles (incluido el legendario nuevo)', () => {
     renderCreacion(cont, { onComenzar: () => {} });
     const estilo = cont.querySelector('[data-campo="estilo"]');
-    expect([...estilo.options].map((o) => o.value).sort()).toEqual(['menton', 'noqueador', 'tecnico']);
+    expect([...estilo.options].map((o) => o.value).sort())
+      .toEqual(['contragolpeador', 'menton', 'noqueador', 'tecnico']);
   });
 
   it('el boton sorprendeme completa el formulario', () => {
