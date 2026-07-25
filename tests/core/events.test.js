@@ -5,6 +5,8 @@ import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import { CARTAS_REDES } from '../../src/content/cards-social.js';
 import { elegirEvento, elegirCartaRedes, resolverOpcion } from '../../src/core/events.js';
 
+const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
+
 function jugador(extra = {}) {
   return {
     ...crearPeleador({
@@ -43,6 +45,25 @@ describe('catalogo de eventos', () => {
     expect(categorias).toContain('evento');
     expect(categorias).toContain('vida');
   });
+
+  it('toda carta declara una rareza valida', () => {
+    for (const carta of CARTAS_EVENTO) {
+      expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+    }
+  });
+
+  it('tiene 1 o 2 eventos legendarios, potentes de verdad', () => {
+    const legendarios = CARTAS_EVENTO.filter((c) => c.rareza === 'legendaria');
+    expect(legendarios.length).toBeGreaterThanOrEqual(1);
+    expect(legendarios.length).toBeLessThanOrEqual(2);
+    for (const carta of legendarios) {
+      const sumaPositivos = carta.opciones.reduce((acc, o) => {
+        const deMods = Object.values(o.mods ?? {}).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+        return Math.max(acc, deMods);
+      }, 0);
+      expect(sumaPositivos).toBeGreaterThanOrEqual(8);
+    }
+  });
 });
 
 describe('catalogo de redes', () => {
@@ -54,6 +75,21 @@ describe('catalogo de redes', () => {
   it('siempre hay una opcion que sube el heat del rival', () => {
     for (const carta of CARTAS_REDES) {
       expect(carta.opciones.some((o) => (o.efectos?.heatRival ?? 0) > 0)).toBe(true);
+    }
+  });
+
+  it('toda carta declara una rareza valida', () => {
+    for (const carta of CARTAS_REDES) {
+      expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+    }
+  });
+
+  it('tiene al menos una carta de redes legendaria, potente de verdad', () => {
+    const legendarias = CARTAS_REDES.filter((c) => c.rareza === 'legendaria');
+    expect(legendarias.length).toBeGreaterThanOrEqual(1);
+    for (const carta of legendarias) {
+      const famaMaxima = Math.max(...carta.opciones.map((o) => o.efectos?.fama ?? 0));
+      expect(famaMaxima).toBeGreaterThanOrEqual(10);
     }
   });
 });
@@ -74,12 +110,46 @@ describe('elegirEvento', () => {
     const b = elegirEvento(createRng(3), { jugador: jugador(), etapa: 'profesional' });
     expect(a.id).toBe(b.id);
   });
+
+  it('la carta elegida trae su rareza intacta', () => {
+    const carta = elegirEvento(createRng(14), { jugador: jugador(), etapa: 'profesional' });
+    expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirEvento(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(45);
+    expect(pct('legendaria')).toBeLessThan(15);
+  });
 });
 
 describe('elegirCartaRedes', () => {
   it('devuelve una carta del catalogo', () => {
     const carta = elegirCartaRedes(createRng(4), { jugador: jugador() });
     expect(CARTAS_REDES.map((c) => c.id)).toContain(carta.id);
+  });
+
+  it('la carta elegida trae su rareza intacta', () => {
+    const carta = elegirCartaRedes(createRng(15), { jugador: jugador() });
+    expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirCartaRedes(createRng(semilla), { jugador: jugador() });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('legendaria')).toBeLessThan(15);
   });
 });
 

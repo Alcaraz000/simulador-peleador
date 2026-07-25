@@ -25,28 +25,39 @@ function rarezaDe(carta) {
   return carta.rareza ?? 'normal';
 }
 
+// Elige UNA carta de `elegibles` respetando los pesos de rareza: el peso es
+// por RAREZA, no por carta individual (si hay cinco normales y una rara, la
+// rara sigue valiendo 25% en total, no 25% dividido entre cinco competidoras).
+// Si a `elegibles` (ya filtrado por etapa/disciplina/categoría) le falta
+// alguna rareza, esa rareza simplemente no aparece entre las entradas: el
+// peso se redistribuye solo entre las que sí están presentes.
+// Consume exactamente una tirada de rng (igual que rng.pick), así que se
+// puede usar como reemplazo directo de un `rng.pick` sin correr la secuencia
+// del resto del bloque.
+export function elegirPorRareza(rng, elegibles) {
+  const porRareza = {};
+  for (const carta of elegibles) {
+    const rareza = rarezaDe(carta);
+    porRareza[rareza] = (porRareza[rareza] ?? 0) + 1;
+  }
+  const entradas = elegibles.map((carta) => {
+    const rareza = rarezaDe(carta);
+    const peso = (PESOS_RAREZA[rareza] ?? PESOS_RAREZA.normal) / porRareza[rareza];
+    return { valor: carta, peso };
+  });
+  return rng.weighted(entradas);
+}
+
 // Sortea `total` cartas sin repetir de `elegibles`, respetando los pesos de
-// rareza. Cada ronda recalcula el peso por carta como PESOS_RAREZA[rareza] /
-// (cantidad de cartas de esa rareza que quedan), así la rareza completa
-// mantiene su peso total sin importar cuántas cartas individuales la formen.
-// Si una rareza se queda sin cartas, el peso restante simplemente se reparte
-// entre las rarezas que sí tienen: nunca se devuelven menos cartas de las
-// pedidas por culpa de un hueco de rareza (mientras el catálogo alcance).
+// rareza (ver elegirPorRareza). Si una rareza se queda sin cartas a mitad de
+// camino, el peso restante se reparte entre las que sí tienen: nunca se
+// devuelven menos cartas de las pedidas por culpa de un hueco de rareza
+// (mientras el catálogo alcance en total).
 function sortearPorRareza(rng, elegibles, total) {
   let restantes = [...elegibles];
   const elegidas = [];
   while (elegidas.length < total && restantes.length > 0) {
-    const porRareza = {};
-    for (const carta of restantes) {
-      const rareza = rarezaDe(carta);
-      porRareza[rareza] = (porRareza[rareza] ?? 0) + 1;
-    }
-    const entradas = restantes.map((carta) => {
-      const rareza = rarezaDe(carta);
-      const peso = (PESOS_RAREZA[rareza] ?? PESOS_RAREZA.normal) / porRareza[rareza];
-      return { valor: carta, peso };
-    });
-    const elegida = rng.weighted(entradas);
+    const elegida = elegirPorRareza(rng, restantes);
     elegidas.push(elegida);
     restantes = restantes.filter((c) => c !== elegida);
   }
