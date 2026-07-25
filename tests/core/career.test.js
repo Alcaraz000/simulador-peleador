@@ -212,11 +212,26 @@ describe('ofertas de pelea por carrera', () => {
 });
 
 describe('progresión de cinturones', () => {
-  it('ganando todas las ofertas de pelea, el jugador puede conseguir los tres cinturones', () => {
+  it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
     const partida = jugarGanandoTodo(nuevaPartida(1));
     expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
     CINTURONES.forEach((cinturon) => {
       expect(partida.jugador.titulos).toContain(cinturon.nombre);
     });
+  });
+
+  // No basta con una semilla favorable: esto garantiza que el eje de cinturones
+  // funciona de punta a punta para la gran mayoría de las carreras, no solo para
+  // una elegida a mano. Si `decidirNivel` (offers.js) vuelve a priorizar la defensa
+  // del cinturón actual por sobre escalar al siguiente cuando el ranking ya
+  // califica, este test lo detecta.
+  it('sobre muchas semillas, al menos el 90% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
+    const total = 150;
+    let conLosTres = 0;
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      const partida = jugarGanandoTodo(nuevaPartida(semilla));
+      if (partida.jugador.titulos.length === CINTURONES.length) conLosTres += 1;
+    }
+    expect(conLosTres / total).toBeGreaterThanOrEqual(0.9);
   });
 });

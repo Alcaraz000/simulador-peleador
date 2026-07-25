@@ -138,15 +138,32 @@ describe('cinturones', () => {
     expect(conTitulo).toBeGreaterThan(10);
   });
 
-  it('un campeon recibe defensas obligatorias', () => {
+  it('un campeon que todavia no califica para el siguiente cinturon recibe defensas obligatorias', () => {
+    // ranking 6 con solo el regional puesto: nacional pide ranking <= 5, asi que
+    // todavia no califica para escalar y le tiene que caer la defensa.
     let defensas = 0;
     for (let s = 1; s <= 30; s++) {
       const oferta = generarOferta(createRng(s), {
-        jugador: jugador({ ranking: 2, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+        jugador: jugador({ ranking: 6, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
       });
       if (oferta.esObligatoria) defensas++;
     }
     expect(defensas).toBeGreaterThan(8);
+  });
+
+  it('un campeon que ya califica para el siguiente cinturon prioriza escalar por sobre defender', () => {
+    // ranking 2 con solo el regional puesto: nacional pide ranking <= 5, asi que
+    // ya califica. Escalar tiene que ganarle a estancarse defendiendo el chico.
+    let ascensos = 0;
+    let defensas = 0;
+    for (let s = 1; s <= 40; s++) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador({ ranking: 2, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+      });
+      if (oferta.esTitulo && !oferta.esObligatoria) ascensos++;
+      if (oferta.esObligatoria) defensas++;
+    }
+    expect(ascensos).toBeGreaterThan(defensas);
   });
 
   it('la pelea de titulo paga mucho mas que una comun', () => {

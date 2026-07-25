@@ -38,7 +38,7 @@ export const ETAPAS = [
   },
   {
     id: 'veterano', nombre: 'Veterano', bloques: 3, aniosPorBloque: 1.3, edadDesde: 36,
-    probPelea: 0.55, probEvento: 0.3, probRedes: 0.15, probSparring: 0.03,
+    probPelea: 0.7, probEvento: 0.3, probRedes: 0.15, probSparring: 0.03,
     frase: 'Cada pelea puede ser la última. Elegí bien.',
   },
 ];

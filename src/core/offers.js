@@ -46,19 +46,38 @@ export function cinturonActual(jugador) {
   return puestos.length > 0 ? puestos[puestos.length - 1] : null;
 }
 
+// Con cinturón puesto y ranking suficiente para el próximo, la chance de que le
+// ofrezcan esa pelea (en vez de una defensa del cinturón actual). Tiene que ser
+// alta: un campeón rankeado 1-2 va detrás del título más grande, no se queda
+// defendiendo el chico hasta que se le acaba la carrera.
+const PROB_ASCENSO_PRIORITARIO = 0.95;
+
 function decidirNivel({ jugador, etapa, forzarTitulo, rng }) {
   if (etapa === 'juvenil' || etapa === 'amateur') {
     return { nivel: NIVELES.local, cinturon: null };
   }
 
-  // Si tiene cinturón puesto, cada tanto le cae una defensa obligatoria.
   const puesto = cinturonActual(jugador);
-  if (puesto && rng.chance(0.55)) {
-    return { nivel: NIVELES.defensa, cinturon: puesto };
+  const proximo = proximoCinturon(jugador);
+
+  if (puesto) {
+    // Si ya califica por ranking para el próximo escalón, escalar le gana a
+    // estancarse: la mayoría de las veces le ofrecen ir por el título grande,
+    // y solo a veces le cae la defensa del que ya tiene.
+    if (proximo && puedeDisputar(jugador, proximo)) {
+      if (rng.chance(PROB_ASCENSO_PRIORITARIO)) {
+        return { nivel: NIVELES.titulo, cinturon: proximo };
+      }
+      return { nivel: NIVELES.defensa, cinturon: puesto };
+    }
+    // Todavía no califica para el siguiente: sigue defendiendo el que tiene.
+    if (rng.chance(0.55)) {
+      return { nivel: NIVELES.defensa, cinturon: puesto };
+    }
   }
 
-  // Si está rankeado lo suficiente, puede pelear por el próximo cinturón.
-  const proximo = proximoCinturon(jugador);
+  // Sin cinturón puesto (o sin defensa/ascenso este turno): pelea por el próximo
+  // si está rankeado lo suficiente.
   if (proximo && (forzarTitulo || puedeDisputar(jugador, proximo))) {
     return { nivel: NIVELES.titulo, cinturon: proximo };
   }
