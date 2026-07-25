@@ -308,7 +308,8 @@ jugar y superar tu marca.
 - Más categorías de peso.
 - Más eventos escritos a mano.
 - Torneos ilegales / exhibiciones post-retiro.
-- Posibles desbloqueos entre partidas.
+- Desbloqueos entre partidas — *solo si en el futuro se reconsidera la decisión de
+  "cada carrera independiente"; hoy queda fuera por diseño.*
 
 ---
 
