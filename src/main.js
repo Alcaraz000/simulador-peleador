@@ -306,9 +306,8 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
         if (opcion.probabilidades) {
           const nodoTarjeta = orq.shell.regiones.centro.querySelector(`[data-opcion="${id}"]`);
-          const indice = opcion.probabilidades.findIndex((p) => p.texto === resuelto.texto);
           animarRoll(nodoTarjeta, {
-            indiceGanador: indice === -1 ? 0 : indice,
+            indiceGanador: resuelto.indiceGanador,
             cantidad: opcion.probabilidades.length,
             onFin: aplicarYMostrar,
           });

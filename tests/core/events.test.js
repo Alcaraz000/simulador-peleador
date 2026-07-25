@@ -164,6 +164,10 @@ describe('resolverOpcion', () => {
         { peso: 1, mods: { forma: -5 }, texto: 'Salió mal.' },
       ] },
       { id: 'picante', texto: 'Picante', efectos: { heatRival: 20 } },
+      { id: 'ambiguo', texto: 'Ambiguo', probabilidades: [
+        { peso: 1, mods: { potencia: 2 } },
+        { peso: 1, mods: { potencia: -2 } },
+      ] },
     ],
   };
 
@@ -233,5 +237,20 @@ describe('resolverOpcion', () => {
     const paso = resolverOpcion(createRng(5), { jugador: yo, carta, opcionId: 'directo' });
     expect(paso.deltas).toEqual({ cardio: 5 });
     expect(paso.deltasTexto).toEqual(['+5 Cardio']);
+  });
+
+  it('no tiene indiceGanador cuando la opcion no tiene azar', () => {
+    const paso = resolverOpcion(createRng(5), { jugador: jugador(), carta, opcionId: 'directo' });
+    expect(paso.indiceGanador).toBeNull();
+  });
+
+  it('expone indiceGanador y coincide con el mod realmente aplicado, aunque las dos ramas no tengan texto (caso que fallaba comparando strings)', () => {
+    for (let s = 1; s <= 200; s += 1) {
+      const yo = jugador();
+      const paso = resolverOpcion(createRng(s), { jugador: yo, carta, opcionId: 'ambiguo' });
+      const ramaGanadora = carta.opciones.find((o) => o.id === 'ambiguo').probabilidades[paso.indiceGanador];
+      const deltaAplicado = paso.jugador.atributos.potencia - yo.atributos.potencia;
+      expect(deltaAplicado).toBe(ramaGanadora.mods.potencia);
+    }
   });
 });

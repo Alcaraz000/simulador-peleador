@@ -26,11 +26,13 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
 
   let mods = { ...(opcion.mods ?? {}) };
   let texto = opcion.textoResultado ?? '';
+  let indiceGanador = null;
 
   if (opcion.probabilidades) {
     const tirada = resolverProbabilidad(rng, opcion);
     mods = { ...mods, ...tirada.resultado };
     texto = tirada.texto;
+    indiceGanador = tirada.indice;
   }
 
   const paso = aplicarCarta(jugador, { ...carta, mods });
@@ -60,5 +62,6 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
     texto,
     deltas: paso.deltas,
     deltasTexto: [...deltasTexto, ...extras],
+    indiceGanador,
   };
 }
