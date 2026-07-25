@@ -4,7 +4,7 @@ import {
   CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
-import { NACIONALIDADES, NOMBRES_POR_PAIS, banderaDe } from '../../src/content/names.js';
+import { NACIONALIDADES, NOMBRES_POR_PAIS } from '../../src/content/names.js';
 
 const base = {
   nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR',
@@ -86,10 +86,9 @@ describe('nacionalidades', () => {
     }
   });
 
-  it('banderaDe devuelve la bandera correcta', () => {
-    expect(banderaDe('AR')).toBe('🇦🇷');
-    expect(banderaDe('JP')).toBe('🇯🇵');
-    expect(banderaDe('XX')).toBeTruthy();
+  it('el campo bandera sigue siendo dato crudo por nacionalidad (la UI dibuja SVG aparte)', () => {
+    expect(NACIONALIDADES.find((n) => n.codigo === 'AR').bandera).toBeTruthy();
+    expect(NACIONALIDADES.find((n) => n.codigo === 'JP').bandera).toBeTruthy();
   });
 });
 

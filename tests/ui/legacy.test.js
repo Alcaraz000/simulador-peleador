@@ -66,11 +66,12 @@ describe('renderLegado', () => {
     expect(vistas).toBe(true);
   });
 
-  it('muestra la bandera del peleador y el trofeo de sus titulos', () => {
+  it('muestra la bandera del peleador como SVG (no emoji) y el trofeo de sus titulos', () => {
     const jugador = jugadorConCarrera();
     const partida = { ...crearPartida({ jugador, semilla: 1 }), jugador };
     renderLegado(cont, { legado: calcularLegado(partida), jugador, onNuevaCarrera: () => {} });
-    expect(cont.textContent).toContain('🇦🇷');
+    expect(cont.querySelector('svg.bandera-svg')).toBeTruthy();
+    expect(cont.textContent).not.toContain('🇦🇷');
     expect(cont.textContent).toContain('🏆');
   });
 });

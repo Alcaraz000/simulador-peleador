@@ -34,10 +34,6 @@ export const NOMBRES_POR_PAIS = {
   JP: { nombres: ['Kenji', 'Hiro', 'Takumi', 'Ryo', 'Daiki'], apellidos: ['Takeda', 'Yamamoto', 'Ishida', 'Kurosawa', 'Nakano'] },
 };
 
-export function banderaDe(codigo) {
-  return NACIONALIDADES.find((n) => n.codigo === codigo)?.bandera ?? '🥊';
-}
-
 export const GIMNASIOS = [
   'La Catedral', 'El Galpón', 'Sudor y Fierro', 'Club Atlético Progreso',
   'La Fábrica', 'Templo del Ring', 'La Cueva', 'Bunker MMA',

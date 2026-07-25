@@ -77,9 +77,10 @@ describe('renderDashboard', () => {
     expect(cont.textContent).not.toContain('pluma · derecha');
   });
 
-  it('muestra la bandera de la nacionalidad', () => {
+  it('muestra la bandera de la nacionalidad como SVG, no como emoji', () => {
     renderDashboard(cont, { partida: partida(), onSiguiente: () => {} });
-    expect(cont.textContent).toContain('🇦🇷');
+    expect(cont.querySelector('svg.bandera-svg')).toBeTruthy();
+    expect(cont.textContent).not.toContain('🇦🇷');
   });
 
   it('muestra los cinturones cuando los tiene', () => {

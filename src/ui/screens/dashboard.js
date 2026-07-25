@@ -5,7 +5,7 @@ import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, etiquetaEstado } from '../../core/stats.js';
 import { etapaActual } from '../../core/career.js';
 import { h2hTexto } from '../../core/rivalry.js';
-import { banderaDe } from '../../content/names.js';
+import { bandera } from '../flags.js';
 
 const BASE = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
 const MANO_TEXTO = { derecha: 'Derecha', zurda: 'Zurda' };
@@ -43,7 +43,10 @@ export function renderDashboard(contenedor, {
       el('div', { class: 'media-num', 'data-media': '', text: String(mediaDe(jugador)), style: 'flex:0 0 auto' }),
       el('div', { style: 'flex:1' }, [
         el('div', { class: 'etiqueta', text: 'Media' }),
-        el('h1', { text: `${banderaDe(jugador.nacionalidad)} "${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
+        el('h1', { style: 'display:flex;align-items:center;gap:7px' }, [
+          bandera(jugador.nacionalidad, { ancho: 20 }),
+          `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
+        ]),
         el('div', {
           class: 'etiqueta',
           text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${disciplina.nombre}`,
