@@ -316,7 +316,12 @@ function pintarRincon(accionNodo, { pelea, onInstruccion = () => {} }) {
   ]));
 }
 
-function pintarGolpe(accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTANA_MS }) {
+// `raiz` recibe la limpieza en `raiz._limpiarAccion`: si `renderPelea` se
+// vuelve a llamar mientras la ventana del golpe de gracia (o la barra de
+// precisión) todavía está corriendo, `renderPelea` la cancela ANTES de
+// pintar el estado nuevo — sin eso, un setTimeout de la ventana anterior
+// podría disparar `onGolpe` con datos viejos aunque el panel ya cambió.
+function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTANA_MS }) {
   const info = abrirGolpeDeGracia(pelea);
   const desde = Date.now();
   let resuelto = false;
@@ -330,11 +335,16 @@ function pintarGolpe(accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTAN
     }
   }
 
+  function limpiarTodo() {
+    limpiarVentana();
+    if (barra) barra.detener();
+  }
+  raiz._limpiarAccion = limpiarTodo;
+
   function resolver(datos) {
     if (resuelto) return;
     resuelto = true;
-    limpiarVentana();
-    if (barra) barra.detener();
+    limpiarTodo();
     onGolpe(datos);
   }
 
@@ -381,11 +391,11 @@ function pintarGolpe(accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTAN
   pintarPaso1();
 }
 
-function pintarAccionResuelta(accionNodo, props) {
+function pintarAccionResuelta(raiz, accionNodo, props) {
   const { pelea } = props;
   if (pelea.terminada) return pintarResultado(accionNodo, props);
   if (pelea.pendiente === 'rincon') return pintarRincon(accionNodo, props);
-  if (pelea.pendiente === 'golpe') return pintarGolpe(accionNodo, props);
+  if (pelea.pendiente === 'golpe') return pintarGolpe(raiz, accionNodo, props);
   return pintarSeguir(accionNodo, props);
 }
 
@@ -409,7 +419,7 @@ function pintarCronicaYAccion(raiz, props, miGeneracion) {
     onFin: () => {
       if (!vigente()) return;
       actualizarMarcador(marcadorNodo, pelea);
-      pintarAccionResuelta(accionNodo, props);
+      pintarAccionResuelta(raiz, accionNodo, props);
     },
   });
 }
@@ -435,6 +445,14 @@ export function renderPelea(contenedor, props) {
   if (!raiz) {
     raiz = construirEsqueleto(pelea);
     mount(contenedor, raiz);
+  } else if (typeof raiz._limpiarAccion === 'function') {
+    // Cancela cualquier timer del panel de acción anterior (típicamente la
+    // ventana del golpe de gracia y su barra de precisión) antes de pintar
+    // el estado nuevo: nunca debería llegar a pasar en el flujo normal
+    // (cada llamada nueva la dispara un callback del panel anterior, que ya
+    // se limpió solo al resolver), pero es la red de seguridad.
+    raiz._limpiarAccion();
+    raiz._limpiarAccion = null;
   }
 
   generacionGlobal += 1;

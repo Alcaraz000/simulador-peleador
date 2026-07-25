@@ -260,6 +260,19 @@ describe('renderPelea — golpe de gracia', () => {
     expect(golpe.aTiempo).toBe(false);
   });
 
+  it('si se re-renderiza mientras la ventana del golpe esta pendiente, no queda un timer colgado', () => {
+    vi.useFakeTimers();
+    let llamadas = 0;
+    const pelea = peleaGroggy();
+    renderPelea(cont, { pelea, momentos: [], onGolpe: () => { llamadas += 1; }, ventanaMs: 1000 });
+    // El jugador (o el flujo) vuelve a pintar la pantalla para otro estado
+    // antes de que la ventana del golpe se cumpla o se elija una zona.
+    renderPelea(cont, { pelea: { ...pelea, pendiente: null }, momentos: [], onSeguir: () => {} });
+    expect(vi.getTimerCount()).toBe(0);
+    vi.advanceTimersByTime(2000);
+    expect(llamadas).toBe(0); // el onGolpe viejo nunca se dispara
+  });
+
   it('no reporta el golpe dos veces', () => {
     vi.useFakeTimers();
     let llamadas = 0;
