@@ -116,8 +116,8 @@ export function marcarLeidas(feed) {
   return feed.map((n) => (n.nueva ? { ...n, nueva: false } : n));
 }
 
-// Etiqueta legible para mostrar en el feed (ui/screens/news.js, panel-noticias.js):
-// antes se mostraba n.tipo crudo ("victoria", "escandalo") tal cual el id interno.
+// Etiqueta legible para mostrar en el feed (panel-noticias.js): antes se
+// mostraba n.tipo crudo ("victoria", "escandalo") tal cual el id interno.
 const ETIQUETAS_TIPO = {
   victoria: 'Resultado',
   derrota: 'Resultado',
