@@ -267,6 +267,12 @@ h2 { font-size: 17px; font-weight: 800; }
 .tarjeta-efecto.negativo { background: #241012; border: 1px solid #4a2c2c; color: #e0a0a0; }
 .tarjeta-efecto.leve { background: #241c08; border: 1px solid #4a3a12; color: #e0b25a; }
 
+/* Roll con suspenso (animarRoll en roll.js): mientras hay un resultado
+   iluminado, los demás se atenúan; al terminar queda fijo el ganador. */
+.tarjeta-efecto { transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease; }
+.tarjeta-efecto.iluminado { box-shadow: 0 0 0 1px currentColor, 0 0 14px rgba(242, 193, 78, 0.35); transform: scale(1.04); }
+.tarjeta-efectos:has(.iluminado) .tarjeta-efecto:not(.iluminado) { opacity: 0.35; }
+
 .tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
 .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
 .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
