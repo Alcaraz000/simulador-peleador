@@ -21,9 +21,11 @@ import {
   describe, it, expect, beforeEach, afterEach, vi,
 } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPartida } from '../../src/core/career.js';
+import { crearPartida, siguienteBeat } from '../../src/core/career.js';
 import { guardar } from '../../src/core/save.js';
 import { CLAVE_GUARDADO } from '../../src/core/save.js';
+import { fechaDe } from '../../src/core/calendario.js';
+import { ANIO_INICIAL } from '../../src/core/world.js';
 import { CLAVE_ACCESO } from '../../src/ui/screens/login.js';
 import { iniciar } from '../../src/main.js';
 
@@ -294,6 +296,37 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-centro [data-accion="siguiente"]')).toBeTruthy();
+  });
+
+  // Pedido del coordinador al revisar esta task: confirmar que una partida
+  // guardada A MITAD DE CAMINO (con el esquema v2, avanzada varios bloques,
+  // con un beat todavía pendiente) se retoma bien después de mover el
+  // calendario al centro y la oferta al tablero — no solo que arranque, sino
+  // que el calendario muestre la semana REAL de esa partida, no la del
+  // arranque de la carrera.
+  it('una partida v2 guardada a mitad de camino (varios bloques avanzados) se retoma con el calendario correcto', () => {
+    let partida = nuevaPartida(7);
+    let guardia = 0;
+    // Avanza varios bloques de verdad (a nivel núcleo) para que semanaGlobal
+    // se mueva un buen trecho del arranque, dejando CUALQUIER beat pendiente
+    // a la cabeza de la cola (no importa cuál: lo que importa acá es la
+    // semana, no el tipo de beat).
+    while (partida.bloqueGlobal < 6 && guardia < 500) {
+      guardia += 1;
+      const paso = siguienteBeat(partida);
+      partida = paso.partida;
+      if (partida.terminada) break;
+    }
+    expect(partida.semanaGlobal).toBeGreaterThan(1);
+    const semanaGuardada = partida.semanaGlobal;
+
+    iniciar(cont, prepararStorage(partida));
+
+    const textoEsperado = fechaDe(semanaGuardada, ANIO_INICIAL).texto;
+    expect(cont.querySelector('.shell-centro').textContent).toContain(textoEsperado);
+    // Y no quedó pegada en la semana 1 (el bug que rompería si la carga
+    // ignorara semanaGlobal y el calendario mostrara siempre el arranque).
+    expect(textoEsperado).not.toBe(fechaDe(1, ANIO_INICIAL).texto);
   });
 
   it('una carrera completa jugada por la UI real (aceptando las peleas) llega al legado sin excepciones', () => {
