@@ -83,10 +83,18 @@ export function crearPeleador(opciones) {
     if (!nick) throw new Error(`Apodo desconocido: ${apodoId}`);
   }
 
+  // Cada estilo trae su entrenador (coach.js). Su aporte se hornea acá abajo
+  // en `atributos`, exactamente igual que el estilo/origen/apodo: NO es un
+  // overlay que solo pinte la UI. `entrenador.aporte` se conserva tal cual
+  // en el peleador devuelto como desglose informativo ("de estos 69, 6 los
+  // pone tu entrenador" — ver atributosConEntrenador en coach.js), pero el
+  // número que de verdad pelea (media, ranking, ofertas) ya lo incluye.
+  const entrenador = crearEntrenadorDe(estilo);
+
   let atributos = baseAtributos(disciplina, media);
   let especiales = { disciplinaPersonal: 40, menton: 40 };
 
-  for (const mods of [est.mods, orig.mods, nick?.mods ?? {}]) {
+  for (const mods of [est.mods, orig.mods, nick?.mods ?? {}, entrenador?.aporte ?? {}]) {
     const soloAtributos = {};
     const soloEspeciales = {};
     for (const [clave, valor] of Object.entries(mods)) {
@@ -116,7 +124,7 @@ export function crearPeleador(opciones) {
     edad,
     atributos,
     especiales,
-    entrenador: crearEntrenadorDe(estilo),
+    entrenador,
     estado: crearEstado(),
     record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     dinero: 0,
