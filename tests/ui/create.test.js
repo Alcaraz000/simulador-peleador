@@ -120,6 +120,34 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     expect(cont.querySelector('[data-campo="categoria"] [data-opcion="mediano"]').classList.contains('elegida')).toBe(true);
   });
 
+  // Verificación visual (v4, grilla 3×3): con disciplina/nacionalidad/
+  // categoría compartiendo una sola fila de 3 columnas, "Peso pluma"/"Peso
+  // mediano" completos se truncaban a "Peso…" (el "Peso" repetido en las dos
+  // opciones no ayudaba a distinguirlas, y encima se cortaba). El chip usa
+  // el nombre corto ("Pluma"/"Mediano"); el peleador sigue guardando la
+  // categoría completa (CATEGORIAS[...].nombre se sigue mostrando entero en
+  // el resto del juego, p. ej. la cabecera del tablero).
+  it('los chips de categoría usan el nombre corto (sin repetir "Peso"), para que entren en la fila de 3 columnas', () => {
+    irAPaso1();
+    const grupo = cont.querySelector('[data-campo="categoria"]');
+    expect(grupo.querySelector('[data-opcion="pluma"]').textContent).toBe('Pluma');
+    expect(grupo.querySelector('[data-opcion="mediano"]').textContent).toBe('Mediano');
+  });
+
+  // Categoría es el campo más apretado de la fila inferior (2 chips en 1/3
+  // de la fila, contra un solo control en disciplina y nacionalidad): sin el
+  // ícono de balanza que llevaba antes (cuando tenía la fila entera para él
+  // solo), "Mediano" seguía truncándose a "Medi…" aun con el nombre corto.
+  // Se saca el ícono acá puntualmente para devolverle ese espacio a los
+  // chips — mano/disciplina siguen con el suyo, no hace falta un ícono en
+  // cada campo para que la fila se lea bien.
+  it('el campo de categoría no lleva ícono en la fila inferior (le da el espacio a los 2 chips)', () => {
+    irAPaso1();
+    const filaInferior = cont.querySelector('[data-fila="datos-inferior"]');
+    const grupoCategoria = cont.querySelector('[data-campo="categoria"]');
+    expect(grupoCategoria.parentElement).toBe(filaInferior);
+  });
+
   it('disciplina se elige con chips, no con un <select>', () => {
     irAPaso1();
     const grupo = cont.querySelector('[data-campo="disciplina"]');

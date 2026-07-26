@@ -191,9 +191,18 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
       (v) => { estado.disciplina = v; pintar(); },
     );
 
+    // Nombre corto en el chip (v4, verificación visual): "Peso pluma"/"Peso
+    // mediano" completos comparten fila con disciplina y nacionalidad (3
+    // columnas) y se truncaban a "Peso…" — el prefijo repetido en las dos
+    // opciones no distinguía nada y encima se cortaba. El resto del juego
+    // (cabecera del tablero, etc.) sigue mostrando el nombre completo desde
+    // CATEGORIAS; esto es solo la etiqueta del chip.
     const grupoCategoria = grupoChips(
       'categoria',
-      Object.values(CATEGORIAS).map((c) => ({ valor: c.id, texto: c.nombre })),
+      Object.values(CATEGORIAS).map((c) => {
+        const corto = c.nombre.replace(/^Peso\s+/i, '');
+        return { valor: c.id, texto: corto.charAt(0).toUpperCase() + corto.slice(1) };
+      }),
       estado.categoria,
       (v) => { estado.categoria = v; pintar(); },
     );
@@ -220,10 +229,15 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
         filaConIcono(icono('persona', { tamano: 16, color: 'var(--texto-sutil)' }), campoApellido),
         filaConIcono(icono('mano', { tamano: 16, color: 'var(--texto-sutil)' }), grupoMano),
       ]),
+      // Categoría va SIN el ícono de balanza que llevaba antes (cuando tenía
+      // la fila entera para ella sola): es el campo más apretado de esta
+      // fila de 3 columnas (2 chips contra un solo control en disciplina y
+      // nacionalidad) — sin el ícono, esos 24px extra evitan que "Mediano"
+      // se trunque a "Medi…" (verificación visual, v4).
       el('div', { class: 'fila', dataset: { fila: 'datos-inferior' } }, [
         filaConIcono(icono('guante', { tamano: 16, color: 'var(--texto-sutil)' }), grupoDisciplina),
         botonNacionalidad,
-        filaConIcono(icono('balanza', { tamano: 16, color: 'var(--texto-sutil)' }), grupoCategoria),
+        grupoCategoria,
       ]),
       el('div', { class: 'rojo campo-error', 'data-error': '', text: estado.error }),
       el('button', {
