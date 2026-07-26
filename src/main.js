@@ -221,6 +221,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (cancelarNoticiasPendiente) cancelarNoticiasPendiente();
   }
 
+  // Misma familia de problema, ahora para el timer del sparring (Task v4,
+  // bug reportado: "falta el timer con la barra decreciendo"): cada pao
+  // encendido programa un `setTimeout` (renderSparring, ui/screens/
+  // sparring.js) que cuenta como error automático si no le pegás a tiempo.
+  // Si el jugador se va a la Ficha con un pao prendido, ese timer sigue
+  // corriendo en segundo plano — sin cancelarlo, dispararía `onGolpe` (y de
+  // ahí `pintarSparring`, que pinta sobre `centroContenido()`) mientras la
+  // Ficha ya reemplazó `contenedor`, con el mismo riesgo que el roll/dado:
+  // `asegurarShell()` reconstruyendo el tablero debajo de la Ficha.
+  let cancelarSparringPendiente = null;
+
+  function abandonarSparringPendiente() {
+    if (cancelarSparringPendiente) cancelarSparringPendiente();
+  }
+
   function asegurarShell() {
     if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
     shellActual = crearShell(contenedor);
@@ -430,6 +445,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     abandonarRollPendiente();
     abandonarDadoPendiente();
     abandonarNoticiasPendientes();
+    abandonarSparringPendiente();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -618,7 +634,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     let sparring = beat.datos.sparring;
 
     function pintarSparring() {
-      renderSparring(centroContenido(), {
+      const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
         onGolpe: (evento) => {
@@ -631,6 +647,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
+      // Se reasigna en CADA golpe (mismo patrón que cancelarNoticiasPendiente
+      // en montarTablero): el handle anterior ya venció apenas se re-pintó.
+      cancelarSparringPendiente = () => {
+        handle.detener();
+        cancelarSparringPendiente = null;
+      };
     }
 
     centro(pintarSparring);
@@ -675,7 +697,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
     function pintarSparring() {
       const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
-      renderSparring(centroContenido(), {
+      const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
         titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
@@ -695,6 +717,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
+      cancelarSparringPendiente = () => {
+        handle.detener();
+        cancelarSparringPendiente = null;
+      };
     }
 
     centro(pintarSparring);

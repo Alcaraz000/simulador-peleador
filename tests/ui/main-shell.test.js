@@ -440,6 +440,67 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   });
 });
 
+// Bug reportado por el usuario: "minijuego de sparring: falta el timer con
+// la barra decreciendo". Al agregarlo (ui/screens/sparring.js), cada pao
+// prendido programa un setTimeout que cuenta como error si no le pegás a
+// tiempo — mismo riesgo de timer colgado que ya se resolvió para el roll y
+// el dado (hallazgo 1, más arriba): si el jugador se va a la Ficha con un
+// pao prendido, ese timer no puede seguir corriendo en segundo plano contra
+// un `centroContenido()` que la Ficha ya reemplazó.
+describe('main.js: el timer del sparring no le puede robar la pantalla al jugador (bug reportado: falta el timer)', () => {
+  it('entrar a la Ficha con un pao prendido y dejar que el timer expire en segundo plano no borra la Ficha', () => {
+    // semilla 3: mismo caso ya usado más arriba para llegar a un beat
+    // "sparring" suelto (en profesional/veterano probSparring es 0 — el
+    // campamento ya lo garantiza en cada pelea).
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    continuar();
+
+    expect(cont.querySelector('.grilla-paos')).toBeTruthy();
+    cont.querySelector('[data-accion="empezar"]').click();
+    expect(cont.querySelector('.pao.activo')).toBeTruthy();
+
+    // El jugador se va a la Ficha con el pao todavía prendido, sin pegarle.
+    cont.querySelector('[data-accion="ficha"]').click();
+    expect(cont.querySelector('.shell')).toBeNull();
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+
+    // Se deja correr el timer del pao en segundo plano (bien por encima de
+    // su duración nominal, 1500ms): la Ficha tiene que seguir en pantalla,
+    // intacta, hasta que el jugador toque "Cerrar" — nunca antes.
+    vi.advanceTimersByTime(5000);
+
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+    expect(cont.querySelector('.shell')).toBeNull();
+  });
+
+  // Verificación más fuerte que la de arriba: sin cancelar el timer, un pao
+  // que vence mientras el jugador está en la Ficha vuelve a encender el
+  // siguiente automáticamente (mismo `empezar()` que dispara el propio
+  // renderSparring al reanudar un sparring "en curso") — y ESE timer, sin
+  // cancelar tampoco, sigue la cadena. Con 5000ms de sobra (más de 3 rondas
+  // de 1500ms) el drill avanzaría solo varios golpes en segundo plano, todos
+  // errados, sin que el jugador tocara nada. Al volver del tablero, el
+  // contador de "Golpes" tiene que seguir en 0: el timer pendiente se corta
+  // ANTES de que la Ficha reemplace la pantalla (abandonarSparringPendiente).
+  it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    continuar();
+
+    cont.querySelector('[data-accion="empezar"]').click();
+    cont.querySelector('[data-accion="ficha"]').click();
+    vi.advanceTimersByTime(5000);
+
+    cont.querySelector('[data-accion="cerrar"]').click();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('.grilla-paos')).toBeTruthy();
+    // "Golpes" es el segundo `.tile .valor` del panel de sparring (el
+    // primero es "Aciertos") — ver renderSparring, ui/screens/sparring.js.
+    const golpes = [...cont.querySelectorAll('.tile .valor')][1];
+    expect(golpes.textContent).toBe('0/10');
+  });
+});
+
 // Regresión pedida en la revisión de las Tasks 5.3/5.4: con la tienda como
 // popup, el tablero queda VISIBLE detrás mientras se compra. Que la plata
 // del panel izquierdo quedara congelada ahí rompía las dos reglas de la v2

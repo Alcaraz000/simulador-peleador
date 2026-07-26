@@ -143,6 +143,13 @@ h2 { font-size: 17px; font-weight: 800; }
 .log > p { margin: 0 0 6px; }
 .log > p.destacado { color: var(--dorado); font-weight: 700; }
 
+/* Timer del sparring (Task v4, bug reportado: "falta el timer con la barra
+   decreciendo"): reusa `.barra` (misma altura/colores que aguante/fatiga en
+   la pantalla de pelea), un poco más alta para que se note el paso del
+   tiempo bajo la grilla de paos. El ancho lo anima sparring.js con un
+   `transition` inline (ver ese archivo) — acá solo el tamaño. */
+.barra-sparring { height: 10px; margin: 10px 0; }
+
 .grilla-paos {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
