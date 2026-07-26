@@ -138,7 +138,10 @@ describe('siguienteBeat', () => {
   it('el primer beat de cada bloque es una mejora', () => {
     const { beat } = siguienteBeat(nuevaPartida());
     expect(beat.tipo).toBe('mejora');
-    expect(beat.datos.cartas.length).toBeGreaterThanOrEqual(3);
+    // Pedido del coordinador (v4): repartirMejoras a veces reparte 2 cartas
+    // en vez de 3 (~1 de cada 5, ver decidirCantidadMejoras en cards.js), así
+    // que ya no se puede fijar un piso de 3 para una semilla cualquiera.
+    expect(beat.datos.cartas.length).toBeGreaterThanOrEqual(2);
   });
 
   it('no muta la partida original', () => {

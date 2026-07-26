@@ -136,6 +136,18 @@ function cartaMejoraAOpcion(carta) {
   };
 }
 
+// Pedido del coordinador (v4): repartirMejoras (cards.js) a veces reparte 2
+// cartas en vez de 3 — el texto tiene que reflejar cuántas salieron de
+// verdad, nunca decir "tres" fijo cuando son dos (o cuatro/cinco, con el
+// bonus del entrenador o de etapa temprana encima).
+const NUMEROS_EN_TEXTO = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete'];
+
+function textoCantidadMejoras(cantidad) {
+  const palabra = NUMEROS_EN_TEXTO[cantidad] ?? String(cantidad);
+  const sustantivo = cantidad === 1 ? 'mejora' : 'mejoras';
+  return `El dado trajo ${palabra} ${sustantivo}. Elegí una.`;
+}
+
 function opcionCartaAOpcion(opcion, nombreIcono) {
   return {
     id: opcion.id, titulo: opcion.texto, efectos: efectosDeOpcion(opcion), icono: icono(nombreIcono),
@@ -535,13 +547,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   function beatMejora(beat) {
+    const cartas = beat.datos.cartas;
     centro(() => renderPanelDecision(centroContenido(), {
       titulo: 'Campamento',
       bajada: 'El trabajo rindió',
-      texto: 'El dado trajo tres mejoras. Elegí una.',
-      opciones: beat.datos.cartas.map(cartaMejoraAOpcion),
+      texto: textoCantidadMejoras(cartas.length),
+      opciones: cartas.map(cartaMejoraAOpcion),
       onElegir: (id) => {
-        const carta = beat.datos.cartas.find((c) => c.id === id);
+        const carta = cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
         aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
       },

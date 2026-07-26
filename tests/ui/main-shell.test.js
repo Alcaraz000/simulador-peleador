@@ -34,17 +34,21 @@ function nuevaPartida(semilla) {
 }
 
 // Devuelve la partida en el estado JUSTO ANTES de que `siguienteBeat` sirva
-// un beat de tipo `tipoObjetivo` (con ese beat todavía a la cabeza de la
+// un beat que cumpla `predicado` (con ese beat todavía a la cabeza de la
 // cola), para que al cargarla y jugar "Continuar" aparezca ese mismo beat.
-function avanzarHasta(partidaInicial, tipoObjetivo, maxBloques = 500) {
+function avanzarHastaQue(partidaInicial, predicado, maxBloques = 500) {
   let partida = partidaInicial;
   for (let i = 0; i < maxBloques; i += 1) {
     if (partida.terminada) break;
     const paso = siguienteBeat(partida);
-    if (paso.beat && paso.beat.tipo === tipoObjetivo) return partida;
+    if (paso.beat && predicado(paso.beat)) return partida;
     partida = paso.partida;
   }
-  throw new Error(`no aparecio un beat "${tipoObjetivo}" en ${maxBloques} bloques (semilla de prueba a revisar)`);
+  throw new Error(`no aparecio un beat buscado en ${maxBloques} bloques (semilla de prueba a revisar)`);
+}
+
+function avanzarHasta(partidaInicial, tipoObjetivo, maxBloques = 500) {
+  return avanzarHastaQue(partidaInicial, (beat) => beat.tipo === tipoObjetivo, maxBloques);
 }
 
 function prepararPartidaGuardada(tipo, semilla = 1) {
@@ -54,6 +58,21 @@ function prepararPartidaGuardada(tipo, semilla = 1) {
   // que haría un jugador que ya inició sesión antes.
   storage.setItem(CLAVE_ACCESO, '1');
   const partida = avanzarHasta(nuevaPartida(semilla), tipo);
+  guardar(partida, storage);
+  return storage;
+}
+
+// Pedido del coordinador (v4, "el mazo de mejora también"): repartirMejoras
+// (cards.js) a veces reparte 2 cartas en vez de 3 (~1 de cada 5, ver
+// decidirCantidadMejoras). Busca el PRIMER 'mejora' que salió con 2, para
+// probar que el tablero lo renderiza bien (texto dinámico + grilla de 2).
+function prepararPartidaGuardadaMejoraReducida(semilla = 1) {
+  const storage = crearStorageFalso();
+  storage.setItem(CLAVE_ACCESO, '1');
+  const partida = avanzarHastaQue(
+    nuevaPartida(semilla),
+    (beat) => beat.tipo === 'mejora' && beat.datos.cartas.length === 2,
+  );
   guardar(partida, storage);
   return storage;
 }
@@ -117,13 +136,32 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
+  it('mejora con cantidad reducida (2 cartas): el texto dice "dos" y usa la grilla de 2 columnas (pedido del coordinador, v4)', () => {
+    iniciar(cont, prepararPartidaGuardadaMejoraReducida(1));
+    continuar();
+
+    expect(cont.textContent).toContain('El dado trajo dos mejoras. Elegí una.');
+    expect(cont.textContent).not.toContain('trajo tres mejoras');
+    const grilla = cont.querySelector('.panel-decision-grilla-2');
+    expect(grilla).toBeTruthy();
+    expect(grilla.querySelectorAll('.tarjeta')).toHaveLength(2);
+
+    grilla.querySelectorAll('.tarjeta')[0].click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+
   it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
-    // semilla 2 -> carta "escuela_o_gimnasio", ninguna opcion tiene
+    // semilla 6 -> carta "escuela_o_gimnasio", ninguna opcion tiene
     // probabilidades (verificado aparte con el catalogo real): ejercita el
-    // camino sin roll. (Antes era la semilla 1 con "cancelacion": las cartas
-    // de riesgo nuevas de Task v3 — ver cards-events.js — corren la secuencia
-    // de rng de 'evento' y esa semilla dejó de llegar a esa carta puntual.)
-    iniciar(cont, prepararPartidaGuardada('evento', 2));
+    // camino sin roll. (Antes era la semilla 2: el reparto de mejoras a veces
+    // reduce a 2 cartas -- decidirCantidadMejoras, cards.js, pedido del
+    // coordinador v4 -- y esa tirada nueva corre la secuencia de rng de
+    // TODOS los bloques, mejora incluida, así que 2 dejó de llegar a esta
+    // carta puntual; 6 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
@@ -140,14 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 3 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 17 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 6: Pedido 1 de v4 sumó cartas nuevas al mismo pool de 'evento'
-    // en juvenil/amateur — cards-events.js — y corrió la secuencia de
-    // sorteo; 6 dejó de llegar a esta carta puntual, 3 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 3));
+    // semilla 3: el reparto de mejoras a veces reduce a 2 cartas
+    // -- decidirCantidadMejoras, cards.js, pedido del coordinador v4 -- y esa
+    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
+    // incluida, así que 3 dejó de llegar a esta carta puntual, 17 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 17));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -202,10 +241,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 2: con el rebalance del campamento (Task v3), la semilla 1 por
-    // defecto ya no llega a un beat "redes" dentro de su propia carrera
-    // (probRedes bajó bastante en varias etapas, ver ETAPAS en career.js).
-    iniciar(cont, prepararPartidaGuardada('redes', 2));
+    // semilla 1: el reparto de mejoras a veces reduce a 2 cartas
+    // (decidirCantidadMejoras, cards.js, pedido del coordinador v4) y esa
+    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
+    // incluida — la semilla 2 usada antes dejó de llegar a un beat "redes"
+    // dentro de las 500 iteraciones de avanzarHasta; 1 sí.
+    iniciar(cont, prepararPartidaGuardada('redes', 1));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -392,9 +433,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 5 -> carta "desafio_de_la_vereda", la opción "aceptar" SI tiene
-    // probabilidades (mismo caso ya usado más arriba para probar el roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 45 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // tiene probabilidades (mismo caso ya usado más arriba para probar el
+    // roll; era la semilla 5 antes de que decidirCantidadMejoras -- pedido
+    // del coordinador v4 -- corriera la secuencia de rng de todos los
+    // bloques).
+    iniciar(cont, prepararPartidaGuardada('evento', 45));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -432,7 +476,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 45: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 45));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');

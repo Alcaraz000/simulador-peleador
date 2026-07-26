@@ -283,6 +283,13 @@ function resumen(nombre, resultados) {
   console.log(`Con al menos una legendaria (creación o carrera): ${conLegendaria.length}/${n} = ${((conLegendaria.length / n) * 100).toFixed(1)}%`);
   console.log(fmtGrupo(conLegendaria, 'CON legendaria'));
   console.log(fmtGrupo(sinLegendaria, 'SIN legendaria'));
+  // Pedido del coordinador (v4, "el mazo de mejora también"): aísla la tasa
+  // de legendarias vistas DURANTE la carrera (mejora + evento/redes, nunca
+  // creación) — la métrica que puede moverse por repartirMejoras a veces
+  // repartiendo 2 cartas en vez de 3 (decidirCantidadMejoras, cards.js).
+  const enCarrera = resultados.map((r) => r.legendariasEnCarrera);
+  const conAlMenosUnaEnCarrera = resultados.filter((r) => r.legendariasEnCarrera > 0).length;
+  console.log(`Legendarias EN LA CARRERA (mejora+evento/redes, sin contar creación): avg=${avg(enCarrera).toFixed(3)} por carrera | al menos 1: ${conAlMenosUnaEnCarrera}/${n} = ${((conAlMenosUnaEnCarrera / n) * 100).toFixed(1)}%`);
 }
 
 const N = Number(process.argv[2] ?? 500);

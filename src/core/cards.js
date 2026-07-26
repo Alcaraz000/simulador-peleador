@@ -47,10 +47,16 @@ function rarezaDe(carta) {
 // Si a `elegibles` (ya filtrado por etapa/disciplina/categoría) le falta
 // alguna rareza, esa rareza simplemente no aparece entre las entradas: el
 // peso se redistribuye solo entre las que sí están presentes.
+// `pesos` es opcional (default PESOS_RAREZA, el de siempre): lo usa
+// `repartirMejoras` para compensar la varianza legendaria cuando reparte
+// menos cartas de lo habitual (ver PESOS_RAREZA_REPARTO_REDUCIDO, más abajo)
+// — el resto de los callers (repartirOrigenes, repartirApodos,
+// repartirEstilos, elegirEvento, elegirCartaCampamento, elegirCartaRedes) no
+// lo pasan y siguen con el 70/25/5 de siempre.
 // Consume exactamente una tirada de rng (igual que rng.pick), así que se
 // puede usar como reemplazo directo de un `rng.pick` sin correr la secuencia
 // del resto del bloque.
-export function elegirPorRareza(rng, elegibles) {
+export function elegirPorRareza(rng, elegibles, pesos = PESOS_RAREZA) {
   const porRareza = {};
   for (const carta of elegibles) {
     const rareza = rarezaDe(carta);
@@ -58,25 +64,26 @@ export function elegirPorRareza(rng, elegibles) {
   }
   const entradas = elegibles.map((carta) => {
     const rareza = rarezaDe(carta);
-    const peso = (PESOS_RAREZA[rareza] ?? PESOS_RAREZA.normal) / porRareza[rareza];
+    const peso = (pesos[rareza] ?? pesos.normal) / porRareza[rareza];
     return { valor: carta, peso };
   });
   return rng.weighted(entradas);
 }
 
 // Sortea `total` elementos sin repetir de `elegibles`, respetando los pesos
-// de rareza (ver elegirPorRareza). Si una rareza se queda sin elementos a
-// mitad de camino, el peso restante se reparte entre las que sí tienen:
-// nunca se devuelven menos elementos de los pedidos por culpa de un hueco de
-// rareza (mientras el catálogo alcance en total). Genérico a propósito: lo
-// usa `repartirMejoras` acá abajo, y también `repartirOrigenes` (fighter.js)
-// y `repartirApodos` (nicknames.js) — un solo algoritmo de reparto por
-// rareza para todo el juego, no uno por catálogo.
-export function sortearPorRareza(rng, elegibles, total) {
+// de rareza (ver elegirPorRareza, incluido el `pesos` opcional). Si una
+// rareza se queda sin elementos a mitad de camino, el peso restante se
+// reparte entre las que sí tienen: nunca se devuelven menos elementos de los
+// pedidos por culpa de un hueco de rareza (mientras el catálogo alcance en
+// total). Genérico a propósito: lo usa `repartirMejoras` acá abajo, y
+// también `repartirOrigenes` (fighter.js), `repartirApodos` (nicknames.js) y
+// `repartirEstilos` (styles.js) — un solo algoritmo de reparto por rareza
+// para todo el juego, no uno por catálogo.
+export function sortearPorRareza(rng, elegibles, total, pesos = PESOS_RAREZA) {
   let restantes = [...elegibles];
   const elegidas = [];
   while (elegidas.length < total && restantes.length > 0) {
-    const elegida = elegirPorRareza(rng, restantes);
+    const elegida = elegirPorRareza(rng, restantes, pesos);
     elegidas.push(elegida);
     restantes = restantes.filter((c) => c !== elegida);
   }
@@ -146,14 +153,66 @@ function conBonusEnElMasGrande(mods, valor) {
   return { ...mods, [claveMax]: mods[claveMax] + valor };
 }
 
-export function repartirMejoras(rng, { jugador, etapa, cantidad = 3, catalogo = null }) {
+// Pedido del coordinador (v4, "el mazo de mejora también"): la queja
+// original del usuario ("muchas decisiones de tres opciones") apuntaba
+// justo a este mazo — el panel de campamento diciendo "El dado trajo tres
+// mejoras. Elegí una." con tres tarjetas, el beat MÁS frecuente del juego
+// (corre garantizado en TODOS los bloques). `repartirMejoras` reparte 3
+// cartas la gran mayoría de las veces, pero ~1 de cada 5 reparte solo 2:
+// variedad de ritmo sin que se sienta un recorte. Solo se sortea cuando el
+// caller NO pide una `cantidad` puntual (el caso real de career.js, que
+// nunca la pasa): pasar `cantidad` explícita sigue siendo 100%
+// determinístico y no consume esta tirada — así ningún test/caller que fije
+// un número exacto se ve afectado por esta variación.
+export const CANTIDAD_MEJORAS_POR_DEFECTO = 3;
+export const CANTIDAD_MEJORAS_REDUCIDA = 2;
+const PROB_CANTIDAD_REDUCIDA = 0.2; // ~1 de cada 5
+
+export function decidirCantidadMejoras(rng) {
+  return rng.chance(PROB_CANTIDAD_REDUCIDA) ? CANTIDAD_MEJORAS_REDUCIDA : CANTIDAD_MEJORAS_POR_DEFECTO;
+}
+
+// Repartir una carta MENOS reduce, para ESE reparto puntual, la chance de
+// que aparezca una legendaria — pedido explícito: "no dejes que eso aplane
+// la varianza legendaria". Se compensa subiendo el peso de legendaria (bajando
+// el de normal en la misma medida; 'rara' no se toca) SOLO cuando la base
+// salió reducida, de forma que la chance de ver AL MENOS UNA legendaria en
+// `total` tiradas quede igual a la que había con `total + 1` tiradas al peso
+// de siempre (5%, la única carta menos que se hubiera repartido sin esta
+// corrección):
+//   1 - (1-w)^total = 1 - (1-0.05)^(total+1)  =>  w = 1 - (0.95^(total+1))^(1/total)
+// Con total=2 (el caso típico, sin bonus de entrenador/etapa): w ≈ 7.41%
+// (contra el 5% de siempre). Se recalcula sobre `total` (no un valor fijo)
+// porque el bonus del entrenador/etapa suma cartas ENCIMA de la base
+// reducida, y esas tiradas de más no necesitan compensación aparte: lo único
+// que hay que tapar es la UNA tirada que dejó de pasar por la base.
+// Medido en conjunto sobre carreras completas con scripts/balance-sim.mjs
+// (no solo el reparto individual) y con un test estadístico dedicado en
+// cards.test.js: la tasa de "al menos una legendaria" con cantidad reducida
+// queda cerca de la de cantidad normal, no varios puntos más abajo.
+function pesosCompensadosPorMenosCartas(total) {
+  const pLegendariaBase = PESOS_RAREZA.legendaria / 100;
+  const probObjetivoConTotalNormal = 1 - (1 - pLegendariaBase) ** (total + 1);
+  const wLegendaria = 1 - (1 - probObjetivoConTotalNormal) ** (1 / total);
+  const pctLegendaria = wLegendaria * 100;
+  const deltaDeNormal = pctLegendaria - PESOS_RAREZA.legendaria;
+  return {
+    normal: PESOS_RAREZA.normal - deltaDeNormal,
+    rara: PESOS_RAREZA.rara,
+    legendaria: pctLegendaria,
+  };
+}
+
+export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo = null }) {
   const fuente = catalogo ?? CARTAS_MEJORA;
   const bonus = bonusCartas(jugador);
   const opcionesExtraEtapa = OPCIONES_EXTRA_ETAPA_TEMPRANA[etapa] ?? 0;
-  const total = cantidad + bonus.opcionesExtra + opcionesExtraEtapa;
+  const cantidadBase = cantidad ?? decidirCantidadMejoras(rng);
+  const total = cantidadBase + bonus.opcionesExtra + opcionesExtraEtapa;
+  const pesos = cantidadBase < CANTIDAD_MEJORAS_POR_DEFECTO ? pesosCompensadosPorMenosCartas(total) : PESOS_RAREZA;
   const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
   const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
-  const elegidas = sortearPorRareza(rng, elegibles, total);
+  const elegidas = sortearPorRareza(rng, elegibles, total, pesos);
 
   const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;
   if (bonus.bonusValor === 0 && bonusEtapa === 0) return elegidas;
