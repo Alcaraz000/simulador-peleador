@@ -5,7 +5,7 @@ import { crearTarjeta } from '../components/card.js';
 import { abrirPopup } from '../components/popup.js';
 import { CATEGORIAS, crearPeleador, repartirOrigenes } from '../../core/fighter.js';
 import { repartirApodos } from '../../core/nicknames.js';
-import { estilosDisponibles } from '../../core/styles.js';
+import { repartirEstilos } from '../../core/styles.js';
 import { crearEntrenadorDe } from '../../core/coach.js';
 import { DISCIPLINAS } from '../../core/disciplines.js';
 import { NACIONALIDADES } from '../../content/names.js';
@@ -78,6 +78,12 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
   // que el jugador toca otra cosa del paso 1).
   const origenesOfrecidos = repartirOrigenes(rng);
   const apodosOfrecidos = repartirApodos(rng);
+  // Pedido v4: con el catálogo de estilos creciendo (8, ver styles.js), se
+  // ofrecen solo 2 al azar (repartirEstilos, misma distribución 70/25/5 que
+  // orígenes/apodos) — nunca los 8 fijos de siempre. Se sortea con la
+  // disciplina por default porque `estilosDisponibles` es lo único que hoy
+  // depende de disciplina, y el juego solo tiene 'boxeo'.
+  const estilosOfrecidos = repartirEstilos(rng, Object.keys(DISCIPLINAS)[0]);
 
   const estado = {
     apellido: '',
@@ -254,10 +260,9 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
 
   function pasoEstilo() {
     const bloqueado = estado.revelado < 4;
-    const estilos = estilosDisponibles(estado.disciplina);
-    // Siempre 4 estilos (noqueador/técnico/mentón/contragolpeador): grilla
-    // de 2 columnas arma un 2×2 prolijo en vez de 3 arriba + 1 sola abajo.
-    const grilla = el('div', { class: 'panel-decision-grilla-2' }, estilos.map((e) => {
+    // v4: 2 estilos al azar (estilosOfrecidos, sorteados una sola vez arriba)
+    // de un catálogo de 8: grilla de 2 columnas los centra en una sola fila.
+    const grilla = el('div', { class: 'panel-decision-grilla-2' }, estilosOfrecidos.map((e) => {
       const entrenador = crearEntrenadorDe(e.id);
       const descripcion = entrenador
         ? `${e.descripcion} Tu entrenador: ${entrenador.nombre} — "${entrenador.frase}"`

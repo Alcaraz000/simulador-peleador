@@ -244,11 +244,11 @@ describe('renderCreacion — grillas: sin huecos, sin apilarse mal', () => {
     expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(3);
   });
 
-  it('el paso 4 (estilo) tiene exactamente 4 tarjetas en una grilla de 2 columnas (2×2), no 3+1', () => {
+  it('el paso 4 (estilo) ofrece exactamente 2 tarjetas al azar (de un catálogo de 8), en una grilla de 2 columnas', () => {
     irAPaso1();
     const grilla = cont.querySelector('[data-paso="4"] .panel-decision-grilla-2');
     expect(grilla).toBeTruthy();
-    expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(4);
+    expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(2);
   });
 });
 
