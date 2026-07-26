@@ -23,46 +23,78 @@ function cargarCSS() {
 }
 
 describe('renderNegociacion', () => {
-  it('muestra la bolsa, la barra de paciencia (pista gruesa, no la barrita fina) y las 4 movidas', () => {
+  it('muestra la bolsa, la franja de paciencia (barra fina, ya no la pista gruesa) y las 4 movidas', () => {
     const negociacion = crearNegociacion(oferta);
     renderNegociacion(cont, {
       negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
     });
     expect(cont.textContent).toContain('US$ 8K');
-    expect(cont.querySelector('.barra-paciencia-pista')).toBeTruthy();
+    // v6 (rediseño integral, pedido textual: "la barra de paciencia es muy
+    // grande, y ancha"): la pista gruesa con borde propio desaparece, la
+    // paciencia ahora usa la barra fina de siempre (`.barra`, 8px).
+    expect(cont.querySelector('.barra-paciencia-pista')).toBeNull();
+    expect(cont.querySelector('.paciencia-fila')).toBeTruthy();
+    expect(cont.querySelector('.barra')).toBeTruthy();
     expect(cont.querySelectorAll('[data-movida]')).toHaveLength(4);
   });
 
-  it('las movidas son tarjetas de tamaño fijo del sistema de tarjetas del juego', () => {
+  // v6 (rediseño integral, pedido textual: "las opciones más anchas que
+  // altas, en formato lista, todas del mismo tamaño, con su ícono a la
+  // izquierda"): reemplaza a la vieja tarjeta cuadrada (`.tarjeta`, pensada
+  // para grillas de decisión) por una fila propia de ancho completo.
+  it('las movidas son filas de lista (.movida-fila), ya no la tarjeta cuadrada del sistema de decisiones', () => {
     const negociacion = crearNegociacion(oferta);
     renderNegociacion(cont, {
       negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
     });
     for (const nodo of cont.querySelectorAll('[data-movida]')) {
-      expect(nodo.classList.contains('tarjeta')).toBe(true);
+      expect(nodo.classList.contains('movida-fila')).toBe(true);
+      expect(nodo.classList.contains('tarjeta')).toBe(false);
+      expect(nodo.querySelector('.movida-icono')).toBeTruthy();
+      expect(nodo.querySelector('.movida-titulo')).toBeTruthy();
     }
   });
 
-  // Feedback repetido del usuario ("las opciones se ven muy grandes"): la
-  // negociación vive FUERA del shell (pantalla completa, #app vuelve a su
-  // max-width angosto), así que en escritorio la grilla de 2 columnas de
-  // siempre (.panel-decision-grilla-2) estiraba cada tarjeta mucho más ancha
-  // que la referencia del sistema de tarjetas (~206px, mockups-v2.html). Se
-  // acerca sin tocar crearTarjeta (tamaño fijo de título/desc en todos
-  // lados): un tope de ancho + centrado en la propia celda de la grilla.
-  it('las tarjetas de movida tienen un ancho tope (mas compactas que estirarse a toda la columna)', () => {
+  // Pedido textual: "todas del mismo tamaño" — las 4 filas comparten el
+  // mismo `min-height` (reservado de antemano, no depende de si esa fila en
+  // particular trae un label de riesgo más largo o más corto) y son de
+  // ancho completo (formato lista, no la tarjeta angosta de antes).
+  it('las 4 filas de movida reservan el mismo alto minimo, a todo el ancho (formato lista)', () => {
     cargarCSS();
     const negociacion = crearNegociacion(oferta);
     renderNegociacion(cont, {
       negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
     });
-    const tarjetas = [...cont.querySelectorAll('[data-movida]')];
-    expect(tarjetas.length).toBe(4);
-    for (const t of tarjetas) {
-      const maxWidth = window.getComputedStyle(t).maxWidth;
-      expect(maxWidth).not.toBe('none');
-      expect(parseInt(maxWidth, 10)).toBeLessThanOrEqual(220);
+    const filas = [...cont.querySelectorAll('[data-movida]')];
+    expect(filas.length).toBe(4);
+    const minAltos = filas.map((f) => window.getComputedStyle(f).minHeight);
+    expect(new Set(minAltos).size).toBe(1);
+    expect(minAltos[0]).not.toBe('0px');
+    for (const f of filas) {
+      expect(window.getComputedStyle(f).width).toBe('100%');
     }
+  });
+
+  // Pedido textual: "los labels de riesgo tienen que entrar (cuando la
+  // opción los tiene) y ningún texto puede quedar cortado". Se verifica que
+  // el nodo del riesgo no recorta su propio texto (sin ellipsis/line-clamp)
+  // y que las 3 movidas de presión lo muestran, mientras "cerrar" muestra su
+  // propio chip ("Sin riesgo") en vez de quedar vacía.
+  it('el label de riesgo entra completo (sin recortarse) en las 3 movidas de presion; "cerrar" muestra "Sin riesgo"', () => {
+    cargarCSS();
+    const negociacion = crearNegociacion(oferta);
+    renderNegociacion(cont, {
+      negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
+    });
+    for (const id of ['masPlata', 'taquilla', 'apretar']) {
+      const riesgo = cont.querySelector(`[data-movida="${id}"] .movida-riesgo`);
+      expect(riesgo).toBeTruthy();
+      expect(riesgo.textContent).toMatch(/Riesgo que se levante: \d+%/);
+      expect(window.getComputedStyle(riesgo).textOverflow).not.toBe('ellipsis');
+    }
+    const cerrar = cont.querySelector('[data-movida="cerrar"] .movida-riesgo');
+    expect(cerrar).toBeTruthy();
+    expect(cerrar.textContent).toContain('Sin riesgo');
   });
 
   // Segunda vez que se reporta: "APRIETES 0/3 está desalineado". Causa real:
@@ -83,25 +115,25 @@ describe('renderNegociacion', () => {
     expect(window.getComputedStyle(contador).flexGrow).toBe('0');
   });
 
-  // Hallazgo al verificar visualmente el fix de arriba (npm run dev + captura
-  // real): "Paciencia del promotor: 100/100" se partía en varias líneas
-  // adentro de su propia fila (`flex:0 0 auto`), aunque hay de sobra de
-  // ancho libre en el panel. Causa: esa fila anidada (ícono + texto) hereda
-  // `.fila > * { flex:1; min-width:0 }` para SUS hijos, y con un hijo
-  // encogible el tamaño "auto" que el navegador le calcula a la fila
-  // exterior queda angosto — un problema previo a la corrección de APRIETES,
-  // ya existía en el código, solo que quedaba más disimulado antes de que el
-  // contador dejara de estirarse.
-  it('la etiqueta de paciencia no se parte en varias lineas (aunque sobre ancho en el panel)', () => {
+  // v6 (rediseño integral): la paciencia ya no es una sola frase larga
+  // ("Paciencia del promotor: 100/100") apretada en una fila angosta — el
+  // ícono vive en su propia placa (antes un SVG suelto de 14px, "se ven muy
+  // chicos" fue la queja puntual) y la etiqueta/valor se separan en dos
+  // renglones propios, así que ninguno de los dos corre riesgo de partirse a
+  // mitad de palabra por falta de ancho.
+  it('la paciencia muestra el icono en su propia placa, con la etiqueta y el valor legibles', () => {
     cargarCSS();
     const negociacion = crearNegociacion(oferta);
     renderNegociacion(cont, {
       negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
     });
-    const etiquetaPaciencia = [...cont.querySelectorAll('b')]
-      .find((n) => n.textContent.includes('Paciencia'));
-    expect(etiquetaPaciencia).toBeTruthy();
-    expect(window.getComputedStyle(etiquetaPaciencia).whiteSpace).toBe('nowrap');
+    const icono = cont.querySelector('.paciencia-icono');
+    expect(icono).toBeTruthy();
+    expect(icono.querySelector('svg')).toBeTruthy();
+    const valor = cont.querySelector('.paciencia-valor');
+    expect(valor).toBeTruthy();
+    expect(valor.textContent).toContain('100/100');
+    expect(cont.textContent).toContain('Paciencia del promotor');
   });
 
   it('el boton de rechazar siempre esta presente y dispara el callback', () => {

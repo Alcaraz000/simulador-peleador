@@ -21,11 +21,80 @@ import { formatearMods } from '../../core/cards.js';
 // ocultan. Elegir algo habilita el paso siguiente; nada se deshabilita al
 // elegir, así que el jugador puede volver a un paso ya resuelto y cambiar
 // de idea en cualquier momento.
+//
+// v6 (rediseño integral, pedido textual: "que al seleccionar una opción no
+// se 'refresque' la pantalla... que solo cambie el estado visual de lo que
+// tocaste, sin volver a dibujar la pantalla"). Antes CUALQUIER click (mano
+// hábil, un chip de categoría, una tarjeta de origen) llamaba a `pintar()`,
+// que tiraba TODO el árbol de esta pantalla (los 4 paneles + el input de
+// apellido) y lo reconstruía de cero — se notaba como un "parpadeo" de
+// refresco (los `#app > .stack > *` reproducen su animación de entrada de
+// nuevo, el input pierde cualquier estado propio del navegador, etc.), y era
+// trabajo de sobra: elegir "Zurda" no necesita reconstruir el picker de
+// nacionalidad ni las tarjetas de estilo.
+//
+// Ahora la pantalla se monta UNA sola vez (`construirVista`, al final de
+// `renderCreacion`) y cada interacción hace el mínimo cambio real:
+//   - Los grupos segmentados (mano/disciplina/categoría) solo alternan la
+//     clase `elegida` entre sus propios botones (`actualizarSegmentoElegido`).
+//   - Elegir una tarjeta de origen/apodo/estilo solo alterna `tarjeta-elegida`
+//     entre las tarjetas DE ESE MISMO paso (`actualizarElegidaEnGrilla`).
+//   - Nacionalidad reemplaza únicamente la bandera + el nombre dentro del
+//     propio botón (`actualizarNacionalidad`).
+//   - Recién cuando un paso pasa de bloqueado a habilitado por PRIMERA vez
+//     hace falta reconstruir SU PROPIA grilla (2-3 tarjetas chicas, no toda
+//     la pantalla): las tarjetas de `crearTarjeta` fijan `deshabilitada` en
+//     el closure de su propio `onClick` al crearse, así que no alcanza con
+//     tocarles el atributo `disabled` a mano — hay que crearlas de nuevo con
+//     `deshabilitada:false`. Ese `pintar()` por paso (`pasoOrigenCtrl.pintar`,
+//     etc.) se llama COMO MUCHO una vez por paso en toda la pantalla (cuando
+//     se habilita), nunca en cada click posterior dentro de un paso ya
+//     habilitado.
 
 const MANOS = [
   { valor: 'derecha', texto: 'Derecha' },
   { valor: 'zurda', texto: 'Zurda' },
 ];
+
+// Un ícono por opción, no uno solo repetido en toda la grilla (pedido
+// textual: "que tengan iconos diferenciables"). Orígenes y estilos son
+// catálogos chicos y fijos (9 y 8 ids), así que cada uno tiene su propio
+// ícono pensado para lo que cuenta esa carta.
+const ICONO_ORIGEN = {
+  barrio: 'casa',
+  club: 'guante',
+  familia: 'corazon',
+  tarde: 'reloj',
+  amateur_de_toda_la_vida: 'trofeo',
+  videos_viejos: 'monitor',
+  sangre_importada: 'globo',
+  becado_desde_pibe: 'estrella',
+  sangre_de_campeon: 'corona',
+};
+
+const ICONO_ESTILO = {
+  noqueador: 'rayo',
+  tecnico: 'blanco',
+  menton: 'escudo',
+  contragolpeador: 'medidor',
+  volante: 'viento',
+  presionador: 'guante',
+  zurdo_cruzado: 'cruce',
+  rustico: 'peligro',
+};
+
+// Los apodos son un catálogo de 42 (content/nicknames.js): mapear uno por
+// id a mano no rinde. En vez de eso, un hash determinístico (nunca
+// Math.random) elige entre un puñado de íconos ya usados en otras partes del
+// juego — mismo id siempre da el mismo ícono, y entre los 3 que se ofrecen a
+// la vez lo normal es que no coincidan.
+const POOL_ICONO_APODO = ['rayo', 'estrella', 'corazon', 'trofeo', 'alerta', 'guante', 'blanco', 'escudo'];
+
+function iconoDeApodo(id) {
+  let hash = 0;
+  for (let i = 0; i < id.length; i += 1) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return POOL_ICONO_APODO[hash % POOL_ICONO_APODO.length];
+}
 
 // Traduce los `mods` de un origen/apodo/estilo a las píldoras de efecto que
 // espera crearTarjeta. A diferencia de main.js (efectosDeMods de los beats),
@@ -54,19 +123,6 @@ function filaConIcono(iconoNodo, control) {
   return el('div', { class: 'creacion-campo' }, [iconoNodo, control]);
 }
 
-// Grupo de opciones para un campo del paso 1 (mano hábil, disciplina,
-// categoría): un control "segmentado" (un solo borde compartido, sin gap
-// entre opciones) en vez de una tarjeta suelta por opción.
-//
-// Bug reportado (v4, verificación visual): con dos tarjetas independientes
-// por campo (borde + padding propios + gap entre ellas), la fila de 3
-// columnas de 390px le dejaba a "Mediano"/"Derecha" tan poco lugar que se
-// truncaban ("Media…", después de acortar el texto todavía "M…"). El
-// problema no era el texto (ya era el nombre corto) ni el ancho de la
-// fila: era el "chrome" repetido de dos bordes + dos paddings + un gap por
-// cada par de opciones. Un control segmentado (un solo borde alrededor de
-// las N opciones, un divisor fino entre ellas) le devuelve ese espacio al
-// texto sin tocar el layout de 3 columnas ni el ancho de la fila.
 function opcionSegmento(valor, texto, elegida, onElegir) {
   return el('button', {
     type: 'button',
@@ -78,10 +134,66 @@ function opcionSegmento(valor, texto, elegida, onElegir) {
   });
 }
 
+// Alterna la clase `elegida` (y su `aria-pressed`) entre los botones de un
+// mismo grupo segmentado o una misma grilla de tarjetas, sin reconstruir
+// ningún nodo — el cambio quirúrgico que reemplaza al `pintar()` de antes.
+function actualizarSegmentoElegido(contenedor, valorElegido) {
+  for (const boton of contenedor.querySelectorAll('[data-opcion]')) {
+    const elegida = boton.dataset.opcion === valorElegido;
+    boton.classList.toggle('elegida', elegida);
+    boton.setAttribute('aria-pressed', elegida ? 'true' : 'false');
+  }
+}
+
+function actualizarElegidaEnGrilla(grilla, idElegido) {
+  for (const nodo of grilla.querySelectorAll('[data-opcion]')) {
+    nodo.classList.toggle('tarjeta-elegida', nodo.dataset.opcion === idElegido);
+  }
+}
+
+// Grupo de opciones para un campo del paso 1 (mano hábil, disciplina,
+// categoría): un control "segmentado" (un solo borde compartido, sin gap
+// entre opciones) en vez de una tarjeta suelta por opción. `onElegir` recibe
+// el valor elegido; el propio grupo se encarga de resaltarlo (nunca hace
+// falta pintar nada más para esto).
 function grupoChips(campo, opciones, valorActual, onElegir, etiquetaAria) {
-  return el('div', {
+  const contenedor = el('div', {
     class: 'creacion-segmentado', dataset: { campo }, role: 'group', 'aria-label': etiquetaAria,
-  }, opciones.map((op) => opcionSegmento(op.valor, op.texto, valorActual === op.valor, onElegir)));
+  }, opciones.map((op) => opcionSegmento(op.valor, op.texto, valorActual === op.valor, (v) => {
+    onElegir(v);
+    actualizarSegmentoElegido(contenedor, v);
+  })));
+  return contenedor;
+}
+
+// Construye (o reconstruye) el contenido de una grilla de tarjetas de un
+// paso dado. Se llama UNA vez al armar la pantalla y, como mucho, una vez
+// más cuando ese paso pasa de bloqueado a habilitado (ver el comentario
+// largo al principio del archivo): las tarjetas de `crearTarjeta` fijan
+// `deshabilitada` en el closure de su propio botón al crearse, así que
+// habilitar el paso implica crearlas de nuevo, no tocarles el atributo a
+// mano.
+function pintarGrillaTarjetas(grilla, items, {
+  onElegir, elegidoIdActual, iconoDe, deshabilitado,
+}) {
+  const nodos = items.map((item) => {
+    const nodo = crearTarjeta({
+      icono: icono(iconoDe(item), { tamano: 20 }),
+      titulo: item.nombre,
+      descripcion: item.descripcion,
+      efectos: efectosDeMods(item.mods),
+      rareza: item.rareza,
+      deshabilitada: deshabilitado,
+      onElegir: () => {
+        onElegir(item.id);
+        actualizarElegidaEnGrilla(grilla, item.id);
+      },
+    });
+    nodo.dataset.opcion = item.id;
+    if (elegidoIdActual() === item.id) nodo.classList.add('tarjeta-elegida');
+    return nodo;
+  });
+  mount(grilla, ...nodos);
 }
 
 export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.now()) }) {
@@ -110,7 +222,15 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
     error: '',
   };
 
-  function pintar() { mount(contenedor, vista()); }
+  // Controles de los pasos 2/3/4 (`{ panel, pintar }`) y la raíz montada:
+  // se asignan en `construirVista()`, pero los closures de abajo (elegir*)
+  // ya los referencian por nombre — para cuando de verdad se llamen (un
+  // click, siempre después de terminar de montar) ya van a estar asignados.
+  let pasoOrigenCtrl;
+  let pasoApodoCtrl;
+  let pasoEstiloCtrl;
+  let raiz;
+  let botonComenzar = null;
 
   function validarApellido() {
     if (estado.apellido.trim()) { estado.error = ''; return true; }
@@ -118,50 +238,41 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
     return false;
   }
 
-  function siguiente() {
-    if (!validarApellido()) { pintar(); return; }
-    estado.revelado = Math.max(estado.revelado, 2);
-    pintar();
-  }
-
   function elegirOrigen(id) {
     estado.origenId = id;
-    estado.revelado = Math.max(estado.revelado, 3);
-    pintar();
+    if (estado.revelado < 3) {
+      estado.revelado = 3;
+      pasoApodoCtrl.pintar();
+    }
   }
 
   function elegirApodo(id) {
     estado.apodoId = id;
-    estado.revelado = Math.max(estado.revelado, 4);
-    pintar();
+    if (estado.revelado < 4) {
+      estado.revelado = 4;
+      pasoEstiloCtrl.pintar();
+    }
+  }
+
+  function mostrarBotonComenzar() {
+    // Se agrega al FINAL de la pantalla (pedido general "nada se mueve"):
+    // sumar un botón nuevo al pie no empuja ni reacomoda nada de lo que ya
+    // estaba arriba, así que no hace falta reservarle el lugar de antemano
+    // como sí necesita "Siguiente" (que vive en medio del contenido).
+    if (botonComenzar) return;
+    botonComenzar = el('button', {
+      class: 'boton', type: 'button', 'data-accion': 'comenzar', text: 'Empezar la carrera', onClick: comenzar,
+    });
+    raiz.appendChild(botonComenzar);
   }
 
   function elegirEstilo(id) {
     estado.estiloId = id;
-    pintar();
-  }
-
-  function abrirPickerNacionalidad() {
-    const grilla = el('div', { class: 'popup-banderas-grilla' },
-      NACIONALIDADES.map((n) => el('button', {
-        type: 'button',
-        'data-pais': n.codigo,
-        class: `popup-bandera-boton${estado.nacionalidad === n.codigo ? ' elegida' : ''}`,
-        onClick: () => {
-          estado.nacionalidad = n.codigo;
-          popup.cerrar();
-          pintar();
-        },
-      }, [
-        bandera(n.codigo, { ancho: 34 }),
-        el('div', { class: 'popup-bandera-nombre', text: n.nombre }),
-      ])));
-
-    const popup = abrirPopup({ titulo: 'Elegí tu nacionalidad', contenido: grilla });
+    mostrarBotonComenzar();
   }
 
   function comenzar() {
-    if (!validarApellido()) { pintar(); return; }
+    if (!validarApellido()) return;
     const peleador = crearPeleador({
       apellido: estado.apellido.trim(),
       apodoId: estado.apodoId,
@@ -184,23 +295,53 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
     campoApellido.value = estado.apellido;
     campoApellido.addEventListener('input', () => { estado.apellido = campoApellido.value; });
 
-    const paisElegido = NACIONALIDADES.find((n) => n.codigo === estado.nacionalidad);
+    const nombreNacionalidadNodo = el('span', {
+      class: 'creacion-nacionalidad-nombre',
+      text: NACIONALIDADES.find((n) => n.codigo === estado.nacionalidad)?.nombre ?? estado.nacionalidad,
+    });
     const botonNacionalidad = el('button', {
       'data-campo': 'nacionalidad', type: 'button', class: 'creacion-control creacion-nacionalidad',
-      onClick: abrirPickerNacionalidad,
+      onClick: () => abrirPickerNacionalidad(),
     }, [
       bandera(estado.nacionalidad, { ancho: 20 }),
-      el('span', { class: 'creacion-nacionalidad-nombre', text: paisElegido?.nombre ?? estado.nacionalidad }),
+      nombreNacionalidadNodo,
       icono('flecha', { tamano: 12, color: 'var(--texto-sutil)' }),
     ]);
 
-    const grupoMano = grupoChips('mano', MANOS, estado.mano, (v) => { estado.mano = v; pintar(); }, 'Mano hábil');
+    // Reemplaza SOLO la bandera (siempre el primer hijo del botón) y el
+    // nombre — el botón entero no se reconstruye.
+    function actualizarNacionalidad() {
+      const paisElegido = NACIONALIDADES.find((n) => n.codigo === estado.nacionalidad);
+      botonNacionalidad.replaceChild(bandera(estado.nacionalidad, { ancho: 20 }), botonNacionalidad.firstChild);
+      nombreNacionalidadNodo.textContent = paisElegido?.nombre ?? estado.nacionalidad;
+    }
+
+    function abrirPickerNacionalidad() {
+      const grilla = el('div', { class: 'popup-banderas-grilla' },
+        NACIONALIDADES.map((n) => el('button', {
+          type: 'button',
+          'data-pais': n.codigo,
+          class: `popup-bandera-boton${estado.nacionalidad === n.codigo ? ' elegida' : ''}`,
+          onClick: () => {
+            estado.nacionalidad = n.codigo;
+            popup.cerrar();
+            actualizarNacionalidad();
+          },
+        }, [
+          bandera(n.codigo, { ancho: 34 }),
+          el('div', { class: 'popup-bandera-nombre', text: n.nombre }),
+        ])));
+
+      const popup = abrirPopup({ titulo: 'Elegí tu nacionalidad', contenido: grilla });
+    }
+
+    const grupoMano = grupoChips('mano', MANOS, estado.mano, (v) => { estado.mano = v; }, 'Mano hábil');
 
     const grupoDisciplina = grupoChips(
       'disciplina',
       Object.values(DISCIPLINAS).map((d) => ({ valor: d.id, texto: d.nombre })),
       estado.disciplina,
-      (v) => { estado.disciplina = v; pintar(); },
+      (v) => { estado.disciplina = v; },
       'Disciplina',
     );
 
@@ -217,7 +358,7 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
         return { valor: c.id, texto: corto.charAt(0).toUpperCase() + corto.slice(1) };
       }),
       estado.categoria,
-      (v) => { estado.categoria = v; pintar(); },
+      (v) => { estado.categoria = v; },
       'Categoría',
     );
 
@@ -231,7 +372,29 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
     // se apaga con `visibility:hidden` una vez que ya se avanzó de paso —
     // sigue ocupando su lugar, solo que invisible (clickearlo de nuevo no
     // hace nada raro: `siguiente()` es idempotente).
-    //
+    const campoError = el('div', { class: 'rojo campo-error', 'data-error': '', text: estado.error });
+    const botonSiguiente = el('button', {
+      class: 'boton',
+      type: 'button',
+      'data-accion': 'siguiente',
+      text: 'Siguiente',
+      onClick: () => siguiente(),
+      style: estado.revelado < 2 ? null : 'visibility:hidden',
+    });
+
+    function siguiente() {
+      if (!validarApellido()) {
+        campoError.textContent = estado.error;
+        return;
+      }
+      campoError.textContent = '';
+      if (estado.revelado < 2) {
+        estado.revelado = 2;
+        botonSiguiente.style.visibility = 'hidden';
+        pasoOrigenCtrl.pintar();
+      }
+    }
+
     // Segunda vez que se reporta ("sigue sin parecerse al mockup"): el diseño
     // pide dos filas (`docs/superpowers/specs/2026-07-25-v2-diseno.md`),
     // apellido | mano hábil arriba y disciplina | nacionalidad | categoría
@@ -253,101 +416,113 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
         botonNacionalidad,
         grupoCategoria,
       ]),
-      el('div', { class: 'rojo campo-error', 'data-error': '', text: estado.error }),
-      el('button', {
-        class: 'boton',
-        type: 'button',
-        'data-accion': 'siguiente',
-        text: 'Siguiente',
-        onClick: siguiente,
-        style: estado.revelado < 2 ? null : 'visibility:hidden',
-      }),
+      campoError,
+      botonSiguiente,
     ]);
 
     return el('div', { class: 'panel', dataset: { paso: '1' } }, [tituloPaso(1, 'TUS DATOS'), filaDatos]);
   }
 
-  function grillaTarjetas(items, {
-    onElegir, elegidoId, iconoNombre, deshabilitado, claseGrilla = 'panel-decision-grilla',
-  }) {
-    return el('div', { class: claseGrilla }, items.map((item) => {
-      const nodo = crearTarjeta({
-        icono: icono(iconoNombre, { tamano: 20 }),
-        titulo: item.nombre,
-        descripcion: item.descripcion,
-        efectos: efectosDeMods(item.mods),
-        rareza: item.rareza,
-        deshabilitada: deshabilitado,
-        onElegir: () => onElegir(item.id),
-      });
-      nodo.dataset.opcion = item.id;
-      if (elegidoId === item.id) nodo.classList.add('tarjeta-elegida');
-      return nodo;
-    }));
-  }
-
+  // 2 tarjetas: grilla de 2 columnas (no la de 3 de siempre) para que no
+  // quede una tercera columna vacía y las dos opciones se vean centradas.
   function pasoOrigen() {
-    const bloqueado = estado.revelado < 2;
-    // 2 tarjetas: grilla de 2 columnas (no la de 3 de siempre) para que no
-    // quede una tercera columna vacía y las dos opciones se vean centradas.
-    const grilla = grillaTarjetas(origenesOfrecidos, {
-      onElegir: elegirOrigen,
-      elegidoId: estado.origenId,
-      iconoNombre: 'origen',
-      deshabilitado: bloqueado,
-      claseGrilla: 'panel-decision-grilla-2',
-    });
-    return el('div', { class: 'panel', dataset: { paso: '2' } }, [tituloPaso(2, 'ORIGEN', bloqueado), grilla]);
+    const tituloNodo = tituloPaso(2, 'ORIGEN', estado.revelado < 2);
+    const grilla = el('div', { class: 'panel-decision-grilla-2' });
+
+    function pintar() {
+      const bloqueado = estado.revelado < 2;
+      tituloNodo.classList.toggle('paso-titulo-bloqueado', bloqueado);
+      pintarGrillaTarjetas(grilla, origenesOfrecidos, {
+        onElegir: elegirOrigen,
+        elegidoIdActual: () => estado.origenId,
+        iconoDe: (item) => ICONO_ORIGEN[item.id] ?? 'origen',
+        deshabilitado: bloqueado,
+      });
+    }
+
+    pintar();
+    return { panel: el('div', { class: 'panel', dataset: { paso: '2' } }, [tituloNodo, grilla]), pintar };
   }
 
   function pasoApodo() {
-    const bloqueado = estado.revelado < 3;
-    const grilla = grillaTarjetas(apodosOfrecidos, {
-      onElegir: elegirApodo, elegidoId: estado.apodoId, iconoNombre: 'etiqueta', deshabilitado: bloqueado,
-    });
-    return el('div', { class: 'panel', dataset: { paso: '3' } }, [tituloPaso(3, 'APODO', bloqueado), grilla]);
-  }
+    const tituloNodo = tituloPaso(3, 'APODO', estado.revelado < 3);
+    const grilla = el('div', { class: 'panel-decision-grilla' });
 
-  function pasoEstilo() {
-    const bloqueado = estado.revelado < 4;
-    // v4: 2 estilos al azar (estilosOfrecidos, sorteados una sola vez arriba)
-    // de un catálogo de 8: grilla de 2 columnas los centra en una sola fila.
-    const grilla = el('div', { class: 'panel-decision-grilla-2' }, estilosOfrecidos.map((e) => {
-      const entrenador = crearEntrenadorDe(e.id);
-      const descripcion = entrenador
-        ? `${e.descripcion} Tu entrenador: ${entrenador.nombre} — "${entrenador.frase}"`
-        : e.descripcion;
-      const nodo = crearTarjeta({
-        icono: icono('blanco', { tamano: 20 }),
-        titulo: e.nombre,
-        descripcion,
-        efectos: efectosDeMods(e.mods),
-        rareza: e.rareza,
-        deshabilitada: bloqueado,
-        onElegir: () => elegirEstilo(e.id),
+    function pintar() {
+      const bloqueado = estado.revelado < 3;
+      tituloNodo.classList.toggle('paso-titulo-bloqueado', bloqueado);
+      pintarGrillaTarjetas(grilla, apodosOfrecidos, {
+        onElegir: elegirApodo,
+        elegidoIdActual: () => estado.apodoId,
+        iconoDe: (item) => iconoDeApodo(item.id),
+        deshabilitado: bloqueado,
       });
-      nodo.dataset.opcion = e.id;
-      if (estado.estiloId === e.id) nodo.classList.add('tarjeta-elegida');
-      return nodo;
-    }));
-    return el('div', { class: 'panel', dataset: { paso: '4' } }, [tituloPaso(4, 'ESTILO (Y ENTRENADOR)', bloqueado), grilla]);
+    }
+
+    pintar();
+    return { panel: el('div', { class: 'panel', dataset: { paso: '3' } }, [tituloNodo, grilla]), pintar };
   }
 
-  function vista() {
-    // Los 4 módulos están siempre montados: los que todavía no se pueden
-    // elegir se ven apagados (tarjeta:disabled + título gris), nunca ocultos.
-    const pasos = [pasoUno(), pasoOrigen(), pasoApodo(), pasoEstilo()];
-    if (estado.estiloId) {
-      pasos.push(el('button', {
-        class: 'boton', type: 'button', 'data-accion': 'comenzar', text: 'Empezar la carrera', onClick: comenzar,
-      }));
+  // v4: 2 estilos al azar (estilosOfrecidos, sorteados una sola vez arriba)
+  // de un catálogo de 8: grilla de 2 columnas los centra en una sola fila.
+  // Arma la descripción con el entrenador propio (no usa `pintarGrillaTarjetas`
+  // genérico porque necesita ese texto compuesto por tarjeta).
+  function pasoEstilo() {
+    const tituloNodo = tituloPaso(4, 'ESTILO (Y ENTRENADOR)', estado.revelado < 4);
+    const grilla = el('div', { class: 'panel-decision-grilla-2' });
+
+    function pintar() {
+      const bloqueado = estado.revelado < 4;
+      tituloNodo.classList.toggle('paso-titulo-bloqueado', bloqueado);
+      const nodos = estilosOfrecidos.map((e) => {
+        const entrenador = crearEntrenadorDe(e.id);
+        const descripcion = entrenador
+          ? `${e.descripcion} Tu entrenador: ${entrenador.nombre} — "${entrenador.frase}"`
+          : e.descripcion;
+        const nodo = crearTarjeta({
+          icono: icono(ICONO_ESTILO[e.id] ?? 'blanco', { tamano: 20 }),
+          titulo: e.nombre,
+          descripcion,
+          efectos: efectosDeMods(e.mods),
+          rareza: e.rareza,
+          deshabilitada: bloqueado,
+          onElegir: () => {
+            elegirEstilo(e.id);
+            actualizarElegidaEnGrilla(grilla, e.id);
+          },
+        });
+        nodo.dataset.opcion = e.id;
+        if (estado.estiloId === e.id) nodo.classList.add('tarjeta-elegida');
+        return nodo;
+      });
+      mount(grilla, ...nodos);
     }
-    return el('div', { class: 'stack' }, [
+
+    pintar();
+    return { panel: el('div', { class: 'panel', dataset: { paso: '4' } }, [tituloNodo, grilla]), pintar };
+  }
+
+  function construirVista() {
+    // Los 4 módulos están siempre montados: los que todavía no se pueden
+    // elegir se ven apagados (tarjeta:disabled + título gris), nunca
+    // ocultos. Se arman UNA sola vez acá — de ahí en más, cada interacción
+    // actualiza en el lugar (ver el comentario largo al principio del
+    // archivo), nunca vuelve a llamar a esta función.
+    const panelUno = pasoUno();
+    pasoOrigenCtrl = pasoOrigen();
+    pasoApodoCtrl = pasoApodo();
+    pasoEstiloCtrl = pasoEstilo();
+
+    raiz = el('div', { class: 'stack' }, [
       el('div', { class: 'etiqueta', text: 'Nueva carrera' }),
       el('h1', { text: 'Creá tu peleador' }),
-      ...pasos,
+      panelUno,
+      pasoOrigenCtrl.panel,
+      pasoApodoCtrl.panel,
+      pasoEstiloCtrl.panel,
     ]);
+    mount(contenedor, raiz);
   }
 
-  pintar();
+  construirVista();
 }

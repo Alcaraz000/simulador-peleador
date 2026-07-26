@@ -2,8 +2,9 @@ import { createRng } from './core/rng.js';
 import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
 } from './core/career.js';
-import { tablaRanking } from './core/world.js';
-import { hitosDePelea, hitoDeEtapa } from './core/hitos.js';
+import { tablaRanking, rankingDelJugador } from './core/world.js';
+import { hitosDePelea, hitoDeEtapa, noticiaDeHitoJugador } from './core/hitos.js';
+import { generarNoticia, agregarNoticias } from './core/news.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -11,7 +12,7 @@ import { resolverOpcion } from './core/events.js';
 import { aplicarResultado, rechazarOferta } from './core/offers.js';
 import { crearNegociacion, jugarMovida, resultadoNegociacion } from './core/negotiation.js';
 import { crearCareo, responderCareo, resultadoCareo } from './core/presser.js';
-import { registrarGolpe, resultadoSparring } from './core/sparring.js';
+import { registrarGolpe, resultadoSparring, terminarPorTiempo } from './core/sparring.js';
 import { registrarCruce, elegirArchirrival, subirHeat } from './core/rivalry.js';
 import { comprar } from './core/money.js';
 import { tirarLesion, aplicarLesion, curarConDinero } from './core/injuries.js';
@@ -540,7 +541,35 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'campSparring') return beatCampSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
+    if (beat.tipo === 'peleasResueltas') return beatPeleasResueltas(beat);
     return irADashboard();
+  }
+
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas
+  // de trámite (esPeleaImportante, offers.js; armarLotePeleas, tramite.js) ya
+  // llegan acá RESUELTAS — career.js las aplicó al jugador dentro de
+  // armarCola, antes de que este beat exista. Acá solo hay que mostrar el
+  // resumen con sabor (titulo/texto ya armados por resumenLote) y un
+  // detalle corto de cada combate, mismo layout que cualquier otro
+  // desenlace (título + texto + Seguir).
+  const METODO_TEXTO_TRAMITE = {
+    ko: 'KO', tko: 'TKO', decision: 'decisión', sumision: 'sumisión',
+  };
+
+  function beatPeleasResueltas(beat) {
+    const { titulo, texto, resultados } = beat.datos;
+    const deltasTexto = resultados.map((r) => {
+      const rival = r.rivalApodo ?? r.rivalNombre;
+      const veredicto = r.resultado === 'v' ? 'Ganaste' : r.resultado === 'e' ? 'Empataste' : 'Perdiste';
+      const metodo = METODO_TEXTO_TRAMITE[r.metodo] ?? r.metodo;
+      return `${veredicto} vs ${rival} (${metodo})`;
+    });
+    centro(() => renderDesenlace(centroContenido(), {
+      titulo,
+      texto,
+      deltasTexto,
+      onContinuar: irADashboard,
+    }));
   }
 
   // 'lesionSinOferta' es un beat simple (nada que jugar, solo un aviso) que
@@ -692,6 +721,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           sparring = registrarGolpe(sparring, evento);
           pintarSparring();
         },
+        // Pedido v6: un solo reloj para TODA la sesión (ya no por golpe). Si
+        // se acaba el tiempo, el minijuego corta ya con lo que se llevaba
+        // acumulado — no se queda esperando el golpe que falta.
+        onTiempoAgotado: () => {
+          sparring = terminarPorTiempo(sparring);
+          pintarSparring();
+        },
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
@@ -747,14 +783,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const { oferta, ultimo } = beat.datos;
 
     function pintarSparring() {
-      const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
       const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
-        titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
+        // La oferta ya trae rivalApodo/rivalNombre propios (self-contained,
+        // sin depender de encontrarlo en el roster) — con el roster de 100
+        // (Pedido 1), la mayoría de los rivales de relleno no tienen apodo
+        // (null): sin el resguardo, esto mostraba literalmente "null".
+        titulo: `Campamento · contra "${oferta.rivalApodo ?? oferta.rivalNombre}"`,
         bajada: 'Los rounds fuertes antes de la pelea',
         onGolpe: (evento) => {
           sparring = registrarGolpe(sparring, evento);
+          pintarSparring();
+        },
+        onTiempoAgotado: () => {
+          sparring = terminarPorTiempo(sparring);
           pintarSparring();
         },
         onTerminar: () => {
@@ -830,6 +873,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onCerrar: () => {
         const final = resultadoNegociacion(negociacion);
         partida = firmarPelea(partida, { oferta: { ...oferta, bolsa: final.bolsa } });
+        // Pedido v6 ("las noticias también deberían nombrar al jugador...
+        // pelea de revancha"): se firma acá, con la bolsa ya cerrada — recién
+        // ahora el cruce es un hecho, no una posibilidad. Mismo rng
+        // "cosmético" que el resto de esta función (nunca el compartido de
+        // la carrera).
+        if (oferta.esRevancha) {
+          const noticia = generarNoticia(rng, {
+            tipo: 'revancha',
+            datos: {
+              nombre: partida.jugador.nombre,
+              apodo: partida.jugador.apodo,
+              rival: oferta.rivalApodo ?? oferta.rivalNombre,
+            },
+            fecha: partida.mundo.anio,
+          });
+          partida = { ...partida, noticias: agregarNoticias(partida.noticias, [{ ...noticia, propia: true }]) };
+        }
         irADashboard();
       },
       // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
@@ -1008,6 +1068,34 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       // basta con un número que cambie pelea a pelea.
       contexto: jugador.historial.length,
     });
+
+    // Pedido v6 ("las noticias también deberían nombrar al jugador cuando
+    // ocurren cosas importantes"): a lo sumo UNA noticia propia por pelea
+    // (noticiaDeHitoJugador ya elige cuál, con su propia prioridad — ver
+    // core/hitos.js), armada con la MISMA maquinaria que ya usan las
+    // noticias del mundo (generarNoticia/PLANTILLAS, news.js/news-templates.js).
+    // El rng que se usa acá es el "cosmético" de main.js (el mismo que ya
+    // tira la lesión unas líneas más arriba en esta función) — nunca el rng
+    // compartido de la carrera (core/career.js), que es el que calibra el
+    // ritmo de toda la partida y no hay que correr de más.
+    const noticiaHito = noticiaDeHitoJugador({
+      hitos,
+      oferta,
+      resultado: pelea.resultado,
+      jugadorAntes,
+      jugador,
+      rankingAntes: rankingDelJugador(partida.mundo, jugadorAntes),
+      rankingDespues: rankingDelJugador(partida.mundo, jugador),
+    });
+    if (noticiaHito) {
+      const noticia = generarNoticia(rng, {
+        tipo: noticiaHito.tipo, datos: noticiaHito.datos, fecha: partida.mundo.anio,
+      });
+      // `propia` distingue esta noticia de las que cuentan lo que le pasa al
+      // resto del mundo — el feed la resalta (ver panel-noticias.js): es tu
+      // carrera, tiene que notarse.
+      partida = { ...partida, noticias: agregarNoticias(partida.noticias, [{ ...noticia, propia: true }]) };
+    }
 
     return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,

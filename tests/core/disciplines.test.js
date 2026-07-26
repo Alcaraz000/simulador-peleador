@@ -30,6 +30,18 @@ describe('disciplinas', () => {
     }
   });
 
+  // Barrida de experto en boxeo (Pedido 4, v6): una eliminatoria (la pelea
+  // que define quién pasa a disputar el título, ver decidirNivel en
+  // offers.js) se pelea a la misma distancia que un título de verdad — igual
+  // que un "final eliminator" real, casi siempre a 12 rounds, no a la
+  // distancia genérica de una pelea de trámite cualquiera (8).
+  it('la eliminatoria se pelea a la misma distancia que un titulo, no como una regional de tramite', () => {
+    for (const disciplina of Object.values(DISCIPLINAS)) {
+      expect(disciplina.roundsPorNivel.eliminatoria).toBe(disciplina.roundsPorNivel.titulo);
+      expect(disciplina.roundsPorNivel.eliminatoria).toBeGreaterThan(disciplina.roundsPorNivel.profesional);
+    }
+  });
+
   it('getDisciplina tira error con un id desconocido', () => {
     expect(() => getDisciplina('mma')).toThrow(/mma/);
     expect(() => getDisciplina('karate')).toThrow(/karate/);

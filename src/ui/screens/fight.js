@@ -36,7 +36,13 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
     el('p', { class: 'medio', text: oferta.textoGancho }),
     el('div', { class: 'panel' }, [
       el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
-        el('div', { style: 'font-size:18px;font-weight:800;flex:1;min-width:0', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+        // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
+        // relleno no tienen apodo (null): sin este resguardo mostraba
+        // literalmente '"null" Nombre'.
+        el('div', {
+          style: 'font-size:18px;font-weight:800;flex:1;min-width:0',
+          text: oferta.rivalApodo ? `"${oferta.rivalApodo}" ${oferta.rivalNombre}` : oferta.rivalNombre,
+        }),
         // Puesto en el ranking del rival (Task v3, pedido textual): junto al
         // nombre, así el jugador ve de un vistazo contra quién se mide sin
         // ir a buscarlo a la tabla de posiciones.
@@ -118,12 +124,15 @@ export function renderPlan(contenedor, { oferta, onElegirPlan = () => {} }) {
     return tarjeta;
   });
 
-  mount(contenedor, el('div', { class: 'stack' }, [
+  mount(contenedor, el('div', { class: 'stack pantalla-corta' }, [
     el('div', { class: 'etiqueta', text: 'Preparación' }),
     el('h1', { text: 'El plan de pelea' }),
     el('p', {
       class: 'medio',
-      text: `Tu entrenador te mira antes de que suene la campana: "¿cómo la encaramos contra ${oferta.rivalApodo}? Vos decidís, yo te digo qué ganás y qué te puede costar."`,
+      // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
+      // relleno no tienen apodo (null): sin este resguardo mostraba
+      // literalmente "null" en la pantalla del plan de pelea.
+      text: `Tu entrenador te mira antes de que suene la campana: "¿cómo la encaramos contra ${oferta.rivalApodo ?? oferta.rivalNombre}? Vos decidís, yo te digo qué ganás y qué te puede costar."`,
     }),
     el('div', { class: 'panel-decision-grilla' }, tarjetas),
   ]));

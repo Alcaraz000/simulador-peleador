@@ -30,7 +30,10 @@ function resolverPeleaDeCampamento(jugador, oferta) {
   return resultado.jugador;
 }
 
-const CHECKPOINTS = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20];
+// v6, segunda vuelta: la carrera pasó de 20 a 24 bloques (ETAPAS, career.js
+// — profesional ahora dura de punta a punta, sin una etapa "veterano"
+// aparte). Checkpoints y mitad de carrera actualizados en consecuencia.
+const CHECKPOINTS = [2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24];
 
 function jugarCarrera(semilla, { limite = 500 } = {}) {
   let partida = crearPartida({ jugador: nuevoJugador(), semilla });
@@ -38,7 +41,7 @@ function jugarCarrera(semilla, { limite = 500 } = {}) {
   let guardia = 0;
   const porCheckpoint = {};
   let dineroAMitad = null;
-  const MITAD_BLOQUE = 10;
+  const MITAD_BLOQUE = 12;
 
   while (!partida.terminada && guardia < limite) {
     guardia += 1;

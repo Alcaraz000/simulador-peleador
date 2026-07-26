@@ -1,12 +1,20 @@
 import { buscarRival } from './world.js';
-import { mediaDe, recordTexto } from './fighter.js';
+import {
+  mediaDe, recordTexto, apodoParaMostrar, nombreConApodo,
+} from './fighter.js';
 import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
 
 export const NIVELES = {
   local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4, famaBase: 2 },
   regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1, famaBase: 4 },
-  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'profesional', multiplicadorBolsa: 1.8, famaBase: 7 },
+  // `nivelPelea: 'eliminatoria'` (Pedido 4, barrida de experto en boxeo): antes
+  // era 'profesional' a secas, así que se peleaba a 8 rounds — la misma
+  // distancia que una regional de trámite. Es la pelea que define el ascenso
+  // al puesto de retador: en el boxeo real, un final eliminator se juega a
+  // distancia de campeonato, no a la de una cartelera cualquiera (ver
+  // roundsPorNivel en disciplines.js, ahora con su propia entrada).
+  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8, famaBase: 7 },
   titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4, famaBase: 15 },
   defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2, famaBase: 10 },
 };
@@ -14,11 +22,22 @@ export const NIVELES = {
 /**
  * Progresión de cinturones. Se pelea por el siguiente que no tenés,
  * en orden; cada uno exige más ranking y paga más.
+ *
+ * Pedido 1 (v6, roster de 12 -> 100, "el ranking tiene que ser una
+ * montaña"): estos `rankingMax` se calibraron para un roster de 12 (top 8 =
+ * 67% de la tabla, top 5 = 42%, top 3 = 25%). Escalarlos a la misma
+ * PROPORCIÓN sobre 100 rivales (66/42/25) los habría dejado casi sin filo —
+ * calificar para el título regional con solo estar en la mitad de la tabla
+ * no se siente como una montaña. En cambio, se ajustaron para que cada
+ * escalón siga siendo un salto real de exigencia sobre una categoría de 100:
+ * top 20 (un puesto que hay que ganarse con una racha de verdad), top 10, y
+ * top 5 para el mundial. Ver el informe de balance (scripts/balance-sim.mjs)
+ * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 8, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 5, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 3, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
 ];
 
 /** El próximo cinturón que el jugador puede disputar, o null si los tiene todos. */
@@ -114,9 +133,15 @@ export function fraseEntrenador(jugador, oferta) {
   // offers.test.js) ni `rivalId` (mismo problema, viene de fighter.js). Con
   // el apodo + la bolsa + lo que está en juego alcanza para variar sin
   // depender de esos contadores.
-  const indice = indiceEstable(`${oferta.rivalApodo}|${oferta.bolsa}|${oferta.enJuego}|${categoria}`, pool.length);
+  // El marcador {rival} se usa siempre SOLO (nunca junto al nombre): con el
+  // roster de 100 (Pedido 1) la mayoría de los rivales de relleno no tienen
+  // apodo, así que cae al nombre — `rellenar` (más abajo) ya resguarda contra
+  // null/undefined con un `?? ''`, pero eso dejaba la frase sin el rival
+  // ("...mano a mano con ."), no solo evitaba el "null" literal.
+  const mote = oferta.rivalApodo ?? oferta.rivalNombre;
+  const indice = indiceEstable(`${mote}|${oferta.bolsa}|${oferta.enJuego}|${categoria}`, pool.length);
   return rellenar(pool[indice], {
-    rival: oferta.rivalApodo,
+    rival: mote,
     bolsa: `US$ ${Math.round(oferta.bolsa).toLocaleString('es-AR')}`,
     enJuego: oferta.enJuego,
   });
@@ -139,10 +164,19 @@ export function cinturonActual(jugador) {
 // baja el "cero defensas en toda la carrera" a ~8% jugando de forma realista.
 const PROB_ASCENSO_PRIORITARIO = 0.8;
 
-function decidirNivel({ jugador, etapa, forzarTitulo, rng }) {
+function decidirNivel({
+  jugador, etapa, forzarTitulo, rng, soloRegional,
+}) {
   if (etapa === 'juvenil' || etapa === 'amateur') {
     return { nivel: NIVELES.local, cinturon: null };
   }
+
+  // Peleas de "trámite" (v6, ver esPeleaImportante más abajo y el criterio
+  // documentado en career.js): un cupo de pelea que se resuelve solo, sin
+  // pasar por careo/campamento. Nunca puede ser de título/defensa/eliminatoria
+  // — esas SIEMPRE se juegan completas — así que se corta acá, antes de
+  // cualquier otra consideración de ranking/cinturón.
+  if (soloRegional) return { nivel: NIVELES.regional, cinturon: null };
 
   const puesto = cinturonActual(jugador);
   const proximo = proximoCinturon(jugador);
@@ -175,14 +209,65 @@ function decidirNivel({ jugador, etapa, forzarTitulo, rng }) {
 
 let contadorOferta = 0;
 
-export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], forzarTitulo = false }) {
-  const { nivel, cinturon } = decidirNivel({ jugador, etapa, forzarTitulo, rng });
+export function generarOferta(rng, {
+  jugador, mundo, etapa, rivalidades = [], forzarTitulo = false,
+  // v6 ("las peleas de trámite se resuelven solas"): un cupo forzado a
+  // NIVELES.regional, sin título/defensa/eliminatoria posible — ver
+  // decidirNivel. Lo usa career.js para los intentos de pelea "de más" del
+  // año, más allá del primero (el único que puede ser una pelea que
+  // importa).
+  soloRegional = false,
+  // Rivales a excluir además del propio jugador y el último rival peleado
+  // (más abajo): career.js lo usa para que, dentro del MISMO bloque, dos
+  // cupos de pelea distintos nunca terminen ofreciendo al mismo rival.
+  excluirIdsExtra = [],
+}) {
+  const {
+    nivel, cinturon,
+  } = decidirNivel({
+    jugador, etapa, forzarTitulo, rng, soloRegional,
+  });
+
+  // Pedido 3 (v6, "nada de revancha inmediata después de una pelea. Que pase
+  // tiempo"): el último rival que de verdad peleó (jugador.historial, el
+  // registro que arma aplicarResultado) queda excluido de ESTA oferta — la
+  // primera que se arma después de esa pelea. Una vez que el jugador firma y
+  // resuelve OTRA pelea, el historial avanza y este mismo rival vuelve a
+  // quedar disponible (incluida la revancha que rivalidades.js narra más
+  // adelante): el cierre es "no inmediata", no "nunca más".
+  const ultimoRivalId = jugador.historial?.length > 0
+    ? jugador.historial[jugador.historial.length - 1].rivalId
+    : null;
 
   const archirrival = rivalidades.find((r) => r.esArchirrival);
-  const rankingObjetivo = clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12);
-  const rival = (archirrival && rng.chance(0.3)
+  const archirrivalEsElUltimo = archirrival?.rivalId === ultimoRivalId;
+  // v6 (peleas de trámite/importantes, tramite.js y esPeleaImportante): el
+  // matchmaking "duro" de acá abajo (cerca de la cima del ranking, sesgo
+  // histórico del proyecto de cuando el roster tenía 12 rivales) solo tiene
+  // sentido cuando de verdad hay algo en juego — título, defensa,
+  // eliminatoria. Para un nivel 'regional' (sea porque es trámite forzado, o
+  // porque el jugador todavía no calificó para nada más), el manager arma
+  // una cartelera SEGURA — el objetivo de ranking se corre hacia rivales
+  // IGUALES o PEOR rankeados, mismo criterio que un promotor de verdad
+  // "construyendo" un récord. Sin este ajuste, TODA oferta (incluida la
+  // regional más chica) se sesgaba hacia la cima, así que `riesgo === 'alto'`
+  // (uno de los criterios de esPeleaImportante) salía casi siempre —
+  // volviendo "jugable" casi cualquier año de la carrera, no solo los que de
+  // verdad definen el ascenso — y de paso el lote de trámite perdía de forma
+  // sistemática combates que el jugador ni siquiera podía elegir jugar,
+  // hundiendo el eje de cinturones incluso jugando perfecto (medido: 3
+  // cinturones caía a ~30%, luego a 0% mientras se depuraba esta misma
+  // medición).
+  const disputaAlgoGrande = nivel.id === 'titulo' || nivel.id === 'defensa' || nivel.id === 'eliminatoria';
+  const rankingObjetivo = disputaAlgoGrande
+    ? clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12)
+    : clamp((jugador.ranking ?? Math.round(mundo.roster.length / 2)) + rng.int(0, 6), 1, mundo.roster.length);
+  const rival = (archirrival && !archirrivalEsElUltimo && !soloRegional && !excluirIdsExtra.includes(archirrival.rivalId) && rng.chance(0.3)
     ? mundo.roster.find((p) => p.id === archirrival.rivalId && !p.retirado)
-    : null) ?? buscarRival(mundo, { excluirIds: [jugador.id], rankingCerca: rankingObjetivo });
+    : null) ?? buscarRival(mundo, {
+    excluirIds: [jugador.id, ultimoRivalId, ...excluirIdsExtra].filter(Boolean),
+    rankingCerca: rankingObjetivo,
+  });
 
   if (!rival) return null;
 
@@ -205,16 +290,21 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     ? cinturon.nombre
     : nivel.id === 'eliminatoria' ? 'Puesto de retador' : 'Subís al ranking si ganás';
 
+  // Con el roster de 100 (Pedido 1), la mayoría de los rivales de relleno no
+  // tienen apodo (null, pool de solo 16 nombres): `mote` se usa SOLO (nunca
+  // "null" en pantalla) y `nombreConApodo` arma el combo "Apodo" Nombre sin
+  // duplicar el nombre cuando no hay apodo.
+  const mote = apodoParaMostrar(rival);
   contadorOferta += 1;
   const gancho = nivel.id === 'defensa'
-    ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${rival.apodo} es el retador oficial.`
+    ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${mote} es el retador oficial.`
     : nivel.id === 'titulo'
-      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${rival.apodo} tiene lo que querés.`
+      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${mote} tiene lo que querés.`
       : esRevancha
-        ? `${rival.apodo} quiere la revancha. Vos sabés lo que pasó la última vez.`
+        ? `${mote} quiere la revancha. Vos sabés lo que pasó la última vez.`
         : rival.esParodia
           ? `${rival.nombre} te nombró en una entrevista. El teléfono no para.`
-          : `"${rival.apodo}" ${rival.nombre} te quiere cruzar.`;
+          : `${nombreConApodo(rival)} te quiere cruzar.`;
 
   const oferta = {
     id: `of_${contadorOferta}`,
@@ -237,6 +327,11 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     esTitulo,
     esObligatoria: nivel.id === 'defensa',
     esRevancha,
+    // v6 ("las peleas que importan se juegan completas: [...] tu archirrival"):
+    // true cuando el rival de ESTA oferta es el archirrival vigente — no
+    // solo cuando se lo buscó a propósito (el matchmaking normal también
+    // puede cruzarlo). Lo usa `esPeleaImportante` (más abajo).
+    esArchirrival: Boolean(archirrival && archirrival.rivalId === rival.id),
     cinturonId: cinturon ? cinturon.id : null,
     famaBase: nivel.famaBase + (cinturon ? cinturon.famaExtra : 0),
     // Solo tiene sentido en una defensa: cuántas defensas exitosas hacen falta
@@ -256,13 +351,51 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
   return oferta;
 }
 
+// El criterio central del rediseño de ritmo v6 ("no todas las peleas se
+// juegan igual"): decide si ESTA oferta merece la crónica completa (careo,
+// campamento, pelea round a round) o si es una de trámite que se resuelve
+// sola (ver armarLotePeleas/resumenLote en tramite.js). Cuatro condiciones,
+// CUALQUIERA alcanza:
+//   - esTitulo: cubre tanto disputar un cinturón como defenderlo — lo más
+//     grande que le puede pasar a una carrera.
+//   - esRevancha: ya se cruzaron antes; hay una historia en juego, no un
+//     desconocido más.
+//   - esArchirrival: el rival de tu vida, aunque esta pelea puntual no
+//     tenga cinturón en juego.
+//   - nivel === 'eliminatoria': la pelea que define el ascenso — ganarla es
+//     lo que te pone en carrera por el título (ver decidirNivel: solo se
+//     ofrece con ranking top-6, o forzada en la etiqueta de sabor
+//     "veterano", ver tagContenido en career.js).
+//
+// Se descartó a propósito un quinto criterio ("riesgo alto": rival
+// claramente mejor) que estuvo en un borrador de esta misma ronda — medido
+// con scripts/balance-sim.mjs, disparaba en CASI CUALQUIER matchup temprano
+// (el matchmaking normal ya sesga hacia arriba, ver rankingObjetivo más
+// abajo) y volvía "jugable" la mitad de los años de la carrera, reventando
+// el presupuesto de ~20 minutos sin sumar nada al eje de cinturones (una
+// pelea de trámite ganada suma exactamente lo mismo al récord). Los cuatro
+// criterios que quedan son, literalmente, los que pidió el brief: "peleas de
+// título, defensas, tu archirrival, revanchas, y las que definen tu
+// ascenso" — ni más ni menos.
+//
+// Todo lo que NO cumple ninguna de estas cuatro es "trámite": un combate
+// regional, parejo o cómodo, que no cambia la historia de la carrera — se
+// resuelve solo, en lote, con sabor (ver resumenLote, tramite.js).
+export function esPeleaImportante(oferta) {
+  return Boolean(
+    oferta.esTitulo || oferta.esRevancha || oferta.esArchirrival || oferta.nivel === 'eliminatoria',
+  );
+}
+
 function clonarJugador(jugador) {
   return {
     ...jugador,
     record: { ...jugador.record },
+    recordAmateur: { ...(jugador.recordAmateur ?? { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 }) },
     estado: { ...jugador.estado },
     titulos: [...jugador.titulos],
     historial: [...jugador.historial],
+    historialAmateur: [...(jugador.historialAmateur ?? [])],
   };
 }
 
@@ -284,21 +417,38 @@ export function rechazarOferta(jugador, oferta) {
 // legacy.js para mostrar cuándo se ganó/defendió cada título (Task v3,
 // pedido textual del usuario) — se guarda ACÁ, en el momento del hito, en
 // vez de reconstruirlo después con datos que ya no están disponibles.
-export function aplicarResultado(jugador, { oferta, resultado, semanaGlobal = null }) {
+// v6 ("las peleas amateur no cuentan ni en el ranking ni en el historial"):
+// `oferta.nivelPelea === 'amateur'` (NIVELES.local, la única que decidirNivel
+// ofrece en juvenil/amateur) manda el resultado a los acumuladores AMATEUR
+// (recordAmateur/historialAmateur) en vez de a los profesionales — así el
+// récord que lee el ranking/ficha/legado arranca en 0-0 el día del debut,
+// sin importar cuántas peleas de formación hubo antes.
+//
+// `modo` (v6, "medí los beats que el jugador realmente resuelve con el
+// mando"): 'jugada' (default, una crónica completa: careo + campamento +
+// pelea) o 'tramite' (career.js, resolverPeleaTramite — se resolvió sola, en
+// lote). Se guarda en el historial para que las estadísticas de fin de
+// carrera puedan distinguir cuántas de las peleas del récord el jugador
+// jugó de verdad con el mando.
+export function aplicarResultado(jugador, {
+  oferta, resultado, semanaGlobal = null, modo = 'jugada',
+}) {
   const nuevo = clonarJugador(jugador);
   const titulosGanados = [];
   const gano = resultado.ganador === 'jugador';
   const empate = resultado.ganador === 'empate';
+  const esAmateur = oferta.nivelPelea === 'amateur';
+  const record = esAmateur ? nuevo.recordAmateur : nuevo.record;
 
   if (gano) {
-    nuevo.record.v += 1;
-    if (resultado.metodo === 'ko' || resultado.metodo === 'tko') nuevo.record.ko += 1;
-    else if (resultado.metodo === 'sumision') nuevo.record.sub += 1;
-    else nuevo.record.dec += 1;
+    record.v += 1;
+    if (resultado.metodo === 'ko' || resultado.metodo === 'tko') record.ko += 1;
+    else if (resultado.metodo === 'sumision') record.sub += 1;
+    else record.dec += 1;
   } else if (empate) {
-    nuevo.record.e += 1;
+    record.e += 1;
   } else {
-    nuevo.record.d += 1;
+    record.d += 1;
   }
 
   nuevo.dinero += oferta.bolsa;
@@ -312,7 +462,7 @@ export function aplicarResultado(jugador, { oferta, resultado, semanaGlobal = nu
   const golpeDerrota = tienePsicologo ? -6 : -12;
   nuevo.estado.moral = clamp(nuevo.estado.moral + (gano ? 10 : empate ? 0 : golpeDerrota), 0, 100);
 
-  if (oferta.esTitulo) {
+  if (!esAmateur && oferta.esTitulo) {
     if (gano) {
       if (oferta.esObligatoria) {
         nuevo.defensas += 1;
@@ -337,7 +487,8 @@ export function aplicarResultado(jugador, { oferta, resultado, semanaGlobal = nu
     }
   }
 
-  nuevo.historial.push({
+  const historial = esAmateur ? nuevo.historialAmateur : nuevo.historial;
+  historial.push({
     rivalId: oferta.rivalId,
     rivalNombre: oferta.rivalNombre,
     rivalApodo: oferta.rivalApodo,
@@ -354,6 +505,7 @@ export function aplicarResultado(jugador, { oferta, resultado, semanaGlobal = nu
     // de la causa real en legacy.js).
     esObligatoria: oferta.esObligatoria ?? false,
     fecha: semanaGlobal,
+    modo,
   });
 
   const texto = gano

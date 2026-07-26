@@ -155,14 +155,13 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
-    // semilla 6 -> carta "escuela_o_gimnasio", ninguna opcion tiene
-    // probabilidades (verificado aparte con el catalogo real): ejercita el
-    // camino sin roll. (Antes era la semilla 2: el reparto de mejoras a veces
-    // reduce a 2 cartas -- decidirCantidadMejoras, cards.js, pedido del
-    // coordinador v4 -- y esa tirada nueva corre la secuencia de rng de
-    // TODOS los bloques, mejora incluida, así que 2 dejó de llegar a esta
-    // carta puntual; 6 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // semilla 2 -> carta "amigos", ninguna opcion tiene probabilidades
+    // (verificado aparte con el catalogo real): ejercita el camino sin roll.
+    // (Antes era la semilla 6: la Ronda v6 -roster de 100, Pedido 1- corrió
+    // la secuencia de rng de TODA la carrera desde el arranque -crearRoster
+    // consume muchas más tiradas con 100 rivales que con 12-, así que 6 dejó
+    // de llegar a esta carta puntual; 2 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 2));
     continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
@@ -179,15 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 18 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 17: Cambio 1 -cards.js, "el tope de mejoras es 3, duro"- hizo
-    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
-    // de rng, así que corrió la secuencia entera; 17 dejó de llegar a esta
-    // carta puntual, 18 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 18));
+    // semilla 18: la Ronda v6 -roster de 100, Pedido 1- corrió la secuencia
+    // de rng de toda la carrera desde el arranque -crearRoster consume
+    // muchas más tiradas con 100 rivales que con 12-, así que 18 dejó de
+    // llegar a esta carta puntual; 6 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -242,12 +241,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 2: Cambio 1 (cards.js, "el tope de mejoras es 3, duro") hizo
-    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
-    // de rng, corriendo la secuencia entera — la semilla 1 usada antes dejó
-    // de llegar a un beat "redes" dentro de las 500 iteraciones de
-    // avanzarHasta; 2 sí.
-    iniciar(cont, prepararPartidaGuardada('redes', 2));
+    // semilla 3: la Ronda v6 (roster de 100, Pedido 1) corrió la secuencia
+    // de rng de toda la carrera desde el arranque (crearRoster consume
+    // muchas más tiradas con 100 rivales que con 12) — la semilla 2 usada
+    // antes dejó de llegar a un beat "redes" dentro de las 500 iteraciones
+    // de avanzarHasta; 3 sí (carta "post_barrio", 3 opciones).
+    iniciar(cont, prepararPartidaGuardada('redes', 3));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -288,6 +287,29 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     // (Task v3) sin pantalla de resultado: derecho al estado ocioso.
     expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): la mayoría
+  // de las peleas de una carrera se resuelven solas — este beat es el
+  // resumen con sabor de ese lote (armarLotePeleas/resumenLote, tramite.js),
+  // ya aplicado al jugador ANTES de que este beat exista. Mismo layout que
+  // cualquier otro desenlace (título + texto + Seguir), con el detalle de
+  // cada combate como "deltas".
+  it('peleasResueltas: muestra el resumen de tramite (con detalle de cada combate) y Seguir vuelve al estado ocioso', () => {
+    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 1));
+    continuar();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    const desenlace = cont.querySelector('.panel-decision-desenlace');
+    expect(desenlace).toBeTruthy();
+    expect(desenlace.textContent.length).toBeGreaterThan(0);
+
+    cont.querySelector('.panel-decision-desenlace .boton').click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
@@ -367,16 +389,29 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
       nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     });
-    // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
-    // Y, más adelante en la misma cola, una 'oferta' — ofertaPendiente (dato
-    // interno) ya queda seteado antes de llegar a ninguno de los dos
-    // (verificado aparte); proximaPelea (lo que muestra el panel) sigue null
-    // porque todavía no se firmó nada.
-    const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
-    const partida = avanzarHasta(inicial, 'evento');
+    // v6, segunda vuelta: en profesional ya no todos los bloques traen una
+    // oferta JUGABLE (la mayoría de los cupos de pelea se resuelven solos,
+    // ver armarLotePeleas en tramite.js), así que ya no alcanza con buscar
+    // una semilla fija que "dé la casualidad" de traer 'evento' y 'oferta'
+    // juntos en la misma cola natural — se arma a mano: se avanza bloque a
+    // bloque hasta encontrar uno con una oferta jugable pendiente (mismo
+    // criterio que primerPasoConOfertaPendiente en career.test.js), y se le
+    // ANTEPONE el 'evento' sintético a esa oferta real ya encontrada. Lo que
+    // importa para este test es la MECÁNICA (cancelar la oferta pendiente
+    // de verdad, no solo en el texto), no la composición natural de la cola.
+    let actual = { ...crearPartida({ jugador, semilla: 14 }), etapaIndice: 2 };
+    for (let intentos = 0; intentos < 80 && !actual.ofertaPendiente; intentos += 1) {
+      const primerPaso = siguienteBeat(actual);
+      if (primerPaso.partida.ofertaPendiente) { actual = primerPaso.partida; break; }
+      let siguiente = primerPaso.partida;
+      while (siguiente.cola.length > 0) siguiente = siguienteBeat(siguiente).partida;
+      actual = siguiente;
+    }
+    const partida = actual;
     expect(partida.ofertaPendiente).not.toBeNull();
     expect(partida.proximaPelea).toBeNull();
-    expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
+    const ofertaBeat = partida.cola.find((b) => b.tipo === 'oferta');
+    expect(ofertaBeat).toBeTruthy();
 
     const cartaSintetica = {
       id: 'riesgo_de_prueba', categoria: 'evento', titulo: 'Riesgo de prueba', texto: 'x',
@@ -391,7 +426,7 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
     };
     const conCartaSintetica = {
       ...partida,
-      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, partida.cola[1]],
+      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, ofertaBeat],
     };
     guardar(conCartaSintetica, storage);
     return storage;
@@ -436,12 +471,13 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 50 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 6 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 45 antes de Cambio 1 -cards.js, "el tope de
-    // mejoras es 3, duro"-, que corrió la secuencia de rng de todos los
-    // bloques).
-    iniciar(cont, prepararPartidaGuardada('evento', 50));
+    // roll; era la semilla 50 antes de la Ronda v6 -roster de 100, Pedido
+    // 1-, que corrió la secuencia de rng de toda la carrera desde el
+    // arranque -crearRoster consume muchas más tiradas con 100 rivales que
+    // con 12-).
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -481,8 +517,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 50: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 50));
+    // semilla 6: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -504,12 +540,14 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
 });
 
 // Bug reportado por el usuario: "minijuego de sparring: falta el timer con
-// la barra decreciendo". Al agregarlo (ui/screens/sparring.js), cada pao
-// prendido programa un setTimeout que cuenta como error si no le pegás a
-// tiempo — mismo riesgo de timer colgado que ya se resolvió para el roll y
-// el dado (hallazgo 1, más arriba): si el jugador se va a la Ficha con un
-// pao prendido, ese timer no puede seguir corriendo en segundo plano contra
-// un `centroContenido()` que la Ficha ya reemplazó.
+// la barra decreciendo". Al agregarlo (ui/screens/sparring.js), el primer
+// "Empezar" programa un setTimeout de toda la ronda (DURACION_RONDA_MS,
+// 7000ms desde el Pedido v6: un solo reloj para todo el minijuego, no por
+// golpe) que fuerza el fin si se acaba el tiempo — mismo riesgo de timer
+// colgado que ya se resolvió para el roll y el dado (hallazgo 1, más
+// arriba): si el jugador se va a la Ficha con un pao prendido, ese timer no
+// puede seguir corriendo en segundo plano contra un `centroContenido()` que
+// la Ficha ya reemplazó.
 describe('main.js: el timer del sparring no le puede robar la pantalla al jugador (bug reportado: falta el timer)', () => {
   it('entrar a la Ficha con un pao prendido y dejar que el timer expire en segundo plano no borra la Ficha', () => {
     // semilla 3: mismo caso ya usado más arriba para llegar a un beat
@@ -527,31 +565,29 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     expect(cont.querySelector('.shell')).toBeNull();
     expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
 
-    // Se deja correr el timer del pao en segundo plano (bien por encima de
-    // su duración nominal, 1500ms): la Ficha tiene que seguir en pantalla,
+    // Se deja correr el reloj de ronda en segundo plano (bien por encima de
+    // su duración nominal, 7000ms): la Ficha tiene que seguir en pantalla,
     // intacta, hasta que el jugador toque "Cerrar" — nunca antes.
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(9000);
 
     expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
     expect(cont.querySelector('.shell')).toBeNull();
   });
 
-  // Verificación más fuerte que la de arriba: sin cancelar el timer, un pao
-  // que vence mientras el jugador está en la Ficha vuelve a encender el
-  // siguiente automáticamente (mismo `empezar()` que dispara el propio
-  // renderSparring al reanudar un sparring "en curso") — y ESE timer, sin
-  // cancelar tampoco, sigue la cadena. Con 5000ms de sobra (más de 3 rondas
-  // de 1500ms) el drill avanzaría solo varios golpes en segundo plano, todos
-  // errados, sin que el jugador tocara nada. Al volver del tablero, el
-  // contador de "Golpes" tiene que seguir en 0: el timer pendiente se corta
-  // ANTES de que la Ficha reemplace la pantalla (abandonarSparringPendiente).
+  // Verificación más fuerte que la de arriba: sin cancelar el timer, que se
+  // acabe el tiempo mientras el jugador está en la Ficha terminaría el
+  // minijuego solo (onTiempoAgotado), en segundo plano, sin que el jugador
+  // tocara nada. Con 9000ms de sobra (por encima de los 7000ms totales) el
+  // drill se daría por terminado solo. Al volver del tablero, el contador de
+  // "Golpes" tiene que seguir en 0: el timer pendiente se corta ANTES de que
+  // la Ficha reemplace la pantalla (abandonarSparringPendiente).
   it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
     iniciar(cont, prepararPartidaGuardada('sparring', 2));
     continuar();
 
     cont.querySelector('[data-accion="empezar"]').click();
     cont.querySelector('[data-accion="historial"]').click();
-    vi.advanceTimersByTime(5000);
+    vi.advanceTimersByTime(9000);
 
     cont.querySelector('[data-accion="cerrar"]').click();
 

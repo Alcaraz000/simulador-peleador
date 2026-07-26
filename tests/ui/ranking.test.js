@@ -27,7 +27,11 @@ describe('renderRanking — se abre como popup', () => {
     expect(document.querySelectorAll('[data-peleador]')).toHaveLength(3);
   });
 
-  it('cada fila muestra nombre, apodo, media, récord y el puesto', () => {
+  // v6 (rediseño integral, pedido textual: "el popup de ranking desperdicia
+  // espacio... que sea una lista compacta: NÚMERO | BANDERA | NOMBRE |
+  // HISTORIAL. La media NO va"): la fila deja de mostrar la media (dato que,
+  // repetido en cien filas, no aportaba nada que el puesto no dijera ya).
+  it('cada fila muestra nombre, apodo, récord y el puesto — nunca la media', () => {
     const filas = [fila({
       id: 'a', nombre: 'Tyrell Carter', apodo: 'El Tanque', ranking: 4, media: 61, record: '10-2',
     })];
@@ -36,9 +40,23 @@ describe('renderRanking — se abre como popup', () => {
     const texto = document.body.textContent;
     expect(texto).toContain('Tyrell Carter');
     expect(texto).toContain('El Tanque');
-    expect(texto).toContain('61');
     expect(texto).toContain('10-2');
     expect(texto).toContain('#4');
+    expect(texto).not.toContain('61');
+    expect(texto).not.toMatch(/MEDIA/);
+  });
+
+  // Pedido explícito: la fila es una sola línea (NÚMERO | BANDERA | NOMBRE |
+  // HISTORIAL) — con el roster de 100 peleadores, una fila más compacta es
+  // lo que hace que la lista entera scrollee liviana.
+  it('la fila es una sola línea (puesto, bandera, nombre y récord al mismo nivel)', () => {
+    const filas = [fila({ id: 'a', ranking: 4 })];
+    renderRanking({ filas });
+    const filaNodo = document.querySelector('[data-peleador="a"]');
+    expect(filaNodo.querySelector('.tabla-ranking-puesto')).toBeTruthy();
+    expect(filaNodo.querySelector('svg.bandera-svg')).toBeTruthy();
+    expect(filaNodo.querySelector('.tabla-ranking-nombre')).toBeTruthy();
+    expect(filaNodo.querySelector('.tabla-ranking-record')).toBeTruthy();
   });
 
   it('usa la bandera SVG, nunca el emoji', () => {

@@ -26,11 +26,18 @@ function prefiereMovimientoReducido() {
   }
 }
 
+// `n.propia` (Pedido v6, "las noticias también deberían nombrar al
+// jugador... que se distinga de una noticia del mundo: es tu carrera, tiene
+// que resaltar"): la arma cerrarPelea (main.js) con la misma máquina que las
+// noticias del mundo (generarNoticia/PLANTILLAS), pero marcada aparte — acá
+// solo se traduce esa marca a un look distinto (borde y chip dorados, ver
+// theme.css), nunca a una estructura de datos distinta.
 function itemNoticia(n, { oculta }) {
   return el('div', {
-    class: `panel noticia-item${n.nueva ? ' nueva' : ''}${oculta ? ' noticia-oculta' : ''}`,
+    class: `panel noticia-item${n.nueva ? ' nueva' : ''}${n.propia ? ' propia' : ''}${oculta ? ' noticia-oculta' : ''}`,
     dataset: { noticia: n.id },
   }, [
+    n.propia ? el('span', { class: 'chip dorado', style: 'margin-bottom:4px', text: 'TU CARRERA' }) : null,
     n.nueva ? el('span', { class: 'chip rojo', style: 'margin-bottom:4px', text: 'ÚLTIMO MOMENTO' }) : null,
     el('div', { class: 'etiqueta', text: etiquetaTipo(n.tipo) }),
     el('div', { style: 'font-weight:800;margin-top:3px;font-size:12.5px', text: n.titular }),

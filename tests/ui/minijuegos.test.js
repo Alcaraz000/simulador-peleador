@@ -3,11 +3,11 @@ import {
 } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearSparring } from '../../src/core/sparring.js';
+import { crearSparring, registrarGolpe } from '../../src/core/sparring.js';
 import { crearCareo } from '../../src/core/presser.js';
 import { crearNegociacion } from '../../src/core/negotiation.js';
 import { renderCareo } from '../../src/ui/screens/presser.js';
-import { renderSparring } from '../../src/ui/screens/sparring.js';
+import { renderSparring, DURACION_RONDA_MS } from '../../src/ui/screens/sparring.js';
 import { renderNegociacion } from '../../src/ui/screens/negotiation.js';
 
 const jugador = (extra = {}) => ({
@@ -103,14 +103,14 @@ describe('renderSparring', () => {
   });
 });
 
-// Bug reportado por el usuario: "minijuego de sparring: falta el timer con
-// la barra decreciendo". Antes un pao encendido se quedaba prendido para
-// siempre (sin límite de tiempo real, cualquiera terminaba acertando casi
-// todo tarde o temprano — ver también el bug de resultadoSparring, que
-// dependía de un límite de reacción que nunca se hacía cumplir). Con el
-// timer, tardarse cuenta como error automático: mismo `onGolpe` que un click
-// errado.
-describe('renderSparring — timer con barra decreciendo (bug reportado)', () => {
+// Pedido v6 ("quiero que el timer sea por todo el juego, no solo por cada
+// golpe [...] no quiero que se reinicie"): antes (Task v4) cada pao
+// encendido tenía su propio DURACION_MS de 1500ms que se reiniciaba con cada
+// golpe. Ahora hay UN SOLO reloj (DURACION_RONDA_MS, 7000ms) para toda la
+// sesión: arranca con el primer "Empezar" y no se reinicia con los golpes
+// siguientes; si se acaba, el minijuego corta con onTiempoAgotado (no con un
+// onGolpe más).
+describe('renderSparring — un solo reloj para toda la ronda (Pedido v6)', () => {
   const sparring = () => crearSparring(createRng(1), { jugador: jugador() });
 
   beforeEach(() => {
@@ -129,8 +129,8 @@ describe('renderSparring — timer con barra decreciendo (bug reportado)', () =>
     const relleno = cont.querySelector('.barra-sparring > i');
     expect(relleno).toBeTruthy();
     // El ancho ya quedó apuntando a 0% (el navegador anima la transición
-    // desde el 100% forzado un instante antes — ver sparring.js): lo que se
-    // puede verificar sin un browser real es que quedó armada una
+    // desde el ancho de arranque un instante antes — ver sparring.js): lo
+    // que se puede verificar sin un browser real es que quedó armada una
     // transición de `width` con duración, no un salto instantáneo.
     expect(relleno.style.width).toBe('0%');
     expect(relleno.style.transition).toMatch(/width/);
@@ -142,45 +142,119 @@ describe('renderSparring — timer con barra decreciendo (bug reportado)', () =>
     expect(relleno.style.width).toBe('100%');
   });
 
-  it('si se deja pasar el tiempo sin pegarle, cuenta como error automático (mismo evento que un click errado)', () => {
-    let evento = null;
-    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
+  it('un golpe NO reinicia el reloj: la duración restante de la barra baja, no vuelve a los 7000ms totales', () => {
+    let sp = sparring();
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
     cont.querySelector('[data-accion="empezar"]').click();
 
-    expect(evento).toBeNull();
-    vi.runAllTimers();
+    vi.advanceTimersByTime(2000);
 
-    expect(evento).not.toBeNull();
-    expect(evento.acerto).toBe(false);
-    expect(typeof evento.ms).toBe('number');
+    // Simula lo que hace main.js tras un golpe: registrarlo y volver a
+    // montar sobre el MISMO contenedor (nunca uno nuevo) — así sobrevive el
+    // reloj de ronda entre golpes en el juego real.
+    sp = registrarGolpe(sp, { acerto: true, ms: 300 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    const relleno = cont.querySelector('.barra-sparring > i');
+    const match = relleno.style.transition.match(/width (\d+)ms/);
+    expect(match).toBeTruthy();
+    const msRestante = Number(match[1]);
+    // Si el reloj se hubiera reiniciado con el golpe, esto volvería a leer
+    // ~7000ms. Como es uno solo para toda la ronda, tiene que reflejar lo
+    // que de verdad queda de los 7000ms originales (~5000, con margen).
+    expect(msRestante).toBeLessThan(6000);
+    expect(msRestante).toBeGreaterThan(3000);
   });
 
-  it('pegarle a tiempo cancela el timer pendiente: no llega un segundo evento por timeout', () => {
-    let llamadas = 0;
-    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => { llamadas += 1; }, onTerminar: () => {} });
+  it('pegarle a un pao no corta el reloj de la ronda: si se agota el tiempo total, igual termina', () => {
+    let sp = sparring();
+    let tiempoAgotado = false;
+    function montar() {
+      renderSparring(cont, {
+        sparring: sp,
+        jugador: jugador(),
+        onGolpe: (e) => { sp = registrarGolpe(sp, e); montar(); },
+        onTiempoAgotado: () => { tiempoAgotado = true; },
+        onTerminar: () => {},
+      });
+    }
+    montar();
     cont.querySelector('[data-accion="empezar"]').click();
-    cont.querySelector('.pao.activo').click();
 
-    expect(llamadas).toBe(1);
-    vi.runAllTimers();
-    expect(llamadas).toBe(1);
+    vi.advanceTimersByTime(3000);
+    cont.querySelector('.pao.activo').click(); // acierta un golpe: vuelve a montar, el reloj sigue
+
+    // Del presupuesto total (7000ms) ya se gastaron 3000ms antes del golpe;
+    // si el reloj se hubiera reiniciado harían falta otros 7000ms enteros.
+    // Como es uno solo, con lo que resta del original alcanza.
+    vi.advanceTimersByTime(4001);
+    expect(tiempoAgotado).toBe(true);
+  });
+
+  it('si se acaba el tiempo de la ronda sin completar los golpes, se dispara onTiempoAgotado (no onGolpe)', () => {
+    let golpeLlamado = false;
+    let tiempoAgotado = false;
+    renderSparring(cont, {
+      sparring: sparring(),
+      jugador: jugador(),
+      onGolpe: () => { golpeLlamado = true; },
+      onTiempoAgotado: () => { tiempoAgotado = true; },
+      onTerminar: () => {},
+    });
+    cont.querySelector('[data-accion="empezar"]').click();
+
+    expect(tiempoAgotado).toBe(false);
+    vi.advanceTimersByTime(DURACION_RONDA_MS - 1);
+    expect(tiempoAgotado).toBe(false);
+
+    vi.advanceTimersByTime(1);
+    expect(tiempoAgotado).toBe(true);
+    expect(golpeLlamado).toBe(false);
+  });
+
+  it('al completar todos los golpes antes de que se acabe el tiempo, no queda el reloj de ronda colgado', () => {
+    let sp = sparring();
+    function montar() {
+      renderSparring(cont, {
+        sparring: sp,
+        jugador: jugador(),
+        onGolpe: (e) => { sp = registrarGolpe(sp, e); montar(); },
+        onTiempoAgotado: () => {},
+        onTerminar: () => {},
+      });
+    }
+    montar();
+    cont.querySelector('[data-accion="empezar"]').click();
+
+    for (let i = 0; i < sp.objetivos; i++) {
+      cont.querySelector('.pao.activo').click();
+    }
+
+    expect(sp.terminado).toBe(true);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   // "No dejes timers colgados si el jugador se va de la pantalla a mitad":
-  // quien monta renderSparring (main.js) necesita poder cancelar el timer
-  // pendiente sin que eso dispare onGolpe (mismo contrato que
-  // crearBarraPrecision/animarRoll: `detener()` corta en seco, sin avisar).
-  it('devuelve un handle con detener() que cancela el timer sin disparar onGolpe', () => {
-    let llamadas = 0;
+  // quien monta renderSparring (main.js) necesita poder cancelar el reloj de
+  // ronda pendiente sin que eso dispare onGolpe ni onTiempoAgotado (mismo
+  // contrato que crearBarraPrecision/animarRoll: `detener()` corta en seco).
+  it('devuelve un handle con detener() que cancela el reloj de ronda sin disparar onGolpe ni onTiempoAgotado', () => {
+    let golpeLlamado = false;
+    let tiempoAgotado = false;
     const handle = renderSparring(cont, {
-      sparring: sparring(), jugador: jugador(), onGolpe: () => { llamadas += 1; }, onTerminar: () => {},
+      sparring: sparring(),
+      jugador: jugador(),
+      onGolpe: () => { golpeLlamado = true; },
+      onTiempoAgotado: () => { tiempoAgotado = true; },
+      onTerminar: () => {},
     });
     cont.querySelector('[data-accion="empezar"]').click();
 
     handle.detener();
     vi.runAllTimers();
 
-    expect(llamadas).toBe(0);
+    expect(golpeLlamado).toBe(false);
+    expect(tiempoAgotado).toBe(false);
   });
 });
 

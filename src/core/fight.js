@@ -33,7 +33,12 @@ function snapshotDe(peleador) {
   return {
     id: peleador.id,
     nombre: peleador.nombre,
-    apodo: peleador.apodo,
+    // Con el roster de 100 (Pedido 1), la mayoría de los rivales de relleno
+    // no tienen apodo (null, pool de solo 16 nombres) — acá se usa siempre
+    // como mote bien solo (narración de la pelea, marcador), nunca junto al
+    // nombre, así que caer al nombre si no hay apodo es seguro (sin riesgo
+    // de "Fulano Fulano" duplicado) y evita mostrar "null" en pantalla.
+    apodo: peleador.apodo ?? peleador.nombre,
     estilo: peleador.estilo,
     nacionalidad: peleador.nacionalidad,
     atributos: { ...peleador.atributos },

@@ -9,7 +9,13 @@ export const DISCIPLINAS = {
     usaGrappling: false,
     pesos: { potencia: 0.20, velocidad: 0.18, tecnica: 0.20, defensa: 0.17, cardio: 0.13, iq: 0.12 },
     desenlaces: ['ko', 'tko', 'decision', 'descalificacion'],
-    roundsPorNivel: { amateur: 3, profesional: 8, titulo: 12 },
+    // `eliminatoria` (Pedido 4, barrida de experto en boxeo): la pelea que
+    // define quién pasa a disputar el título se juega a la misma distancia
+    // QUE un título (como un final eliminator real de un organismo grande) —
+    // no a la distancia genérica de una regional de trámite (8).
+    roundsPorNivel: {
+      amateur: 3, profesional: 8, eliminatoria: 12, titulo: 12,
+    },
   },
 };
 

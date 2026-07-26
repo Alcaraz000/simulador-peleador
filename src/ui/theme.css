@@ -84,6 +84,13 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 12px;
   padding: 13px 14px;
+  /* Profundidad sutil (pase de diseño v6): un filo de luz apenas visible
+     arriba (como si la luz cayera desde ese lado) más una sombra corta hacia
+     abajo — da la sensación de placa "levantada" del fondo sin agregar
+     ningún alto/ancho (box-shadow no participa del box model, así que ningún
+     layout existente se mueve un píxel). Nunca sobre `border`, que sigue
+     marcando el límite real del panel. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .tile {
@@ -347,9 +354,14 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 .tarjeta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
-.tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
-.tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
-.tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
+/* Gateado (auditoría v6, misma razón que `.carta` más abajo): el "levante"
+   con translateY es hover de movimiento, no algo que un tap en celular deba
+   dejar pegado hasta el próximo toque. */
+@media (hover: hover) and (pointer: fine) {
+  .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
+  .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
+  .tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
+}
 .tarjeta:not(:disabled):active { transform: translateY(0) scale(0.97); }
 
 @media (min-width: 720px) {
@@ -377,17 +389,111 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .panel-decision-desenlace .boton { margin-top: 4px; }
 
-/* Negociación (v4, feedback repetido: "las opciones se ven muy grandes"):
-   siempre son 4 movidas fijas (MOVIDAS, negotiation.js), en la grilla de 2
-   columnas de siempre -- pero esta pantalla vive FUERA del shell (pantalla
-   completa: #app vuelve a su max-width angosto de 430/560px), así que en
-   escritorio cada columna quedaba mucho más ancha que la tarjeta de
-   referencia del sistema (~206px, ver mockups-v2.html sección A). Un tope de
-   ancho + centrado en la propia celda de la grilla achica la tarjeta sin
-   tocar crearTarjeta (que sigue con su tamaño fijo de título/descripción en
-   todos los demás lugares del juego). En celular la columna ya mide menos
-   que el tope, así que no cambia nada ahí. */
-.negociacion-movidas .tarjeta { max-width: 210px; margin: 0 auto; }
+/* Negociación (v6, rediseño integral — pedido textual: "en líneas generales
+   no me gusta para nada el diseño de toda esta pantalla... la barra de
+   paciencia es muy grande, y ancha, da la impresión de que toda esta sección
+   debe rearmarse"). Reemplaza dos generaciones de intentos con tarjetas
+   cuadradas en grilla (v3: grilla de 2 col enteras; v4: la misma grilla con
+   un tope de ancho encima) por el formato que pidió el usuario en punta:
+   "más anchas que altas, en formato lista, todas del mismo tamaño, con su
+   ícono a la izquierda". Las 4 movidas son siempre las mismas 4 (MOVIDAS,
+   negotiation.js) — una lista vertical de filas gana en las dos pantallas
+   (celular Y escritorio) porque no depende de cuántas columnas entran a un
+   ancho dado, a diferencia de la grilla que sí necesitaba un tope de ancho
+   distinto por breakpoint. */
+.negociacion-lista { display: flex; flex-direction: column; gap: 8px; }
+
+.movida-fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  /* min-height (no height): reserva el mismo alto para las 4 filas (pedido
+     "todas del mismo tamaño") sin arriesgar cortar texto si alguna vez una
+     traducción/variante corre más larga — la garantía "ningún texto puede
+     quedar cortado" pesa más que el milímetro de diferencia que dejaría una
+     fila con menos texto. */
+  min-height: 92px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 13px 14px;
+  text-align: left;
+  color: var(--texto);
+  font-family: var(--fuente);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background-color 0.15s ease;
+}
+
+.movida-fila:disabled { opacity: 0.45; cursor: not-allowed; }
+@media (hover: hover) and (pointer: fine) {
+  .movida-fila:not(:disabled):hover { border-color: var(--borde-fuerte); background: var(--superficie-alta); }
+}
+.movida-fila:not(:disabled):active { transform: scale(0.98); }
+
+/* Ícono a la izquierda (pedido textual: "los iconos... se ven muy chicos:
+   proporcionalos bien") — mismo tratamiento de placa que `.tarjeta-icono`/
+   `.tienda-item-icono` (42px, ícono a 20-22px adentro) en vez del ícono
+   suelto a 18px de la vieja tarjeta cuadrada. */
+.movida-icono {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: #1f1113;
+  color: var(--dorado);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.movida-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.movida-titulo { font-weight: 800; font-size: 14.5px; letter-spacing: 0.2px; }
+.movida-desc { font-size: 12px; color: var(--texto-medio); line-height: 1.45; }
+
+/* El label de riesgo (pedido textual: "los labels de riesgo tienen que
+   entrar... y ningún texto puede quedar cortado"): en la fila ancha de
+   siempre hay lugar de sobra, así que se deja envolver libre (sin
+   line-clamp ni ellipsis) en vez de forzarlo a una sola línea. "Cerrá el
+   trato" no tiene riesgo real, pero muestra su propio chip ("Sin riesgo")
+   en vez de dejar un hueco: así las 4 filas comparten la misma anatomía. */
+.movida-riesgo {
+  align-self: flex-start;
+  margin-top: 2px;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.movida-riesgo.positivo { background: #16240f; border: 1px solid #2c4a30; color: var(--verde); }
+.movida-riesgo.negativo { background: #241012; border: 1px solid #4a2c2c; color: #e0a0a0; }
+.movida-riesgo.leve { background: #241c08; border: 1px solid #4a3a12; color: #e0b25a; }
+
+/* Paciencia del promotor (v6): antes una pista gruesa de 22-28px con borde
+   propio (pedido textual anterior, "que se parezca al mockup") — ahora, con
+   el enfoque puesto en la LISTA de movidas (pedido explícito: "con enfoque
+   en las cosas importantes"), la paciencia pasa a ser una franja de estado
+   chica: ícono en su propia placa (mismo tamaño que en .fila del resto del
+   juego, ya no un SVG suelto de 14px) + número, y la barra fina de siempre
+   (`.barra`, 8px) en vez de la pista ancha. */
+.paciencia-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.paciencia-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.paciencia-icono {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #1f1113;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paciencia-textos { min-width: 0; }
+.paciencia-valor { font-size: 15px; font-weight: 800; line-height: 1.3; }
+.paciencia-aprietes { flex: 0 0 auto; white-space: nowrap; }
 
 /* Shell persistente (v2), grilla 3×3 (v4): tres regiones montadas una sola
    vez. Mobile-first (las tres apiladas, en el mismo orden que en escritorio)
@@ -619,41 +725,44 @@ h2 { font-size: 17px; font-weight: 800; }
 /* Cuadros iguales de atributos/estado (Cambio 2, feedback del usuario: "los
    módulos de atributos y estados están bien posicionados pero mal
    orientados... quiero que se vean en horizontal... cuadros con POT / 33,
-   VEL / 43"). Grilla real (no una lista de filas): CADA celda mide igual a
-   sus hermanas porque comparten el mismo padding/tipografía fija y ninguna
-   envuelve texto (ETIQUETAS[clave].corta son abreviaturas cortas, ver
-   filaAtributo en panel-peleador.js) — nota 1/2 del pedido: los cuadros de
-   Atributos miden igual ENTRE SÍ, los de Estado también entre sí (pueden
-   diferir de los de Atributos: acá comparten CSS y terminan iguales, pero
-   nada lo exige). 3 columnas para Atributos (6-7 claves de combate); Estado
-   son siempre 4 claves fijas, así que 2 columnas arma un 2×2 prolijo en vez
-   de dejar una tercera columna con un solo cuadro huérfano. */
+   VEL / 43"). CADA celda mide igual a sus hermanas porque comparten el mismo
+   padding/tipografía fija y ninguna envuelve texto (ETIQUETAS[clave].corta
+   son abreviaturas cortas, ver filaAtributo en panel-peleador.js) — nota 1/2
+   del pedido: los cuadros de Atributos miden igual ENTRE SÍ, los de Estado
+   también entre sí (pueden diferir de los de Atributos: acá comparten CSS y
+   terminan iguales, pero nada lo exige).
+   v6 (rediseño integral, pedido textual: "todos los atributos deben verse en
+   una sola fila y todos los estados deben verse en una sola fila también"):
+   la vieja grilla de 3 columnas (2 filas para 6-7 atributos) y la de 2×2
+   (estado) se reemplazan por una FILA real — mismo patrón que `.fila` (flex,
+   cada hijo a `flex:1 1 0`) — que no depende de cuántas claves haya: sirve
+   igual para los 6 atributos de siempre, los 7 con grappling, o las 4 de
+   estado, siempre en un solo renglón. `flex-basis:0` (no `auto`) es lo que
+   garantiza que las N celdas midan EXACTAMENTE igual entre sí sin importar
+   que el número o el ancho del texto de cada una varíe. */
 .panel-peleador-atributos {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.panel-peleador-atributos.panel-peleador-atributos-estado {
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  gap: 5px;
 }
 
 .panel-peleador-atributo {
   position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-height: 52px;
-  padding: 8px 4px;
+  padding: 8px 2px;
   border-radius: 8px;
   background: var(--superficie);
   text-align: center;
 }
 
-.panel-peleador-atributo .nombre { font-size: 9px; letter-spacing: 1px; }
-.panel-peleador-atributo .valor { font-size: 18px; font-weight: 800; line-height: 1; }
+.panel-peleador-atributo .nombre { font-size: 8.5px; letter-spacing: 0.5px; }
+.panel-peleador-atributo .valor { font-size: 16px; font-weight: 800; line-height: 1; }
 .panel-peleador-atributo.con-aporte { background: #1a1408; }
 
 /* El aporte del entrenador (badge dorado "+N"): posición ABSOLUTA en la
@@ -733,6 +842,15 @@ h2 { font-size: 17px; font-weight: 800; }
 .noticia-item { padding: 10px 11px; }
 .noticia-item.nueva { border-color: var(--rojo); }
 
+/* "Es tu carrera" (Pedido v6, hitos del jugador en el feed): franja dorada a
+   la izquierda, SIEMPRE presente en una noticia propia sin importar si
+   además está "nueva" — la urgencia (rojo, borde completo) y la autoría
+   (dorado, franja) son dos señales distintas, no se pisan. Sin franja
+   "nueva" propia, el borde completo también se pone dorado (nada compite por
+   el rojo). box-shadow inset: no reserva ancho nuevo, no empuja nada. */
+.noticia-item.propia { box-shadow: inset 3px 0 0 var(--dorado); }
+.noticia-item.propia:not(.nueva) { border-color: var(--dorado); }
+
 /* Entrada escalonada de noticias nuevas (v3, feedback del usuario: "que se
    vayan sumando", no todas de golpe): arrancan invisibles/corridas y cada una
    se revela un rato después de la anterior (panel-noticias.js). Con
@@ -769,9 +887,13 @@ h2 { font-size: 17px; font-weight: 800; }
   80%      { transform: translateX(2px); }
 }
 
+/* `--color-destello` (v6): parametrizado para que el golpe de gracia pueda
+   teñir el MISMO brillo de siempre de verde (clavado) sin duplicar el
+   keyframe — nada que ya usaba `destello` (.log > p.destacado) cambia,
+   porque el default es el mismo dorado de antes. */
 @keyframes destello {
   from { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
-  to   { box-shadow: 0 0 26px rgba(242, 193, 78, 0.65); }
+  to   { box-shadow: 0 0 26px var(--color-destello, rgba(242, 193, 78, 0.65)); }
 }
 
 #app > .stack > * { animation: aparecer 0.22s ease both; }
@@ -780,14 +902,25 @@ h2 { font-size: 17px; font-weight: 800; }
 #app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
 
 .carta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
-.carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+/* Gateado detrás de hover:hover+pointer:fine (auditoría v6): sin esto, tocar
+   una `.carta` en celular la deja "levantada" (translateY) y con el fondo
+   claro hasta el próximo toque en otra parte — el navegador dispara :hover
+   en el tap y no hay mouse que lo saque. Mismo criterio que ya usaba `.pao`
+   desde v3; acá se extiende al resto de los controles con hover "de
+   movimiento" (transform/filter), no a los de solo color (border-color),
+   que no generan ese efecto pegajoso. */
+@media (hover: hover) and (pointer: fine) {
+  .carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+}
 .carta:active { transform: translateY(0) scale(0.97); }
 
 .boton { transition: transform 0.14s var(--ease-out), filter 0.15s ease; }
-.boton:hover { filter: brightness(1.08); }
+@media (hover: hover) and (pointer: fine) {
+  .boton:hover { filter: brightness(1.08); }
+}
 .boton:active { transform: scale(0.97); }
 
-.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease; }
 
 .log > p { animation: aparecer 0.25s ease both; }
 .log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
@@ -835,28 +968,59 @@ h2 { font-size: 17px; font-weight: 800; }
 .silueta-zona:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
 .silueta-zona:hover circle { filter: brightness(1.25); }
 
-/* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
-   elegida, flecha en movimiento que hay que frenar con un click (o Enter/
-   Espacio: es un <button>, no un <div> — mismo motivo que .pao). width:100%
-   + padding:0 resetean el ancho encogido y el padding por defecto que
-   traería un <button> nativo; el resto del look ya lo daba esta clase. */
+/* Barra de precisión (golpe de gracia, paso 2, pulida v6 — "que se vea como
+   el momento importante que es"): franja verde según la zona elegida,
+   flecha en movimiento que hay que frenar con un click (o Enter/Espacio: es
+   un <button>, no un <div> — mismo motivo que .pao). width:100% + padding:0
+   resetean el ancho encogido y el padding por defecto que traería un
+   <button> nativo.
+   El envoltorio reserva SIEMPRE la fila de resultado (altura fija, aunque
+   esté vacía antes de resolver): el texto que aparece al frenar la flecha
+   nunca empuja nada de abajo (regla general del usuario: nada se mueve). */
+.barra-precision { display: flex; flex-direction: column; gap: 8px; }
+
 .barra-precision-pista {
   position: relative;
   display: block;
   width: 100%;
-  height: 28px;
+  height: 34px;
   padding: 0;
-  background: #241012;
+  background: linear-gradient(180deg, #1c0d0e, #241012 55%, #170b0c);
   border: 1px solid var(--borde-fuerte);
-  border-radius: 14px;
+  border-radius: 17px;
   overflow: hidden;
   cursor: pointer;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .barra-precision-pista .franja { position: absolute; top: 0; bottom: 0; }
-.barra-precision-pista .franja.al-aire { background: #3a1a1a; }
-.barra-precision-pista .franja.roza { background: #7a5a12; }
-.barra-precision-pista .franja-verde { position: absolute; top: 0; bottom: 0; background: #2f8a3a; }
+/* "Al aire": rayas diagonales de peligro, sutiles y estáticas (ningún
+   patrón que anime) — la zona muerta se lee como tal de un vistazo. */
+.barra-precision-pista .franja.al-aire {
+  background: repeating-linear-gradient(-45deg, #341718, #341718 6px, #2a1213 6px, #2a1213 12px);
+}
+.barra-precision-pista .franja.roza { background: linear-gradient(180deg, #8a6a1c, #6e4f10); }
+.barra-precision-pista .franja-verde {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #4bc25a, #2f8a3a 60%, #226228);
+  box-shadow: inset 0 0 10px rgba(160, 255, 170, 0.35);
+}
+
+/* Marca del centro exacto del verde ("clavala acá"): puramente decorativa —
+   pointer-events:none para nunca robarle el click a la pista, y nunca
+   cambia de tamaño ni de lugar, es una guía fija. */
+.barra-precision-marca {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 
 .barra-precision-flecha {
   position: absolute;
@@ -864,33 +1028,65 @@ h2 { font-size: 17px; font-weight: 800; }
   bottom: 0;
   width: 3px;
   background: #fff;
-  box-shadow: 0 0 10px #fff;
+  box-shadow: 0 0 10px #fff, 0 0 18px rgba(242, 193, 78, 0.5);
   transform: translateX(-50%);
   transition: left 0.05s linear;
 }
+/* Puntas tipo mira (arriba apuntando abajo, abajo apuntando arriba): leen
+   como un instrumento de precisión en vez de una raya lisa. Contenidas
+   dentro de la misma caja (0%/100% de alto de la flecha): nunca se salen
+   del recorte de `.barra-precision-pista` (overflow:hidden). */
+.barra-precision-flecha::before,
+.barra-precision-flecha::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  transform: translateX(-50%);
+}
+.barra-precision-flecha::before { top: 0; border-top: 6px solid #fff; }
+.barra-precision-flecha::after { bottom: 0; border-bottom: 6px solid #fff; }
 
-/* Barra de paciencia del promotor (negociación, v3): mismo tratamiento
-   grueso y con borde que la barra de precisión del golpe de gracia
-   (referencia visual del mockup, sección C: pista redondeada, con borde,
-   26-28px de alto) en vez de la barrita fina de 8px de `.barra` — el pedido
-   textual del usuario fue justamente "la barra no es igual [al mockup]".
-   Acá no hay zona que acertar (no es un minijuego de puntería): una sola
-   franja cuyo COLOR viaja de verde a rojo según cuánta paciencia queda, el
-   mismo semáforo que ya usa el resto del juego para "bueno/ojo/peligro". */
-.barra-paciencia-pista {
-  position: relative;
-  height: 22px;
-  background: #241012;
-  border: 1px solid var(--borde-fuerte);
-  border-radius: 11px;
-  overflow: hidden;
+/* Fila de resultado: alto fijo, siempre presente (vacía antes de resolver) —
+   ver el comentario del envoltorio más arriba. */
+.barra-precision-resultado {
+  height: 18px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
 }
 
-.barra-paciencia-pista > i {
-  display: block;
-  height: 100%;
-  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease;
+/* Los tres desenlaces (Pedido v6: "que varíe según si clickeaste en el
+   verde, amarillo o si erraste"): reusan el MISMO lenguaje visual que ya
+   habla el resto del juego — el destello dorado de las líneas destacadas de
+   la crónica, el sacudón del nocaut — en vez de inventar animaciones
+   nuevas, para que el golpe de gracia se sienta parte del mismo juego. El
+   impacto limpio (verde) dura un poco más que el resto: es el momento
+   grande, se gana el derecho a un instante extra (sigue bien por debajo de
+   los 500ms). */
+.barra-precision.resultado-verde .barra-precision-pista {
+  --color-destello: rgba(143, 214, 148, 0.75);
+  animation: destello 0.42s ease-out both;
+  border-color: var(--verde);
 }
+.barra-precision.resultado-verde .barra-precision-resultado { color: var(--verde); }
+
+.barra-precision.resultado-roza .barra-precision-pista {
+  animation: destello 0.3s ease-out both;
+  border-color: var(--dorado);
+}
+.barra-precision.resultado-roza .barra-precision-resultado { color: var(--dorado); }
+
+.barra-precision.resultado-errado .barra-precision-pista {
+  animation: sacudon 0.32s ease-out both;
+  border-color: var(--rojo);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55), 0 0 14px rgba(239, 68, 68, 0.45);
+}
+.barra-precision.resultado-errado .barra-precision-resultado { color: var(--rojo); }
 
 /* Campo "qué acaba de pasar" (Task v3, pedido textual: "falta un campo que
    describa lo que acaba de ocurrir"): mismo tratamiento que la crónica de la
@@ -970,6 +1166,11 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 14px;
   padding: 14px;
+  /* Sombra propia (pase de diseño v6): flota sobre el velo oscuro de
+     `.popup-overlay`, así que se gana más presencia que un `.panel` normal
+     (que descansa sobre el fondo liso de siempre) — una sombra más ancha y
+     oscura vende esa distancia. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 40px rgba(0, 0, 0, 0.55);
   /* Modal (no anclado a un disparador puntual): transform-origin queda en el
      centro por defecto a propósito. Arranca en 0.96 (nunca 0, nada aparece
      de la nada) — no en cero. */
@@ -1031,9 +1232,15 @@ h2 { font-size: 17px; font-weight: 800; }
   border-radius: 50%;
 }
 
-.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); }
-.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); }
-.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); }
+/* Antes solo el fondo llevaba el tono (dorado/rojo/medio): el ícono adentro
+   (currentColor) heredaba el gris de siempre y quedaba desconectado del
+   halo que lo rodea. Sumar `color` acá pinta el trazo del ícono del mismo
+   tono; el `box-shadow` agrega un resplandor apenas perceptible hacia
+   afuera — un momento de hito merece un poco más de brillo que un panel
+   común (pedido general: "con brillos, con efectos"). */
+.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); color: var(--dorado); box-shadow: 0 0 26px rgba(242, 193, 78, 0.25); }
+.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); color: var(--rojo); box-shadow: 0 0 26px rgba(239, 68, 68, 0.22); }
+.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); color: var(--texto-medio); }
 
 .hito-popup-titulo { margin: 4px 0 0; font-size: 20px; }
 .hito-popup-texto { margin: 0; }
@@ -1049,18 +1256,63 @@ h2 { font-size: 17px; font-weight: 800; }
    `.panel-noticias-lista`): la cabecera del popup queda siempre fija arriba,
    y una fila cortada a la mitad en el borde inferior avisa que hay más para
    scrollear. */
-.tabla-ranking-lista { max-height: 60vh; overflow-y: auto; padding-right: 2px; }
-.tabla-ranking-fila { padding: 9px 12px; }
+/* Lista compacta (v6, pedido textual: "el popup de ranking desperdicia
+   espacio... que sea una lista compacta: NÚMERO | BANDERA | NOMBRE |
+   HISTORIAL. La media NO va"): con el roster de 100 peleadores, cada fila se
+   repite cien veces — una sola línea por fila (antes nombre + "MEDIA ·
+   récord" en dos renglones) es lo que hace que la lista scrollee liviana en
+   vez de pesada. `gap` chico entre filas (no `.stack`'s 8px de siempre): son
+   datos de tabla, no tarjetas, y respiran distinto. */
+.tabla-ranking-lista { display: flex; flex-direction: column; gap: 3px; max-height: 65vh; overflow-y: auto; padding-right: 2px; }
+
+.tabla-ranking-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabla-ranking-fila:hover { background: var(--superficie); }
+}
+
 .tabla-ranking-puesto {
   flex: 0 0 auto;
-  width: 30px;
+  width: 32px;
   text-align: center;
   font-weight: 800;
+  font-size: 12.5px;
   color: var(--texto-sutil);
 }
 
-.tabla-ranking-fila-jugador { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
-.tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
+.tabla-ranking-nombre {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 13px;
+  overflow-wrap: break-word;
+}
+
+.tabla-ranking-record {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.tabla-ranking-fila-jugador {
+  background: #1a1408;
+  box-shadow: 0 0 0 1px var(--dorado);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabla-ranking-fila-jugador:hover { background: #1a1408; }
+}
+
+.tabla-ranking-fila-jugador .tabla-ranking-puesto,
+.tabla-ranking-fila-jugador .tabla-ranking-record { color: var(--dorado); }
 
 /* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
    (panel-peleador.js): comparte fila con la etiqueta "Ranking", así que no
@@ -1337,6 +1589,48 @@ input.creacion-control { cursor: text; }
 .rojo { color: var(--rojo); }
 .sutil { color: var(--texto-sutil); }
 .medio { color: var(--texto-medio); }
+
+/* Pantallas cortas de contenido fijo (login, plan de pelea): a diferencia de
+   la creación o el tablero (que crecen con la partida), estas tienen un
+   contenido breve y fijo — anclado arriba como el resto, dejaban un tramo
+   de negro liso enorme abajo en cualquier pantalla más alta que un celular
+   chico ("espacio desaprovechado" del pedido general). Centrado vertical
+   redistribuye ese sobrante arriba y abajo del contenido en vez de dejarlo
+   todo apilado como un resto al pie. */
+.pantalla-corta {
+  position: relative;
+  min-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Resplandor atmosférico fijo detrás del título del login (nunca se mueve
+   ni anima: es fondo, no motion) — la firma visual de la primera pantalla
+   del juego, para que ya desde acá se sienta el tono gótico-dorado del
+   resto (pedido general: "con brillos, con efectos"). Puntual del login: no
+   se repite en `.pantalla-corta` porque perdería su valor de firma si
+   apareciera en cualquier pantalla corta.
+   Vive en `.login-hero` (el envoltorio de la etiqueta + el h1), no en toda
+   `.pantalla-login`: como esta última se centra verticalmente, su alto
+   cambia con el viewport, y un resplandor anclado a un offset fijo desde su
+   borde superior quedaba flotando lejos del título en vez de detrás suyo.
+   Centrado con top/left 50% sobre `.login-hero` siempre queda pegado al
+   título, sea cual sea el alto de pantalla. */
+.login-hero { position: relative; }
+
+.login-hero::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(242, 193, 78, 0.14), rgba(239, 68, 68, 0.06) 45%, transparent 72%);
+  pointer-events: none;
+  z-index: -1;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

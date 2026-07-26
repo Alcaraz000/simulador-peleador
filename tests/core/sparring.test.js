@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
-  crearSparring, registrarGolpe, resultadoSparring, MS_BIEN,
+  crearSparring, registrarGolpe, resultadoSparring, terminarPorTiempo, MS_BIEN,
 } from '../../src/core/sparring.js';
 
 const jugador = () => crearPeleador({
@@ -133,5 +133,51 @@ describe('resultadoSparring', () => {
     const totalPerfecto = Object.values(perfecto.mods).reduce((a, v) => a + Math.max(0, v), 0);
     const totalBien = Object.values(bien.mods).reduce((a, v) => a + Math.max(0, v), 0);
     expect(totalPerfecto).toBeGreaterThan(totalBien);
+  });
+});
+
+// Pedido v6 ("quiero que el timer sea por todo el juego, no solo por cada
+// golpe"): el reloj único de la UI (ui/screens/sparring.js) fuerza el fin de
+// la sesión con lo que ya se acumuló, en vez de esperar el golpe que falta.
+describe('terminarPorTiempo', () => {
+  it('marca terminado=true sin tocar aciertos/indice/tiempos ya acumulados', () => {
+    let s = crearSparring(createRng(10), { jugador: jugador() });
+    s = registrarGolpe(s, { acerto: true, ms: 300 });
+    s = registrarGolpe(s, { acerto: false, ms: 500 });
+    const cortado = terminarPorTiempo(s);
+    expect(cortado.terminado).toBe(true);
+    expect(cortado.aciertos).toBe(s.aciertos);
+    expect(cortado.indice).toBe(s.indice);
+    expect(cortado.tiempos).toEqual(s.tiempos);
+  });
+
+  it('sobre una sesion recien arrancada (0 golpes) tambien termina', () => {
+    const s = crearSparring(createRng(11), { jugador: jugador() });
+    const cortado = terminarPorTiempo(s);
+    expect(cortado.terminado).toBe(true);
+    expect(cortado.indice).toBe(0);
+  });
+
+  it('es idempotente: si ya estaba terminado, no cambia nada', () => {
+    let s = crearSparring(createRng(12), { jugador: jugador() });
+    for (let i = 0; i < s.objetivos; i++) s = registrarGolpe(s, { acerto: true, ms: 250 });
+    expect(s.terminado).toBe(true);
+    expect(terminarPorTiempo(s)).toEqual(s);
+  });
+
+  it('no muta el original', () => {
+    const s = crearSparring(createRng(13), { jugador: jugador() });
+    const antes = JSON.stringify(s);
+    terminarPorTiempo(s);
+    expect(JSON.stringify(s)).toBe(antes);
+  });
+
+  it('resultadoSparring sobre una sesion cortada por tiempo sigue funcionando (ratio sobre objetivos, no sobre lo intentado)', () => {
+    let s = crearSparring(createRng(14), { jugador: jugador() });
+    for (let i = 0; i < 6; i++) s = registrarGolpe(s, { acerto: true, ms: 300 });
+    const cortado = terminarPorTiempo(s);
+    const r = resultadoSparring(cortado, jugador());
+    expect(r.texto.length).toBeGreaterThan(0);
+    expect(['perfecto', 'bien', 'flojo']).toContain(r.nivel);
   });
 });

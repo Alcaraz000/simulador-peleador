@@ -21,19 +21,23 @@ import { nombreConApodo } from '../../core/fighter.js';
 // `max-height` con `overflow-y:auto` (`.tabla-ranking-lista`, theme.css), y
 // al abrir se hace scroll automático hasta la fila del jugador para que
 // quede visible sin que haya que buscarla.
-
+//
+// v6 (rediseño integral, pedido textual: "el popup de ranking desperdicia
+// espacio... que sea una lista compacta: NÚMERO | BANDERA | NOMBRE |
+// HISTORIAL. La media NO va"): con el roster de 100 peleadores cada fila se
+// repite cien veces, así que un dato de más (MEDIA, que ya no aporta nada
+// que el puesto no diga) se paga cien veces en alto de scroll. La fila baja
+// a una sola línea de verdad (antes tenía nombre arriba + "MEDIA · récord"
+// abajo): puesto, bandera, nombre y récord comparten la misma fila.
 function filaRanking(fila) {
   return el('div', {
-    class: `panel fila tabla-ranking-fila${fila.esJugador ? ' tabla-ranking-fila-jugador' : ''}`,
-    style: 'align-items:center;gap:10px',
+    class: `tabla-ranking-fila${fila.esJugador ? ' tabla-ranking-fila-jugador' : ''}`,
     dataset: { peleador: fila.id },
   }, [
-    el('div', { class: 'tabla-ranking-puesto', text: `#${fila.ranking}` }),
+    el('span', { class: 'tabla-ranking-puesto', text: `#${fila.ranking}` }),
     bandera(fila.nacionalidad, { ancho: 20 }),
-    el('div', { style: 'flex:1;min-width:0' }, [
-      el('div', { style: 'font-weight:800', text: nombreConApodo(fila) }),
-      el('div', { class: 'etiqueta', text: `MEDIA ${fila.media} · ${fila.record}` }),
-    ]),
+    el('span', { class: 'tabla-ranking-nombre', text: nombreConApodo(fila) }),
+    el('span', { class: 'tabla-ranking-record etiqueta', text: fila.record }),
   ]);
 }
 

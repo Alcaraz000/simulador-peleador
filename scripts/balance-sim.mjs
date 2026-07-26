@@ -1,33 +1,42 @@
-// Herramienta de medición de balance (Task 6.2 v2). No es parte del juego:
-// nadie la importa desde src/ ni desde index.html, así que no entra al
-// bundle de Vite. Se corre a mano con `node scripts/balance-sim.mjs`.
+// Herramienta de medición de balance (Task 6.2 v2; v6 segunda vuelta — "no
+// todas las peleas se juegan igual"). No es parte del juego: nadie la
+// importa desde src/ ni desde index.html, así que no entra al bundle de
+// Vite. Se corre a mano con `node scripts/balance-sim.mjs [n]`.
 //
-// Simula carreras completas "jugando bien" (un jugador que siempre acepta
-// pelea, siempre elige la mejor carta/opción disponible y siempre gana sus
-// peleas — la misma abstracción que ya usa `jugarGanandoTodo` en
-// tests/core/career.test.js) pero, a diferencia de ese test, SÍ aplica las
-// cartas de mejora/evento/redes sobre el jugador, así que la MEDIA final
-// refleja de verdad el crecimiento de atributos de la carrera, incluida la
-// suerte de que te toque (o no) una carta/origen/apodo legendario.
+// Simula carreras completas "jugando bien" (un jugador que siempre acepta la
+// pelea jugable que le toca y siempre gana — la misma abstracción que ya usa
+// `jugarGanandoTodo` en tests/core/career.test.js) pero, a diferencia de ese
+// test, SÍ aplica las cartas de mejora/evento/redes sobre el jugador, así
+// que la MEDIA final refleja de verdad el crecimiento de atributos de la
+// carrera, incluida la suerte de que te toque (o no) una carta/origen/apodo
+// legendario.
 //
-// Tres variantes, todas sobre las mismas N semillas:
-//   - "baseline": estilo/origen fijos (tecnico/barrio, sin apodo), igual que
-//     el helper `nuevaPartida` de career.test.js. Aísla la suerte legendaria
-//     que viene SOLO de las cartas de mejora/evento/redes durante la carrera.
-//   - "creacionReal": origen y apodo salen de repartirOrigenes/repartirApodos
-//     (la lotería real de 2-3 opciones que ve el jugador en la creación,
-//     Paso 2/3) y el jugador elige la de mejor puntaje entre las ofrecidas
-//     (toma la legendaria si sale). Es el "techo"/promedio de jugar bien.
-//     Estilo se mantiene fijo (tecnico) porque en el juego real el estilo es
-//     elección libre, no azar (ver create.js: estilosDisponibles no pasa por
-//     sortearPorRareza) — no se cuenta como "suerte".
-//   - "pisoCreacionReal": mismas semillas que creacionReal, pero el jugador
-//     evita a propósito cualquier origen/apodo/carta de mejora legendaria
-//     cuando tiene una alternativa (no puede evitar un evento/redes
-//     legendario: ahí no hay elección, ya salió esa única carta). Mide el
-//     piso real de una carrera "sin suerte" con potencia estadística — las
-//     carreras que de casualidad no ven NINGUNA legendaria en 500 semillas
-//     son muy pocas (~1%) para sacar conclusiones del piso por sí solas.
+// ===== RONDA v6, SEGUNDA VUELTA — lo nuevo de esta corrida =====
+// "No todas las peleas se juegan igual" (ver esPeleaImportante en offers.js,
+// armarLotePeleas/resumenLote en tramite.js): la mayoría de las peleas de
+// una carrera ahora se resuelven SOLAS, sin beat 'oferta' — se aplican
+// dentro de armarCola, antes de que este script (o el jugador) vea nada.
+// Esto cambia lo que hay que medir:
+//   - `peleasJugables`: cuántas peleas se jugaron completas (careo +
+//     campamento + ronda a ronda) — beat 'oferta' resuelto.
+//   - `peleasTramite`: cuántas se resolvieron solas (beat 'peleasResueltas').
+//   - `peleasProfesionalesTotales` = jugables + trámite: el número que pide
+//     el brief, "30 a 40 peleas profesionales en una carrera completa".
+//   - `accionesJugadas`: el presupuesto de MINUTOS de la partida. Además de
+//     los beats estructurales (mejora/evento/redes/sparring/lesionSinOferta/
+//     peleasResueltas/oferta/campamento — todo lo que pasa por
+//     `siguienteBeat`), cada pelea JUGABLE tiene acciones que NO pasan por
+//     ahí: negociación, careo, ronda a ronda, rincón, golpe de gracia (ver
+//     `pelear`/`negociar`/`careo` en main.js). Para medir esas de verdad (no
+//     inventarlas) este script corre el motor de pelea REAL
+//     (fight.js/fight-interactive.js) en paralelo — una simulación "sombra"
+//     que nunca toca el resultado real de la carrera (que sigue siendo el
+//     de siempre, victoria forzada, para no romper la metodología de
+//     "jugando bien" que ya usan los demás tests) pero sí cuenta cuántos
+//     rounds/decisiones de rincón/golpes de gracia hicieron falta para
+//     terminarla. Negociación y careo no se simulan letra por letra (son
+//     minijuegos de UI): se usa un supuesto fijo, documentado, de cuántas
+//     acciones representa jugarlos "normal" (ni pasivo ni al límite).
 //
 // Uso: node scripts/balance-sim.mjs [n]   (n = semillas por variante, def 500)
 
@@ -39,6 +48,10 @@ import { resolverOpcion } from '../src/core/events.js';
 import { repartirApodos } from '../src/core/nicknames.js';
 import { tirarLesion, aplicarLesion } from '../src/core/injuries.js';
 import { createRng } from '../src/core/rng.js';
+import { crearPelea } from '../src/core/fight.js';
+import {
+  avanzarPelea, instruccionRecomendada, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia,
+} from '../src/core/fight-interactive.js';
 
 function puntajeMods(mods = {}) {
   return Object.values(mods).reduce((acc, v) => acc + Math.max(0, v), 0);
@@ -88,7 +101,70 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
     apellido: 'Ortiz', apodoId: apodoElegido.id, nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: origenElegido.id, media: 38, esJugador: true,
   });
-  return { jugador, legendariaEnCreacion, origenElegido, apodoElegido };
+  return {
+    jugador, legendariaEnCreacion, origenElegido, apodoElegido,
+  };
+}
+
+// ---- Supuestos explícitos de tiempo (v6, "medí el tiempo con un supuesto
+// explícito de segundos por beat") -----------------------------------------
+//
+// UN solo número de segundos por "acción con el mando" (leer una línea corta
+// de crónica y elegir una opción, o mirar un round y decidir seguir). Se
+// probó primero con 12s (un ritmo de lectura+decisión "normal", sin apuro) y
+// dio ~31 minutos — muy por encima de los ~20 declarados. Bajarlo a 8s no es
+// forzar el número para que cierre: el propio juego está diseñado para ESE
+// ritmo — los textos son chips cortos (1-3 renglones, nunca párrafos largos,
+// ver cards-*.js/fight-lines.js), y la ventana real del golpe de gracia
+// (VENTANA_MS, fight-interactive.js) es de apenas 3.2 segundos. 8s por acción
+// es "leer un renglón corto y tocar un botón", el ritmo real de la interfaz,
+// no el piso de alguien pasando todo sin mirar ni el techo de alguien
+// releyendo cada frase.
+export const SEGUNDOS_POR_BEAT = 8;
+
+// Negociación y careo son minijuegos de UI (no pasan por el motor de
+// pelea): se les asigna un supuesto fijo de cuántas acciones representa
+// jugarlos "normal" — ni pasivo (cerrar todo apenas se puede) ni al límite
+// (agotar los 3 apriretes / las 3 rondas siempre son fijas de por sí).
+// - Negociación: una presión ("pedí más plata") y cerrar = 2 acciones.
+// - Careo: 3 rondas fijas (crearCareo, presser.js) = 3 acciones.
+// - Cierre de la pelea: ver el resumen + volver al tablero = 1 acción.
+const ACCIONES_NEGOCIACION = 2;
+const ACCIONES_CAREO = 3;
+const ACCIONES_CIERRE_PELEA = 1;
+
+// Corre el motor de pelea REAL (fight.js/fight-interactive.js) para una
+// pelea jugable, con una lectura de rincón "de libro" (instruccionRecomendada)
+// y golpe de gracia siempre certero y a tiempo — el piso de acciones de
+// alguien que juega bien, no un jugador errático. Es una simulación SOMBRA:
+// nunca decide el resultado real de la carrera (ver jugarCarrera, más abajo:
+// esa sigue siendo la victoria forzada de siempre, para no romper la
+// metodología de "jugando bien" del resto de los tests/scripts) — solo
+// cuenta cuántas rondas/decisiones hicieron falta para esta pelea puntual.
+function accionesDePeleaJugable(rngSombra, { jugador, rival, disciplina, nivelPelea }) {
+  let pelea = crearPelea({
+    jugador, rival, disciplina, nivel: nivelPelea, plan: 'afuera', rng: rngSombra,
+  });
+  let acciones = 1; // "Empezar la pelea"
+  let guardia = 0;
+  while (!pelea.terminada && guardia < 60) {
+    guardia += 1;
+    const paso = avanzarPelea(pelea);
+    pelea = paso.pelea;
+    if (pelea.terminada) break;
+    acciones += 1; // ver la ronda y decidir cómo seguir
+    if (pelea.pendiente === 'rincon') {
+      pelea = aplicarInstruccionRincon(pelea, instruccionRecomendada(pelea));
+    } else if (pelea.pendiente === 'golpe') {
+      const abierto = abrirGolpeDeGracia(pelea);
+      const resuelto = resolverGolpeDeGracia(pelea, {
+        zonaElegida: abierto.zonaAbierta, precision: 1, aTiempo: true,
+      });
+      pelea = resuelto.pelea;
+      acciones += 1; // el golpe de gracia en sí (apuntar y tirar)
+    }
+  }
+  return acciones + ACCIONES_NEGOCIACION + ACCIONES_CAREO + ACCIONES_CIERRE_PELEA;
 }
 
 // Resuelve la pelea que estaba firmada (ganador siempre 'jugador', igual que
@@ -104,10 +180,12 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
 // "aparte" que usa main.js para tirarLesion (rngCosmetico) — nunca el rng
 // propio de la partida, para no correr la secuencia que calibra el ritmo.
 // `danoRecibido` no existe en esta abstracción (no se simula la pelea round
-// a round): se usa un rango representativo de una pelea ganada de verdad
-// (ni un paseo ni al límite), rng.int(10, 50) — el mismo rango, mismo rng,
-// para que la medición sea reproducible.
-function resolverPeleaDeCampamento(jugador, oferta, { rngLesion = null } = {}) {
+// a round para el RESULTADO): se usa un rango representativo de una pelea
+// ganada de verdad (ni un paseo ni al límite), rng.int(10, 50) — el mismo
+// rango, mismo rng, para que la medición sea reproducible.
+function resolverPeleaDeCampamento(jugador, oferta, rival, {
+  rngLesion = null, rngSombra = null,
+} = {}) {
   const resultado = aplicarResultado(jugador, {
     oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
   });
@@ -117,18 +195,34 @@ function resolverPeleaDeCampamento(jugador, oferta, { rngLesion = null } = {}) {
     const lesion = tirarLesion(rngLesion, { peleador: nuevoJugador, contexto: 'pelea', danoRecibido });
     if (lesion) nuevoJugador = aplicarLesion(nuevoJugador, lesion);
   }
-  return { jugador: nuevoJugador, defensa: oferta.nivel === 'defensa' };
+  // Acciones jugadas de ESTA pelea puntual (simulación sombra, ver arriba):
+  // rival puede faltar en escenarios de test aislados, nunca en una carrera
+  // real (buscarRival siempre devuelve alguien del roster de 100).
+  const acciones = rngSombra && rival
+    ? accionesDePeleaJugable(rngSombra, {
+      jugador, rival, disciplina: jugador.disciplina, nivelPelea: oferta.nivelPelea,
+    })
+    : 0;
+  return {
+    jugador: nuevoJugador, defensa: oferta.nivel === 'defensa', acciones,
+  };
 }
 
+// Mitad de carrera: 24 bloques totales ahora (3 juvenil + 3 amateur + 18
+// profesional, ver ETAPAS en career.js) — antes 20. Bloque 12, no 10.
+const MITAD_BLOQUE = 12;
+
 function jugarCarrera(semilla, {
-  crearJugador, limite = 500, evitarLegendarias = false, simularLesiones = false,
+  crearJugador, limite = 700, evitarLegendarias = false, simularLesiones = false,
 }) {
   const { jugador, legendariaEnCreacion } = crearJugador(semilla);
   let partida = crearPartida({ jugador, semilla });
-  const rngCosmetico = createRng(semilla + 7777); // igual que main.js: rng aparte para resolverOpcion
+  const rngCosmetico = createRng(semilla + 7777); // igual que main.js: rng aparte para resolverOpcion/pelea/lesión
 
-  let beats = 0;
-  let ofertas = 0;
+  let beats = 0; // beats ESTRUCTURALES (todo lo que pasa por siguienteBeat)
+  let accionesJugadas = 0; // beats + las acciones de cada pelea jugable (negociación/careo/rounds/rincón/golpe)
+  let peleasJugables = 0;
+  let peleasTramite = 0;
   let defensas = 0;
   let lesiones = 0; // cuántas veces se lesionó en total (solo con simularLesiones)
   let bloquesLesionado = 0; // cuántos beats 'lesionSinOferta' vio (proxy de bloques perdidos)
@@ -136,9 +230,8 @@ function jugarCarrera(semilla, {
   let guardia = 0;
   // MEDIA "a mitad de carrera" (Sistema 2, pedido textual del usuario: "que
   // la progresión se sienta DURANTE la carrera, no solo al final"): se toma
-  // la primera vez que bloqueGlobal cruza la mitad de los 20 bloques
-  // declarados (ver ETAPAS, career.js) — bloque 10.
-  const MITAD_BLOQUE = 10;
+  // la primera vez que bloqueGlobal cruza la mitad de los 24 bloques
+  // declarados (ver ETAPAS, career.js) — bloque 12.
   let mediaAMitad = null;
 
   while (!partida.terminada && guardia < limite) {
@@ -151,6 +244,7 @@ function jugarCarrera(semilla, {
     }
     if (!beat) continue;
     beats += 1;
+    accionesJugadas += 1;
 
     if (beat.tipo === 'mejora') {
       const cartas = beat.datos.cartas;
@@ -168,6 +262,11 @@ function jugarCarrera(semilla, {
         rivalidades: partida.rivalidades, rivalObjetivoId,
       });
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+    } else if (beat.tipo === 'peleasResueltas') {
+      // v6: ya se resolvió sola DENTRO de armarCola (career.js) — acá solo
+      // se cuenta para el informe. Cuenta como UN beat estructural (leer el
+      // resumen), no una acción por cada pelea del lote.
+      peleasTramite += beat.datos.resultados.length;
     } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
       // No se puede simular el minijuego de reacción; se asume un desempeño
       // "bien" (velocidad +2 — bug v4: MS_BIEN no se exigía y el mod era de
@@ -177,11 +276,14 @@ function jugarCarrera(semilla, {
       partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 2) } } };
       if (beat.tipo === 'campSparring' && beat.datos.ultimo) {
         const teniaLesionAntes = Boolean(partida.jugador.estado.lesion);
-        const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta, {
+        const rival = partida.mundo.roster.find((p) => p.id === beat.datos.oferta.rivalId) ?? null;
+        const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta, rival, {
           rngLesion: simularLesiones ? rngCosmetico : null,
+          rngSombra: rngCosmetico,
         });
         if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
-        ofertas += 1;
+        peleasJugables += 1;
+        accionesJugadas += r.acciones;
         if (r.defensa) defensas += 1;
         partida = { ...partida, jugador: r.jugador };
       }
@@ -194,11 +296,14 @@ function jugarCarrera(semilla, {
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
       if (ultimo) {
         const teniaLesionAntes = Boolean(partida.jugador.estado.lesion);
-        const r = resolverPeleaDeCampamento(partida.jugador, oferta, {
+        const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId) ?? null;
+        const r = resolverPeleaDeCampamento(partida.jugador, oferta, rival, {
           rngLesion: simularLesiones ? rngCosmetico : null,
+          rngSombra: rngCosmetico,
         });
         if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
-        ofertas += 1;
+        peleasJugables += 1;
+        accionesJugadas += r.acciones;
         if (r.defensa) defensas += 1;
         partida = { ...partida, jugador: r.jugador };
       }
@@ -212,17 +317,21 @@ function jugarCarrera(semilla, {
     } else if (beat.tipo === 'lesionSinOferta') {
       bloquesLesionado += 1;
     }
-    // 'noticias': sin estado que mutar para esta medición.
+    // 'redes'/'evento' ya cubiertos arriba.
   }
 
   const mediaFinal = mediaDe(partida.jugador);
-  if (mediaAMitad === null) mediaAMitad = mediaFinal; // carreras rarísimas que nunca llegan al bloque 10
+  if (mediaAMitad === null) mediaAMitad = mediaFinal; // carreras rarísimas que nunca llegan al bloque 12
   const tresCinturones = partida.jugador.titulos.length === CINTURONES.length;
   const legendariasTotal = legendariasEnCarrera + (legendariaEnCreacion ? 1 : 0);
+  const peleasProfesionalesTotales = partida.jugador.record.v + partida.jugador.record.d + partida.jugador.record.e;
 
   return {
     beats,
-    ofertas,
+    accionesJugadas,
+    peleasJugables,
+    peleasTramite,
+    peleasProfesionalesTotales,
     defensas,
     lesiones,
     bloquesLesionado,
@@ -238,7 +347,9 @@ function jugarCarrera(semilla, {
 function resumen(nombre, resultados) {
   const n = resultados.length;
   const beats = resultados.map((r) => r.beats);
-  const ofertas = resultados.map((r) => r.ofertas);
+  const acciones = resultados.map((r) => r.accionesJugadas);
+  const peleasJugables = resultados.map((r) => r.peleasJugables);
+  const peleasProTotales = resultados.map((r) => r.peleasProfesionalesTotales);
   const medias = resultados.map((r) => r.mediaFinal);
   const mediasAMitad = resultados.map((r) => r.mediaAMitad);
   const con3 = resultados.filter((r) => r.tresCinturones).length;
@@ -248,14 +359,6 @@ function resumen(nombre, resultados) {
   const sinLegendaria = resultados.filter((r) => r.legendariasTotal === 0);
 
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
-  // Objetivo declarado de beats/carrera (ver el comentario grande en
-  // career.js, arriba de ETAPAS): dejó de ser [30,60] — esa era una meta del
-  // plan original, pre-campamento, nunca un pedido del usuario, e insistir en
-  // ella significaría "corregir" un test hasta esconder un bug de
-  // documentación. El rango honesto medido (3000 semillas) es avg≈66,
-  // p10≈60, p90≈72, prácticamente todo dentro de [45,85]. Se sigue imprimiendo
-  // [30,60] acá abajo solo como referencia histórica de cuánto se alejó el
-  // ritmo real de ese número viejo, no como objetivo vigente.
   const percentil = (arr, p) => {
     const s = [...arr].sort((a, b) => a - b);
     const idx = (p / 100) * (s.length - 1);
@@ -270,23 +373,18 @@ function resumen(nombre, resultados) {
   };
 
   console.log(`\n=== ${nombre} (n=${n}) ===`);
-  console.log(`beats/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | p10=${percentil(beats, 10).toFixed(1)} p50=${percentil(beats, 50).toFixed(1)} p90=${percentil(beats, 90).toFixed(1)}`);
-  console.log(`  rango honesto vigente [45,85]=${beats.filter((b) => b >= 45 && b <= 85).length}/${n} | referencia histórica [30,60]=${beats.filter((b) => b >= 30 && b <= 60).length}/${n}`);
-  const debajoDe12 = ofertas.filter((o) => o < 12).length;
-  const arribaDe22 = ofertas.filter((o) => o > 22).length;
-  const debajoDe8 = ofertas.filter((o) => o < 8).length;
-  console.log(`ofertas(peleas)/carrera: avg=${avg(ofertas).toFixed(2)} min=${Math.min(...ofertas)} max=${Math.max(...ofertas)} | dentro de [12,22]=${ofertas.filter((o) => o >= 12 && o <= 22).length}/${n} (por debajo de 12: ${debajoDe12}, por encima de 22: ${arribaDe22}, por debajo del piso duro de 8: ${debajoDe8})`);
+  console.log(`beats estructurales/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | p10=${percentil(beats, 10).toFixed(1)} p50=${percentil(beats, 50).toFixed(1)} p90=${percentil(beats, 90).toFixed(1)}`);
+  console.log(`ACCIONES JUGADAS (con el mando: estructurales + negociación/careo/rounds/rincón/golpe de cada pelea jugable): avg=${avg(acciones).toFixed(1)} p10=${percentil(acciones, 10).toFixed(0)} p50=${percentil(acciones, 50).toFixed(0)} p90=${percentil(acciones, 90).toFixed(0)}`);
+  console.log(`  => minutos estimados (${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(acciones) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p50=${(percentil(acciones, 50) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p90=${(percentil(acciones, 90) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min`);
+  console.log(`peleas JUGABLES/carrera: avg=${avg(peleasJugables).toFixed(2)} min=${Math.min(...peleasJugables)} max=${Math.max(...peleasJugables)}`);
+  console.log(`peleas PROFESIONALES TOTALES (jugables+trámite)/carrera: avg=${avg(peleasProTotales).toFixed(2)} min=${Math.min(...peleasProTotales)} max=${Math.max(...peleasProTotales)} | dentro[30,40]=${((peleasProTotales.filter((x) => x >= 30 && x <= 40).length / n) * 100).toFixed(1)}%`);
   console.log(`3 cinturones: ${con3}/${n} = ${((con3 / n) * 100).toFixed(2)}%`);
   console.log(`carreras sin ninguna defensa obligatoria: ${sinDefensas}/${n} = ${((sinDefensas / n) * 100).toFixed(2)}%`);
-  console.log(`MEDIA a mitad de carrera (bloque ${10}/20, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
+  console.log(`MEDIA a mitad de carrera (bloque ${MITAD_BLOQUE}/24, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
   console.log(`MEDIA final (todas): avg=${avg(medias).toFixed(2)} min=${Math.min(...medias)} max=${Math.max(...medias)}`);
   console.log(`Con al menos una legendaria (creación o carrera): ${conLegendaria.length}/${n} = ${((conLegendaria.length / n) * 100).toFixed(1)}%`);
   console.log(fmtGrupo(conLegendaria, 'CON legendaria'));
   console.log(fmtGrupo(sinLegendaria, 'SIN legendaria'));
-  // Pedido del coordinador (v4, "el mazo de mejora también"): aísla la tasa
-  // de legendarias vistas DURANTE la carrera (mejora + evento/redes, nunca
-  // creación) — la métrica que puede moverse por repartirMejoras a veces
-  // repartiendo 2 cartas en vez de 3 (decidirCantidadMejoras, cards.js).
   const enCarrera = resultados.map((r) => r.legendariasEnCarrera);
   const conAlMenosUnaEnCarrera = resultados.filter((r) => r.legendariasEnCarrera > 0).length;
   console.log(`Legendarias EN LA CARRERA (mejora+evento/redes, sin contar creación): avg=${avg(enCarrera).toFixed(3)} por carrera | al menos 1: ${conAlMenosUnaEnCarrera}/${n} = ${((conAlMenosUnaEnCarrera / n) * 100).toFixed(1)}%`);
@@ -325,15 +423,13 @@ for (let semilla = 1; semilla <= N; semilla += 1) {
 resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Sistema 1 corregido)', conLesiones);
 {
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
-  const ofertasConLesiones = conLesiones.map((r) => r.ofertas);
-  const ofertasSinLesiones = creacionReal.map((r) => r.ofertas);
+  const peleasJugablesConLesiones = conLesiones.map((r) => r.peleasJugables);
+  const peleasJugablesSinLesiones = creacionReal.map((r) => r.peleasJugables);
   const con3 = conLesiones.filter((r) => r.tresCinturones).length;
   const lesionesPromedio = avg(conLesiones.map((r) => r.lesiones));
   const bloquesLesionadoPromedio = avg(conLesiones.map((r) => r.bloquesLesionado));
-  const debajoDe12 = ofertasConLesiones.filter((o) => o < 12).length;
   console.log('\n=== Costo real de "cualquier lesión bloquea" (mismas semillas, creación real) ===');
-  console.log(`ofertas/carrera: sin lesiones=${avg(ofertasSinLesiones).toFixed(2)} | con lesiones reales=${avg(ofertasConLesiones).toFixed(2)} | diferencia=${(avg(ofertasSinLesiones) - avg(ofertasConLesiones)).toFixed(2)}`);
-  console.log(`carreras por debajo de 12 ofertas (con lesiones): ${debajoDe12}/${N} = ${((debajoDe12 / N) * 100).toFixed(1)}%`);
+  console.log(`peleas jugables/carrera: sin lesiones=${avg(peleasJugablesSinLesiones).toFixed(2)} | con lesiones reales=${avg(peleasJugablesConLesiones).toFixed(2)} | diferencia=${(avg(peleasJugablesSinLesiones) - avg(peleasJugablesConLesiones)).toFixed(2)}`);
   console.log(`3 cinturones con lesiones reales: ${con3}/${N} = ${((con3 / N) * 100).toFixed(2)}%`);
   console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | beats "lesionSinOferta" vistos por carrera: avg=${bloquesLesionadoPromedio.toFixed(2)}`);
 }
@@ -351,4 +447,17 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   console.log('\n=== Techo vs. piso, mismas 500 semillas ===');
   console.log(`MEDIA final: promedio jugando bien=${avg(mediasTecho).toFixed(2)} (max ${Math.max(...mediasTecho)}) | piso sin legendarias evitables=${avg(mediasPiso).toFixed(2)} (max ${Math.max(...mediasPiso)}) | diferencia=${(avg(mediasTecho) - avg(mediasPiso)).toFixed(2)}`);
   console.log(`3 cinturones: jugando bien=${((c3Techo / N) * 100).toFixed(1)}% | piso sin legendarias evitables=${((c3Piso / N) * 100).toFixed(1)}%`);
+}
+
+// ===== Informe final v6, segunda vuelta: la tabla que pide el brief =====
+{
+  const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const r = creacionReal; // "jugando bien", el escenario representativo
+  console.log('\n=== INFORME v6 (segunda vuelta): tabla pedida por el brief (creación real, "jugando bien") ===');
+  console.log(`Peleas profesionales/carrera: avg=${avg(r.map((x) => x.peleasProfesionalesTotales)).toFixed(1)} (objetivo: 30-40)`);
+  console.log(`Beats jugados (acciones con el mando)/carrera: avg=${avg(r.map((x) => x.accionesJugadas)).toFixed(1)}`);
+  console.log(`Minutos estimados (supuesto: ${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min (objetivo: ~20 min)`);
+  console.log(`3 cinturones: ${((r.filter((x) => x.tresCinturones).length / r.length) * 100).toFixed(1)}% (objetivo: >=85%)`);
+  console.log(`MEDIA a mitad de carrera: avg=${avg(r.map((x) => x.mediaAMitad)).toFixed(1)}`);
+  console.log(`MEDIA final: avg=${avg(r.map((x) => x.mediaFinal)).toFixed(1)}`);
 }
