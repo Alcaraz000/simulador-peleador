@@ -114,7 +114,7 @@ export const CARTAS_EVENTO = [
   // reescriba el resto de la carrera.
   {
     id: 'sparring_idolo', categoria: 'evento', titulo: 'El ídolo te llama al ring', etapas: SIEMPRE, rareza: 'legendaria',
-    texto: 'El campeón que mirabas por tele de pibe te invita a entrenar una semana en su campamento. Esto no se vuelve a repetir.',
+    texto: 'El campeón que mirabas por tele de pibe te invita a entrenar una semana en su campamento. No es algo que le pase a cualquiera.',
     opciones: [
       { id: 'entrenar', texto: 'Meterte a full, aunque duela.', mods: { tecnica: 6, iq: 6, potencia: 4 } },
       { id: 'moderado', texto: 'Aprovechar sin quemarte.', mods: { tecnica: 4, iq: 4, forma: 6 } },
