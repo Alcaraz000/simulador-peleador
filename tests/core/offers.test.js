@@ -5,6 +5,7 @@ import { crearMundo } from '../../src/core/world.js';
 import {
   NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
   proximoCinturon, puedeDisputar, cinturonActual, opinionEntrenador, fraseEntrenador,
+  esPeleaImportante,
 } from '../../src/core/offers.js';
 
 function jugador(extra = {}) {
@@ -171,6 +172,69 @@ describe('generarOferta', () => {
     const { id: idA, rivalId: rivalIdA, ...restoA } = a;
     const { id: idB, rivalId: rivalIdB, ...restoB } = b;
     expect(restoA).toEqual(restoB);
+  });
+});
+
+describe('generarOferta — soloRegional y excluirIdsExtra (v6, peleas de trámite)', () => {
+  it('soloRegional nunca ofrece titulo/defensa/eliminatoria aunque el ranking calificaria', () => {
+    for (let s = 1; s <= 40; s += 1) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador({ ranking: 1, titulos: ['Cinturón regional'] }),
+        mundo: mundo(),
+        etapa: 'profesional',
+        forzarTitulo: true,
+        soloRegional: true,
+      });
+      expect(oferta.esTitulo).toBe(false);
+      expect(oferta.esObligatoria).toBe(false);
+      expect(oferta.nivel).toBe('regional');
+    }
+  });
+
+  it('excluirIdsExtra saca a ese rival de la seleccion, ademas del ultimo peleado', () => {
+    const m = mundo();
+    const aExcluir = m.roster[2];
+    for (let s = 1; s <= 60; s += 1) {
+      const oferta = generarOferta(createRng(s), {
+        jugador: jugador(), mundo: m, etapa: 'profesional', excluirIdsExtra: [aExcluir.id],
+      });
+      if (oferta) expect(oferta.rivalId).not.toBe(aExcluir.id);
+    }
+  });
+});
+
+describe('esPeleaImportante (v6, criterio de "que pelea se juega completa")', () => {
+  function ofertaBase(extra = {}) {
+    return {
+      esTitulo: false, esRevancha: false, esArchirrival: false, nivel: 'regional', riesgo: 'medio', ...extra,
+    };
+  }
+
+  it('una pelea de titulo importa', () => {
+    expect(esPeleaImportante(ofertaBase({ esTitulo: true }))).toBe(true);
+  });
+
+  it('una revancha importa', () => {
+    expect(esPeleaImportante(ofertaBase({ esRevancha: true }))).toBe(true);
+  });
+
+  it('el archirrival importa aunque no haya cinturon en juego', () => {
+    expect(esPeleaImportante(ofertaBase({ esArchirrival: true }))).toBe(true);
+  });
+
+  it('una eliminatoria importa (define el ascenso)', () => {
+    expect(esPeleaImportante(ofertaBase({ nivel: 'eliminatoria' }))).toBe(true);
+  });
+
+  // "riesgo alto" se descartó como criterio (ver el comentario grande en
+  // offers.js): el matchmaking normal ya sesga hacia rivales mejores, así
+  // que casi cualquier pelea temprana calificaba como "riesgo alto" —
+  // reventaba el presupuesto de ~20 minutos sin sumarle nada al eje de
+  // cinturones. Una regional de riesgo alto sigue siendo trámite.
+  it('una regional pareja, comoda, o de riesgo alto (sin titulo/revancha/archirrival/eliminatoria) es tramite', () => {
+    expect(esPeleaImportante(ofertaBase())).toBe(false);
+    expect(esPeleaImportante(ofertaBase({ riesgo: 'bajo' }))).toBe(false);
+    expect(esPeleaImportante(ofertaBase({ riesgo: 'alto' }))).toBe(false);
   });
 });
 
@@ -560,5 +624,54 @@ describe('aplicarResultado', () => {
       resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
     });
     expect(JSON.stringify(yo)).toBe(antes);
+  });
+
+  // v6 ("las peleas amateur no cuentan ni en el ranking ni en el
+  // historial"): una oferta de NIVELES.local (nivelPelea:'amateur', la que
+  // genera decidirNivel en juvenil/amateur) tiene que sumar a los
+  // acumuladores AMATEUR, nunca al récord/historial profesional.
+  describe('peleas amateur (nivelPelea === "amateur")', () => {
+    const ofertaAmateur = () => generarOferta(createRng(12), { jugador: jugador(), mundo: mundo(), etapa: 'amateur' });
+
+    it('ganar suma al recordAmateur, no al record profesional', () => {
+      const o = ofertaAmateur();
+      expect(o.nivelPelea).toBe('amateur');
+      const paso = aplicarResultado(jugador(), {
+        oferta: o, resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+      });
+      expect(paso.jugador.recordAmateur.v).toBe(1);
+      expect(paso.jugador.record.v).toBe(0);
+    });
+
+    it('guarda la pelea en historialAmateur, no en historial', () => {
+      const o = ofertaAmateur();
+      const paso = aplicarResultado(jugador(), {
+        oferta: o, resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+      });
+      expect(paso.jugador.historialAmateur).toHaveLength(1);
+      expect(paso.jugador.historial).toHaveLength(0);
+    });
+
+    it('perder suma derrota al recordAmateur', () => {
+      const o = ofertaAmateur();
+      const paso = aplicarResultado(jugador(), {
+        oferta: o, resultado: { ganador: 'rival', metodo: 'decision', round: 3, texto: 'Perdió' },
+      });
+      expect(paso.jugador.recordAmateur.d).toBe(1);
+      expect(paso.jugador.record.d).toBe(0);
+    });
+  });
+
+  it('guarda modo "jugada" por defecto, y "tramite" si se pasa explicito', () => {
+    const o = oferta();
+    const jugada = aplicarResultado(jugador(), {
+      oferta: o, resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+    });
+    expect(jugada.jugador.historial[0].modo).toBe('jugada');
+
+    const tramite = aplicarResultado(jugador(), {
+      oferta: o, resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' }, modo: 'tramite',
+    });
+    expect(tramite.jugador.historial[0].modo).toBe('tramite');
   });
 });

@@ -1,0 +1,227 @@
+// Peleas de "trámite" (v6, rediseño de ritmo: "no todas las peleas se juegan
+// igual" — la decisión de diseño central de esta ronda). Este módulo decide
+// CUÁNTAS peleas caen en un bloque y resuelve las que no ameritan crónica
+// completa (ver esPeleaImportante, offers.js) en un lote — nunca pinta nada,
+// eso sigue siendo trabajo de main.js.
+//
+// El criterio completo (documentado también en el comentario grande de
+// ETAPAS, career.js, y en esPeleaImportante, offers.js): una pelea se JUEGA
+// COMPLETA (careo, campamento, ronda a ronda) cuando es de título, defensa,
+// revancha, contra el archirrival, o una eliminatoria (define el ascenso al
+// puesto de retador). Todo lo demás es trámite: se resuelve solo, en lote,
+// con sabor (ver resumenLote), sin gastar los minutos del jugador.
+
+import { clamp } from './stats.js';
+import { getDisciplina } from './disciplines.js';
+import { mediaDe } from './fighter.js';
+import {
+  generarOferta, aplicarResultado, esPeleaImportante,
+  cinturonActual, proximoCinturon, puedeDisputar, CINTURONES,
+} from './offers.js';
+import { POOLS_TRAMITE } from '../content/tramite-lines.js';
+
+// Cuántos cupos de pelea trae un año de carrera profesional, según la edad
+// (Pedido 3, v6: "de joven se pelea más seguido... un pibe de 21 pelea
+// cuatro o cinco veces al año; un campeón de 34 pelea dos"). La MAYORÍA de
+// estos cupos van a ser trámite (ver armarLotePeleas): un pibe de 21 con
+// cuatro o cinco peleas en el año casi siempre tiene UNA que importa (o
+// ninguna) y el resto son cartelera de relleno que ni el jugador necesita
+// jugar. Calibrado con scripts/_tune.mjs (ver el comentario de ETAPAS en
+// career.js para los números medidos).
+const BANDAS_FRECUENCIA_PRO = [
+  { hasta: 22, min: 3, max: 3 },
+  { hasta: 25, min: 2, max: 2 },
+  { hasta: 29, min: 2, max: 2 },
+  { hasta: 33, min: 1, max: 1 },
+  { hasta: Infinity, min: 1, max: 1 },
+];
+
+function bandaDe(edad) {
+  return BANDAS_FRECUENCIA_PRO.find((b) => edad <= b.hasta) ?? BANDAS_FRECUENCIA_PRO.at(-1);
+}
+
+// "Sube con lo que está en juego": defendiendo un cinturón (o ya calificado
+// por ranking para el próximo) el circuito no te deja quieto — un campeón
+// sigue activo, no descansa la temporada entera. Se refleja subiendo el TECHO
+// del rango en vez de mover el piso: el mínimo de la banda de edad no
+// cambia, pero el año puede estirarse uno más si hay algo grande en juego.
+function conMuchoEnJuego(jugador) {
+  return Boolean(cinturonActual(jugador)) || puedeDisputar(jugador, proximoCinturon(jugador));
+}
+
+export function intentosDePelea(rng, jugador) {
+  const banda = bandaDe(Math.floor(jugador.edad));
+  const max = conMuchoEnJuego(jugador) ? banda.max + 1 : banda.max;
+  return rng.int(banda.min, max);
+}
+
+// Un campeón indiscutido (los tres cinturones puestos) ya escaló todo lo que
+// el ranking le podía pedir. Sin este freno, medido con
+// scripts/balance-sim.mjs: un "jugando bien" que corona los tres cinturones
+// a mitad de carrera pasa el resto (a veces 8-10 años más) con CADA cupo de
+// pelea convertido en una defensa del mundial — esPeleaImportante la marca
+// esTitulo siempre, así que cada año de campeón indiscutido se volvía una
+// pelea JUGABLE más, dispuesto el presupuesto de minutos muy por encima de
+// los ~20 declarados sin sumarle nada al eje de cinturones (ya los tiene
+// los tres). La cuenta de peleas PROFESIONALES totales no se toca (el año
+// sigue trayendo sus cupos de trámite, ver intentosDePelea arriba) — lo que
+// se apaga es la posibilidad de que ESTE año en particular sea la excepción
+// que se juega completa: el campeón, la mayoría de los años, elige no
+// arriesgar el cinturón en nada que no sea trámite. Esto no toca la
+// frecuencia mientras el reinado todavía se está construyendo (subir a
+// buscar el próximo cinturón, o la primera defensa recién ganado el
+// mundial) — sólo el tramo final, ya consagrado.
+const PROB_DESCANSO_CAMPEON_INDISCUTIDO = 0.8;
+
+export function permiteMarqueeEsteAnio(rng, jugador) {
+  const esCampeonIndiscutido = (jugador.titulos?.length ?? 0) >= CINTURONES.length;
+  if (esCampeonIndiscutido && rng.chance(PROB_DESCANSO_CAMPEON_INDISCUTIDO)) return false;
+  return true;
+}
+
+// Resultado rápido de una pelea de trámite: mismo criterio que el combate
+// NPC-vs-NPC de `avanzarMundo` (world.js) — la diferencia de MEDIA empuja la
+// probabilidad, con piso/techo para que ni el más flojo ni el más fuerte sea
+// un resultado 100% cantado. Nunca hay empate (mismo criterio que
+// avanzarMundo): un trámite es un resultado seco, no una pelea completa
+// round a round. Deliberadamente NO tira lesión: el riesgo de lesión de
+// verdad vive en las peleas que el jugador SÍ juega (ver cerrarPelea,
+// main.js) — un combate de trámite lo maneja tu equipo, no vos.
+function resolverResultadoRapido(rng, { jugador, oferta }) {
+  const fuerza = mediaDe(jugador) - oferta.rivalMedia;
+  const probJugador = clamp(0.5 + fuerza * 0.02, 0.12, 0.88);
+  const ganaJugador = rng.chance(probJugador);
+  const porKo = rng.chance(0.35);
+  const disc = getDisciplina(jugador.disciplina);
+  const tope = disc.roundsPorNivel[oferta.nivelPelea] ?? disc.roundsPorNivel.profesional;
+  return {
+    ganador: ganaJugador ? 'jugador' : 'rival',
+    metodo: porKo ? 'ko' : 'decision',
+    round: porKo ? rng.int(1, tope) : tope,
+  };
+}
+
+const NUMERO = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete'];
+const numero = (n) => NUMERO[n] ?? String(n);
+const capitalizar = (s) => (s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1));
+
+function cantidadTexto(n) {
+  return n === 1 ? 'Una pelea' : `${capitalizar(numero(n))} peleas`;
+}
+
+function koTexto(kos, victorias) {
+  if (kos === 0) return '';
+  if (kos === 1) return ', una por nocaut';
+  if (kos === victorias) return ', todas por nocaut';
+  return `, ${numero(kos)} por nocaut`;
+}
+
+function rellenar(plantilla, datos) {
+  return plantilla.replace(/\{(\w+)\}/g, (_, clave) => String(datos[clave] ?? ''));
+}
+
+/**
+ * Resumen con sabor de un lote de peleas de trámite ya resueltas. `tono`
+ * ('amateur' | 'juvenil' | 'profesional' | 'veterano') elige la voz — ver
+ * content/tramite-lines.js. Puro (no consume rng para nada que no sea elegir
+ * la variante de texto — mismo criterio que el resto del "sabor" del juego,
+ * p.ej. LINEAS en fight.js).
+ */
+export function resumenLote(rng, { resultados, tono = 'profesional' }) {
+  const victorias = resultados.filter((r) => r.resultado === 'v').length;
+  const derrotas = resultados.length - victorias;
+  const kos = resultados.filter(
+    (r) => r.resultado === 'v' && (r.metodo === 'ko' || r.metodo === 'tko'),
+  ).length;
+
+  const poolKey = tono === 'juvenil' ? 'amateur' : tono;
+  const pool = POOLS_TRAMITE[poolKey] ?? POOLS_TRAMITE.profesional;
+
+  let categoria;
+  if (resultados.length === 1) {
+    categoria = victorias === 1 ? 'unaGanada' : 'unaPerdida';
+  } else if (derrotas === 0) {
+    categoria = 'perfecta';
+  } else if (victorias === 0) {
+    categoria = 'derrotas';
+  } else {
+    categoria = 'mixta';
+  }
+
+  const datos = {
+    cantidad: cantidadTexto(resultados.length),
+    record: `${victorias}-${derrotas}`,
+    ko: koTexto(kos, victorias),
+  };
+
+  return {
+    titulo: poolKey === 'amateur' ? 'Circuito amateur' : 'Mientras tanto...',
+    texto: rellenar(rng.pick(pool[categoria]), datos),
+    victorias,
+    derrotas,
+  };
+}
+
+/**
+ * Arma (y resuelve) el lote de peleas de un bloque: hasta `intentos` cupos,
+ * de los cuales como MUCHO el primero puede terminar siendo una pelea que
+ * importa (ver esPeleaImportante) — el resto son siempre de trámite (nivel
+ * regional forzado, ver `soloRegional` en generarOferta). Si el primer cupo
+ * SÍ importa, se lo deja afuera del lote (`marqueeOferta`): esa la juega el
+ * jugador de verdad (career.js la encola como beat 'oferta'); las demás se
+ * resuelven acá mismo, en el momento.
+ *
+ * `permiteJugable=false` (juvenil/amateur): NINGÚN cupo puede volverse
+ * jugable — la etapa de formación entera se resuelve sola (ver el criterio
+ * en el comentario grande de ETAPAS, career.js).
+ *
+ * No muta `jugador` ni `rivalidades`; el `rng` sí viaja mutado (mismo
+ * contrato que el resto de career.js: quien llama guarda `rng.estado()`).
+ */
+export function armarLotePeleas(rng, {
+  jugador, mundo, etapa, rivalidades = [], forzarTitulo = false, intentos, permiteJugable = true, tono = 'profesional',
+}) {
+  let jugadorActual = jugador;
+  const excluidos = [];
+  let marqueeOferta = null;
+  const resultados = [];
+
+  for (let i = 0; i < intentos; i += 1) {
+    const primerCupo = i === 0 && permiteJugable && !marqueeOferta;
+    const oferta = generarOferta(rng, {
+      jugador: jugadorActual,
+      mundo,
+      etapa,
+      rivalidades,
+      forzarTitulo: primerCupo && forzarTitulo,
+      soloRegional: !primerCupo,
+      excluirIdsExtra: excluidos,
+    });
+    if (!oferta) continue; // sin rivales disponibles (rarísimo, roster agotado)
+    excluidos.push(oferta.rivalId);
+
+    if (primerCupo && esPeleaImportante(oferta)) {
+      marqueeOferta = oferta;
+      continue;
+    }
+
+    const resultado = resolverResultadoRapido(rng, { jugador: jugadorActual, oferta });
+    const paso = aplicarResultado(jugadorActual, { oferta, resultado, modo: 'tramite' });
+    jugadorActual = paso.jugador;
+    resultados.push({
+      rivalNombre: oferta.rivalNombre,
+      rivalApodo: oferta.rivalApodo,
+      resultado: resultado.ganador === 'jugador' ? 'v' : 'd',
+      metodo: resultado.metodo,
+      bolsa: oferta.bolsa,
+    });
+  }
+
+  const beatTramite = resultados.length > 0
+    ? { tipo: 'peleasResueltas', datos: { resultados, ...resumenLote(rng, { resultados, tono }) } }
+    : null;
+
+  return {
+    marqueeOferta, beatTramite, jugador: jugadorActual, rivalidades,
+  };
+}

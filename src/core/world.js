@@ -41,10 +41,12 @@ function clonarRoster(roster) {
     especiales: { ...p.especiales },
     estado: { ...p.estado },
     record: { ...p.record },
+    recordAmateur: { ...(p.recordAmateur ?? { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 }) },
     titulos: [...p.titulos],
     staff: [...p.staff],
     lujos: [...p.lujos],
     historial: [...p.historial],
+    historialAmateur: [...(p.historialAmateur ?? [])],
   }));
 }
 

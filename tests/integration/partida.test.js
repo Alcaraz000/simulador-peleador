@@ -118,18 +118,35 @@ function jugarCarrera(semilla) {
 }
 
 describe('carrera completa de punta a punta', () => {
-  it('termina sin colgarse y con peleas jugadas', () => {
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): `peleas`
+  // acá solo cuenta las JUGABLES (las que de verdad corren el motor de
+  // fight.js/fight-interactive.js, ver jugarPeleaDeVerdad) — la mayoría de
+  // las peleas de una carrera ahora son de trámite y se resuelven solas,
+  // dentro de armarCola, sin pasar por acá. El objetivo de "30-40 peleas
+  // profesionales" se mide sobre jugador.record (jugables + trámite), no
+  // sobre `peleas`.
+  it('termina sin colgarse, con peleas jugadas de verdad y un récord profesional completo', () => {
     for (const semilla of [1, 2, 3]) {
       const { partida, peleas } = jugarCarrera(semilla);
       expect(partida.terminada).toBe(true);
-      expect(peleas).toBeGreaterThan(5);
+      expect(peleas).toBeGreaterThan(0);
+      const { v, d, e } = partida.jugador.record;
+      expect(v + d + e).toBeGreaterThanOrEqual(20);
     }
   });
 
-  it('el record cierra con la cantidad de peleas jugadas', () => {
+  // El historial guarda tanto las jugables (modo:'jugada') como las de
+  // trámite (modo:'tramite') — ver aplicarResultado, offers.js. `peleas`
+  // (el contador de jugarPeleaDeVerdad) tiene que coincidir EXACTO con la
+  // cantidad de entradas 'jugada' del historial: ni una pelea jugada de más
+  // ni de menos quedó sin registrar.
+  it('el historial distingue las peleas jugadas de las de tramite, y el total cierra con el record', () => {
     const { partida, peleas } = jugarCarrera(4);
     const { v, d, e } = partida.jugador.record;
-    expect(v + d + e).toBe(peleas);
+    const jugadasEnHistorial = partida.jugador.historial.filter((h) => h.modo === 'jugada').length;
+    expect(jugadasEnHistorial).toBe(peleas);
+    expect(v + d + e).toBe(partida.jugador.historial.length);
+    expect(partida.jugador.historial.length).toBeGreaterThan(peleas);
   });
 
   it('el peleador mejora respecto del arranque', () => {

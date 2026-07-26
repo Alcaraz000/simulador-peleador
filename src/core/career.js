@@ -3,7 +3,8 @@ import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './wor
 import { EDAD_INICIAL } from './fighter.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
-import { generarOferta, CINTURONES } from './offers.js';
+import { CINTURONES } from './offers.js';
+import { intentosDePelea, permiteMarqueeEsteAnio, armarLotePeleas } from './tramite.js';
 import { crearSparring } from './sparring.js';
 import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas,
@@ -30,9 +31,10 @@ export const CANTIDAD_MUNDO = 100;
 // como un arco — era un interruptor, no una curva. Ahora hay DOS escalones:
 // uno suave a partir de EDAD_DECLIVE_JUGADOR (32, sin tocar) y uno duro a
 // partir de EDAD_DECLIVE_DURO_JUGADOR (36 — a propósito la MISMA edad en que
-// el juego narra el arranque de la etapa "veterano", ver ETAPAS más abajo:
+// el juego empieza a narrar el tono "veterano", ver `tagContenido` más abajo:
 // "Cada pelea puede ser la última. Elegí bien." — la mecánica y la narrativa
-// caen juntas). El escalón duro pega más fuerte Y empieza a tocar también la
+// caen juntas, aunque "veterano" ya no sea una etapa real de ETAPAS, solo una
+// etiqueta de sabor). El escalón duro pega más fuerte Y empieza a tocar también la
 // potencia, no solo piernas y pulmón: el jugador tiene que SENTIR que ya no
 // es el mismo. `faseFisicaJugador` (exportada, más abajo) es la versión
 // "para mostrar en el tablero" de estos mismos umbrales — el jugador puede
@@ -100,6 +102,21 @@ export function faseFisicaJugador(jugador) {
     return { id: 'prime', etiqueta: 'En tu prime', detalle: 'Tu mejor momento. Que rinda.' };
   }
   return { id: 'ascenso', etiqueta: 'En ascenso', detalle: 'Todavía hay margen para crecer.' };
+}
+
+// "Veterano" no es una etapa mecánica (v6, pedido textual: "'Veterano' no es
+// una categoría nueva... el peleador sigue siendo profesional"): ETAPAS (más
+// abajo) tiene una sola entrada profesional, de punta a punta de la carrera —
+// el tablero siempre muestra "Profesional" desde el debut hasta el retiro.
+// Pero el CONTENIDO (qué carta de mejora/evento/campamento sale, y el tono de
+// las peleas de trámite — ver tramite.js) sigue queriendo saber si el
+// jugador está en el tramo final: esta función deriva esa etiqueta de SABOR
+// a partir de la edad, nunca de una etapa real. Mismo umbral que el escalón
+// duro del declive físico (EDAD_DECLIVE_DURO_JUGADOR, arriba): a propósito
+// la misma edad en la que el cuerpo empieza a fallar de verdad.
+function tagContenido(etapaId, jugador) {
+  if (etapaId === 'profesional' && jugador.edad >= EDAD_DECLIVE_DURO_JUGADOR) return 'veterano';
+  return etapaId;
 }
 
 // Nombre del cinturón que el mundo narra como "el campeonato" (mundo.campeonId
@@ -177,116 +194,127 @@ function declivePorEdadJugador(jugador) {
   };
 }
 
-// Probabilidades por etapa recalibradas respecto del brief original. El primer ajuste
-// (Task 17, primera vuelta) tocó solo estas probabilidades para bajar el total de
-// beats a 30-60, pero dejó el eje de cinturones casi inalcanzable (~5 ofertas de pelea
-// en toda la carrera). La causa real era el beat de 'noticias' incondicional en cada
-// bloque (comiéndose 20 de los 40 beats de piso). Con 'noticias' periódico el
-// presupuesto se liberó y estas probabilidades se recalibraron de nuevo con doble
-// objetivo: 30-60 beats totales Y 12-22 ofertas de pelea por carrera (nunca menos de
-// 8). Segundo ajuste (Task v3, "las semanas de preparación"): el campamento le puso
-// 2-3 beats a CADA pelea aceptada.
-// Tercer ajuste (Task v3, "cartas nuevas + progresión"): se sacó el beat 'noticias'
-// DEL TODO (las noticias ya viven siempre visibles en la columna derecha, así que
-// interrumpir la carrera para mostrarlas de nuevo era presupuesto de ritmo gastado en
-// algo que el jugador ya podía ver) y se devolvió la mejora garantizada a TODOS los
-// bloques (el bloque que seguía a una pelea firmada se la saltaba — iba en contra
-// de la progresión sentida: un jugador que peleaba mucho terminaba viendo MENOS
-// cartas de mejora, no más).
+// ===== RONDA v6 — SEGUNDA VUELTA (pedido de fondo): "no todas las peleas se
+// juegan igual" ==============================================================
 //
-// Esto tensiona el presupuesto de ritmo de una forma que no tiene una solución limpia
-// con las cuatro metas a la vez (30-60 beats, 12-22 peleas, ≥85% tres cinturones,
-// progresión de MEDIA sentida). Medido con `node scripts/balance-sim.mjs` y con
-// `scripts/_tune.mjs` (mismo helper "sin crecimiento por cartas" que usa
-// career.test.js para medir cinturones, más estricto que balance-sim porque ahí la
-// MEDIA nunca sube): con 20 bloques fijos de mejora garantizada + 1 (oferta) + 2-3
-// (campamento) beats por cada pelea aceptada, bajar `probPelea` lo suficiente para
-// que el promedio de beats entre en 30-60 hunde el eje de cinturones bien por debajo
-// del 85% (menos peleas = menos chances de escalar el ranking y de defender el
-// título). El eje de cinturones es la condición de victoria del juego, así que se
-// priorizó: `probPelea` de profesional/veterano quedó cerca de los valores
-// originales (necesarios para volver a superar el 85%, con margen — medido en 87-88%
-// sobre 3000 semillas), y el promedio de beats por carrera quedó en ~65-67 (por
-// encima de 60 en la mayoría de las carreras, pero lejos del ~81 que daba la primera
-// combinación sin calibrar). `probEvento`/`probRedes` subieron respecto del recorte
-// anterior (aunque no llegan al brief pre-campamento) usando el margen que dejó
-// `probSparring` en profesional/veterano (en 0: ahí el campamento YA garantiza
-// sparring en cada pelea).
+// La frase que gobierna esta ronda, textual del usuario: "este juego NO es
+// un simulador, son partidas cortas, 20 min máximo" — y a la vez "un
+// peleador debe tener entre 30 y 40 peleas en toda su carrera profesional".
+// Esas dos cosas NO entraban juntas mientras cada pelea (oferta, negociación,
+// careo, campamento de 3-5 beats, crónica ronda a ronda, golpe de gracia) se
+// jugara completa: 30-40 peleas jugadas de punta a punta son varias HORAS,
+// no minutos.
 //
-// OBJETIVO DECLARADO DE BEATS/CARRERA — actualizado (cierre de ronda v3): el
-// "30-60 beats" de acá arriba era una meta del PLAN original (brief pre-
-// campamento), nunca un pedido textual del usuario — el usuario sí pidió,
-// explícitamente, las semanas de preparación (el campamento) y "más
-// progresión de media" (la mejora garantizada en todo bloque). Ambos pedidos
-// suman beats de forma estructural (1-3 por pelea aceptada, ~20 mejoras
-// garantizadas), así que el 30-60 dejó de ser alcanzable SIN pisar el eje de
-// cinturones (ver el párrafo de arriba) — y como ese eje es la condición de
-// victoria del juego, no es negociable. Mantener 30-60 como "objetivo" habría
-// dejado un número que la propia mecánica pedida por el usuario garantiza
-// incumplir siempre; eso no es un objetivo, es un bug de documentación.
+// La solución (decisión de diseño central de esta ronda, ver `esPeleaImportante`
+// en offers.js y `armarLotePeleas`/`resumenLote` en tramite.js): NO TODAS LAS
+// PELEAS SE JUEGAN IGUAL.
+//   - Las peleas que IMPORTAN se juegan completas: título (disputarlo o
+//     defenderlo), revancha, tu archirrival, y la eliminatoria que define tu
+//     ascenso al puesto de retador. Ver `esPeleaImportante` — se probó
+//     sumar un quinto criterio ("riesgo alto": un rival claramente mejor) y
+//     se descartó: el matchmaking normal ya sesga hacia arriba, así que
+//     disparaba en casi cualquier matchup temprano y volvía "jugable" la
+//     mitad de los años de la carrera sin sumarle nada al eje de cinturones.
+//     Los cuatro criterios que quedaron son, literalmente, los del brief.
+//   - Las peleas de TRÁMITE se resuelven solas: sin careo, sin campamento,
+//     sin ronda a ronda — un resultado calculado (mismo criterio que el
+//     combate NPC-vs-NPC de `avanzarMundo`, world.js) y un resumen con sabor
+//     ("Tres peleas en el año: 3-0, dos por nocaut"), nunca un renglón de
+//     log. Ver `armarLotePeleas`/`resumenLote` (tramite.js) y el beat
+//     'peleasResueltas' (main.js).
+// El RÉCORD que se muestra suma TODAS: el jugador llega a 35-2 como un
+// boxeador de verdad, aunque solo haya jugado con el mando ocho o diez veces.
 //
-// El rango honesto, medido sobre 3000 semillas con el mismo método que el
-// test de ritmo (tests/core/career.test.js, jugarGanandoTodo: acepta y gana
-// TODA oferta, con su campamento — el camino "de punta a punta" real):
-//   avg=66.4 | p10=60 | p50=66 (mediana) | p90=72 | min=49 | max=83
-// El promedio es muy estable entre muestras (varía <1 punto incluso
-// comparando ventanas de 200 semillas distintas tomadas de zonas separadas
-// del espacio de semillas) porque el grueso del conteo sale de estructura
-// fija, no de azar: 20 bloques × 1 mejora garantizada + 1-3 beats de
-// campamento por cada una de las ~14-15 peleas de una carrera típica. NO es
-// un número inventado ni un ajuste cosmético del test — es lo que da jugar
-// exactamente como el usuario pidió. Si algún cambio futuro corre este
-// promedio bien afuera de [60,73], el test de ritmo lo va a marcar: hay que
-// revisar el cambio, no "arreglar" el test corriéndolo para que pase nomás.
-// Los otros dos objetivos de ritmo NO cambiaron: 12-22 peleas/carrera y
-// ≥85% de carreras bien jugadas con los tres cinturones (ver el test
-// 'progresión de cinturones' en career.test.js).
+// Un freno extra hizo falta para que la cuenta cerrara: un "jugando bien"
+// que corona los tres cinturones a mitad de carrera pasaba el resto (a veces
+// 8-10 años más) defendiendo el mundial año a año SIN EXCEPCIÓN — cada
+// defensa es esTitulo, así que cada uno de esos años se volvía una pelea
+// jugable más, sin sumarle nada al eje de cinturones (ya resuelto). Ver
+// `permiteMarqueeEsteAnio` (tramite.js): un campeón indiscutido, la mayoría
+// de los años, elige no arriesgar nada — los cupos de pelea de ese año
+// siguen existiendo (la cuenta de peleas profesionales no se toca), pero se
+// resuelven todos como trámite.
 //
-// ===== RONDA v6 (Pedido 1-4): roster de 100 + ritmo de peleas + crecimiento =====
-// Cuarta vuelta de recalibración, y la más grande hasta ahora: tres pedidos
-// del usuario que empujan el presupuesto de ritmo en direcciones opuestas a
-// la vez, todos atendidos:
-//   - Pedido 1 ("el ranking tiene que ser una montaña"): el roster pasa de
-//     12 a 100 (CANTIDAD_MUNDO). Esto por sí solo NO toca el presupuesto de
-//     beats (sigue siendo 1 mejora + 1-N campamento por pelea), pero sí
-//     hunde el eje de cinturones si no se compensa (ver Pedido 4).
-//   - Pedido 3 ("hay muy poco margen entre pelea y pelea... debe darte
-//     varios turnos de preparación"): el campamento pasa de 2-3 beats a 3-5
-//     (campamento.js) y `probPelea` de profesional/veterano baja (0.85/0.6,
-//     antes 1/0.7) para que existan bloques de verdad sin oferta. Las dos
-//     cosas EMPUJAN EN CONTRA del eje de cinturones (menos peleas, más
-//     roster) y del rango de beats (más beats por pelea).
-//   - Pedido 4 ("los atributos crecen y decaen con la edad... quiero que la
-//     media suba más rápido"): crecimiento pasivo por edad (ver
-//     crecimientoPorEdadJugador, arriba) — es lo que TERMINA sosteniendo el
-//     eje de cinturones: sin él, medido con cantidad=100 y el ritmo de
-//     peleas ya recortado, el eje caía a ~68% (por debajo del piso). Con el
-//     crecimiento pasivo puesto, vuelve a superarlo con margen.
+// Pedido 2 (v6, "las peleas amateur no cuentan ni en el ranking ni en el
+// historial"): juvenil/amateur dejan de generar el beat 'oferta' del todo —
+// TODA pelea de esas dos etapas es de formación, se resuelve sola (ver
+// `armarLotePeleas` con `permiteJugable:false`) y va a `recordAmateur`/
+// `historialAmateur` (fighter.js/offers.js), nunca a `record`/`historial`.
+// El día del debut profesional el récord real arranca en 0-0, como en la
+// vida real — y de yapa, el ranking deja de mostrarse durante la etapa
+// amateur SOLO (panel-peleador.js ya lo resolvía gratis: muestra "Sin
+// clasificar" mientras `record` esté en 0 peleas).
 //
-// Para sostener el eje de cinturones con MENOS peleas y un roster 8x más
-// grande, `CINTURONES.rankingMax` (offers.js) también se recalibró: de
-// 8/5/3 (proporciones de un roster de 12) a 20/13/6 sobre 100 — mucho más
-// exigente en TÉRMINOS ABSOLUTOS (top 20%, no top 67%) pero alcanzable en el
-// número de peleas que quedan. Esto es exactamente lo que pide el brief:
-// "si para sostener el eje de cinturones hay que ajustar cómo se gana una
-// oportunidad titular, hacelo."
+// Pedido 3 (v6, "'Veterano' no es una categoría nueva... el peleador sigue
+// siendo profesional"): ETAPAS pasa de CUATRO entradas a TRES — profesional
+// dura de punta a punta de la carrera pro (debut a los 21, hasta el retiro).
+// El tablero muestra "Profesional" siempre, del debut al retiro (ver
+// bloqueEtapa, panel-peleador.js, que ahora usa `fraseDeEtapa` en vez de
+// `etapa.frase` directo). "Veterano" sigue existiendo como ETIQUETA DE
+// SABOR (ver `tagContenido`, arriba): el tono de las cartas/eventos/
+// campamento y de las peleas de trámite cambia a partir de
+// EDAD_DECLIVE_DURO_JUGADOR (36 — la misma edad en la que el cuerpo empieza
+// a fallar de verdad), pero la mecánica de la carrera no distingue nada.
 //
-// Medido con scripts/_tune.mjs (3000 semillas, jugador fijo sin lotería de
-// creación, mismo método que el test 'progresión de cinturones'):
-//   3 cinturones: 86.6% (antes de esta ronda: ~87%; el piso de 0.85 sigue
-//   con el mismo margen que tenía antes — no se debilitó a pesar de la
-//   montaña más alta y menos peleas, gracias al crecimiento pasivo).
-//   beats/carrera: avg=82.0 | p10=70 | p50=82 | p90=93 | min=49 | max=110
-//   (antes: avg=66.4). Sube por el campamento más largo — costo medido y
-//   aceptado, no escondido (ver el test de ritmo, actualizado).
-//   ofertas/carrera: avg=12.9 | p10=11 | p90=15 | min=6 | max=19 (antes:
-//   avg=14.7, típico 12-22). Baja — es lo que pidió el usuario
-//   explícitamente ("el número de peleas por carrera puede bajar"). El piso
-//   duro de 8 se mantiene para las semillas fijas del test (nunca lo cruzan).
-// El objetivo declarado de beats/carrera pasa de "avg≈66" a "avg≈82" (ver el
-// test de ritmo, actualizado con el mismo criterio de honestidad que las
-// rondas anteriores: medir, declarar, y que el test marque una regresión
-// real, no un número inventado).
+// Pedido 4 (v6, "de joven se pelea más seguido... un pibe de 21 pelea cuatro
+// o cinco veces al año; un campeón de 34 pelea dos, y son todas grandes"):
+// `probPelea` (un número fijo por etapa) no alcanza para esto — un año de
+// carrera profesional ahora puede traer VARIOS cupos de pelea, no uno solo.
+// `intentosDePelea` (tramite.js) decide cuántos según la edad (bandas que
+// declinan de 3 a los 21-22 hasta 1 pasados los 33) y sube el techo si hay
+// mucho en juego (cinturón puesto, o ranking que ya califica para el
+// próximo). La enorme mayoría de esos cupos, sobre todo de joven, van a ser
+// trámite — exactamente lo que hace que "pelear varias veces al año" y
+// "30-40 peleas en TODA la carrera" convivan sin reventar el presupuesto de
+// minutos.
+//
+// Con esto, `ETAPAS.profesional` deja de tener `probPelea` (reemplazado por
+// `intentosDePelea`, edad-dependiente) y pasa de 11 bloques × 1.3 años +
+// veterano (3 × 1.3) a UNA sola entrada de 18 bloques × 1 año — mismo rango
+// de edad de cierre (~39), granularidad más fina (1 año por bloque, para que
+// la frecuencia por edad tenga sentido bloque a bloque).
+//
+// LOS NÚMEROS MEDIDOS — dos metodologías, ambas sobre "jugando bien" (acepta
+// y gana toda oferta jugable; las de trámite se resuelven solas):
+//
+// scripts/_tune.mjs (3000 semillas, jugador fijo, SIN cartas de mejora — el
+// mismo método que el test 'progresión de cinturones' de career.test.js):
+//   3 cinturones: 99.3% | sin ninguna defensa obligatoria: 3.1%
+//   peleas profesionales totales/carrera: avg=34.7 | p10=32 p90=37 |
+//     dentro de [30,40] en 99.5% de las 3000 semillas.
+//   peleas JUGABLES/carrera (careo+campamento+ronda a ronda): avg=6.4
+//   beats estructurales/carrera: avg=77.1
+//
+// scripts/balance-sim.mjs (300 semillas, "creación real" — SÍ aplica cartas
+// de mejora/evento, la MEDIA sube de verdad; además corre el motor de pelea
+// real -sombra- para medir cuántas rondas/decisiones tiene cada pelea
+// jugable, no una estimación):
+//   3 cinturones: 100% | sin ninguna defensa obligatoria: 11.7%
+//   peleas profesionales totales/carrera: avg=36.4 (dentro de [30,40] en 97%)
+//   peleas JUGABLES/carrera: avg=5.9
+//   ACCIONES JUGADAS/carrera (beats estructurales + negociación/careo/
+//     rounds/rincón/golpe de cada pelea jugable — lo que el jugador
+//     realmente resuelve con el mando): avg=158.4
+//   => minutos estimados, con el supuesto de 8 segundos por acción (ver
+//     SEGUNDOS_POR_BEAT, balance-sim.mjs — el propio juego está diseñado
+//     para ese ritmo: textos cortos, ventana del golpe de gracia de 3.2s):
+//     avg=21.1 minutos.
+//
+// Los tres objetivos de ritmo, con lo medido:
+//   - 30-40 peleas PROFESIONALES por carrera: CUMPLIDO (avg 34.7-36.4).
+//   - ~20 minutos de partida: CUMPLIDO con margen chico (avg 21.1 min, con
+//     el supuesto de 8s/acción declarado arriba).
+//   - ≥85% de carreras bien jugadas consiguen los tres cinturones: CUMPLIDO
+//     con margen amplio (99.3-100%, no negociable, sigue siendo la
+//     condición de victoria).
+// "Sin ninguna defensa obligatoria" sube de ~3.1% a ~11.7% entre ambas
+// medidas — es el costo esperado de `permiteMarqueeEsteAnio`: con cartas de
+// mejora (balance-sim), la MEDIA sube más rápido, los tres cinturones se
+// coronan antes, y quedan más años de "campeón indiscutido que elige
+// descansar" en los que ninguna defensa llega a jugarse. Sigue lejos de
+// cualquier lectura de "nunca aparece una defensa" (~9 de cada 10 carreras
+// SÍ ven una) y no es la métrica que el brief pidió proteger como
+// no-negociable (esa es el eje de cinturones, arriba).
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,
@@ -299,31 +327,37 @@ export const ETAPAS = [
     frase: 'El ascenso no consagra ídolos. Ganate el salto.',
   },
   {
-    // Pedido 3 (v6, "en profesional hay 1 o 2 peleas al año máximo... por lo
-    // tanto ¿pueden surgir peleas nuevas? sí, pero debe darte varios turnos
-    // de preparación"): antes probPelea=1 (garantizado TODOS los bloques, sin
-    // excepción — nunca había un bloque "de descanso"). Con bloques de 1.3
-    // años, un 0.8 deja ~1 de cada 5 bloques sin oferta (un año y monedas sin
-    // que suene el teléfono) y el resto sigue rindiendo cerca de 1 pelea por
-    // bloque — 1.3 años, adentro del "1-2 por año" que pidió el usuario. El
-    // cooldown de revancha inmediata (generarOferta, offers.js) y el
-    // campamento más largo (campamento.js) hacen el resto del trabajo de
-    // "que no se sienta acelerado".
-    id: 'profesional', nombre: 'Profesional', bloques: 11, aniosPorBloque: 1.3, edadDesde: 21,
-    probPelea: 0.85, probEvento: 0.02, probRedes: 0.02, probSparring: 0,
+    // v6, segunda vuelta: profesional pasa a ser la ÚNICA etapa desde el
+    // debut hasta el retiro — "veterano" ya no es una etapa mecánica (ver el
+    // comentario grande de arriba y `tagContenido`). `probPelea` desaparece:
+    // la frecuencia de pelea ahora depende de la edad, ver `intentosDePelea`
+    // (tramite.js), llamada desde `armarCola` más abajo.
+    id: 'profesional', nombre: 'Profesional', bloques: 18, aniosPorBloque: 1, edadDesde: 21,
+    probEvento: 0.03, probRedes: 0.02, probSparring: 0,
     frase: 'Acá se cobra y se sangra. Bienvenido.',
-  },
-  {
-    // Mismo criterio que profesional, un escalón más abajo: un veterano
-    // pelea menos seguido (cuerpo castigado, carrera sobre el final).
-    id: 'veterano', nombre: 'Veterano', bloques: 3, aniosPorBloque: 1.3, edadDesde: 36,
-    probPelea: 0.6, probEvento: 0.02, probRedes: 0.01, probSparring: 0,
-    frase: 'Cada pelea puede ser la última. Elegí bien.',
   },
 ];
 
 export function etapaActual(partida) {
   return ETAPAS[Math.min(partida.etapaIndice, ETAPAS.length - 1)];
+}
+
+// Frase de sabor por ETIQUETA DE CONTENIDO, no por ETAPAS real (v6: con
+// profesional durando toda la carrera pro, `etapaActual(partida).frase` se
+// quedaría diciendo "Acá se cobra y se sangra. Bienvenido." incluso a los 38
+// años). `bloqueEtapa` (panel-peleador.js) usa ESTA función, no
+// `etapaActual().frase` directo, para que el tono narrado en el tablero
+// también envejezca con el jugador.
+const FRASES_POR_TAG = {
+  juvenil: 'Nadie sabe quién sos. Todavía.',
+  amateur: 'El ascenso no consagra ídolos. Ganate el salto.',
+  profesional: 'Acá se cobra y se sangra. Bienvenido.',
+  veterano: 'Cada pelea puede ser la última. Elegí bien.',
+};
+
+export function fraseDeEtapa(partida) {
+  const etapa = etapaActual(partida);
+  return FRASES_POR_TAG[tagContenido(etapa.id, partida.jugador)] ?? etapa.frase;
 }
 
 export function crearPartida({ jugador, semilla }) {
@@ -386,10 +420,12 @@ function clonarPartida(partida) {
       especiales: { ...partida.jugador.especiales },
       estado: { ...partida.jugador.estado },
       record: { ...partida.jugador.record },
+      recordAmateur: { ...(partida.jugador.recordAmateur ?? { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 }) },
       titulos: [...partida.jugador.titulos],
       staff: [...partida.jugador.staff],
       lujos: [...partida.jugador.lujos],
       historial: [...partida.jugador.historial],
+      historialAmateur: [...(partida.jugador.historialAmateur ?? [])],
     },
     rivalidades: partida.rivalidades.map((r) => ({ ...r, h2h: { ...r.h2h }, hitos: [...r.hitos] })),
     noticias: [...partida.noticias],
@@ -481,14 +517,24 @@ export function avanzarBloque(partida) {
 function armarCola(partida) {
   const rng = rngDe(partida);
   const etapa = etapaActual(partida);
+  const tag = tagContenido(etapa.id, partida.jugador);
   const cola = [];
-  // Si este bloque trae una oferta de pelea, se guarda acá (dato INTERNO,
-  // nunca leído por el panel de próxima pelea): sirve para que
+  // Si este bloque trae una oferta de pelea JUGABLE, se guarda acá (dato
+  // INTERNO, nunca leído por el panel de próxima pelea): sirve para que
   // cancelarProximaPelea pueda sacarla de la cola si una carta de riesgo la
   // hace caer antes de que el jugador llegue a decidir sobre ella. La oferta
   // recién se vuelve "próxima pelea" de verdad (lo que muestra el tablero)
-  // cuando el jugador la acepta y firma — ver firmarPelea, más abajo.
+  // cuando el jugador la acepta y firma — ver firmarPelea, más abajo. Las
+  // peleas de trámite (ver más abajo) nunca pasan por acá: no hay nada que
+  // decidir, ya se resolvieron solas.
   let ofertaPendiente = null;
+  // El lote de peleas de este bloque (más abajo) puede resolver una o varias
+  // peleas de trámite EN EL ACTO — eso cambia jugador/rivalidades antes de
+  // que el jugador vea ningún beat. `jugadorActual`/`rivalidadesActuales`
+  // acarrean ese cambio para que el resto de esta función (y el retorno)
+  // trabajen siempre con el estado más fresco.
+  let jugadorActual = partida.jugador;
+  let rivalidadesActuales = partida.rivalidades;
 
   // Mejora garantizada en TODOS los bloques (Task v3, "progresión"): un
   // intento anterior la salteaba en el bloque que seguía a una pelea firmada
@@ -497,47 +543,87 @@ function armarCola(partida) {
   // MEDIA tiene que sentirse pase lo que pase con el calendario de peleas.
   cola.push({
     tipo: 'mejora',
-    datos: { cartas: repartirMejoras(rng, { jugador: partida.jugador, etapa: etapa.id }) },
+    datos: { cartas: repartirMejoras(rng, { jugador: jugadorActual, etapa: tag }) },
   });
 
   if (rng.chance(etapa.probSparring)) {
-    cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: partida.jugador }) } });
+    cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: jugadorActual }) } });
   }
 
   if (rng.chance(etapa.probEvento)) {
     const categoria = rng.chance(0.5) ? 'vida' : 'evento';
-    cola.push({ tipo: 'evento', datos: { carta: elegirEvento(rng, { jugador: partida.jugador, etapa: etapa.id, categoria }) } });
+    cola.push({ tipo: 'evento', datos: { carta: elegirEvento(rng, { jugador: jugadorActual, etapa: tag, categoria }) } });
   }
 
   if (rng.chance(etapa.probRedes)) {
-    cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: partida.jugador }) } });
+    cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: jugadorActual }) } });
   }
 
-  if (rng.chance(etapa.probPelea)) {
-    if (puedePelear(partida.jugador)) {
-      const forzarTitulo = etapa.id === 'profesional'
-        && partida.jugador.titulos.length === 0
-        && (partida.jugador.ranking ?? 99) <= 3;
-      const oferta = generarOferta(rng, {
-        jugador: partida.jugador,
+  if (puedePelear(jugadorActual)) {
+    // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
+    // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
+    // tramite.js — declina con la edad, sube si hay mucho en juego). En
+    // juvenil/amateur sigue siendo el viejo gate de un solo intento
+    // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
+    // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
+    // resuelve sola — ver el comentario grande de ETAPAS.
+    const esProfesional = etapa.id === 'profesional';
+    const intentos = esProfesional
+      ? intentosDePelea(rng, jugadorActual)
+      : (rng.chance(etapa.probPelea) ? 1 : 0);
+
+    if (intentos > 0) {
+      const forzarTitulo = esProfesional
+        && jugadorActual.titulos.length === 0
+        && (jugadorActual.ranking ?? 99) <= 3;
+      // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
+      // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
+      // para el porqué: sin este freno, "jugando bien" convierte cada año
+      // que le queda de carrera en una defensa jugable más, reventando el
+      // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
+      // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
+      // de peleas profesionales totales no se toca) — se resuelven todos
+      // como trámite.
+      const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
+
+      const lote = armarLotePeleas(rng, {
+        jugador: jugadorActual,
         mundo: partida.mundo,
-        etapa: etapa.id,
-        rivalidades: partida.rivalidades,
+        etapa: tag,
+        rivalidades: rivalidadesActuales,
         forzarTitulo,
+        intentos,
+        permiteJugable,
+        tono: tag,
       });
-      if (oferta) {
-        cola.push({ tipo: 'oferta', datos: { oferta } });
-        ofertaPendiente = { oferta };
+
+      jugadorActual = lote.jugador;
+      rivalidadesActuales = lote.rivalidades;
+      // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
+      // año fue pasando" antes de llegar a la que de verdad importa.
+      if (lote.beatTramite) cola.push(lote.beatTramite);
+      if (lote.marqueeOferta) {
+        cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
+        ofertaPendiente = { oferta: lote.marqueeOferta };
       }
-    } else {
-      // Le tocaba pelea pero está lesionado grave (ver puedePelear en
-      // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
-      // por qué no llegan ofertas.
-      cola.push({ tipo: 'lesionSinOferta', datos: { lesion: partida.jugador.estado.lesion } });
+      // El ranking se recalcula ACÁ (no solo una vez por bloque en
+      // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
+      // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
+      // tiene que verlas reflejadas, no el ranking de antes de pelear.
+      if (lote.beatTramite) {
+        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
+      }
     }
+  } else {
+    // Le tocaba pelea pero está lesionado grave (ver puedePelear en
+    // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
+    // por qué no llegan ofertas.
+    cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
   }
 
-  return { cola, rngEstado: rng.estado(), ofertaPendiente };
+  return {
+    cola, rngEstado: rng.estado(), ofertaPendiente, jugador: jugadorActual, rivalidades: rivalidadesActuales,
+  };
 }
 
 // Firma la pelea que el jugador acaba de aceptar (y, si hubo negociación, ya
@@ -554,7 +640,7 @@ export function firmarPelea(partida, { oferta }) {
   const rng = rngDe(nueva);
   const etapa = etapaActual(nueva);
   const { beats, semanaObjetivo } = armarBeatsCampamento(rng, {
-    jugador: nueva.jugador, etapa: etapa.id, oferta, semanaInicial: nueva.semanaGlobal ?? 1,
+    jugador: nueva.jugador, etapa: tagContenido(etapa.id, nueva.jugador), oferta, semanaInicial: nueva.semanaGlobal ?? 1,
   });
   nueva.cola = [...beats, ...nueva.cola];
   nueva.proximaPelea = { oferta, semanaObjetivo };
@@ -604,6 +690,11 @@ export function siguienteBeat(partida) {
     nueva.cola = armado.cola;
     nueva.rngEstado = armado.rngEstado;
     nueva.ofertaPendiente = armado.ofertaPendiente;
+    // v6: armarCola puede resolver una o varias peleas de trámite EN EL ACTO
+    // (ver armarLotePeleas, tramite.js) — jugador/rivalidades vuelven ya
+    // actualizados, antes de que el jugador vea ningún beat de este bloque.
+    nueva.jugador = armado.jugador;
+    nueva.rivalidades = armado.rivalidades;
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }
@@ -620,11 +711,4 @@ export function siguienteBeat(partida) {
   nueva.beatActual = beat;
   nueva.historialBeats += beat ? 1 : 0;
   return { partida: nueva, beat };
-}
-
-export function totalBeatsEstimado() {
-  return ETAPAS.reduce((total, etapa) => {
-    const porBloque = 1 + etapa.probSparring + etapa.probEvento + etapa.probRedes + etapa.probPelea;
-    return total + etapa.bloques * porBloque;
-  }, 0);
 }

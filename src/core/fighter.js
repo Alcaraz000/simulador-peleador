@@ -127,6 +127,14 @@ export function crearPeleador(opciones) {
     entrenador,
     estado: crearEstado(),
     record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
+    // Récord AMATEUR (v6, "las peleas amateur no cuentan ni en el ranking ni
+    // en el historial"): las peleas de juvenil/amateur (formación, antes de
+    // debutar profesional) suman ACÁ, nunca en `record`/`historial` de
+    // arriba — así el récord que se muestra en el tablero (ranking, ficha,
+    // legado) arranca en 0-0 el día del debut profesional, como en la vida
+    // real. Ver `aplicarResultado` (offers.js): decide el destino mirando
+    // `oferta.nivelPelea === 'amateur'`.
+    recordAmateur: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     dinero: 0,
     fama: 0,
     titulos: [],
@@ -143,6 +151,10 @@ export function crearPeleador(opciones) {
     staff: [],
     lujos: [],
     historial: [],
+    // Historial amateur, mismo criterio que `recordAmateur` de arriba: las
+    // peleas de formación (juvenil/amateur) viven acá, separadas del
+    // historial profesional.
+    historialAmateur: [],
     retirado: false,
     personalidad,
   };
@@ -180,9 +192,20 @@ export function mediaDe(peleador) {
   return calcularMedia(peleador.atributos, pesosDe(peleador.disciplina));
 }
 
-export function recordTexto(peleador) {
-  const { v, d, e } = peleador.record;
+function textoDeRecord(record) {
+  const { v, d, e } = record;
   return e > 0 ? `${v}-${d}-${e}` : `${v}-${d}`;
+}
+
+export function recordTexto(peleador) {
+  return textoDeRecord(peleador.record);
+}
+
+// Récord amateur por separado (v6): mismo formato que `recordTexto`, pero
+// sobre `recordAmateur` — para mostrarlo en algún lado (ficha, legado) sin
+// mezclarlo nunca con el profesional.
+export function recordAmateurTexto(peleador) {
+  return textoDeRecord(peleador.recordAmateur ?? { v: 0, d: 0, e: 0 });
 }
 
 // "Apodo" Nombre — el formato que usan tablero, ficha, ranking y legado para

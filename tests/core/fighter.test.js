@@ -30,6 +30,11 @@ describe('crearPeleador', () => {
     expect(p.nombre).toBe('Lucas Ortiz');
     expect(p.edad).toBe(15);
     expect(p.record).toEqual({ v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
+    // v6 ("las peleas amateur no cuentan ni en el ranking ni en el
+    // historial"): récord/historial profesional y amateur arrancan
+    // SEPARADOS, ambos en cero — nunca comparten acumulador.
+    expect(p.recordAmateur).toEqual({ v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
+    expect(p.historialAmateur).toEqual([]);
     expect(p.retirado).toBe(false);
     expect(p.especiales.menton).toBeGreaterThan(0);
     expect(p.estado.lesion).toBeNull();

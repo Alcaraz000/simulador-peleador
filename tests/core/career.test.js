@@ -5,6 +5,8 @@ import {
   faseFisicaJugador,
 } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
+import { intentosDePelea } from '../../src/core/tramite.js';
+import { createRng } from '../../src/core/rng.js';
 import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
 import { ANIO_INICIAL } from '../../src/core/world.js';
 
@@ -29,21 +31,29 @@ function jugarTodo(partida, limite = 400) {
   return { partida: actual, beats };
 }
 
-// Juega una carrera entera aceptando y ganando cada oferta de pelea que aparece
-// (sin correr el motor de pelea completo: aplica directamente un resultado ganador
-// vía aplicarResultado). Sirve para verificar que la progresión de cinturones
-// funciona de punta a punta cuando al jugador le va bien.
+// Juega una carrera entera aceptando y ganando cada oferta JUGABLE que
+// aparece (sin correr el motor de pelea completo: aplica directamente un
+// resultado ganador vía aplicarResultado). Sirve para verificar que la
+// progresión de cinturones funciona de punta a punta cuando al jugador le
+// va bien.
 //
 // Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
 // resuelve la pelea en el acto — firma el contrato (firmarPelea) y el
-// campamento (2-3 beats más, campCarta/campSparring) se juega como cualquier
+// campamento (3-5 beats más, campCarta/campSparring) se juega como cualquier
 // otro beat. La pelea en sí se resuelve recién cuando aparece el beat
 // `ultimo` del campamento, no en el beat 'oferta'. `beats` cuenta TODO lo que
 // pasó por acá (incluido el campamento): es la medida real del presupuesto
 // de ritmo de una carrera jugada de punta a punta, no solo de la cola "en
 // bruto" (ver jugarTodo, más arriba, que nunca acepta nada y por lo tanto
 // nunca dispara ningún campamento).
-function jugarGanandoTodo(partida, limite = 400) {
+//
+// v6, segunda vuelta ("no todas las peleas se juegan igual"): `ofertas`
+// ahora cuenta SOLO las peleas JUGABLES (beat 'oferta' -> campamento
+// completo) — las de trámite (beat 'peleasResueltas') se resuelven solas
+// DENTRO de armarCola, antes de que este helper vea nada que aceptar.
+// `peleasTotales` (jugador.record) es el número que de verdad mide el
+// objetivo de "30-40 peleas profesionales": jugables + trámite juntas.
+function jugarGanandoTodo(partida, limite = 500) {
   let actual = partida;
   let guardia = 0;
   let defensas = 0;
@@ -72,18 +82,24 @@ function jugarGanandoTodo(partida, limite = 400) {
       }
     }
   }
+  const peleasTotales = actual.jugador.record.v + actual.jugador.record.d + actual.jugador.record.e;
   return {
-    partida: actual, defensas, ofertas, beats,
+    partida: actual, defensas, ofertas, beats, peleasTotales,
   };
 }
 
 describe('etapas', () => {
-  it('define las cuatro etapas en orden', () => {
-    expect(ETAPAS.map((e) => e.id)).toEqual(['juvenil', 'amateur', 'profesional', 'veterano']);
+  // v6, segunda vuelta ("'Veterano' no es una categoría nueva... el
+  // peleador sigue siendo profesional"): ETAPAS pasa de CUATRO entradas a
+  // TRES — profesional dura de punta a punta de la carrera pro (debut a
+  // los 21, hasta el retiro ~39). "Veterano" sigue existiendo como etiqueta
+  // de SABOR (ver tagContenido en career.js), nunca como una etapa real.
+  it('define las tres etapas en orden', () => {
+    expect(ETAPAS.map((e) => e.id)).toEqual(['juvenil', 'amateur', 'profesional']);
   });
 
-  it('suman veinte bloques', () => {
-    expect(ETAPAS.reduce((a, e) => a + e.bloques, 0)).toBe(20);
+  it('suman veinticuatro bloques', () => {
+    expect(ETAPAS.reduce((a, e) => a + e.bloques, 0)).toBe(24);
   });
 
   it('la carrera cubre de los 15 a los ~39', () => {
@@ -92,10 +108,33 @@ describe('etapas', () => {
     expect(finEstimado).toBeLessThanOrEqual(41);
   });
 
-  it('en juvenil se pelea menos que en profesional', () => {
+  it('en juvenil se pelea menos que en amateur', () => {
     const juvenil = ETAPAS.find((e) => e.id === 'juvenil');
+    const amateur = ETAPAS.find((e) => e.id === 'amateur');
+    expect(juvenil.probPelea).toBeLessThan(amateur.probPelea);
+  });
+
+  // Profesional ya NO tiene un `probPelea` fijo (Pedido 4, v6: "de joven se
+  // pelea más seguido... un pibe de 21 pelea cuatro o cinco veces al año").
+  // La frecuencia ahora depende de la edad — `intentosDePelea` (tramite.js).
+  // Este test confirma la forma general del arco (más joven, más peleas)
+  // sin acoplarse a los números exactos de las bandas (esos se calibran con
+  // scripts/_tune.mjs y pueden moverse sin romper este test).
+  it('profesional ya no tiene probPelea: la frecuencia de pelea depende de la edad, no de la etapa', () => {
     const pro = ETAPAS.find((e) => e.id === 'profesional');
-    expect(juvenil.probPelea).toBeLessThan(pro.probPelea);
+    expect(pro.probPelea).toBeUndefined();
+
+    const rng = createRng(1);
+    const jugadorJoven = { edad: 21, ranking: 50, titulos: [] };
+    const jugadorVeterano = { edad: 38, ranking: 50, titulos: [] };
+    const n = 300;
+    let totalJoven = 0;
+    let totalVeterano = 0;
+    for (let i = 0; i < n; i += 1) {
+      totalJoven += intentosDePelea(rng, jugadorJoven);
+      totalVeterano += intentosDePelea(rng, jugadorVeterano);
+    }
+    expect(totalJoven / n).toBeGreaterThan(totalVeterano / n);
   });
 });
 
@@ -159,25 +198,40 @@ describe('siguienteBeat', () => {
 
 describe('ritmo de la carrera', () => {
   // Task v3: el presupuesto de ritmo tiene que medirse sobre una carrera
-  // REALMENTE jugada (aceptando ofertas, con su campamento de 2-3 beats cada
+  // REALMENTE jugada (aceptando ofertas, con su campamento de 3-5 beats cada
   // una) — jugarTodo (arriba) nunca acepta nada, así que nunca dispara ningún
   // campamento y mediría un piso irreal.
   //
-  // Objetivo declarado de beats/carrera — ACTUALIZADO OTRA VEZ (Pedido 3, v6:
-  // "más aire entre pelea y pelea, varios beats de preparación, no dos o
-  // tres"). El campamento pasó de 2-3 beats a 3-5 (campamento.js) — pedido
-  // textual del usuario, y suma beats de forma estructural igual que ya
-  // documentaba este mismo comentario para el campamento original. Medido de
-  // nuevo con scripts/_tune.mjs sobre 3000 semillas (mismo método que este
-  // test): avg≈82.0 | p10≈70 | p50≈82 | p90≈93 | min=49 | max=110,
-  // prácticamente todo dentro de [65,105] (97.1%). Subió respecto del rango
-  // anterior (avg≈66.4) — es el costo, medido y declarado, del "varios turnos
-  // de preparación" que pidió el usuario; no se escondió bajándole el
-  // umbral. Los otros dos objetivos de ritmo se actualizan igual (ver
-  // 'ofertas de pelea por carrera' más abajo: bajaron de forma deliberada) y
-  // el que NO se negocia sigue siendo ≥85% de tres cinturones (ver
-  // 'progresión de cinturones').
-  it('sobre muchas semillas, el promedio de beats/carrera cae en el rango honesto medido (jugadas de punta a punta, con campamento incluido)', () => {
+  // ===== RONDA v6, SEGUNDA VUELTA ("no todas las peleas se juegan igual") =====
+  // Con las peleas de trámite resolviéndose solas (ver esPeleaImportante en
+  // offers.js, armarLotePeleas en tramite.js), `beats` acá abajo cuenta los
+  // beats ESTRUCTURALES que el jugador de verdad resuelve con el mando desde
+  // el tablero (mejora, evento, redes, sparring, lesionSinOferta,
+  // peleasResueltas, la oferta jugable en sí, y el campamento de la pelea
+  // jugable) — pero NO incluye las acciones de la pantalla completa de la
+  // pelea jugable (negociación, careo, ronda a ronda, rincón, golpe de
+  // gracia): esas viven fuera de `siguienteBeat` (ver `pelear`/`negociar`/
+  // `careo`, main.js) y se miden aparte con scripts/balance-sim.mjs, que sí
+  // corre el motor de pelea completo — ver el informe entregado con esta
+  // ronda para el estimado de MINUTOS de partida completo (con su supuesto
+  // explícito de segundos por beat).
+  //
+  // Medido con scripts/_tune.mjs sobre 3000 semillas (mismo método que este
+  // test, jugarGanandoTodo: acepta y gana TODA oferta JUGABLE — las de
+  // trámite no se "aceptan", ya están resueltas cuando este helper las ve).
+  // Bajó respecto de una medición intermedia de esta misma ronda (~91.3):
+  // `permiteMarqueeEsteAnio` (tramite.js) frena a un campeón indiscutido de
+  // convertir cada año restante de carrera en una defensa jugable más — sin
+  // eso, el presupuesto de MINUTOS reventaba muy por encima de los ~20
+  // declarados (ver el informe entregado con esta ronda) sin sumarle nada al
+  // eje de cinturones (ya resuelto). Bajar beats estructurales es justo el
+  // costo esperado y deseado de ese freno, no una regresión:
+  //   beats estructurales: avg≈77.1 | p10≈67 | p50≈76 | p90≈89 | min=56 max=125
+  //   peleas JUGABLES (careo+campamento+ronda a ronda): avg≈6.4 | p10≈4 p90≈9
+  //   peleas PROFESIONALES TOTALES (jugables+trámite): avg≈34.7 | p10≈32 p90≈37
+  //     — dentro de [30,40] en 99.5% de las 3000 semillas.
+  //   3 cinturones: 99.3% | sin ninguna defensa obligatoria: 3.1%
+  it('sobre muchas semillas, el promedio de beats estructurales/carrera cae en el rango medido (jugadas de punta a punta, con campamento incluido)', () => {
     const total = 1500;
     const todos = [];
     for (let semilla = 1; semilla <= total; semilla += 1) {
@@ -185,20 +239,38 @@ describe('ritmo de la carrera', () => {
     }
     const promedio = todos.reduce((a, b) => a + b, 0) / total;
 
-    // Banda amplia (±7-8 sobre el ~82.0 medido) para no ser flaky, pero sigue
+    // Banda amplia sobre el ~77.1 medido, para no ser flaky pero seguir
     // marcando una regresión real si alguien recorta o infla el ritmo.
-    expect(promedio).toBeGreaterThanOrEqual(75);
-    expect(promedio).toBeLessThanOrEqual(90);
+    expect(promedio).toBeGreaterThanOrEqual(68);
+    expect(promedio).toBeLessThanOrEqual(86);
 
-    // Guardia de forma de la distribución: casi ninguna carrera bien jugada
-    // debería quedar bien afuera del rango observado (min 49 / max 110 sobre
-    // 3000 semillas) — esto detectaría, por ejemplo, un campamento que a
-    // veces se dispara mucho más largo de lo previsto.
-    const dentroDelRango = todos.filter((b) => b >= 65 && b <= 105).length;
+    const dentroDelRango = todos.filter((b) => b >= 45 && b <= 130).length;
     expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
-  it('incluye peleas, mejoras y eventos', () => {
+  // El objetivo central de esta ronda: 30-40 peleas PROFESIONALES por
+  // carrera (jugables + trámite), sumando lo que se juega completo y lo que
+  // se resuelve solo — el número que de verdad ve el jugador en su récord
+  // final.
+  it('sobre muchas semillas, las peleas profesionales totales (jugables + trámite) caen en el rango 30-40 pedido', () => {
+    const total = 1500;
+    const todas = [];
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      todas.push(jugarGanandoTodo(nuevaPartida(semilla)).peleasTotales);
+    }
+    const promedio = todas.reduce((a, b) => a + b, 0) / total;
+    expect(promedio).toBeGreaterThanOrEqual(30);
+    expect(promedio).toBeLessThanOrEqual(40);
+
+    // Piso duro: ninguna carrera jugada de punta a punta debería quedar muy
+    // por debajo de "una carrera profesional completa" (mismo espíritu que
+    // el piso de 8 ofertas de la ronda anterior).
+    expect(Math.min(...todas)).toBeGreaterThanOrEqual(20);
+    const dentroDelRango = todas.filter((n) => n >= 25 && n <= 45).length;
+    expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.95);
+  });
+
+  it('incluye peleas jugables, mejoras y eventos', () => {
     const { beats } = jugarTodo(nuevaPartida(3));
     const tipos = new Set(beats.map((b) => b.tipo));
     expect(tipos).toContain('mejora');
@@ -206,14 +278,28 @@ describe('ritmo de la carrera', () => {
     expect(tipos.has('evento') || tipos.has('redes')).toBe(true);
   });
 
-  // En este juego no existe un beat de tipo "pelea": toda pelea nace de aceptar
-  // un beat de tipo "oferta" (ver main.js). Esto verifica esa invariante de punta
-  // a punta: el historial de peleas del jugador tiene exactamente una entrada por
-  // cada oferta jugada, ni una pelea fantasma de más ni de menos.
-  it('cada pelea del historial vino de una oferta jugada (no hay peleas fantasma)', () => {
-    const { partida, ofertas } = jugarGanandoTodo(nuevaPartida(4));
+  // v6: la mayoría de las peleas de una carrera son de trámite — se
+  // resuelven solas, sin que el jugador tenga que aceptar nada.
+  it('tambien aparecen peleas de tramite, resueltas solas con su propio resumen', () => {
+    const { beats } = jugarTodo(nuevaPartida(3));
+    const tramite = beats.filter((b) => b.tipo === 'peleasResueltas');
+    expect(tramite.length).toBeGreaterThan(0);
+    tramite.forEach((b) => {
+      expect(b.datos.resultados.length).toBeGreaterThan(0);
+      expect(b.datos.texto.length).toBeGreaterThan(0);
+    });
+  });
+
+  // v6, segunda vuelta: ya NO hay una pelea por cada oferta jugada — la
+  // mayoría del historial ahora viene de peleas de trámite, resueltas solas
+  // dentro de armarCola. La invariante que sigue valiendo, de punta a punta:
+  // el historial tiene EXACTAMENTE una entrada por cada pelea profesional de
+  // verdad (jugable + trámite), ni una pelea fantasma de más ni de menos.
+  it('cada pelea profesional del historial vino de una oferta jugable o de un lote de tramite (no hay peleas fantasma)', () => {
+    const { partida, ofertas, peleasTotales } = jugarGanandoTodo(nuevaPartida(4));
     expect(ofertas).toBeGreaterThan(0);
-    expect(partida.jugador.historial.length).toBe(ofertas);
+    expect(peleasTotales).toBeGreaterThan(ofertas); // hay trámite de más, no solo jugables
+    expect(partida.jugador.historial.length).toBe(peleasTotales);
   });
 
   it('el jugador llega cerca de los 39 al final', () => {
@@ -224,11 +310,13 @@ describe('ritmo de la carrera', () => {
 });
 
 describe('etapaActual', () => {
-  it('empieza en juvenil y termina en veterano', () => {
+  // v6, segunda vuelta: ya no hay una etapa "veterano" separada — profesional
+  // dura de punta a punta de la carrera pro.
+  it('empieza en juvenil y termina en profesional', () => {
     const p = nuevaPartida();
     expect(etapaActual(p).id).toBe('juvenil');
     const { partida } = jugarTodo(p);
-    expect(['profesional', 'veterano']).toContain(etapaActual(partida).id);
+    expect(etapaActual(partida).id).toBe('profesional');
   });
 });
 
@@ -501,9 +589,14 @@ describe('avanzarBloque', () => {
 });
 
 describe('ofertas de pelea bloqueadas por lesion', () => {
+  // v6, segunda vuelta: "avisa que llegó pelea" ya no es solo el beat
+  // 'oferta' (jugable) — la enorme mayoría de los años de carrera resuelven
+  // su cupo de pelea como 'peleasResueltas' (trámite), sin pasar por ahí.
+  // El gate de lesión (puedePelear, injuries.js) bloquea AMBOS por igual: ni
+  // jugable ni trámite pueden aparecer mientras la lesión sigue activa.
   it('si esta lesionado y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
-    p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
+    p.etapaIndice = 2; // profesional: intentosDePelea siempre da >=1 cupo
     // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
     // mínimo de beats por bloque en profesional (mientras sigue lesionado)
     // es 2 (mejora + lesionSinOferta, siempre) — así que en el peor caso
@@ -524,10 +617,11 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       if (paso.beat) tipos.push(paso.beat.tipo);
     }
     expect(tipos).not.toContain('oferta');
+    expect(tipos).not.toContain('peleasResueltas');
     expect(tipos).toContain('lesionSinOferta');
   });
 
-  it('sin lesion, esa misma situacion ofrece pelea con normalidad', () => {
+  it('sin lesion, esa misma situacion resuelve actividad de pelea con normalidad (jugable o de tramite)', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     let actual = p;
@@ -537,7 +631,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       actual = paso.partida;
       if (paso.beat) tipos.push(paso.beat.tipo);
     }
-    expect(tipos).toContain('oferta');
+    expect(tipos.includes('oferta') || tipos.includes('peleasResueltas')).toBe(true);
     expect(tipos).not.toContain('lesionSinOferta');
   });
 
@@ -548,7 +642,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   // grave. Único punto de generación de ofertas en todo el juego es
   // armarCola (acá abajo, vía siguienteBeat) — no hay otro camino que pueda
   // saltarse el gate.
-  it('con lesion leve o moderada, TAMBIÉN bloquea la oferta (sin matices de severidad)', () => {
+  it('con lesion leve o moderada, TAMBIÉN bloquea toda actividad de pelea (sin matices de severidad)', () => {
     // bloquesRestantes en 8 con 12 iteraciones, mismo margen de seguridad que
     // el test de la lesión grave (arriba): el mínimo de beats por bloque en
     // profesional mientras sigue lesionado es 2 (mejora + lesionSinOferta),
@@ -570,62 +664,57 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
         if (paso.beat) tipos.push(paso.beat.tipo);
       }
       expect(tipos).not.toContain('oferta');
+      expect(tipos).not.toContain('peleasResueltas');
       expect(tipos).toContain('lesionSinOferta');
     }
   });
 
   // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
-  // 0 vía recuperar(), avanzarBloque), las ofertas vuelven solas en el
-  // próximo bloque, sin que el jugador tenga que hacer nada especial.
-  it('en cuanto se cura, las ofertas vuelven sin trabas', () => {
+  // 0 vía recuperar(), avanzarBloque), la actividad de pelea vuelve sola en
+  // el próximo bloque, sin que el jugador tenga que hacer nada especial.
+  it('en cuanto se cura, la actividad de pelea vuelve sin trabas', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     p.jugador.estado.lesion = {
       id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
     };
     let actual = p;
-    let vioOferta = false;
-    for (let i = 0; i < 8 && !vioOferta; i++) {
+    let vioPelea = false;
+    for (let i = 0; i < 8 && !vioPelea; i++) {
       const paso = siguienteBeat(actual);
       actual = paso.partida;
-      if (paso.beat?.tipo === 'oferta') vioOferta = true;
+      if (paso.beat?.tipo === 'oferta' || paso.beat?.tipo === 'peleasResueltas') vioPelea = true;
     }
     expect(actual.jugador.estado.lesion).toBeNull();
-    expect(vioOferta).toBe(true);
+    expect(vioPelea).toBe(true);
   });
 });
 
 describe('ofertas de pelea por carrera', () => {
-  // Guarda de ritmo para el eje de cinturones: si alguien vuelve a bajar probPelea
-  // sin medir el impacto, estos tests lo detectan. Ver el informe de la Task 17
-  // para el porqué de estos números.
-  //
-  // Pedido 3 (v6, "en profesional hay 1 o 2 peleas al año máximo... el
-  // número de peleas por carrera puede bajar"): el usuario pidió textualmente
-  // menos frecuencia — profesional/veterano bajaron su `probPelea` (career.js,
-  // ver ETAPAS) para dejar bloques sin oferta de verdad. El total de la
-  // carrera baja en consecuencia: medido con scripts/_tune.mjs sobre 3000
-  // semillas, avg≈12.9 | p10≈11 | p50≈13 | p90≈15 | min=6 | max=19 (antes:
-  // avg≈14.7, piso duro de 8, típico 12-22). El piso duro se mantiene en 8
-  // para las semillas fijas de acá abajo (las 10 nunca bajan de eso, medido);
-  // el rango "típico" se actualiza de forma honesta al nuevo número, más
-  // bajo — es exactamente lo que pidió el usuario, no una regresión.
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): esto ahora
+  // mide solo las peleas JUGABLES (beat 'oferta' — título/defensa/revancha/
+  // archirrival/eliminatoria/riesgo alto, ver esPeleaImportante en
+  // offers.js). El total de peleas PROFESIONALES (jugables + trámite) es
+  // otro eje — ver 'ritmo de la carrera' más arriba para el objetivo de
+  // 30-40. Medido con jugarTodo (nunca acepta nada, pero eso no frena a las
+  // de trámite: se resuelven solas igual) sobre las semillas 1-10: entre 9 y
+  // 16 jugables por carrera.
   const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
-  it('nunca caen por debajo de 8 ofertas en toda la carrera', () => {
+  it('nunca caen por debajo de 5 peleas jugables en toda la carrera', () => {
+    semillas.forEach((semilla) => {
+      const { beats } = jugarTodo(nuevaPartida(semilla));
+      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
+      expect(ofertas).toBeGreaterThanOrEqual(5);
+    });
+  });
+
+  it('tipicamente caen entre 8 y 18 peleas jugables por carrera', () => {
     semillas.forEach((semilla) => {
       const { beats } = jugarTodo(nuevaPartida(semilla));
       const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
       expect(ofertas).toBeGreaterThanOrEqual(8);
-    });
-  });
-
-  it('tipicamente caen entre 9 y 19 ofertas por carrera', () => {
-    semillas.forEach((semilla) => {
-      const { beats } = jugarTodo(nuevaPartida(semilla));
-      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
-      expect(ofertas).toBeGreaterThanOrEqual(9);
-      expect(ofertas).toBeLessThanOrEqual(19);
+      expect(ofertas).toBeLessThanOrEqual(18);
     });
   });
 });
@@ -736,17 +825,32 @@ describe('progresión de cinturones', () => {
 // semanaObjetivo) de lo que el panel puede mostrar (`proximaPelea`, que solo
 // nace en `firmarPelea`, con el semanaObjetivo real del campamento).
 describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
-  // Etapa "profesional": probPelea = 1, asi que el bloque siempre trae una
-  // oferta y podemos verificar que quedó guardada de forma confiable.
-  function partidaProfesional(semilla) {
-    const p = nuevaPartida(semilla);
-    p.etapaIndice = 2;
-    return p;
+  // v6, segunda vuelta: en profesional ya NO todos los bloques traen una
+  // oferta JUGABLE (la mayoría de los cupos de pelea se resuelven solos, ver
+  // armarLotePeleas en tramite.js) — así que hay que avanzar bloque a bloque
+  // hasta encontrar uno que sí traiga una oferta pendiente, en vez de asumir
+  // que el primero la tiene. `primerPaso` es el `siguienteBeat` inmediato
+  // después de arrancar ESE bloque (su primer beat, siempre 'mejora') — el
+  // mismo punto que antes probaban los tests de acá abajo.
+  function primerPasoConOfertaPendiente(semilla, { maxBloques = 60 } = {}) {
+    let actual = nuevaPartida(semilla);
+    actual.etapaIndice = 2;
+    for (let i = 0; i < maxBloques; i += 1) {
+      const primerPaso = siguienteBeat(actual);
+      if (primerPaso.partida.ofertaPendiente) return primerPaso;
+      // Este bloque no trajo ninguna oferta jugable (fue trámite, o nada):
+      // se agota el resto de su cola para pasar limpio al próximo bloque.
+      let siguiente = primerPaso.partida;
+      while (siguiente.cola.length > 0) {
+        siguiente = siguienteBeat(siguiente).partida;
+      }
+      actual = siguiente;
+    }
+    throw new Error(`no hubo ninguna oferta jugable pendiente en ${maxBloques} bloques (semilla ${semilla})`);
   }
 
   it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
-    const p = partidaProfesional(2);
-    const primerPaso = siguienteBeat(p);
+    const primerPaso = primerPasoConOfertaPendiente(2);
 
     // El primer beat de un bloque siempre es "mejora": si el bloque trae una
     // oferta más adelante en la cola, ofertaPendiente ya tiene que
@@ -773,27 +877,26 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   });
 
   it('sin firmar, semanasHastaPelea da null: no hay nada que contar todavía', () => {
-    const p = partidaProfesional(2);
-    const paso = siguienteBeat(p);
-    expect(paso.partida.ofertaPendiente).not.toBeNull();
-    expect(semanasHastaPelea(paso.partida)).toBeNull();
+    const primerPaso = primerPasoConOfertaPendiente(2);
+    expect(primerPaso.partida.ofertaPendiente).not.toBeNull();
+    expect(semanasHastaPelea(primerPaso.partida)).toBeNull();
   });
 
-  it('recién firmada, semanasHastaPelea da una cuenta regresiva creíble (el campamento son 2-3 beats, nunca ~68 semanas)', () => {
-    const p = partidaProfesional(2);
-    const paso = siguienteBeat(p);
-    const { oferta } = paso.partida.ofertaPendiente;
-    const firmada = firmarPelea(paso.partida, { oferta });
+  it('recién firmada, semanasHastaPelea da una cuenta regresiva creíble (el campamento son 3-5 beats, nunca ~52 semanas)', () => {
+    const primerPaso = primerPasoConOfertaPendiente(2);
+    const { oferta } = primerPaso.partida.ofertaPendiente;
+    const firmada = firmarPelea(primerPaso.partida, { oferta });
     const faltan = semanasHastaPelea(firmada);
     expect(faltan).toBeGreaterThanOrEqual(0);
     expect(Number.isFinite(faltan)).toBe(true);
-    // SEMANAS_POR_BEAT_CAMPAMENTO=3 x hasta 3 beats (campamento.js): 9 como
-    // mucho, muy lejos de las ~68 semanas de un bloque entero.
-    expect(faltan).toBeLessThanOrEqual(9);
+    // SEMANAS_POR_BEAT_CAMPAMENTO=3 x hasta 5 beats (campamento.js): 15 como
+    // mucho, muy lejos de las ~52 semanas de un bloque entero (1 año).
+    expect(faltan).toBeLessThanOrEqual(15);
   });
 
   it('no muta partida.ofertaPendiente de la partida original', () => {
-    const p = partidaProfesional(2);
+    const p = nuevaPartida(2);
+    p.etapaIndice = 2;
     const antes = JSON.stringify(p.ofertaPendiente);
     siguienteBeat(p);
     expect(JSON.stringify(p.ofertaPendiente)).toBe(antes);
