@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearSparring, registrarGolpe, resultadoSparring } from '../../src/core/sparring.js';
+import {
+  crearSparring, registrarGolpe, resultadoSparring, MS_BIEN,
+} from '../../src/core/sparring.js';
 
 const jugador = () => crearPeleador({
   nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
@@ -92,5 +94,44 @@ describe('resultadoSparring', () => {
 
   it('siempre devuelve un texto', () => {
     expect(resultadoSparring(jugar(7, 400), jugador()).texto.length).toBeGreaterThan(0);
+  });
+
+  // Bug reportado por el usuario: "el minijuego de sparring, ¿tiene algún
+  // efecto? No parece". Causa real (parte 1): MS_BIEN estaba definida y
+  // exportada pero nunca se usaba en ninguna rama de resultadoSparring — con
+  // ratio>=0.5 alcanzaba el nivel "bien" sin importar cuánto hubieras
+  // tardado en reaccionar. Sin ningún límite de velocidad para "bien" (y sin
+  // presión de tiempo real en la UI — ver el bug del timer), CUALQUIER
+  // sesión terminaba en "bien" o "perfecto": el nivel "flojo" (que no da
+  // ningún mod) era casi inalcanzable, así que el jugador siempre veía
+  // "algo" pasar, pero nunca lo sentía como una recompensa por jugar bien.
+  it('mitad acertado pero LENTO (por encima de MS_BIEN) ya no alcanza "bien": es flojo', () => {
+    const r = resultadoSparring(jugar(5, MS_BIEN + 50), jugador());
+    expect(r.nivel).toBe('flojo');
+    expect(Object.keys(r.mods)).toHaveLength(0);
+  });
+
+  it('mitad acertado y rapido (dentro de MS_BIEN) SI alcanza "bien"', () => {
+    const r = resultadoSparring(jugar(5, MS_BIEN - 50), jugador());
+    expect(r.nivel).toBe('bien');
+  });
+
+  // Causa real (parte 2): incluso cuando el resultado se aplicaba, el mod de
+  // "bien" (velocidad+1, un solo punto en un solo atributo) es tan chico que
+  // se pierde entre el resto de los sistemas del juego (mejora/campamento
+  // suelen mover 3 a 12 puntos de una). El minijuego tiene que valer la pena
+  // jugarlo bien: se sube la recompensa de ambos niveles alcanzables.
+  it('el nivel "bien" da una recompensa notoria (no un solo punto suelto)', () => {
+    const r = resultadoSparring(jugar(5, MS_BIEN - 50), jugador());
+    const total = Object.values(r.mods).reduce((a, v) => a + Math.max(0, v), 0);
+    expect(total).toBeGreaterThanOrEqual(2);
+  });
+
+  it('el nivel "perfecto" da claramente mas que "bien"', () => {
+    const perfecto = resultadoSparring(jugar(10, 220), jugador());
+    const bien = resultadoSparring(jugar(5, MS_BIEN - 50), jugador());
+    const totalPerfecto = Object.values(perfecto.mods).reduce((a, v) => a + Math.max(0, v), 0);
+    const totalBien = Object.values(bien.mods).reduce((a, v) => a + Math.max(0, v), 0);
+    expect(totalPerfecto).toBeGreaterThan(totalBien);
   });
 });

@@ -138,9 +138,11 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
     } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
       // No se puede simular el minijuego de reacción; se asume un desempeño
-      // "bien" (velocidad +1), ni el piso ni el techo del minijuego. Sin
-      // rareza propia, no afecta la medición de suerte legendaria.
-      partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 1) } } };
+      // "bien" (velocidad +2 — bug v4: MS_BIEN no se exigía y el mod era de
+      // solo +1, ver core/sparring.js), ni el piso ("flojo", sin mods) ni el
+      // techo ("perfecto", velocidad+3/forma+4) del minijuego. Sin rareza
+      // propia, no afecta la medición de suerte legendaria.
+      partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 2) } } };
       if (beat.tipo === 'campSparring' && beat.datos.ultimo) {
         const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta);
         ofertas += 1;
