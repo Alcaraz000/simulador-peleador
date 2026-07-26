@@ -150,7 +150,12 @@ function biografiaDe(jugador, legados, archirrival) {
   const peleas = v + d + e;
   const deportivo = legados.find((l) => l.id === 'deportivo').puntaje;
 
-  const apertura = `${jugador.nombre}, "${jugador.apodo}", cerró su carrera con ${v} victorias y ${d} derrotas en ${peleas} peleas.`;
+  // Con apodo, "Nombre, "Apodo", cerró..."; sin apodo (guardado viejo, o un
+  // rival sin apodo asignado), se omite la coma extra en vez de mostrar
+  // "Nombre, "null", cerró...".
+  const apertura = jugador.apodo
+    ? `${jugador.nombre}, "${jugador.apodo}", cerró su carrera con ${v} victorias y ${d} derrotas en ${peleas} peleas.`
+    : `${jugador.nombre} cerró su carrera con ${v} victorias y ${d} derrotas en ${peleas} peleas.`;
   const medio = jugador.titulos.length > 0
     ? ` Se colgó ${jugador.titulos.length === 1 ? 'un cinturón' : `${jugador.titulos.length} cinturones`} y defendió ${jugador.defensas} ${jugador.defensas === 1 ? 'vez' : 'veces'}.`
     : ' Nunca llegó a colgarse un cinturón, aunque estuvo cerca más de una vez.';

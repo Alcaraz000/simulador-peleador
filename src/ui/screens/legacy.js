@@ -1,6 +1,7 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { bandera } from '../flags.js';
 import { icono } from '../icons.js';
+import { nombreConApodo } from '../../core/fighter.js';
 
 // Un ícono SVG por eje del legado (Task v3, pedido textual: "Faltan iconos
 // en la parte de legado"). 'nacional' no está acá: usa la bandera del
@@ -108,7 +109,7 @@ function bloqueEstadisticas(e) {
       el('div', { class: 'etiqueta', text: 'Carrera' }),
       el('div', { text: `Debutaste a los ${e.edadDebut} y colgaste los guantes a los ${e.edadRetiro}.` }),
       e.rivalMasDuro
-        ? el('div', { class: 'medio', style: 'margin-top:6px', text: `El rival más duro que enfrentaste: "${e.rivalMasDuro.apodo}" ${e.rivalMasDuro.nombre} (media ${e.rivalMasDuro.media}).` })
+        ? el('div', { class: 'medio', style: 'margin-top:6px', text: `El rival más duro que enfrentaste: ${nombreConApodo(e.rivalMasDuro)} (media ${e.rivalMasDuro.media}).` })
         : null,
     ]),
   ]);
@@ -121,7 +122,7 @@ export function renderLegado(contenedor, {
     el('div', { class: 'etiqueta rojo', text: 'Fin de la carrera' }),
     el('h1', { style: 'display:flex;align-items:center;gap:7px' }, [
       bandera(jugador.nacionalidad, { ancho: 20 }),
-      `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
+      nombreConApodo(jugador).toUpperCase(),
     ]),
     el('div', { class: 'panel' }, [
       el('div', { class: 'fila' }, [
@@ -147,7 +148,7 @@ export function renderLegado(contenedor, {
     bloqueEstadisticas(estadisticas),
     legado.archirrival ? el('div', { class: 'panel' }, [
       el('div', { class: 'etiqueta rojo', text: 'Archirrival' }),
-      el('div', { style: 'font-weight:800', text: `"${legado.archirrival.apodo}" ${legado.archirrival.nombre}` }),
+      el('div', { style: 'font-weight:800', text: nombreConApodo(legado.archirrival) }),
       el('div', { class: 'etiqueta', text: `Cara a cara: ${legado.archirrival.h2h}` }),
     ]) : null,
     legado.momentos.length > 0 ? el('div', { class: 'panel' }, [

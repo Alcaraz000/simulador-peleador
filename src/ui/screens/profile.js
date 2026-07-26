@@ -1,7 +1,7 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { ETIQUETAS } from '../../core/stats.js';
 import { getDisciplina } from '../../core/disciplines.js';
-import { recordTexto } from '../../core/fighter.js';
+import { recordTexto, nombreConApodo } from '../../core/fighter.js';
 
 const METODOS = { ko: 'KO', tko: 'TKO', sumision: 'Sumisión', decision: 'Decisión', descalificacion: 'DQ' };
 
@@ -39,7 +39,7 @@ export function renderFicha(contenedor, { jugador, seccion = 'atributos', onCerr
 
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta', text: 'Ficha del peleador' }),
-    el('h1', { text: `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase() }),
+    el('h1', { text: nombreConApodo(jugador).toUpperCase() }),
     el('div', { class: 'etiqueta', text: `Récord ${recordTexto(jugador)} · ${fmtDinero(jugador.dinero)} ganados` }),
     seccion === 'historial' ? historial : atributos,
     el('button', { class: 'boton', 'data-accion': 'cerrar', text: 'Volver', onClick: onCerrar }),

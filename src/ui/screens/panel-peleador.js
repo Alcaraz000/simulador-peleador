@@ -1,7 +1,9 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
-import { mediaDe, recordTexto, CATEGORIAS } from '../../core/fighter.js';
+import {
+  mediaDe, recordTexto, CATEGORIAS, nombreConApodo,
+} from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
@@ -65,7 +67,7 @@ function cuadroMedia(jugador) {
     ]),
     el('h1', { class: 'panel-peleador-nombre', style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
       bandera(jugador.nacionalidad, { ancho: 20 }),
-      `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
+      nombreConApodo(jugador).toUpperCase(),
     ]),
     el('div', {
       class: 'etiqueta',

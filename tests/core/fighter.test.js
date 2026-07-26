@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import {
   CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto, repartirOrigenes,
+  nombreConApodo,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
 import { NACIONALIDADES, NOMBRES_POR_PAIS } from '../../src/content/names.js';
@@ -251,5 +252,28 @@ describe('recordTexto', () => {
     const p = crearPeleador(base);
     p.record = { v: 9, d: 3, e: 1, ko: 7, sub: 0, dec: 2 };
     expect(recordTexto(p)).toBe('9-3-1');
+  });
+});
+
+// Regresión barrida final (cierre de ronda v3): con apodo null/undefined
+// (guardado viejo, o un rival generado sin uno), media docena de pantallas
+// interpolaban `jugador.apodo` sin resguardo y mostraban el string literal
+// "null" en pantalla. `nombreConApodo` centraliza el formato para que ese
+// resguardo valga en todos lados a la vez.
+describe('nombreConApodo', () => {
+  it('con apodo, muestra "Apodo" Nombre', () => {
+    const p = crearPeleador(base);
+    expect(nombreConApodo(p)).toBe('"El Relámpago" Lucas Ortiz');
+  });
+
+  it('sin apodo (null), muestra solo el nombre, nunca "null"', () => {
+    const p = crearPeleador({ ...base, apodo: null, apodoId: null });
+    expect(nombreConApodo(p)).toBe('Lucas Ortiz');
+    expect(nombreConApodo(p)).not.toContain('null');
+  });
+
+  it('sin apodo (undefined), muestra solo el nombre', () => {
+    const { apodo, ...sinApodo } = crearPeleador(base);
+    expect(nombreConApodo(sinApodo)).toBe('Lucas Ortiz');
   });
 });

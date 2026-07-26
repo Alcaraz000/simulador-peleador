@@ -1,6 +1,7 @@
 import { el } from '../dom.js';
 import { bandera } from '../flags.js';
 import { abrirPopup } from '../components/popup.js';
+import { nombreConApodo } from '../../core/fighter.js';
 
 // Tabla de posiciones como popup (Task v3, feedback textual del usuario:
 // "ranking aparece, pero no puedo ver quiénes están por encima o por debajo
@@ -18,7 +19,7 @@ function filaRanking(fila) {
     el('div', { class: 'tabla-ranking-puesto', text: `#${fila.ranking}` }),
     bandera(fila.nacionalidad, { ancho: 20 }),
     el('div', { style: 'flex:1;min-width:0' }, [
-      el('div', { style: 'font-weight:800', text: `"${fila.apodo}" ${fila.nombre}` }),
+      el('div', { style: 'font-weight:800', text: nombreConApodo(fila) }),
       el('div', { class: 'etiqueta', text: `MEDIA ${fila.media} · ${fila.record}` }),
     ]),
   ]);
