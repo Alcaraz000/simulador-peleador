@@ -124,7 +124,7 @@ export function renderPlan(contenedor, { oferta, onElegirPlan = () => {} }) {
     return tarjeta;
   });
 
-  mount(contenedor, el('div', { class: 'stack' }, [
+  mount(contenedor, el('div', { class: 'stack pantalla-corta' }, [
     el('div', { class: 'etiqueta', text: 'Preparación' }),
     el('h1', { text: 'El plan de pelea' }),
     el('p', {

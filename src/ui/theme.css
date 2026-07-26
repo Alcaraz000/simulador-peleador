@@ -84,6 +84,13 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 12px;
   padding: 13px 14px;
+  /* Profundidad sutil (pase de diseño v6): un filo de luz apenas visible
+     arriba (como si la luz cayera desde ese lado) más una sombra corta hacia
+     abajo — da la sensación de placa "levantada" del fondo sin agregar
+     ningún alto/ancho (box-shadow no participa del box model, así que ningún
+     layout existente se mueve un píxel). Nunca sobre `border`, que sigue
+     marcando el límite real del panel. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035), 0 1px 3px rgba(0, 0, 0, 0.35);
 }
 
 .tile {
@@ -347,9 +354,14 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 .tarjeta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
-.tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
-.tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
-.tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
+/* Gateado (auditoría v6, misma razón que `.carta` más abajo): el "levante"
+   con translateY es hover de movimiento, no algo que un tap en celular deba
+   dejar pegado hasta el próximo toque. */
+@media (hover: hover) and (pointer: fine) {
+  .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
+  .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
+  .tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
+}
 .tarjeta:not(:disabled):active { transform: translateY(0) scale(0.97); }
 
 @media (min-width: 720px) {
@@ -414,7 +426,9 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 .movida-fila:disabled { opacity: 0.45; cursor: not-allowed; }
-.movida-fila:not(:disabled):hover { border-color: var(--borde-fuerte); background: var(--superficie-alta); }
+@media (hover: hover) and (pointer: fine) {
+  .movida-fila:not(:disabled):hover { border-color: var(--borde-fuerte); background: var(--superficie-alta); }
+}
 .movida-fila:not(:disabled):active { transform: scale(0.98); }
 
 /* Ícono a la izquierda (pedido textual: "los iconos... se ven muy chicos:
@@ -875,11 +889,22 @@ h2 { font-size: 17px; font-weight: 800; }
 #app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
 
 .carta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
-.carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+/* Gateado detrás de hover:hover+pointer:fine (auditoría v6): sin esto, tocar
+   una `.carta` en celular la deja "levantada" (translateY) y con el fondo
+   claro hasta el próximo toque en otra parte — el navegador dispara :hover
+   en el tap y no hay mouse que lo saque. Mismo criterio que ya usaba `.pao`
+   desde v3; acá se extiende al resto de los controles con hover "de
+   movimiento" (transform/filter), no a los de solo color (border-color),
+   que no generan ese efecto pegajoso. */
+@media (hover: hover) and (pointer: fine) {
+  .carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
+}
 .carta:active { transform: translateY(0) scale(0.97); }
 
 .boton { transition: transform 0.14s var(--ease-out), filter 0.15s ease; }
-.boton:hover { filter: brightness(1.08); }
+@media (hover: hover) and (pointer: fine) {
+  .boton:hover { filter: brightness(1.08); }
+}
 .boton:active { transform: scale(0.97); }
 
 .barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease; }
@@ -1042,6 +1067,11 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 14px;
   padding: 14px;
+  /* Sombra propia (pase de diseño v6): flota sobre el velo oscuro de
+     `.popup-overlay`, así que se gana más presencia que un `.panel` normal
+     (que descansa sobre el fondo liso de siempre) — una sombra más ancha y
+     oscura vende esa distancia. */
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04), 0 12px 40px rgba(0, 0, 0, 0.55);
   /* Modal (no anclado a un disparador puntual): transform-origin queda en el
      centro por defecto a propósito. Arranca en 0.96 (nunca 0, nada aparece
      de la nada) — no en cero. */
@@ -1103,9 +1133,15 @@ h2 { font-size: 17px; font-weight: 800; }
   border-radius: 50%;
 }
 
-.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); }
-.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); }
-.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); }
+/* Antes solo el fondo llevaba el tono (dorado/rojo/medio): el ícono adentro
+   (currentColor) heredaba el gris de siempre y quedaba desconectado del
+   halo que lo rodea. Sumar `color` acá pinta el trazo del ícono del mismo
+   tono; el `box-shadow` agrega un resplandor apenas perceptible hacia
+   afuera — un momento de hito merece un poco más de brillo que un panel
+   común (pedido general: "con brillos, con efectos"). */
+.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); color: var(--dorado); box-shadow: 0 0 26px rgba(242, 193, 78, 0.25); }
+.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); color: var(--rojo); box-shadow: 0 0 26px rgba(239, 68, 68, 0.22); }
+.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); color: var(--texto-medio); }
 
 .hito-popup-titulo { margin: 4px 0 0; font-size: 20px; }
 .hito-popup-texto { margin: 0; }
@@ -1454,6 +1490,40 @@ input.creacion-control { cursor: text; }
 .rojo { color: var(--rojo); }
 .sutil { color: var(--texto-sutil); }
 .medio { color: var(--texto-medio); }
+
+/* Pantallas cortas de contenido fijo (login, plan de pelea): a diferencia de
+   la creación o el tablero (que crecen con la partida), estas tienen un
+   contenido breve y fijo — anclado arriba como el resto, dejaban un tramo
+   de negro liso enorme abajo en cualquier pantalla más alta que un celular
+   chico ("espacio desaprovechado" del pedido general). Centrado vertical
+   redistribuye ese sobrante arriba y abajo del contenido en vez de dejarlo
+   todo apilado como un resto al pie. */
+.pantalla-corta {
+  position: relative;
+  min-height: min(560px, calc(100vh - 32px));
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+/* Resplandor atmosférico fijo detrás del título del login (nunca se mueve
+   ni anima: es fondo, no motion) — la firma visual de la primera pantalla
+   del juego, para que ya desde acá se sienta el tono gótico-dorado del
+   resto (pedido general: "con brillos, con efectos"). Puntual del login: no
+   se repite en `.pantalla-corta` porque perdería su valor de firma si
+   apareciera en cualquier pantalla corta. */
+.pantalla-login::before {
+  content: '';
+  position: absolute;
+  top: -80px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 340px;
+  height: 340px;
+  background: radial-gradient(circle, rgba(242, 193, 78, 0.1), rgba(239, 68, 68, 0.05) 45%, transparent 72%);
+  pointer-events: none;
+  z-index: -1;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
