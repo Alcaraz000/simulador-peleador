@@ -140,15 +140,14 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 3 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 5: Sistema 2, segunda ronda — las opciones extra de
-    // repartirMejoras en juvenil/amateur, cards.js, consumen más tiradas de
-    // rng por bloque y corrieron la secuencia; 5 dejó de llegar a esta carta
-    // puntual, 6 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // semilla 6: Pedido 1 de v4 sumó cartas nuevas al mismo pool de 'evento'
+    // en juvenil/amateur — cards-events.js — y corrió la secuencia de
+    // sorteo; 6 dejó de llegar a esta carta puntual, 3 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 3));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central

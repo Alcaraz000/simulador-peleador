@@ -288,4 +288,89 @@ export const CARTAS_EVENTO = [
       { id: 'rechazar', texto: 'Confiar en el trabajo de siempre con tu entrenador.', mods: {} },
     ],
   },
+
+  // --- Decisiones de DOS opciones con dilema real (Pedido 1, v4): pedido
+  // textual del usuario — "no todo sea siempre elegir entre tres mejoras
+  // equivalentes"; a veces una disyuntiva corta y con carácter, una opción
+  // que hace algo con costo y la otra que no cambia nada o casi nada. Viven
+  // en el MISMO catálogo/pool que las de tres (arriba: 'chantaje' tiene 3
+  // opciones, por ejemplo) para que el jugador se las cruce mezcladas, sin
+  // patrón previsible — nunca en un silo aparte. Repartidas entre juvenil,
+  // amateur ('JOVEN'), profesional y veterano ('PRO', y una exclusiva de
+  // veterano más abajo). Ver también cards-camp.js para las del campamento.
+  {
+    id: 'guantes_nuevos', categoria: 'evento', titulo: 'Guantes nuevos en la vidriera', etapas: JOVEN, rareza: 'normal',
+    texto: 'Un par de guantes importados en la vidriera del club, carísimos. Los tuyos ya no cierran bien de tan gastados.',
+    opciones: [
+      { id: 'comprar', texto: 'Juntar la plata y comprarlos.', efectos: { dinero: -8000 }, mods: { potencia: 2, tecnica: 1 } },
+      { id: 'seguir', texto: 'Seguir con los de siempre: total, todavía atajan.', mods: {} },
+    ],
+  },
+  {
+    id: 'cuerpo_pide_tregua', categoria: 'evento', titulo: 'El cuerpo pide tregua', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'Terminaste la sesión con las piernas de goma y un cansancio que no es de un día cualquiera. Tu entrenador te mira y espera que decidas vos.',
+    opciones: [
+      { id: 'seguir', texto: 'Apretar los dientes y seguir entrenando.', mods: { potencia: 2, velocidad: 2, cardio: -8 } },
+      { id: 'descansar', texto: 'Bajar la persiana por hoy y descansar.', mods: { forma: 4 } },
+    ],
+  },
+  {
+    id: 'beca_deportiva', categoria: 'evento', titulo: 'La beca que te ofrecen', etapas: JOVEN, rareza: 'normal',
+    texto: 'La secretaría de deportes del municipio ofrece una beca chica, pero exige entrenar también atletismo dos veces por semana.',
+    opciones: [
+      { id: 'aceptar', texto: 'Aceptarla: la plata ayuda en casa.', efectos: { dinero: 12000 }, mods: { cardio: 2, tecnica: -2 } },
+      { id: 'rechazar', texto: 'Rechazarla: preferís no repartir el tiempo.', mods: {} },
+    ],
+  },
+  {
+    id: 'primer_lujo', categoria: 'vida', titulo: 'El primer lujo', etapas: PRO, rareza: 'normal',
+    texto: 'Con la última bolsa podrías darte un gusto caro. O guardarla, como te enseñaron en tu casa.',
+    opciones: [
+      { id: 'gastar', texto: 'Darte el gusto.', efectos: { dinero: -20000 }, mods: { moral: 6 } },
+      { id: 'guardar', texto: 'Guardarla, como siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'gimnasio_de_moda', categoria: 'evento', titulo: 'El gimnasio de moda', etapas: PRO, rareza: 'normal',
+    texto: 'Un gimnasio nuevo, con máquinas último modelo, te ofrece pase gratis por ser "cara conocida". Queda lejos de tu rincón de siempre.',
+    opciones: [
+      { id: 'probar', texto: 'Ir a probar unas semanas.', mods: { tecnica: 3, disciplinaPersonal: -3 } },
+      { id: 'quedarte', texto: 'Quedarte en tu gimnasio de siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'consejo_del_viejo_entrenador', categoria: 'evento', titulo: 'El consejo del viejo entrenador', etapas: ['veterano'], rareza: 'normal',
+    texto: 'Tu primer entrenador, ya jubilado, te invita a tomar unos mates y "hablar en serio" antes de la próxima pelea.',
+    opciones: [
+      { id: 'escuchar', texto: 'Ir a escucharlo con la cabeza abierta.', mods: { iq: 3, moral: 3 } },
+      { id: 'no_ir', texto: 'Agradecer y seguir con la rutina de siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'la_costilla_que_avisa', categoria: 'evento', titulo: 'La costilla que avisa', etapas: SIEMPRE, rareza: 'rara',
+    texto: 'Un pinchazo en las costillas durante el último sparring. Puede ser nada, o puede ser el principio de un problema.',
+    opciones: [
+      { id: 'seguir', texto: 'Ignorarlo y seguir entrenando fuerte.', probabilidades: [
+        { peso: 70, mods: { potencia: 3 }, texto: 'Era un tirón sin importancia. Seguís de largo.' },
+        { peso: 30, mods: { forma: -18 }, texto: 'Se hizo bola: terminás dos semanas en el diván del kinesiólogo.' },
+      ] },
+      { id: 'parar', texto: 'Parar antes de arriesgar de más.', mods: {} },
+    ],
+  },
+  {
+    id: 'torneo_interbarrial', categoria: 'evento', titulo: 'El torneo interbarrial', etapas: JOVEN, rareza: 'normal',
+    texto: 'Organizan un torneo relámpago entre gimnasios del barrio, sin categorías ni pesaje serio. Buena experiencia, cero glamour.',
+    opciones: [
+      { id: 'anotarte', texto: 'Anotarte y sumar rounds de verdad.', mods: { iq: 2, cardio: 2, forma: -4 } },
+      { id: 'no_anotarte', texto: 'Dejarlo pasar: no suma nada oficial.', mods: {} },
+    ],
+  },
+  {
+    id: 'fotos_viejas', categoria: 'vida', titulo: 'Las fotos viejas del gimnasio', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'Encontraste una caja con fotos de tus primeros años arriba de un ring. Dan ganas de mirarlas todas, y el tiempo no sobra.',
+    opciones: [
+      { id: 'mirar', texto: 'Sentarte un rato a mirarlas todas.', mods: { moral: 5, disciplinaPersonal: -2 } },
+      { id: 'guardar', texto: 'Guardar la caja para otro día.', mods: {} },
+    ],
+  },
 ];

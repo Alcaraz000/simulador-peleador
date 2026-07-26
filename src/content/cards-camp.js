@@ -126,4 +126,58 @@ export const CARTAS_CAMPAMENTO = [
       { id: 'relajarte', texto: 'Bajar la intensidad y llegar fresco.', mods: { forma: 4, fatiga: -6, tecnica: -1 } },
     ],
   },
+
+  // --- Decisiones de DOS opciones con dilema real (Pedido 1, v4): mismo
+  // patrón que las nuevas de cards-events.js — una opción cuesta algo, la
+  // otra directamente no cambia nada. El campamento YA es 100% de dos
+  // opciones (nunca tres, ver campamento.test.js), así que estas se mezclan
+  // sin más trámite con las de siempre.
+  {
+    id: 'dia_franco',
+    categoria: 'campamento',
+    titulo: 'El día franco',
+    texto: 'Tu entrenador te ofrece bajar la persiana un día entero antes de {rival}, sin cargo de conciencia.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'tomarlo', texto: 'Tomarlo: un día entero de nada.', mods: { forma: 6, fatiga: -14 } },
+      { id: 'no_tomarlo', texto: 'Seguir como si nada.', mods: {} },
+    ],
+  },
+  {
+    id: 'ropa_nueva_de_entrenar',
+    categoria: 'campamento',
+    titulo: 'Ropa nueva para entrenar',
+    texto: 'La marca que te viste manda un cargamento de ropa técnica último modelo justo para el campamento de {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'usarla', texto: 'Estrenarla en cada sesión.', mods: { moral: 3, forma: 2 } },
+      { id: 'no_usarla', texto: 'Quedarte con la de siempre, por superstición.', mods: {} },
+    ],
+  },
+  {
+    id: 'video_motivacional',
+    categoria: 'campamento',
+    titulo: 'El video antes de dormir',
+    texto: 'Tu entrenador te manda, todas las noches, un video viejo de una paliza histórica para "meterte en clima" contra {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'mirarlos', texto: 'Mirarlos todos, aunque te cueste dormir.', mods: { iq: 2, moral: -3 } },
+      { id: 'ignorarlos', texto: 'Borrar el chat y dormir tranquilo.', mods: {} },
+    ],
+  },
+  {
+    id: 'sesion_biomecanica',
+    categoria: 'campamento',
+    titulo: 'El biomecánico',
+    texto: 'Un especialista carísimo se ofrece a analizarte cuadro por cuadro para afinar cada golpe antes de {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'rara',
+    opciones: [
+      { id: 'hacerlo', texto: 'Hacer la sesión completa.', mods: { tecnica: 5, iq: 2, fatiga: 3 } },
+      { id: 'pasar', texto: 'Pasar: confiar en el ojo de siempre.', mods: {} },
+    ],
+  },
 ];
