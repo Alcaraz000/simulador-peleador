@@ -118,12 +118,13 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
 
-    // No se fija un número exacto (Sistema 2, corrección del coordinador:
-    // juvenil/amateur ofrecen más opciones que profesional — la semilla 1
-    // por defecto arranca en juvenil, ver OPCIONES_EXTRA_ETAPA_TEMPRANA en
-    // cards.js).
-    const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta');
-    expect(tarjetas.length).toBeGreaterThanOrEqual(3);
+    // No se fija un número exacto de cartas (decidirCantidadMejoras reparte
+    // 3 la gran mayoría de las veces, pero a veces 2 — Cambio 1: el bonus de
+    // etapa temprana/entrenador ya no agrega cartas de más, tope duro de 3,
+    // ver OPCIONES_EXTRA_ETAPA_TEMPRANA en cards.js) — por eso se buscan
+    // tarjetas en las DOS variantes de grilla (3 o 2 columnas).
+    const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta');
+    expect(tarjetas.length).toBeGreaterThanOrEqual(2);
 
     tarjetas[0].click();
     vi.runAllTimers();
@@ -178,15 +179,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 17 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 18 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 3: el reparto de mejoras a veces reduce a 2 cartas
-    // -- decidirCantidadMejoras, cards.js, pedido del coordinador v4 -- y esa
-    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
-    // incluida, así que 3 dejó de llegar a esta carta puntual, 17 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 17));
+    // semilla 17: Cambio 1 -cards.js, "el tope de mejoras es 3, duro"- hizo
+    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
+    // de rng, así que corrió la secuencia entera; 17 dejó de llegar a esta
+    // carta puntual, 18 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 18));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -241,12 +242,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 1: el reparto de mejoras a veces reduce a 2 cartas
-    // (decidirCantidadMejoras, cards.js, pedido del coordinador v4) y esa
-    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
-    // incluida — la semilla 2 usada antes dejó de llegar a un beat "redes"
-    // dentro de las 500 iteraciones de avanzarHasta; 1 sí.
-    iniciar(cont, prepararPartidaGuardada('redes', 1));
+    // semilla 2: Cambio 1 (cards.js, "el tope de mejoras es 3, duro") hizo
+    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
+    // de rng, corriendo la secuencia entera — la semilla 1 usada antes dejó
+    // de llegar a un beat "redes" dentro de las 500 iteraciones de
+    // avanzarHasta; 2 sí.
+    iniciar(cont, prepararPartidaGuardada('redes', 2));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -331,19 +332,21 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
-    // No se fija un número exacto de tarjetas (Sistema 2, corrección del
-    // coordinador: juvenil/amateur ofrecen más opciones que profesional,
-    // ver OPCIONES_EXTRA_ETAPA_TEMPRANA en cards.js) — lo que este test
-    // verifica es la navegación a la Ficha y de vuelta, no la cantidad.
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
+    // No se fija un número exacto de tarjetas (decidirCantidadMejoras reparte
+    // 2 o 3, ver cards.js) — lo que este test verifica es la navegación a la
+    // Ficha y de vuelta, no la cantidad; por eso se buscan tarjetas en las
+    // DOS variantes de grilla. Cambio 4 ("clickear el personaje ya no abre la
+    // ficha"): el click que dispara la navegación es ahora el del bloque de
+    // historial (dataset accion="historial"), no el de la cabecera.
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta').length).toBeGreaterThan(0);
 
-    cont.querySelector('[data-accion="ficha"]').click();
+    cont.querySelector('[data-accion="historial"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
 
     cont.querySelector('[data-accion="cerrar"]').click();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta').length).toBeGreaterThan(0);
   });
 });
 
@@ -433,12 +436,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 45 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 50 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 5 antes de que decidirCantidadMejoras -- pedido
-    // del coordinador v4 -- corriera la secuencia de rng de todos los
+    // roll; era la semilla 45 antes de Cambio 1 -cards.js, "el tope de
+    // mejoras es 3, duro"-, que corrió la secuencia de rng de todos los
     // bloques).
-    iniciar(cont, prepararPartidaGuardada('evento', 45));
+    iniciar(cont, prepararPartidaGuardada('evento', 50));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -451,8 +454,10 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     vi.advanceTimersByTime(400);
     expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
 
-    // El jugador se va a la Ficha ANTES de que el roll termine.
-    cont.querySelector('[data-accion="ficha"]').click();
+    // El jugador se va a la Ficha ANTES de que el roll termine (Cambio 4: el
+    // click que abre la Ficha ahora vive en el bloque de historial, no en la
+    // cabecera del peleador).
+    cont.querySelector('[data-accion="historial"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
     expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
 
@@ -476,15 +481,15 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 45: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 45));
+    // semilla 50: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 50));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
     vi.advanceTimersByTime(400);
 
-    cont.querySelector('[data-accion="ficha"]').click();
+    cont.querySelector('[data-accion="historial"]').click();
     vi.advanceTimersByTime(2000); // no queda nada pendiente en segundo plano, en la Ficha
 
     cont.querySelector('[data-accion="cerrar"]').click();
@@ -518,7 +523,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     expect(cont.querySelector('.pao.activo')).toBeTruthy();
 
     // El jugador se va a la Ficha con el pao todavía prendido, sin pegarle.
-    cont.querySelector('[data-accion="ficha"]').click();
+    cont.querySelector('[data-accion="historial"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
     expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
 
@@ -545,7 +550,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     continuar();
 
     cont.querySelector('[data-accion="empezar"]').click();
-    cont.querySelector('[data-accion="ficha"]').click();
+    cont.querySelector('[data-accion="historial"]').click();
     vi.advanceTimersByTime(5000);
 
     cont.querySelector('[data-accion="cerrar"]').click();

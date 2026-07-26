@@ -28,6 +28,22 @@ describe('set de íconos nuevo (creación + tienda)', () => {
   });
 });
 
+// Cabecera del peleador rearmada (Cambio 3): la fila "EDAD | FORMA" pide un
+// ícono nuevo para forma física — un pulso/latido (mismo lenguaje Feather/
+// Lucide minimalista que el resto del set), distinto de "corazon" (que ya
+// se usa para otra cosa en la tienda) para que no se confundan a simple vista.
+describe('icono("forma")', () => {
+  it('se dibuja como un <svg> con al menos un <path>', () => {
+    const svg = icono('forma');
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+
+  it('es visualmente distinto de "corazon" (no una copia)', () => {
+    expect(icono('forma').outerHTML).not.toBe(icono('corazon').outerHTML);
+  });
+});
+
 // Bolsa + niveles de riesgo (v3, oferta de pelea) y los cuatro tonos del
 // careo (reusan íconos ya existentes en el set de arriba: rayo/cerebro/
 // corazon/estrella — ver presser.js).

@@ -2,7 +2,7 @@ import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
 import {
-  mediaDe, recordTexto, CATEGORIAS, nombreConApodo,
+  mediaDe, recordTexto, CATEGORIAS,
 } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
@@ -53,59 +53,100 @@ function peleasTotales(jugador) {
   return v + d + e;
 }
 
-// Cabecera del peleador (revisión v3, feedback del usuario): antes, la MEDIA
-// (58×58) y el nombre/datos compartían una misma fila (`.fila` con la MEDIA
-// `flex:0 0 auto` y un `div flex:1` al lado) — en la columna angosta del
-// tablero (242px) el nombre le quedaban ~160px y se partía en tres líneas, y
-// la línea de datos (categoría·mano·edad / gimnasio·forma), aunque no
-// envolvía, se veía angosta con un espacio muerto a la derecha comparada con
-// el resto del panel. Ahora la MEDIA es un badge chico en la esquina
-// superior derecha (su propia fila, junto a la etiqueta del rango), y el
-// nombre + las dos líneas de datos usan el ANCHO COMPLETO del panel debajo,
-// sin compartir fila con nada.
+// Cabecera del peleador (Cambio 3, mockup del usuario): un cuadro grande de
+// MEDIA a la izquierda; a su derecha, arriba bandera+apodo y abajo el
+// apellido; debajo, en dos columnas, PESO|MANO HÁBIL y EDAD|FORMA (con
+// ícono); por último FAMA, que ANTES vivía en su propio panel
+// (bloqueRecursos, más abajo) y ahora se mudó acá — ya no hay panel de fama
+// aparte. Reemplaza a la cabecera de la v3 (MEDIA como badge chico arriba a
+// la derecha + una sola `h1` con bandera+apodo+apellido juntos, que en la
+// columna angosta del tablero se partía en tres líneas — queja del usuario).
+// Separar apodo (arriba) de apellido (abajo) en dos líneas propias es lo que
+// evita esa partidura: cada uno respira en su propio renglón, nunca los tres
+// juntos peleando por el mismo ancho.
+//
 // Sistema 2 (feedback del usuario: "hay una edad donde el prime va bajando
 // [...] el tablero debería poder comunicarlo"): color por fase — dorado para
 // "el mejor momento" (una buena noticia, se destaca), rojo para el declive
-// (aviso), sutil para el ascenso (todavía no hay nada que anunciar).
+// (aviso), sutil para el ascenso (todavía no hay nada que anunciar). Sigue
+// visible, ahora como una etiqueta chica debajo del apellido, en la columna
+// de identidad.
 const CLASE_FASE = {
   ascenso: 'sutil', prime: 'dorado', declive: 'rojo', declive_duro: 'rojo',
 };
+
+function capitalizar(texto) {
+  return texto.length === 0 ? texto : texto.charAt(0).toUpperCase() + texto.slice(1);
+}
+
+// "Peso pluma"/"Peso mediano" (CATEGORIAS, fighter.js) ya arrancan con
+// "Peso": la fila de la cabecera ya trae su propia etiqueta "PESO" arriba,
+// así que mostrar el nombre completo hubiera repetido la palabra dos veces
+// ("Peso: Peso pluma"). Se muestra solo la categoría (capitalizada).
+function pesoDe(jugador) {
+  const nombre = CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria;
+  return capitalizar(nombre.replace(/^Peso\s+/i, ''));
+}
+
+// Apodo arriba (con la bandera), apellido abajo — el contrato de
+// `nombreConApodo` (fighter.js) es un solo string ('"Apodo" Apellido' o solo
+// 'Apellido' si no tiene apodo); acá se necesitan las dos partes por
+// separado para ponerlas en renglones distintos. Sin apodo, el apellido
+// sube solo a la línea de arriba (junto a la bandera) en vez de dejar un
+// renglón vacío debajo.
+function identidadDividida(jugador) {
+  if (jugador.apodo) return { arriba: `"${jugador.apodo}"`, abajo: jugador.nombre };
+  return { arriba: jugador.nombre, abajo: '' };
+}
+
+// Una celda de la grilla de datos de la cabecera: etiqueta chica arriba,
+// valor grande abajo (mismo lenguaje visual que los cuadros de
+// atributos/estado, ver filaAtributo más abajo). `contenido` puede ser un
+// string o una lista de nodos (FORMA le suma su ícono nuevo antes del
+// texto).
+function filaDato(etiqueta, contenido) {
+  return el('div', { class: 'cabecera-dato' }, [
+    el('div', { class: 'etiqueta', text: etiqueta }),
+    el('div', { class: 'cabecera-dato-valor' }, contenido),
+  ]);
+}
 
 function cuadroMedia(jugador) {
   const media = mediaDe(jugador);
   const rango = rangoDeMedia(media);
   const fase = faseFisicaJugador(jugador);
-  return el('div', { class: 'panel panel-peleador-cabecera', dataset: { accion: 'ficha' } }, [
-    el('div', { class: 'panel-peleador-cabecera-top' }, [
-      el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
+  const identidad = identidadDividida(jugador);
+
+  return el('div', { class: 'panel panel-peleador-cabecera' }, [
+    el('div', { class: 'cabecera-top' }, [
       el('div', {
-        class: 'rango-media',
+        class: 'cabecera-media',
         dataset: { rangoMedia: rango.id },
         style: `background:${rango.color}22;border-color:${rango.color};color:${rango.color}`,
       }, [
-        el('div', { class: 'rango-media-num', text: String(media) }),
+        el('div', { class: 'cabecera-media-num', text: String(media) }),
+        el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
+      ]),
+      el('div', { class: 'cabecera-identidad' }, [
+        el('div', { class: 'cabecera-apodo' }, [
+          bandera(jugador.nacionalidad, { ancho: 18 }),
+          el('span', { text: identidad.arriba.toUpperCase() }),
+        ]),
+        identidad.abajo ? el('div', { class: 'cabecera-apellido', text: identidad.abajo.toUpperCase() }) : null,
+        el('div', {
+          class: `etiqueta cabecera-fase ${CLASE_FASE[fase.id] ?? 'sutil'}`,
+          title: fase.detalle,
+          text: fase.etiqueta,
+        }),
       ]),
     ]),
-    el('h1', { class: 'panel-peleador-nombre', style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
-      bandera(jugador.nacionalidad, { ancho: 20 }),
-      nombreConApodo(jugador).toUpperCase(),
+    el('div', { class: 'cabecera-datos-grilla' }, [
+      filaDato('Peso', pesoDe(jugador)),
+      filaDato('Mano hábil', MANO_TEXTO[jugador.mano] ?? jugador.mano),
+      filaDato('Edad', `${Math.floor(jugador.edad)} años`),
+      filaDato('Forma', [icono('forma', { tamano: 14 }), ` ${etiquetaEstado('forma', jugador.estado.forma)}`]),
     ]),
-    el('div', {
-      class: 'etiqueta',
-      style: 'margin-top:6px',
-      text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
-    }),
-    el('div', {
-      class: 'etiqueta',
-      style: 'margin-top:2px',
-      text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
-    }),
-    el('div', {
-      class: `etiqueta ${CLASE_FASE[fase.id] ?? 'sutil'}`,
-      style: 'margin-top:2px',
-      title: fase.detalle,
-      text: fase.etiqueta,
-    }),
+    filaDato('Fama', String(jugador.fama)),
   ]);
 }
 
@@ -115,23 +156,32 @@ function bloqueCinturones(jugador) {
     jugador.titulos.map((t) => el('span', { class: 'chip dorado', text: `🏆 ${t}` })));
 }
 
-// El número grande es la BASE sin entrenador; el badge dorado es lo que él
-// aporta aparte. `jugador.atributos[clave]` ya viene horneado con ese aporte
-// sumado (así pelea, rankea y hace ofertas — ver coach.js), así que mostrarlo
-// tal cual Y ADEMÁS el "+N" al lado duplicaba el aporte visualmente (bug de
-// la revisión del Bloque 5: un "64 +6" que el jugador leía como 70, cuando el
-// atributo real es 64). `atributosConEntrenador` devuelve `{base, aporte}`
-// por clave con la invariante `base + aporte === jugador.atributos[clave]`.
+// Cambio 2 (feedback del usuario: "los módulos de atributos y estados están
+// bien posicionados pero mal orientados... quiero que se vean en
+// horizontal... cuadros con POT / 33, VEL / 43"): antes una fila
+// `nombre .......... valor`; ahora un CUADRO — etiqueta arriba, valor grande
+// abajo — que vive en una grilla junto a sus hermanos (bloqueAtributosSolo/
+// bloqueEstadoSolo, más abajo). Se usa `ETIQUETAS[clave].corta` (POT, VEL,
+// DIS, MEN...), no `.larga`: "Disciplina" o "IQ de pelea" no entran en un
+// cuadro angosto sin partirse o recortarse con "…" (inaceptable, pedido
+// explícito), y el proyecto ya traía estas abreviaturas listas para
+// exactamente este caso.
+//
+// El número grande sigue siendo la BASE sin entrenador; el badge dorado
+// sigue siendo lo que él aporta aparte (misma invariante de siempre:
+// `base + aporte === jugador.atributos[clave]`, ver atributosConEntrenador,
+// coach.js). Para que TODOS los cuadros midan igual entre sí (nota 1/2 del
+// pedido) el badge se posiciona ABSOLUTO en la esquina superior derecha del
+// cuadro: nunca participa del alto/ancho del cuadro, así que un cuadro CON
+// aporte y uno SIN aporte ocupan exactamente el mismo espacio.
 function filaAtributo(clave, { base, aporte }) {
   return el('div', {
     class: `panel-peleador-atributo${aporte ? ' con-aporte' : ''}`,
     dataset: { atributo: clave },
   }, [
-    el('span', { class: 'nombre sutil', text: ETIQUETAS[clave].larga }),
-    el('span', {}, [
-      el('b', { class: 'valor', text: String(base) }),
-      aporte ? el('span', { class: 'aporte-entrenador', text: ` +${aporte}` }) : null,
-    ]),
+    aporte ? el('span', { class: 'aporte-entrenador', text: `+${aporte}` }) : null,
+    el('span', { class: 'nombre sutil', text: ETIQUETAS[clave].corta }),
+    el('b', { class: 'valor', text: String(base) }),
   ]);
 }
 
@@ -170,7 +220,7 @@ function bloqueAtributosSolo(jugador) {
 function bloqueEstadoSolo(jugador) {
   return el('div', { class: 'panel' }, [
     el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Estado' }),
-    el('div', { class: 'panel-peleador-atributos' },
+    el('div', { class: 'panel-peleador-atributos panel-peleador-atributos-estado' },
       ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
   ]);
 }
@@ -279,23 +329,28 @@ function bloqueHistorial(jugador, mundo, onVerRanking) {
   ]);
 }
 
-// Fama y el cara a cara contra el archirrival: los traía renderDashboard
-// (v1, `recursos`) y no tenían casa todavía en el tablero v2. El archirrival
-// recién existe cuando hay al menos dos cruces con el mismo rival (ver
-// elegirArchirrival, rivalry.js), así que puede no haber ninguno.
-function bloqueRecursos(jugador, partida) {
+// El cara a cara contra el archirrival: lo traía renderDashboard (v1,
+// `recursos`, junto con Fama) y no tenía casa todavía en el tablero v2. La
+// Fama se mudó a la cabecera del peleador (Cambio 3, "el módulo de fama ya
+// no estaría independiente") — este panel quedó solo para el archirrival,
+// que recién existe cuando hay al menos dos cruces con el mismo rival (ver
+// elegirArchirrival, rivalry.js), así que puede no haber ninguno todavía:
+// mismo criterio que "Sin cuerpo técnico" (entrenadorDe, más arriba) — un
+// estado neutro con su propio texto, nunca un panel vacío sin nada adentro.
+function bloqueRecursos(partida) {
   const archi = (partida.rivalidades ?? []).find((r) => r.esArchirrival);
   const datosArchi = archi ? partida.mundo.roster.find((p) => p.id === archi.rivalId) : null;
 
-  return el('div', { class: 'panel fila', style: 'gap:14px' }, [
-    el('div', { style: 'flex:1' }, [
-      el('div', { class: 'etiqueta', text: 'Fama' }),
-      el('div', { style: 'font-weight:800', text: String(jugador.fama) }),
-    ]),
-    datosArchi ? el('div', { style: 'flex:1' }, [
-      el('div', { class: 'etiqueta rojo', text: `vs ${datosArchi.apodo}` }),
-      el('div', { style: 'font-weight:800', text: h2hTexto(archi) }),
-    ]) : null,
+  if (!datosArchi) {
+    return el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta', text: 'Archirrival' }),
+      el('div', { class: 'medio', style: 'margin-top:6px', text: 'Todavía no tenés uno marcado.' }),
+    ]);
+  }
+
+  return el('div', { class: 'panel' }, [
+    el('div', { class: 'etiqueta rojo', text: `vs ${datosArchi.apodo}` }),
+    el('div', { style: 'font-weight:800;margin-top:6px', text: h2hTexto(archi) }),
   ]);
 }
 
@@ -319,13 +374,15 @@ function bloqueDinero(jugador) {
 // beat), este panel vive en la región izquierda del shell y se repinta solo
 // cuando cambian los datos del jugador: nunca desaparece mientras el jugador
 // decide en el módulo central.
-// Hace clickeable-por-teclado un panel que hoy solo escuchaba 'click' (dos
-// casos acá abajo: la cabecera del peleador y el bloque de historial).
-// Mismo criterio que .silueta-zona (silueta-rival.js): role=button +
-// tabindex=0 + Enter/Espacio disparan lo mismo que el click. Sin esto, Tab
-// saltaba directo de un botón real al siguiente y estas dos tarjetas —de
-// las más usadas del tablero: abren la ficha del peleador— quedaban
-// invisibles para quien navega solo con teclado.
+// Hace clickeable-por-teclado un panel que hoy solo escuchaba 'click' (el
+// bloque de historial — la cabecera del peleador YA NO es clickeable desde
+// Cambio 4: "clickear el personaje ya no abre la ficha, eso está obsoleto y
+// se ve directamente en la pantalla principal"). Mismo criterio que
+// .silueta-zona (silueta-rival.js): role=button + tabindex=0 + Enter/Espacio
+// disparan lo mismo que el click. Sin esto, Tab saltaba directo de un botón
+// real al siguiente y esta tarjeta —de las más usadas del tablero: abre el
+// historial de peleas— quedaba invisible para quien navega solo con
+// teclado.
 function hacerActivable(nodo, etiquetaAria, onActivar) {
   nodo.setAttribute('role', 'button');
   nodo.setAttribute('tabindex', '0');
@@ -346,11 +403,15 @@ function hacerActivable(nodo, etiquetaAria, onActivar) {
 }
 
 export function renderPanelPeleador(region, {
-  partida, onFicha = () => {}, onHistorial = () => {}, onVerRanking = () => {},
+  partida, onHistorial = () => {}, onVerRanking = () => {},
 }) {
   const { jugador, mundo } = partida;
 
-  const cabecera = hacerActivable(cuadroMedia(jugador), 'Ver ficha del peleador', () => onFicha(jugador));
+  // Cambio 4: la cabecera (cuadroMedia) es un panel informativo más, sin
+  // click ni atributos de accesibilidad de control interactivo — ya no abre
+  // la ficha (esa pantalla quedó obsoleta: la misma info ya se ve directo en
+  // el tablero).
+  const cabecera = cuadroMedia(jugador);
 
   const historial = hacerActivable(
     bloqueHistorial(jugador, mundo, onVerRanking),
@@ -398,9 +459,10 @@ export function renderPanelDinero(region, { jugador, onTienda = () => {} }) {
   mount(region, dinero);
 }
 
-// Columna derecha: Fama y el cara a cara con el archirrival, junto a la
-// próxima pelea (mudado desde la columna izquierda — el mockup los agrupa:
-// "Fama y 'vs clásico rival' + Próxima pelea").
+// Columna derecha: el cara a cara con el archirrival, junto a la próxima
+// pelea (mudado desde la columna izquierda — el mockup los agrupa: "'vs
+// clásico rival' + Próxima pelea"). La Fama ya no vive acá: se mudó a la
+// cabecera del peleador (Cambio 3).
 export function renderPanelRecursos(region, { partida }) {
-  mount(region, bloqueRecursos(partida.jugador, partida));
+  mount(region, bloqueRecursos(partida));
 }
