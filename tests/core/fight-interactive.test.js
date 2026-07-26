@@ -4,7 +4,7 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPelea } from '../../src/core/fight.js';
 import {
   INSTRUCCIONES_RINCON, ZONAS_GOLPE, POSTURAS, avanzarPelea, estadoRincon,
-  aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia,
+  aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia, instruccionRecomendada,
 } from '../../src/core/fight-interactive.js';
 
 function armar({ semilla = 1, nivel = 'profesional' } = {}) {
@@ -66,6 +66,42 @@ describe('estadoRincon', () => {
     expect(estado.tarjetasTexto).toMatch(/\d/);
     expect(typeof estado.fatigaJugador).toBe('number');
     expect(estado.consejo.length).toBeGreaterThan(0);
+  });
+
+  it('incluye una instruccion recomendada valida', () => {
+    const { pelea } = avanzarPelea(armar());
+    const estado = estadoRincon(pelea);
+    expect(Object.keys(INSTRUCCIONES_RINCON)).toContain(estado.recomendada);
+  });
+});
+
+// Task v3, pedido textual: el hint del rincón "debe tener criterio real, no
+// una sugerencia al azar" — se prueba el criterio en los cuatro cuadrantes
+// posibles (arriba/abajo en tarjetas × cansado/con gas), no solo que exista.
+describe('instruccionRecomendada', () => {
+  function peleaCon({ jugador, rival, fatigaJugador }) {
+    const base = armar();
+    return { ...base, tarjetas: { jugador, rival }, fatiga: { ...base.fatiga, jugador: fatigaJugador } };
+  }
+
+  it('abajo en tarjetas y sin gas: recomienda respirar (recuperar antes de arriesgar)', () => {
+    expect(instruccionRecomendada(peleaCon({ jugador: 1, rival: 3, fatigaJugador: 75 }))).toBe('respirar');
+  });
+
+  it('abajo en tarjetas pero con gas: recomienda acelerar (dar vuelta el marcador)', () => {
+    expect(instruccionRecomendada(peleaCon({ jugador: 1, rival: 3, fatigaJugador: 20 }))).toBe('acelerar');
+  });
+
+  it('arriba en tarjetas pero sin gas: recomienda respirar (cuidar la ventaja)', () => {
+    expect(instruccionRecomendada(peleaCon({ jugador: 3, rival: 1, fatigaJugador: 75 }))).toBe('respirar');
+  });
+
+  it('arriba en tarjetas y con gas: recomienda ir al cuerpo (buscar el nocaut)', () => {
+    expect(instruccionRecomendada(peleaCon({ jugador: 3, rival: 1, fatigaJugador: 20 }))).toBe('cuerpo');
+  });
+
+  it('empatado y con gas: se trata como "no perdiendo", recomienda ir al cuerpo', () => {
+    expect(instruccionRecomendada(peleaCon({ jugador: 2, rival: 2, fatigaJugador: 20 }))).toBe('cuerpo');
   });
 });
 

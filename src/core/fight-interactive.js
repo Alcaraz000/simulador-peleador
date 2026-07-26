@@ -108,6 +108,24 @@ export function avanzarPelea(pelea) {
   };
 }
 
+// Qué instrucción del rincón conviene según cómo viene la pelea — mismo
+// criterio (diferencia en tarjetas + fatiga del jugador) que ya usaba
+// `consejo` más abajo, pero devuelto como un id concreto para que la UI
+// pueda marcar UNA tarjeta puntual como recomendada (Task v3, pedido
+// textual: "una pista de cuál te recomienda el entrenador ... que tenga
+// criterio real, no una sugerencia al azar"). Cuatro casos:
+//   - abajo en tarjetas y sin gas: hay que primero recuperar el aliento.
+//   - abajo en tarjetas pero con gas: presionar para dar vuelta el marcador.
+//   - arriba (o empatado) y sin gas: cuidar la ventaja, no regalar nada.
+//   - arriba (o empatado) y con gas: buscar el nocaut mientras se puede.
+export function instruccionRecomendada(pelea) {
+  const { jugador, rival } = pelea.tarjetas;
+  const diferencia = jugador - rival;
+  const cansado = pelea.fatiga.jugador > 60;
+  if (diferencia < 0) return cansado ? 'respirar' : 'acelerar';
+  return cansado ? 'respirar' : 'cuerpo';
+}
+
 export function estadoRincon(pelea) {
   const { jugador, rival } = pelea.tarjetas;
   const diferencia = jugador - rival;
@@ -132,6 +150,7 @@ export function estadoRincon(pelea) {
     fatigaRival: Math.round(pelea.fatiga.rival),
     aguanteRival: Math.round(pelea.aguante.rival),
     consejo,
+    recomendada: instruccionRecomendada(pelea),
   };
 }
 

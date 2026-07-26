@@ -65,7 +65,14 @@ export function crearPelea({ jugador, rival, disciplina, nivel = 'profesional', 
     caidas: { jugador: 0, rival: 0 },
     golpes: { jugador: golpesVacio(), rival: golpesVacio() },
     historialRounds: [],
-    pendiente: null,
+    // 'inicio': todavía no se simuló ningún round — la UI usa este valor
+    // (distinto de `null`, que en pleno combate significa "sin nada
+    // pendiente, listo para el próximo round") para mostrar el botón de
+    // "Empezar pelea" en vez de arrancar la narración sola (Task v3, pedido
+    // textual: "Debe incluirse un botón que sea para empezar la pelea").
+    // `avanzarPelea`/`simularRound` no leen este campo, así que no cambia
+    // ningún cálculo — es puro dato de estado para la pantalla.
+    pendiente: 'inicio',
     terminada: false,
     resultado: null,
     snapshot: { jugador: snapshotDe(jugador), rival: snapshotDe(rival) },
