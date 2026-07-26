@@ -143,6 +143,43 @@ const PATHS = {
   // pulso/latido (Feather/Lucide "activity"), distinto de "corazon" (ya
   // usado en la tienda) para que la forma física se reconozca de un vistazo.
   forma: ['M22 12h-4l-3 9L9 3l-3 9H2'],
+
+  // --- Creación del peleador, v6 (rediseño integral: "que tengan iconos
+  // diferenciables"): antes TODAS las tarjetas de un mismo paso (origen,
+  // apodo, estilo) compartían un único ícono fijo, así que dentro de la
+  // grilla no había forma de distinguirlas a simple vista sin leer el
+  // título. Estos 5 son puntuales para ese mapeo por id (ver create.js). ---
+
+  // Reloj (origen "tarde", "Arrancaste tarde"): empezaste después que los
+  // demás.
+  reloj: ['M12 21a9 9 0 1 0 0-18a9 9 0 0 0 0 18z', 'M12 7v5l3 3'],
+
+  // Monitor viejo (origen "videos_viejos", "VHS y madrugadas").
+  monitor: ['M3 4h18v13H3z', 'M8 21h8', 'M12 17v4'],
+
+  // Corona (origen legendario "sangre_de_campeon", "Sangre de campeón").
+  corona: [
+    'M4 19h16',
+    'M4 19 3 8l5 4.5L12 5l4 7.5 5-4.5-1 11z',
+  ],
+
+  // Viento (estilo "volante": velocidad y juego de piernas). Mismas 3 líneas
+  // del ícono "wind" de Feather/Lucide.
+  viento: [
+    'M12.8 19.6a2 2 0 1 0 1.2-3.6H2',
+    'M17.5 8a2.5 2.5 0 1 1 2 4H2',
+    'M9.8 4.4a2 2 0 1 1 1.2 3.6H2',
+  ],
+
+  // Cruce/intercambio (estilo "zurdo_cruzado": la guardia cambiada). Mismas
+  // 4 líneas del ícono "repeat" de Feather/Lucide — dos flechas que se
+  // cruzan en direcciones opuestas.
+  cruce: [
+    'M17 2l4 4-4 4',
+    'M3 11v-1a4 4 0 0 1 4-4h14',
+    'M7 22l-4-4 4-4',
+    'M21 13v1a4 4 0 0 1-4 4H3',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

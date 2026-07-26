@@ -377,17 +377,109 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .panel-decision-desenlace .boton { margin-top: 4px; }
 
-/* Negociación (v4, feedback repetido: "las opciones se ven muy grandes"):
-   siempre son 4 movidas fijas (MOVIDAS, negotiation.js), en la grilla de 2
-   columnas de siempre -- pero esta pantalla vive FUERA del shell (pantalla
-   completa: #app vuelve a su max-width angosto de 430/560px), así que en
-   escritorio cada columna quedaba mucho más ancha que la tarjeta de
-   referencia del sistema (~206px, ver mockups-v2.html sección A). Un tope de
-   ancho + centrado en la propia celda de la grilla achica la tarjeta sin
-   tocar crearTarjeta (que sigue con su tamaño fijo de título/descripción en
-   todos los demás lugares del juego). En celular la columna ya mide menos
-   que el tope, así que no cambia nada ahí. */
-.negociacion-movidas .tarjeta { max-width: 210px; margin: 0 auto; }
+/* Negociación (v6, rediseño integral — pedido textual: "en líneas generales
+   no me gusta para nada el diseño de toda esta pantalla... la barra de
+   paciencia es muy grande, y ancha, da la impresión de que toda esta sección
+   debe rearmarse"). Reemplaza dos generaciones de intentos con tarjetas
+   cuadradas en grilla (v3: grilla de 2 col enteras; v4: la misma grilla con
+   un tope de ancho encima) por el formato que pidió el usuario en punta:
+   "más anchas que altas, en formato lista, todas del mismo tamaño, con su
+   ícono a la izquierda". Las 4 movidas son siempre las mismas 4 (MOVIDAS,
+   negotiation.js) — una lista vertical de filas gana en las dos pantallas
+   (celular Y escritorio) porque no depende de cuántas columnas entran a un
+   ancho dado, a diferencia de la grilla que sí necesitaba un tope de ancho
+   distinto por breakpoint. */
+.negociacion-lista { display: flex; flex-direction: column; gap: 8px; }
+
+.movida-fila {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  /* min-height (no height): reserva el mismo alto para las 4 filas (pedido
+     "todas del mismo tamaño") sin arriesgar cortar texto si alguna vez una
+     traducción/variante corre más larga — la garantía "ningún texto puede
+     quedar cortado" pesa más que el milímetro de diferencia que dejaría una
+     fila con menos texto. */
+  min-height: 92px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 13px 14px;
+  text-align: left;
+  color: var(--texto);
+  font-family: var(--fuente);
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background-color 0.15s ease;
+}
+
+.movida-fila:disabled { opacity: 0.45; cursor: not-allowed; }
+.movida-fila:not(:disabled):hover { border-color: var(--borde-fuerte); background: var(--superficie-alta); }
+.movida-fila:not(:disabled):active { transform: scale(0.98); }
+
+/* Ícono a la izquierda (pedido textual: "los iconos... se ven muy chicos:
+   proporcionalos bien") — mismo tratamiento de placa que `.tarjeta-icono`/
+   `.tienda-item-icono` (42px, ícono a 20-22px adentro) en vez del ícono
+   suelto a 18px de la vieja tarjeta cuadrada. */
+.movida-icono {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  background: #1f1113;
+  color: var(--dorado);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.movida-cuerpo { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.movida-titulo { font-weight: 800; font-size: 14.5px; letter-spacing: 0.2px; }
+.movida-desc { font-size: 12px; color: var(--texto-medio); line-height: 1.45; }
+
+/* El label de riesgo (pedido textual: "los labels de riesgo tienen que
+   entrar... y ningún texto puede quedar cortado"): en la fila ancha de
+   siempre hay lugar de sobra, así que se deja envolver libre (sin
+   line-clamp ni ellipsis) en vez de forzarlo a una sola línea. "Cerrá el
+   trato" no tiene riesgo real, pero muestra su propio chip ("Sin riesgo")
+   en vez de dejar un hueco: así las 4 filas comparten la misma anatomía. */
+.movida-riesgo {
+  align-self: flex-start;
+  margin-top: 2px;
+  border-radius: 20px;
+  padding: 4px 10px;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.movida-riesgo.positivo { background: #16240f; border: 1px solid #2c4a30; color: var(--verde); }
+.movida-riesgo.negativo { background: #241012; border: 1px solid #4a2c2c; color: #e0a0a0; }
+.movida-riesgo.leve { background: #241c08; border: 1px solid #4a3a12; color: #e0b25a; }
+
+/* Paciencia del promotor (v6): antes una pista gruesa de 22-28px con borde
+   propio (pedido textual anterior, "que se parezca al mockup") — ahora, con
+   el enfoque puesto en la LISTA de movidas (pedido explícito: "con enfoque
+   en las cosas importantes"), la paciencia pasa a ser una franja de estado
+   chica: ícono en su propia placa (mismo tamaño que en .fila del resto del
+   juego, ya no un SVG suelto de 14px) + número, y la barra fina de siempre
+   (`.barra`, 8px) en vez de la pista ancha. */
+.paciencia-fila { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.paciencia-info { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.paciencia-icono {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: #1f1113;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.paciencia-textos { min-width: 0; }
+.paciencia-valor { font-size: 15px; font-weight: 800; line-height: 1.3; }
+.paciencia-aprietes { flex: 0 0 auto; white-space: nowrap; }
 
 /* Shell persistente (v2), grilla 3×3 (v4): tres regiones montadas una sola
    vez. Mobile-first (las tres apiladas, en el mismo orden que en escritorio)
@@ -619,41 +711,44 @@ h2 { font-size: 17px; font-weight: 800; }
 /* Cuadros iguales de atributos/estado (Cambio 2, feedback del usuario: "los
    módulos de atributos y estados están bien posicionados pero mal
    orientados... quiero que se vean en horizontal... cuadros con POT / 33,
-   VEL / 43"). Grilla real (no una lista de filas): CADA celda mide igual a
-   sus hermanas porque comparten el mismo padding/tipografía fija y ninguna
-   envuelve texto (ETIQUETAS[clave].corta son abreviaturas cortas, ver
-   filaAtributo en panel-peleador.js) — nota 1/2 del pedido: los cuadros de
-   Atributos miden igual ENTRE SÍ, los de Estado también entre sí (pueden
-   diferir de los de Atributos: acá comparten CSS y terminan iguales, pero
-   nada lo exige). 3 columnas para Atributos (6-7 claves de combate); Estado
-   son siempre 4 claves fijas, así que 2 columnas arma un 2×2 prolijo en vez
-   de dejar una tercera columna con un solo cuadro huérfano. */
+   VEL / 43"). CADA celda mide igual a sus hermanas porque comparten el mismo
+   padding/tipografía fija y ninguna envuelve texto (ETIQUETAS[clave].corta
+   son abreviaturas cortas, ver filaAtributo en panel-peleador.js) — nota 1/2
+   del pedido: los cuadros de Atributos miden igual ENTRE SÍ, los de Estado
+   también entre sí (pueden diferir de los de Atributos: acá comparten CSS y
+   terminan iguales, pero nada lo exige).
+   v6 (rediseño integral, pedido textual: "todos los atributos deben verse en
+   una sola fila y todos los estados deben verse en una sola fila también"):
+   la vieja grilla de 3 columnas (2 filas para 6-7 atributos) y la de 2×2
+   (estado) se reemplazan por una FILA real — mismo patrón que `.fila` (flex,
+   cada hijo a `flex:1 1 0`) — que no depende de cuántas claves haya: sirve
+   igual para los 6 atributos de siempre, los 7 con grappling, o las 4 de
+   estado, siempre en un solo renglón. `flex-basis:0` (no `auto`) es lo que
+   garantiza que las N celdas midan EXACTAMENTE igual entre sí sin importar
+   que el número o el ancho del texto de cada una varíe. */
 .panel-peleador-atributos {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-}
-
-.panel-peleador-atributos.panel-peleador-atributos-estado {
-  grid-template-columns: repeat(2, 1fr);
+  display: flex;
+  gap: 5px;
 }
 
 .panel-peleador-atributo {
   position: relative;
+  flex: 1 1 0;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 3px;
+  gap: 2px;
   min-height: 52px;
-  padding: 8px 4px;
+  padding: 8px 2px;
   border-radius: 8px;
   background: var(--superficie);
   text-align: center;
 }
 
-.panel-peleador-atributo .nombre { font-size: 9px; letter-spacing: 1px; }
-.panel-peleador-atributo .valor { font-size: 18px; font-weight: 800; line-height: 1; }
+.panel-peleador-atributo .nombre { font-size: 8.5px; letter-spacing: 0.5px; }
+.panel-peleador-atributo .valor { font-size: 16px; font-weight: 800; line-height: 1; }
 .panel-peleador-atributo.con-aporte { background: #1a1408; }
 
 /* El aporte del entrenador (badge dorado "+N"): posición ABSOLUTA en la
@@ -787,7 +882,7 @@ h2 { font-size: 17px; font-weight: 800; }
 .boton:hover { filter: brightness(1.08); }
 .boton:active { transform: scale(0.97); }
 
-.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
+.barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease; }
 
 .log > p { animation: aparecer 0.25s ease both; }
 .log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
@@ -867,29 +962,6 @@ h2 { font-size: 17px; font-weight: 800; }
   box-shadow: 0 0 10px #fff;
   transform: translateX(-50%);
   transition: left 0.05s linear;
-}
-
-/* Barra de paciencia del promotor (negociación, v3): mismo tratamiento
-   grueso y con borde que la barra de precisión del golpe de gracia
-   (referencia visual del mockup, sección C: pista redondeada, con borde,
-   26-28px de alto) en vez de la barrita fina de 8px de `.barra` — el pedido
-   textual del usuario fue justamente "la barra no es igual [al mockup]".
-   Acá no hay zona que acertar (no es un minijuego de puntería): una sola
-   franja cuyo COLOR viaja de verde a rojo según cuánta paciencia queda, el
-   mismo semáforo que ya usa el resto del juego para "bueno/ojo/peligro". */
-.barra-paciencia-pista {
-  position: relative;
-  height: 22px;
-  background: #241012;
-  border: 1px solid var(--borde-fuerte);
-  border-radius: 11px;
-  overflow: hidden;
-}
-
-.barra-paciencia-pista > i {
-  display: block;
-  height: 100%;
-  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease;
 }
 
 /* Campo "qué acaba de pasar" (Task v3, pedido textual: "falta un campo que
@@ -1049,18 +1121,63 @@ h2 { font-size: 17px; font-weight: 800; }
    `.panel-noticias-lista`): la cabecera del popup queda siempre fija arriba,
    y una fila cortada a la mitad en el borde inferior avisa que hay más para
    scrollear. */
-.tabla-ranking-lista { max-height: 60vh; overflow-y: auto; padding-right: 2px; }
-.tabla-ranking-fila { padding: 9px 12px; }
+/* Lista compacta (v6, pedido textual: "el popup de ranking desperdicia
+   espacio... que sea una lista compacta: NÚMERO | BANDERA | NOMBRE |
+   HISTORIAL. La media NO va"): con el roster de 100 peleadores, cada fila se
+   repite cien veces — una sola línea por fila (antes nombre + "MEDIA ·
+   récord" en dos renglones) es lo que hace que la lista scrollee liviana en
+   vez de pesada. `gap` chico entre filas (no `.stack`'s 8px de siempre): son
+   datos de tabla, no tarjetas, y respiran distinto. */
+.tabla-ranking-lista { display: flex; flex-direction: column; gap: 3px; max-height: 65vh; overflow-y: auto; padding-right: 2px; }
+
+.tabla-ranking-fila {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabla-ranking-fila:hover { background: var(--superficie); }
+}
+
 .tabla-ranking-puesto {
   flex: 0 0 auto;
-  width: 30px;
+  width: 32px;
   text-align: center;
   font-weight: 800;
+  font-size: 12.5px;
   color: var(--texto-sutil);
 }
 
-.tabla-ranking-fila-jugador { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
-.tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
+.tabla-ranking-nombre {
+  flex: 1;
+  min-width: 0;
+  font-weight: 700;
+  font-size: 13px;
+  overflow-wrap: break-word;
+}
+
+.tabla-ranking-record {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.tabla-ranking-fila-jugador {
+  background: #1a1408;
+  box-shadow: 0 0 0 1px var(--dorado);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabla-ranking-fila-jugador:hover { background: #1a1408; }
+}
+
+.tabla-ranking-fila-jugador .tabla-ranking-puesto,
+.tabla-ranking-fila-jugador .tabla-ranking-record { color: var(--dorado); }
 
 /* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
    (panel-peleador.js): comparte fila con la etiqueta "Ranking", así que no

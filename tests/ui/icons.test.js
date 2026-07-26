@@ -65,6 +65,25 @@ describe('set de íconos nuevo (oferta de pelea)', () => {
   });
 });
 
+// v6 (rediseño integral, pedido textual: "que tengan iconos diferenciables"):
+// antes cada paso de la creación (origen/apodo/estilo) mostraba el MISMO
+// ícono fijo en las 2-3 tarjetas que ofrecía, así que dentro de la grilla no
+// había forma de distinguirlas sin leer el título. Estos 5 son puntuales
+// para ese mapeo por id (ver ICONO_ORIGEN/ICONO_ESTILO en create.js).
+describe('set de íconos nuevo (creación v6: origen/estilo diferenciables)', () => {
+  const nombres = ['reloj', 'monitor', 'corona', 'viento', 'cruce'];
+
+  it.each(nombres)('%s se dibuja como un <svg> con al menos un <path>', (nombre) => {
+    const svg = icono(nombre);
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+
+  it('son visualmente distintos entre si (y de los que ya existian)', () => {
+    expect(new Set(nombres.map((n) => icono(n).outerHTML)).size).toBe(nombres.length);
+  });
+});
+
 describe('icono desconocido', () => {
   it('tira un error legible', () => {
     expect(() => icono('no-existe')).toThrow(/no-existe/);
