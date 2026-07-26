@@ -24,4 +24,28 @@ export const CARTAS_MEJORA = [
   { id: 'racha_mistica', titulo: 'La racha que no se explica', texto: 'Todo lo que tirás entra. El cuerpo responde antes de que lo pienses.', mods: { potencia: 8, tecnica: 6 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
   { id: 'campamento_perfecto', titulo: 'El campamento perfecto', texto: 'Ni un día flojo, ni una excusa, ni una lesión. Todo salió como en los libros.', mods: { cardio: 8, velocidad: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
   { id: 'secreto_del_entrenador', titulo: 'El secreto que el entrenador guardaba', texto: 'Treinta años de esquina resumidos en una tarde de gimnasio. Ahora es tuyo.', mods: { iq: 10, menton: 4 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
+
+  // --- Recuperación (Sistema 1, feedback del usuario: "las tarjetas que
+  // aparecen están condicionadas al estado del jugador" — lesionado tiene que
+  // ver kinesiología, reposo, cuidado; nunca machaque de gimnasio). Solo
+  // elegibles con `estados: ['lesionado']` (ver cartaAplicaPorEstado,
+  // cards.js): mientras estás sano, `repartirMejoras` nunca las reparte.
+  {
+    id: 'reposo_estricto', titulo: 'Reposo estricto, sin vueltas', texto: 'El médico fue claro: nada de forzar. Descansar bien también es entrenar.', mods: { forma: 8, fatiga: -15 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', estados: ['lesionado'],
+  },
+  {
+    id: 'kinesiologia_diaria', titulo: 'Kinesiología todos los días', texto: 'Bici fija, hielo, manos que saben. De a poco, vuelve.', mods: { forma: 10 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', estados: ['lesionado'],
+  },
+  {
+    id: 'dieta_de_recuperacion', titulo: 'Comer para sanar', texto: 'Proteína, verdura y paciencia. El cuerpo pide tiempo, no plazos.', mods: { forma: 6, disciplinaPersonal: 3 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', estados: ['lesionado'],
+  },
+  {
+    id: 'psicologo_del_bache', titulo: 'La cabeza también se lesiona', texto: 'Charlar con el psicólogo del equipo mientras el cuerpo no responde.', mods: { moral: 8, forma: 3 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', estados: ['lesionado'],
+  },
+  {
+    id: 'video_desde_el_sillon', titulo: 'Estudiar rivales desde el sillón', texto: 'No podés mover el cuerpo, pero la cabeza sigue entrenando.', mods: { iq: 4, forma: 4 }, etapas: ['amateur', 'profesional', 'veterano'], disciplinas: TODAS, rareza: 'rara', estados: ['lesionado'],
+  },
+  {
+    id: 'paciencia_de_lesionado', titulo: 'La paciencia que no tenías', texto: 'Aprender a esperar sin quemar etapas: la lesión, a su manera, también forma.', mods: { disciplinaPersonal: 5, forma: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'rara', estados: ['lesionado'],
+  },
 ];

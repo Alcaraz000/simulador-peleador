@@ -77,3 +77,20 @@ export function puedePelear(peleador) {
   const lesion = peleador.estado.lesion;
   return !lesion || lesion.severidad < 3;
 }
+
+// Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+// Parecería que no afecta en nada"). Multiplicador de efectividad en pelea
+// para un peleador lesionado — lo consume `efectividad()` en fight.js sobre
+// el CÁLCULO ENTERO (antes era un 0.88 fijo aplicado solo a la mitad de la
+// fórmula: ~6% de penalización total, invisible en la práctica). Escala con
+// la severidad: una lesión leve (severidad 1, tipo "corte en la ceja") se
+// siente pero no arruina la pelea; una moderada (severidad 2, tipo "mano
+// fracturada") pesa de verdad. Severidad 3 en teoría nunca llega acá —
+// puedePelear ya bloquea la oferta antes— pero el valor está igual, por las
+// dudas, y sigue la misma progresión.
+const FACTOR_POR_SEVERIDAD = { 1: 0.94, 2: 0.82, 3: 0.68 };
+
+export function factorEfectividad(lesion) {
+  if (!lesion) return 1;
+  return FACTOR_POR_SEVERIDAD[lesion.severidad] ?? 0.82;
+}

@@ -218,7 +218,18 @@ export function avanzarBloque(partida) {
   nueva.jugador.edad += etapa.aniosPorBloque;
   nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque);
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
-  nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
+  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+  // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
+  // los bloques, incluso mientras seguías lesionado — así que una lesión leve
+  // (1 bloque) quedaba borrada de la forma antes de que `recuperar()` (más
+  // abajo) te diera de alta. Mientras la lesión sigue activa AL ARRANCAR este
+  // bloque, el descanso pasivo se frena: la forma se queda baja de verdad. El
+  // bonus de curación de `recuperar()` (+10, en el bloque que te da de alta)
+  // no se toca: sigue siendo la recompensa de terminar la recuperación, no el
+  // descanso de rutina.
+  if (!nueva.jugador.estado.lesion) {
+    nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
+  }
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
   const recuperacion = recuperar(nueva.jugador, { bloques: 1 });

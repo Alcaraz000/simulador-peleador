@@ -295,6 +295,44 @@ describe('avanzarBloque', () => {
     expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
   });
 
+  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+  // Parecería que no afecta en nada"): antes, la forma se recuperaba +5 TODOS
+  // los bloques sin importar si seguías lesionado, así que una lesión leve
+  // (1 bloque de duración) quedaba borrada de la forma antes incluso de que
+  // `recuperar()` te diera de alta. Ahora, mientras sigue activa la lesión,
+  // ese descanso pasivo se frena: la forma se queda baja de verdad hasta
+  // curarte.
+  it('mientras sigue lesionado, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.lesion = {
+      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 3, costo: 1, texto: 'x',
+    };
+    p.jugador.estado.forma = 30;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion.bloquesRestantes).toBe(2);
+    expect(despues.jugador.estado.forma).toBe(30);
+  });
+
+  it('en el bloque en que termina de curarse, la forma sube por el bonus de curación (no por el descanso normal)', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.lesion = {
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+    };
+    p.jugador.estado.forma = 30;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion).toBeNull();
+    // +10 del bonus de curación (recuperar, injuries.js), SIN el +5 pasivo de
+    // un bloque sano (ese solo corre cuando no hay lesión activa al arrancar
+    // el bloque).
+    expect(despues.jugador.estado.forma).toBe(40);
+  });
+
+  it('sin lesion, la forma sigue subiendo de a poco cada bloque como siempre', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.forma = 30;
+    expect(avanzarBloque(p).jugador.estado.forma).toBe(35);
+  });
+
   it('no muta la partida original', () => {
     const p = nuevaPartida();
     const antes = JSON.stringify(p);
@@ -404,6 +442,54 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     }
     expect(tipos).toContain('oferta');
     expect(tipos).not.toContain('lesionSinOferta');
+  });
+
+  // Sistema 1 (feedback del usuario: "verificá que puedePelear() bloquee de
+  // verdad, en todos los caminos"): confirma el límite exacto de severidad —
+  // leve y moderada siguen ofreciendo pelea a propósito (no todo golpe te
+  // saca de circulación), solo severidad 3 (grave) corta la oferta. Único
+  // punto de generación de ofertas en todo el juego es armarCola (acá abajo,
+  // vía siguienteBeat) — no hay otro camino que pueda saltarse el gate.
+  it('con lesion leve o moderada, sigue ofreciendo pelea (no bloquea de más)', () => {
+    for (const severidad of [1, 2]) {
+      const p = nuevaPartida();
+      p.etapaIndice = 2;
+      p.jugador.estado.lesion = {
+        id: 'x', nombre: 'x', severidad, bloquesRestantes: 2, costo: 1, texto: 'x',
+      };
+      const { beat } = siguienteBeat(p);
+      expect(beat.tipo).toBe('mejora'); // primer beat del bloque siempre es mejora
+      // Sigue buscando la oferta en los próximos beats del mismo bloque.
+      let actual = siguienteBeat(p).partida;
+      const tipos = [];
+      for (let i = 0; i < 5; i++) {
+        const paso = siguienteBeat(actual);
+        actual = paso.partida;
+        if (paso.beat) tipos.push(paso.beat.tipo);
+      }
+      expect(tipos).toContain('oferta');
+      expect(tipos).not.toContain('lesionSinOferta');
+    }
+  });
+
+  // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
+  // 0 vía recuperar(), avanzarBloque), las ofertas vuelven solas en el
+  // próximo bloque, sin que el jugador tenga que hacer nada especial.
+  it('en cuanto se cura de una lesion grave, las ofertas vuelven sin trabas', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2;
+    p.jugador.estado.lesion = {
+      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 1, costo: 1, texto: 'x',
+    };
+    let actual = p;
+    let vioOferta = false;
+    for (let i = 0; i < 8 && !vioOferta; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat?.tipo === 'oferta') vioOferta = true;
+    }
+    expect(actual.jugador.estado.lesion).toBeNull();
+    expect(vioOferta).toBe(true);
   });
 });
 

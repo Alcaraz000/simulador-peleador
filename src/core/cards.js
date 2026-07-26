@@ -10,10 +10,24 @@ export function formatearMods(mods) {
   });
 }
 
-function cartaAplica(carta, { etapa, disciplina }) {
+// Sistema 1 (feedback del usuario: "las tarjetas que aparecen están
+// condicionadas al estado del jugador"): `carta.estados` es opcional y, si
+// falta, se asume `['sano']` — así el catálogo viejo (todo pensado para un
+// jugador sano, "machaque de gimnasio") sigue funcionando tal cual sin tener
+// que taggear cada carta a mano. Una carta de recuperación declara
+// `estados: ['lesionado']` explícitamente (ver CARTAS_MEJORA,
+// content/cards-improve.js): mientras el jugador está lesionado, SOLO esas
+// aparecen — nunca las de gimnasio — y viceversa.
+function cartaAplicaPorEstado(carta, estado) {
+  const estadosCarta = carta.estados ?? ['sano'];
+  return estadosCarta.includes(estado);
+}
+
+function cartaAplica(carta, { etapa, disciplina, estado }) {
   const porEtapa = carta.etapas.includes(etapa);
   const porDisciplina = carta.disciplinas === 'todas' || carta.disciplinas.includes(disciplina);
-  return porEtapa && porDisciplina;
+  const porEstado = cartaAplicaPorEstado(carta, estado);
+  return porEtapa && porDisciplina && porEstado;
 }
 
 // Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.
@@ -71,7 +85,8 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = 3, catalogo = 
   const fuente = catalogo ?? CARTAS_MEJORA;
   const bonus = bonusCartas(jugador);
   const total = cantidad + bonus.opcionesExtra;
-  const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina }));
+  const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
+  const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
   const elegidas = sortearPorRareza(rng, elegibles, total);
 
   if (bonus.bonusValor === 0) return elegidas;

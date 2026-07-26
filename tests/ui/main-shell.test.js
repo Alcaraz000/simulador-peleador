@@ -544,10 +544,10 @@ describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo
     // ...el foco no se escapó hacia atrás, al panel que se acaba de repintar...
     expect(cont.querySelector('.shell-izquierda').contains(document.activeElement)).toBe(false);
     // ...y el panel izquierdo, DETRÁS del popup, ya muestra la plata nueva
-    // (200000 - 90000 del kinesiólogo = 110000).
+    // (200000 - 16000 del kinesiólogo, precio recalibrado en Sistema 3 = 184000).
     const dineroDespues = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroDespues).not.toBe(dineroAntes);
-    expect(dineroDespues).toBe('US$ 110K');
+    expect(dineroDespues).toBe('US$ 184K');
 
     // El centro y la derecha del shell no se tocaron: la garantía del shell
     // (montarCentro nunca toca las columnas laterales) sigue en pie aunque

@@ -2,6 +2,7 @@ import { getDisciplina, pesosDe } from './disciplines.js';
 import { ventajaDeEstilo } from './styles.js';
 import { calcularMedia, clamp } from './stats.js';
 import { createRng } from './rng.js';
+import { factorEfectividad } from './injuries.js';
 import { LINEAS } from '../content/fight-lines.js';
 
 // Las descripciones son la voz del entrenador armando el plan con vos, no un
@@ -100,9 +101,14 @@ function efectividad(snapshot, disciplina, fatiga, planMods, esJugador) {
   const forma = (snapshot.estado.forma ?? 60) / 60;
   const moral = (snapshot.estado.moral ?? 60) / 60;
   const castigoFatiga = 1 - clamp(fatiga, 0, 100) / 220;
-  const castigoLesion = snapshot.estado.lesion ? 0.88 : 1;
+  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+  // Parecería que no afecta en nada"): antes era un 0.88 fijo aplicado solo a
+  // la MITAD de la fórmula (~6% de penalización total, invisible). Ahora
+  // `factorEfectividad` (injuries.js) escala con la severidad y pesa sobre el
+  // cálculo ENTERO, así que sí se siente en pelea.
+  const castigoLesion = factorEfectividad(snapshot.estado.lesion);
   const agresion = esJugador ? planMods.agresion : 0;
-  return media * forma * 0.5 + media * 0.5 * moral * castigoFatiga * castigoLesion * (1 + agresion);
+  return (media * forma * 0.5 + media * 0.5 * moral * castigoFatiga * (1 + agresion)) * castigoLesion;
 }
 
 function texto(plantilla, yo, rival) {

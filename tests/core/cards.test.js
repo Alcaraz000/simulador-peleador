@@ -141,6 +141,73 @@ describe('repartirMejoras', () => {
     expect(pct('legendaria')).toBeLessThan(15);
   });
 
+  // Sistema 1 (feedback del usuario: "las tarjetas que aparecen están
+  // condicionadas al estado del jugador"): un jugador lesionado tiene que ver
+  // cartas de recuperación (kinesiología, reposo), nunca de machaque de
+  // gimnasio — y viceversa, un jugador sano nunca ve las de recuperación.
+  describe('condicionado por el estado del jugador (lesionado)', () => {
+    const catalogoMixto = [
+      { id: 'gym1', titulo: 'Gym1', texto: 't', mods: { potencia: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'gym2', titulo: 'Gym2', texto: 't', mods: { velocidad: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'gym3', titulo: 'Gym3', texto: 't', mods: { tecnica: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      {
+        id: 'rec1', titulo: 'Rec1', texto: 't', mods: { forma: 5 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+      {
+        id: 'rec2', titulo: 'Rec2', texto: 't', mods: { forma: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+      {
+        id: 'rec3', titulo: 'Rec3', texto: 't', mods: { moral: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+    ];
+
+    function jugadorLesionado() {
+      const j = jugador();
+      return { ...j, estado: { ...j.estado, lesion: { id: 'x', nombre: 'x', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' } } };
+    }
+
+    it('un jugador lesionado solo ve cartas marcadas para ese estado, nunca las de gimnasio', () => {
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugadorLesionado(), etapa: 'profesional', catalogo: catalogoMixto,
+        });
+        for (const carta of cartas) expect(carta.id.startsWith('rec')).toBe(true);
+      }
+    });
+
+    it('un jugador sano nunca ve las cartas exclusivas de lesionado', () => {
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugador(), etapa: 'profesional', catalogo: catalogoMixto,
+        });
+        for (const carta of cartas) expect(carta.id.startsWith('gym')).toBe(true);
+      }
+    });
+
+    it('el catalogo real trae varias cartas de recuperación para cuando el jugador está lesionado', () => {
+      const deRecuperacion = CARTAS_MEJORA.filter((c) => (c.estados ?? []).includes('lesionado'));
+      expect(deRecuperacion.length).toBeGreaterThanOrEqual(5);
+      for (const carta of deRecuperacion) {
+        expect(carta.titulo.length).toBeGreaterThan(0);
+        expect(carta.texto.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('las cartas de recuperación del catálogo real nunca aparecen para un jugador sano', () => {
+      for (let semilla = 1; semilla <= 150; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+        for (const carta of cartas) expect(carta.estados ?? ['sano']).toContain('sano');
+      }
+    });
+
+    it('un jugador lesionado, sobre muchas semillas, solo recibe cartas de recuperación del catálogo real', () => {
+      for (let semilla = 1; semilla <= 150; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugadorLesionado(), etapa: 'profesional' });
+        for (const carta of cartas) expect(carta.estados ?? []).toContain('lesionado');
+      }
+    });
+  });
+
   it('si una rareza no tiene cartas elegibles para la etapa/disciplina, igual completa la cantidad pedida con lo que haya', () => {
     const catalogoChico = [
       { id: 'n1', titulo: 'N1', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
