@@ -11,6 +11,7 @@ import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
+import { armarBeatsCampamento } from './campamento.js';
 
 // Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
 export const PERIODO_NOTICIAS = 4;
@@ -281,6 +282,27 @@ function armarCola(partida) {
   return { cola, rngEstado: rng.estado(), proximaPelea };
 }
 
+// Firma la pelea que el jugador acaba de aceptar (y, si hubo negociación, ya
+// tiene la bolsa final — ver main.js): en vez de ir directo al combate, arma
+// el campamento de preparación (campamento.js: 2 o 3 beats, siempre con
+// sparring) y lo mete AL FRENTE de lo que quede en la cola de este bloque
+// (típicamente nada, o como mucho el beat de 'noticias' periódico). Deja
+// `proximaPelea` con el semanaObjetivo real del campamento: el módulo de
+// "próxima pelea" del tablero (panel-proxima.js) ya sabe leer esto tal cual,
+// sin ningún cambio — usa el mismo `semanasHastaPelea` de siempre.
+export function firmarPelea(partida, { oferta }) {
+  const nueva = clonarPartida(partida);
+  const rng = rngDe(nueva);
+  const etapa = etapaActual(nueva);
+  const { beats, semanaObjetivo } = armarBeatsCampamento(rng, {
+    jugador: nueva.jugador, etapa: etapa.id, oferta, semanaInicial: nueva.semanaGlobal ?? 1,
+  });
+  nueva.cola = [...beats, ...nueva.cola];
+  nueva.proximaPelea = { oferta, semanaObjetivo };
+  nueva.rngEstado = rng.estado();
+  return nueva;
+}
+
 export function siguienteBeat(partida) {
   if (partida.terminada) return { partida, beat: null };
 
@@ -307,6 +329,14 @@ export function siguienteBeat(partida) {
   }
 
   const beat = nueva.cola.shift() ?? null;
+  // Los beats de campamento (firmarPelea, más arriba) representan semanas de
+  // verdad pasando mientras se prepara la pelea firmada: cada uno avanza el
+  // calendario del tablero (semanaGlobal, calendario.js) lo que le toca, así
+  // "faltan N semanas" en el panel de próxima pelea baja de verdad beat a
+  // beat en vez de quedarse fijo hasta el próximo bloque.
+  if (beat && (beat.tipo === 'campCarta' || beat.tipo === 'campSparring')) {
+    nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + (beat.datos.semanas ?? 0);
+  }
   nueva.beatActual = beat;
   nueva.historialBeats += beat ? 1 : 0;
   return { partida: nueva, beat };

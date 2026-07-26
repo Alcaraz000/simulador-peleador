@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
+import {
+  ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea,
+} from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
 import { ANIO_INICIAL } from '../../src/core/world.js';
@@ -498,6 +500,61 @@ describe('proximaPelea (calendario del tablero)', () => {
     const antes = JSON.stringify(p.proximaPelea);
     siguienteBeat(p);
     expect(JSON.stringify(p.proximaPelea)).toBe(antes);
+  });
+});
+
+describe('firmarPelea (campamento de preparación)', () => {
+  function ofertaDePrueba() {
+    return {
+      id: 'of_1', rivalId: 'r1', rivalApodo: 'El Zurdo', esTitulo: false,
+    };
+  }
+
+  it('mete los beats de campamento al frente de la cola', () => {
+    const p = nuevaPartida(1);
+    p.etapaIndice = 2; // profesional
+    const conCola = { ...p, cola: [{ tipo: 'noticias', datos: {} }] };
+    const firmada = firmarPelea(conCola, { oferta: ofertaDePrueba() });
+    expect(['campCarta', 'campSparring']).toContain(firmada.cola[0].tipo);
+    expect(firmada.cola[firmada.cola.length - 1].tipo).toBe('noticias');
+  });
+
+  it('deja proximaPelea con la oferta y un semanaObjetivo mayor a la semana actual', () => {
+    const p = nuevaPartida(2);
+    const oferta = ofertaDePrueba();
+    const firmada = firmarPelea(p, { oferta });
+    expect(firmada.proximaPelea.oferta).toBe(oferta);
+    expect(firmada.proximaPelea.semanaObjetivo).toBeGreaterThan(p.semanaGlobal);
+  });
+
+  it('no muta la partida original', () => {
+    const p = nuevaPartida(3);
+    const antes = JSON.stringify(p);
+    firmarPelea(p, { oferta: ofertaDePrueba() });
+    expect(JSON.stringify(p)).toBe(antes);
+  });
+
+  it('siguienteBeat avanza semanaGlobal al consumir un beat de campamento', () => {
+    const p = nuevaPartida(4);
+    const firmada = firmarPelea(p, { oferta: ofertaDePrueba() });
+    const semanaAntes = firmada.semanaGlobal;
+    const paso = siguienteBeat(firmada);
+    expect(['campCarta', 'campSparring']).toContain(paso.beat.tipo);
+    expect(paso.partida.semanaGlobal).toBe(semanaAntes + paso.beat.datos.semanas);
+  });
+
+  it('consumiendo todo el campamento, semanaGlobal llega exactamente a semanaObjetivo', () => {
+    const p = nuevaPartida(5);
+    let actual = firmarPelea(p, { oferta: ofertaDePrueba() });
+    const objetivo = actual.proximaPelea.semanaObjetivo;
+    let ultimoBeat = null;
+    for (let i = 0; i < 5 && !ultimoBeat; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat.datos.ultimo) ultimoBeat = paso.beat;
+    }
+    expect(ultimoBeat).not.toBeNull();
+    expect(actual.semanaGlobal).toBe(objetivo);
   });
 });
 
