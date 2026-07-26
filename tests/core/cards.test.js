@@ -104,6 +104,17 @@ describe('repartirMejoras', () => {
     expect(conEntrenador).toHaveLength(4);
   });
 
+  // Sistema 2, corrección del coordinador: en juvenil/amateur hay más
+  // opciones para elegir (además del bonus de mods) — "mejor de más
+  // cartas" empuja el promedio sin tocar ningún valor, así que nunca puede
+  // acercar una normal/rara a una legendaria.
+  it('en juvenil hay mas opciones para elegir que en profesional', () => {
+    const juvenil = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'juvenil' });
+    const profesional = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'profesional' });
+    expect(juvenil.length).toBeGreaterThan(profesional.length);
+    expect(profesional).toHaveLength(3);
+  });
+
   it('el entrenador mejora los numeros positivos', () => {
     const sin = repartirMejoras(createRng(5), { jugador: jugador(), etapa: 'profesional' });
     const con = repartirMejoras(createRng(5), { jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional' });
@@ -117,6 +128,90 @@ describe('repartirMejoras', () => {
     const a = repartirMejoras(createRng(6), { jugador: jugador(), etapa: 'profesional' });
     const b = repartirMejoras(createRng(6), { jugador: jugador(), etapa: 'profesional' });
     expect(a.map((c) => c.id)).toEqual(b.map((c) => c.id));
+  });
+
+  // Sistema 2, corrección del coordinador (segunda ronda): "el problema está
+  // en la mitad de la carrera, no en el final" — un jugador que recién
+  // arranca sube muy lento porque cada carta mueve poco sobre una base
+  // chica. Bonus extra en las etapas tempranas (decae a 0 en profesional):
+  // empuja fuerte la MEDIA al principio sin inflar más el techo final, ya
+  // que para cuando llega a profesional (la mayoría de los 20 bloques de la
+  // carrera) el bonus ya se apagó.
+  describe('bonus de etapa temprana (Sistema 2, corrección del coordinador)', () => {
+    const positivos = (cartas) => cartas.reduce(
+      (acc, c) => acc + Object.values(c.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0), 0,
+    );
+
+    // Catálogo de UNA sola carta (disponible en las cuatro etapas): con un
+    // solo elemento elegible, sortearPorRareza siempre devuelve esa misma
+    // carta sin importar la tirada de rng — así la comparación entre etapas
+    // aísla el bonus de verdad, sin el ruido de que el POOL elegible cambie
+    // de una etapa a otra (varias cartas reales son solo de ciertas etapas).
+    const catalogoUnaCarta = [
+      { id: 'unica', titulo: 'Única', texto: 't', mods: { potencia: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+    ];
+
+    it('en juvenil, la MISMA carta sale con un mod mayor que en profesional', () => {
+      const juvenil = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const profesional = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
+      expect(juvenil[0].mods.potencia).toBeGreaterThan(profesional[0].mods.potencia);
+      expect(profesional[0].mods.potencia).toBe(4); // profesional: sin bonus, el valor de la carta tal cual
+    });
+
+    it('en amateur tambien hay bonus, pero menor que en juvenil', () => {
+      const juvenil = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const amateur = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'amateur', catalogo: catalogoUnaCarta });
+      expect(amateur[0].mods.potencia).toBeGreaterThan(4);
+      expect(juvenil[0].mods.potencia).toBeGreaterThan(amateur[0].mods.potencia);
+    });
+
+    it('en profesional y veterano no hay bonus de etapa (el comportamiento de siempre)', () => {
+      const profesional = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
+      const veterano = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'veterano', catalogo: catalogoUnaCarta });
+      expect(profesional[0].mods.potencia).toBe(4);
+      expect(veterano[0].mods.potencia).toBe(4);
+    });
+
+    it('el bonus de etapa se suma al del entrenador, no lo reemplaza', () => {
+      const soloEtapa = repartirMejoras(createRng(13), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const etapaYEntrenador = repartirMejoras(createRng(13), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoUnaCarta,
+      });
+      expect(etapaYEntrenador[0].mods.potencia).toBeGreaterThan(soloEtapa[0].mods.potencia);
+    });
+
+    it('los mods negativos nunca se tocan con el bonus de etapa', () => {
+      const catalogoNegativo = [
+        { id: 'mixta', titulo: 'Mixta', texto: 't', mods: { potencia: 4, velocidad: -2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      ];
+      const juvenil = repartirMejoras(createRng(14), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoNegativo });
+      expect(juvenil[0].mods.velocidad).toBe(-2);
+    });
+
+    // Pedido explícito y repetido del usuario: "no aplanes la varianza de
+    // las legendarias". Un bonus parejo para TODAS las cartas (normal, rara
+    // Y legendaria) diluye la ventaja relativa de sacar una legendaria —
+    // medido con balance-sim.mjs, la brecha CON/SIN legendaria se achicaba
+    // de ~4.24 a ~3.03 puntos de MEDIA. Las legendarias quedan afuera del
+    // bonus de etapa: siguen valiendo exactamente lo que su autor escribió,
+    // nunca más, nunca menos.
+    it('las cartas legendarias NO reciben el bonus de etapa temprana (no aplanar su varianza)', () => {
+      const catalogoLegendaria = [
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+      ];
+      const juvenil = repartirMejoras(createRng(15), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoLegendaria });
+      expect(juvenil[0].mods.potencia).toBe(8);
+    });
+
+    it('el entrenador SÍ sigue mejorando las legendarias (solo el bonus de etapa las excluye)', () => {
+      const catalogoLegendaria = [
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+      ];
+      const conEntrenador = repartirMejoras(createRng(16), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoLegendaria,
+      });
+      expect(conEntrenador[0].mods.potencia).toBeGreaterThan(8);
+    });
   });
 
   it('respeta el filtro de etapa', () => {

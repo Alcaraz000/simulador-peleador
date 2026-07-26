@@ -91,7 +91,7 @@ function continuar() {
 }
 
 describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', () => {
-  it('mejora: el shell se monta con los 3 paneles y 3 tarjetas; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
+  it('mejora: el shell se monta con los 3 paneles y tarjetas de mejora; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
@@ -99,8 +99,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
 
+    // No se fija un número exacto (Sistema 2, corrección del coordinador:
+    // juvenil/amateur ofrecen más opciones que profesional — la semilla 1
+    // por defecto arranca en juvenil, ver OPCIONES_EXTRA_ETAPA_TEMPRANA en
+    // cards.js).
     const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta');
-    expect(tarjetas).toHaveLength(3);
+    expect(tarjetas.length).toBeGreaterThanOrEqual(3);
 
     tarjetas[0].click();
     vi.runAllTimers();
@@ -136,14 +140,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 5 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 52 con "entrenador"/"cambiar": las cartas nuevas de riesgo
-    // corren la secuencia de rng de 'evento' y esa semilla dejó de llegar a
-    // esa carta puntual.)
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 5: Sistema 2, segunda ronda — las opciones extra de
+    // repartirMejoras en juvenil/amateur, cards.js, consumen más tiradas de
+    // rng por bloque y corrieron la secuencia; 5 dejó de llegar a esta carta
+    // puntual, 6 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -247,11 +252,16 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
-    // semilla 3: con el rebalance del campamento (Task v3), probSparring
-    // bajó fuerte (0 en profesional/veterano — el campamento ya lo garantiza
-    // en cada pelea, ver campamento.js), así que la semilla 1 por defecto ya
-    // no llega a un beat "sparring" suelto dentro de su propia carrera.
-    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    // semilla 2: con el rebalance del campamento (Task v3), probSparring bajó
+    // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
+    // cada pelea, ver campamento.js), así que un "sparring" suelto solo
+    // puede salir en los 6 bloques de juvenil/amateur. Sistema 2 (segunda
+    // ronda, corrección del coordinador): las opciones extra de
+    // repartirMejoras en esas mismas etapas (cards.js) consumen más tiradas
+    // de rng por bloque, así que corrieron la secuencia y la semilla 3 (que
+    // antes sí llegaba) dejó de encontrar un "sparring" dentro del límite de
+    // búsqueda — 2 sí lo encuentra.
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -281,7 +291,11 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta')).toHaveLength(3);
+    // No se fija un número exacto de tarjetas (Sistema 2, corrección del
+    // coordinador: juvenil/amateur ofrecen más opciones que profesional,
+    // ver OPCIONES_EXTRA_ETAPA_TEMPRANA en cards.js) — lo que este test
+    // verifica es la navegación a la Ficha y de vuelta, no la cantidad.
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
 
     cont.querySelector('[data-accion="ficha"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
@@ -289,7 +303,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     cont.querySelector('[data-accion="cerrar"]').click();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta')).toHaveLength(3);
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
   });
 });
 
@@ -452,7 +466,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     // semilla 3: mismo caso ya usado más arriba para llegar a un beat
     // "sparring" suelto (en profesional/veterano probSparring es 0 — el
     // campamento ya lo garantiza en cada pelea).
-    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
     continuar();
 
     expect(cont.querySelector('.grilla-paos')).toBeTruthy();
@@ -483,7 +497,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
   // contador de "Golpes" tiene que seguir en 0: el timer pendiente se corta
   // ANTES de que la Ficha reemplace la pantalla (abandonarSparringPendiente).
   it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
-    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
     continuar();
 
     cont.querySelector('[data-accion="empezar"]').click();

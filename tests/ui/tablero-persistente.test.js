@@ -82,7 +82,23 @@ function hayPantallaDePelea(cont) {
   );
 }
 
+// Sistema 4 (hitos de carrera, popups): pueden aparecer en CUALQUIER
+// "Continuar" que cruce de etapa (ver hitoDeEtapa/siguiente(), main.js). En
+// el navegador real el overlay bloquea el click al tablero de atrás
+// (clickear el fondo cierra el popup en vez de pasarle el click a lo que
+// está debajo — ver popup.js), así que un usuario real SIEMPRE lo cierra
+// antes de poder seguir. happy-dom no simula ese bloqueo visual: sin este
+// guard, resolverUnPaso seguía clickeando el tablero de "atrás" con el
+// hito todavía abierto, y ese popup viejo quedaba de fantasma en
+// document.body — rompiendo cualquier aserción posterior que abriera OTRO
+// popup (p. ej. la tabla de ranking) buscando `.popup-overlay` a secas.
+function cerrarHitoSiHay() {
+  const cerrar = document.querySelector('.popup-overlay .popup-cerrar');
+  if (cerrar) cerrar.click();
+}
+
 function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
+  cerrarHitoSiHay();
   if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
 
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');

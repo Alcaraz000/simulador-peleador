@@ -37,6 +37,7 @@ import { aplicarResultado, CINTURONES } from '../src/core/offers.js';
 import { aplicarCarta } from '../src/core/cards.js';
 import { resolverOpcion } from '../src/core/events.js';
 import { repartirApodos } from '../src/core/nicknames.js';
+import { tirarLesion, aplicarLesion } from '../src/core/injuries.js';
 import { createRng } from '../src/core/rng.js';
 
 function puntajeMods(mods = {}) {
@@ -94,14 +95,34 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
 // el resto de esta simulación "jugando bien"): se llama cuando aparece el
 // beat `ultimo` del campamento (firmarPelea, career.js), no apenas se ve la
 // oferta — la pelea en sí ya no ocurre en el acto de aceptar.
-function resolverPeleaDeCampamento(jugador, oferta) {
+//
+// `simularLesiones` (Sistema 1, corrección del coordinador: "cualquier
+// lesión bloquea las ofertas — medí el efecto colateral"): opcional porque
+// las variantes de MEDIA (baseline/creacionReal/pisoCreacionReal, más abajo)
+// necesitan quedar comparables con las corridas anteriores, sin el ruido
+// extra de lesiones. Cuando está activo, tira una lesión con el mismo rng
+// "aparte" que usa main.js para tirarLesion (rngCosmetico) — nunca el rng
+// propio de la partida, para no correr la secuencia que calibra el ritmo.
+// `danoRecibido` no existe en esta abstracción (no se simula la pelea round
+// a round): se usa un rango representativo de una pelea ganada de verdad
+// (ni un paseo ni al límite), rng.int(10, 50) — el mismo rango, mismo rng,
+// para que la medición sea reproducible.
+function resolverPeleaDeCampamento(jugador, oferta, { rngLesion = null } = {}) {
   const resultado = aplicarResultado(jugador, {
     oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
   });
-  return { jugador: resultado.jugador, defensa: oferta.nivel === 'defensa' };
+  let nuevoJugador = resultado.jugador;
+  if (rngLesion) {
+    const danoRecibido = rngLesion.int(10, 50);
+    const lesion = tirarLesion(rngLesion, { peleador: nuevoJugador, contexto: 'pelea', danoRecibido });
+    if (lesion) nuevoJugador = aplicarLesion(nuevoJugador, lesion);
+  }
+  return { jugador: nuevoJugador, defensa: oferta.nivel === 'defensa' };
 }
 
-function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias = false }) {
+function jugarCarrera(semilla, {
+  crearJugador, limite = 500, evitarLegendarias = false, simularLesiones = false,
+}) {
   const { jugador, legendariaEnCreacion } = crearJugador(semilla);
   let partida = crearPartida({ jugador, semilla });
   const rngCosmetico = createRng(semilla + 7777); // igual que main.js: rng aparte para resolverOpcion
@@ -109,6 +130,8 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
   let beats = 0;
   let ofertas = 0;
   let defensas = 0;
+  let lesiones = 0; // cuántas veces se lesionó en total (solo con simularLesiones)
+  let bloquesLesionado = 0; // cuántos beats 'lesionSinOferta' vio (proxy de bloques perdidos)
   let legendariasEnCarrera = 0; // solo cartas/eventos DURANTE la carrera (no creación)
   let guardia = 0;
   // MEDIA "a mitad de carrera" (Sistema 2, pedido textual del usuario: "que
@@ -153,7 +176,11 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
       // propia, no afecta la medición de suerte legendaria.
       partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 2) } } };
       if (beat.tipo === 'campSparring' && beat.datos.ultimo) {
-        const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta);
+        const teniaLesionAntes = Boolean(partida.jugador.estado.lesion);
+        const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta, {
+          rngLesion: simularLesiones ? rngCosmetico : null,
+        });
+        if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
         ofertas += 1;
         if (r.defensa) defensas += 1;
         partida = { ...partida, jugador: r.jugador };
@@ -166,7 +193,11 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
       });
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
       if (ultimo) {
-        const r = resolverPeleaDeCampamento(partida.jugador, oferta);
+        const teniaLesionAntes = Boolean(partida.jugador.estado.lesion);
+        const r = resolverPeleaDeCampamento(partida.jugador, oferta, {
+          rngLesion: simularLesiones ? rngCosmetico : null,
+        });
+        if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
         ofertas += 1;
         if (r.defensa) defensas += 1;
         partida = { ...partida, jugador: r.jugador };
@@ -178,8 +209,10 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
       // igual que antes; la pelea en sí se resuelve recién cuando aparece el
       // beat `ultimo` del campamento (campCarta/campSparring, más arriba).
       partida = firmarPelea(partida, { oferta: beat.datos.oferta });
+    } else if (beat.tipo === 'lesionSinOferta') {
+      bloquesLesionado += 1;
     }
-    // 'lesionSinOferta' y 'noticias': sin estado que mutar para esta medición.
+    // 'noticias': sin estado que mutar para esta medición.
   }
 
   const mediaFinal = mediaDe(partida.jugador);
@@ -188,7 +221,17 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
   const legendariasTotal = legendariasEnCarrera + (legendariaEnCreacion ? 1 : 0);
 
   return {
-    beats, ofertas, defensas, tresCinturones, mediaFinal, mediaAMitad, legendariasTotal, legendariaEnCreacion, legendariasEnCarrera,
+    beats,
+    ofertas,
+    defensas,
+    lesiones,
+    bloquesLesionado,
+    tresCinturones,
+    mediaFinal,
+    mediaAMitad,
+    legendariasTotal,
+    legendariaEnCreacion,
+    legendariasEnCarrera,
   };
 }
 
@@ -259,6 +302,34 @@ for (let semilla = 1; semilla <= N; semilla += 1) {
 resumen('Baseline (estilo/origen fijos, sin apodo)', baseline);
 resumen('Creación real (origen+apodo por lotería, mejor opción ofrecida) — TECHO/promedio de "jugando bien"', creacionReal);
 resumen('Creación real, PISO deliberado (evita origen/apodo/carta legendarios siempre que hay alternativa)', pisoCreacionReal);
+
+// Sistema 1, corrección del coordinador ("cualquier lesión bloquea las
+// ofertas — medí el efecto colateral"): variante aparte, con
+// `simularLesiones: true` (tira una lesión real después de cada pelea
+// ganada, con la misma probabilidad/duración que en el juego real —
+// LESIONES/PROB_BASE, injuries.js). Mismas semillas y misma creación que
+// "creación real" (el escenario representativo de jugar bien), así que es
+// directamente comparable con esa fila de arriba: la diferencia en
+// ofertas/cinturones ES el costo real de "cualquier lesión bloquea".
+const conLesiones = [];
+for (let semilla = 1; semilla <= N; semilla += 1) {
+  conLesiones.push(jugarCarrera(semilla, { crearJugador: nuevoJugadorCreacionReal, simularLesiones: true }));
+}
+resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Sistema 1 corregido)', conLesiones);
+{
+  const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  const ofertasConLesiones = conLesiones.map((r) => r.ofertas);
+  const ofertasSinLesiones = creacionReal.map((r) => r.ofertas);
+  const con3 = conLesiones.filter((r) => r.tresCinturones).length;
+  const lesionesPromedio = avg(conLesiones.map((r) => r.lesiones));
+  const bloquesLesionadoPromedio = avg(conLesiones.map((r) => r.bloquesLesionado));
+  const debajoDe12 = ofertasConLesiones.filter((o) => o < 12).length;
+  console.log('\n=== Costo real de "cualquier lesión bloquea" (mismas semillas, creación real) ===');
+  console.log(`ofertas/carrera: sin lesiones=${avg(ofertasSinLesiones).toFixed(2)} | con lesiones reales=${avg(ofertasConLesiones).toFixed(2)} | diferencia=${(avg(ofertasSinLesiones) - avg(ofertasConLesiones)).toFixed(2)}`);
+  console.log(`carreras por debajo de 12 ofertas (con lesiones): ${debajoDe12}/${N} = ${((debajoDe12 / N) * 100).toFixed(1)}%`);
+  console.log(`3 cinturones con lesiones reales: ${con3}/${N} = ${((con3 / N) * 100).toFixed(2)}%`);
+  console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | beats "lesionSinOferta" vistos por carrera: avg=${bloquesLesionadoPromedio.toFixed(2)}`);
+}
 
 // Comparación directa techo (promedio real) vs piso (mismas 500 semillas, sin
 // legendarias evitables) para las dos métricas que pide la Task 6.2: cuánto
