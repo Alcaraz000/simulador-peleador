@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
+import { rankingDelJugador, tablaRanking } from '../../src/core/world.js';
 import { renderPanelPeleador } from '../../src/ui/screens/panel-peleador.js';
 
 function partidaBase({ media = 55 } = {}) {
@@ -85,13 +86,39 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain('Sin clasificar');
   });
 
-  it('despues de la primera pelea, muestra un numero de ranking', () => {
+  // El puesto se calcula EN VIVO (rankingDelJugador, world.js), no leyendo
+  // jugador.ranking: ese campo cacheado se deja deliberadamente "stale" acá
+  // (999, un valor que nunca daría el cálculo real) para probar que el panel
+  // no confía en él.
+  it('despues de la primera pelea, muestra un numero de ranking calculado en vivo', () => {
     const p = partidaBase();
     p.jugador.record = { v: 1, d: 0, e: 0, ko: 1, sub: 0, dec: 0 };
-    p.jugador.ranking = 7;
+    p.jugador.ranking = 999;
     renderPanelPeleador(cont, { partida: p });
     expect(cont.textContent).not.toContain('Sin clasificar');
-    expect(cont.textContent).toContain('#7');
+    expect(cont.textContent).not.toContain('#999');
+    const puestoReal = rankingDelJugador(p.mundo, p.jugador);
+    expect(cont.textContent).toContain(`#${puestoReal}`);
+  });
+
+  // Regresión Fix 2 (cierre de ronda v3, feedback del usuario: el ranking del
+  // panel y el de la tabla podían no coincidir). `jugador.ranking` se
+  // recalculaba una sola vez por bloque (avanzarBloque, career.js) mientras
+  // que el popup de tablaRanking recalculaba en vivo cada vez que se abría:
+  // si algo cambiaba la media del jugador a mitad de bloque (una carta, el
+  // campamento), el "#N" del panel quedaba viejo. Ahora ambos salen de la
+  // MISMA función (rankingDelJugador) con el mismo mundo/jugador, así que
+  // nunca pueden discrepar — se prueba forzando un jugador.ranking cacheado
+  // bien distinto del puesto real.
+  it('el ranking del panel coincide siempre con el puesto del jugador en tablaRanking', () => {
+    const p = partidaBase();
+    p.jugador.record = { v: 3, d: 1, e: 0, ko: 2, sub: 0, dec: 0 };
+    p.jugador.atributos.potencia = Math.min(99, p.jugador.atributos.potencia + 15);
+    p.jugador.ranking = 1; // deliberadamente stale, no el puesto real
+
+    renderPanelPeleador(cont, { partida: p });
+    const filaJugador = tablaRanking(p.mundo, p.jugador).find((f) => f.esJugador);
+    expect(cont.textContent).toContain(`#${filaJugador.ranking}`);
   });
 
   it('dice "Dinero", nunca "Plata"', () => {

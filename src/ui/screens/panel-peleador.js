@@ -6,6 +6,7 @@ import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
 import { h2hTexto } from '../../core/rivalry.js';
+import { rankingDelJugador } from '../../core/world.js';
 
 // Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
 // (renderDashboard, que mezclaba esto con el botón "Continuar" y se
@@ -188,9 +189,18 @@ function botonVerRanking(onVerRanking) {
   return boton;
 }
 
-function bloqueHistorial(jugador, onVerRanking) {
+// El puesto se calcula EN VIVO con `rankingDelJugador` (world.js) — la misma
+// función que arma `tablaRanking` para el popup — en vez de leer el campo
+// cacheado `jugador.ranking`. Ese campo solo se refresca una vez por bloque
+// (avanzarBloque, career.js): si algo cambió la media o el récord del
+// jugador a mitad de bloque (una carta de mejora, una pelea, el campamento),
+// quedaba viejo hasta el próximo bloque y el "#N" de acá podía no coincidir
+// con el puesto real que mostraba el popup de la tabla. Al usar la misma
+// función pura con el mismo `mundo`/`jugador` del momento, panel y tabla
+// nunca pueden discrepar.
+function bloqueHistorial(jugador, mundo, onVerRanking) {
   const totalPeleas = peleasTotales(jugador);
-  const ranking = totalPeleas === 0 ? 'Sin clasificar' : (jugador.ranking ? `#${jugador.ranking}` : 'Sin clasificar');
+  const ranking = totalPeleas === 0 ? 'Sin clasificar' : `#${rankingDelJugador(mundo, jugador)}`;
 
   const ultimasTres = jugador.historial.slice(-3).reverse();
 
@@ -257,7 +267,7 @@ function bloqueDinero(jugador) {
 export function renderPanelPeleador(region, {
   partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {}, onVerRanking = () => {},
 }) {
-  const { jugador } = partida;
+  const { jugador, mundo } = partida;
 
   const cabecera = cuadroMedia(jugador);
   cabecera.addEventListener('click', () => onFicha(jugador));
@@ -268,7 +278,7 @@ export function renderPanelPeleador(region, {
     onTienda();
   });
 
-  const historial = bloqueHistorial(jugador, onVerRanking);
+  const historial = bloqueHistorial(jugador, mundo, onVerRanking);
   historial.addEventListener('click', () => onHistorial(jugador));
 
   mount(region, el('div', { class: 'stack panel-peleador' }, [
