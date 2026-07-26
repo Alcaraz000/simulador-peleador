@@ -99,12 +99,23 @@ export function sortearPorRareza(rng, elegibles, total, pesos = PESOS_RAREZA) {
 // así que empujan fuerte el arranque sin inflar mucho más el techo final:
 //   - BONUS_ETAPA_TEMPRANA: suma puntos directo al atributo de combate más
 //     grande de la carta (ver conBonusEnElMasGrande, más abajo).
-//   - OPCIONES_EXTRA_ETAPA_TEMPRANA: una o dos cartas más para elegir en el
-//     reparto — sube el promedio por selección (mejor de más opciones) sin
-//     tocar ningún valor. Con esta sola palanca la brecha CON/SIN legendaria
-//     no se achica (a veces hasta se agranda un poco: más tiradas tempranas
-//     = más chances de que la legendaria temprana SÍ aparezca), pero por sí
-//     sola no alcanza para mover la MEDIA lo suficiente.
+//   - OPCIONES_EXTRA_ETAPA_TEMPRANA: cuánta MEJOR CALIDAD (chance de
+//     rara/legendaria, ver `bonusCalidadDe` y `repartirMejoras` más abajo)
+//     gana ese reparto puntual — sube el promedio por selección sin tocar
+//     ningún valor de la carta que sale.
+//
+// Cambio 1 (feedback del usuario: "una acción trae 5 opciones, eso no está
+// bien, son 2 o máximo 3"): hasta acá, OPCIONES_EXTRA_ETAPA_TEMPRANA (y el
+// `opcionesExtra` del entrenador de elite, ver bonusCartas en money.js)
+// SUMABAN cartas de más al reparto — con base 3 + entrenador (+1) + etapa
+// temprana (+2), llegaba a repartir 5. El tope de `repartirMejoras` ahora es
+// DURO (nunca más que la cantidad base, 2 o 3): estos dos bonus dejaron de
+// agregar cartas y en cambio suben la chance de que la carta que SÍ sale sea
+// rara o legendaria — compensado matemáticamente (ver `pesosCompensados`)
+// para que la tasa de "al menos una legendaria" NO baje por tener menos
+// tiradas: es la misma lógica que ya usaba `pesosCompensadosPorMenosCartas`
+// para el reparto reducido (2 en vez de 3), generalizada para cubrir también
+// las cartas que este bonus ya no agrega.
 //
 // Medido con scripts/balance-sim.mjs (n=1500, "creación real"): MEDIA a
 // mitad de carrera subió de ~52.5 a 56.5 (antes de esta corrección; el
@@ -172,28 +183,37 @@ export function decidirCantidadMejoras(rng) {
   return rng.chance(PROB_CANTIDAD_REDUCIDA) ? CANTIDAD_MEJORAS_REDUCIDA : CANTIDAD_MEJORAS_POR_DEFECTO;
 }
 
-// Repartir una carta MENOS reduce, para ESE reparto puntual, la chance de
-// que aparezca una legendaria — pedido explícito: "no dejes que eso aplane
-// la varianza legendaria". Se compensa subiendo el peso de legendaria (bajando
-// el de normal en la misma medida; 'rara' no se toca) SOLO cuando la base
-// salió reducida, de forma que la chance de ver AL MENOS UNA legendaria en
-// `total` tiradas quede igual a la que había con `total + 1` tiradas al peso
-// de siempre (5%, la única carta menos que se hubiera repartido sin esta
-// corrección):
-//   1 - (1-w)^total = 1 - (1-0.05)^(total+1)  =>  w = 1 - (0.95^(total+1))^(1/total)
-// Con total=2 (el caso típico, sin bonus de entrenador/etapa): w ≈ 7.41%
-// (contra el 5% de siempre). Se recalcula sobre `total` (no un valor fijo)
-// porque el bonus del entrenador/etapa suma cartas ENCIMA de la base
-// reducida, y esas tiradas de más no necesitan compensación aparte: lo único
-// que hay que tapar es la UNA tirada que dejó de pasar por la base.
+// Repartir menos cartas de las que "corresponderían" reduce, para ESE
+// reparto puntual, la chance de que aparezca una legendaria — pedido
+// explícito: "no dejes que eso aplane la varianza legendaria". Se compensa
+// subiendo el peso de legendaria (bajando el de normal en la misma medida;
+// 'rara' no se toca) de forma que la chance de ver AL MENOS UNA legendaria en
+// `totalOfrecido` tiradas quede igual a la que había con `totalQueHubieraSalido`
+// tiradas al peso de siempre (5%):
+//   1 - (1-w)^totalOfrecido = 1 - (1-0.05)^totalQueHubieraSalido
+//   =>  w = 1 - (0.95^totalQueHubieraSalido)^(1/totalOfrecido)
+// Si no falta ninguna tirada (totalQueHubieraSalido <= totalOfrecido), no hay
+// nada que compensar: se devuelve el peso de siempre tal cual.
+//
+// Dos llamadores, la MISMA lógica para los dos (Cambio 1: "coordiná tu
+// cambio con `pesosCompensadosPorMenosCartas` en vez de pelearte con ella" —
+// esta es esa función, generalizada en vez de duplicada):
+//   1. La cantidad base salió reducida (2 en vez de 3, ~1 de cada 5
+//      repartos, decidirCantidadMejoras): falta la 3ª carta de siempre.
+//   2. El entrenador de elite y/o la etapa temprana ya NO agregan cartas de
+//      más (tope duro de 3, Cambio 1): faltan las que antes sí se agregaban.
+// `repartirMejoras` combina ambas faltantes en un solo `totalQueHubieraSalido`
+// antes de llamar acá — ver el comentario ahí.
 // Medido en conjunto sobre carreras completas con scripts/balance-sim.mjs
 // (no solo el reparto individual) y con un test estadístico dedicado en
-// cards.test.js: la tasa de "al menos una legendaria" con cantidad reducida
-// queda cerca de la de cantidad normal, no varios puntos más abajo.
-function pesosCompensadosPorMenosCartas(total) {
+// cards.test.js: la tasa de "al menos una legendaria" con menos tiradas de
+// las que corresponderían queda cerca de la de la cantidad de siempre, no
+// varios puntos más abajo.
+function pesosCompensados(totalOfrecido, totalQueHubieraSalido) {
+  if (totalQueHubieraSalido <= totalOfrecido) return PESOS_RAREZA;
   const pLegendariaBase = PESOS_RAREZA.legendaria / 100;
-  const probObjetivoConTotalNormal = 1 - (1 - pLegendariaBase) ** (total + 1);
-  const wLegendaria = 1 - (1 - probObjetivoConTotalNormal) ** (1 / total);
+  const probObjetivoSinCompensar = 1 - (1 - pLegendariaBase) ** totalQueHubieraSalido;
+  const wLegendaria = 1 - (1 - probObjetivoSinCompensar) ** (1 / totalOfrecido);
   const pctLegendaria = wLegendaria * 100;
   const deltaDeNormal = pctLegendaria - PESOS_RAREZA.legendaria;
   return {
@@ -208,11 +228,25 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
   const bonus = bonusCartas(jugador);
   const opcionesExtraEtapa = OPCIONES_EXTRA_ETAPA_TEMPRANA[etapa] ?? 0;
   const cantidadBase = cantidad ?? decidirCantidadMejoras(rng);
-  const total = cantidadBase + bonus.opcionesExtra + opcionesExtraEtapa;
-  const pesos = cantidadBase < CANTIDAD_MEJORAS_POR_DEFECTO ? pesosCompensadosPorMenosCartas(total) : PESOS_RAREZA;
+
+  // Cambio 1: tope DURO — nunca se reparten más de `cantidadBase` cartas
+  // (2 o 3), ni con entrenador de elite ni en etapa temprana. Lo que esos dos
+  // bonus daban ANTES en cantidad (`bonus.opcionesExtra` + `opcionesExtraEtapa`,
+  // hasta +3 cartas juntos) ahora se traduce en CALIDAD: `totalQueHubieraSalido`
+  // es cuántas cartas se habrían repartido con el sistema viejo (deshaciendo
+  // también la reducción de `decidirCantidadMejoras` con `Math.max(...,
+  // CANTIDAD_MEJORAS_POR_DEFECTO)`, para no confundir esa reducción — ya
+  // compensada por su cuenta — con el bonus de calidad de este cambio) y
+  // `pesosCompensados` sube el peso de legendaria/rara para que la chance de
+  // "al menos una legendaria" en las `cantidadBase` cartas que sí se ofrecen
+  // iguale (no baje) la que había cuando esas cartas de más existían de
+  // verdad.
+  const totalQueHubieraSalido = Math.max(cantidadBase, CANTIDAD_MEJORAS_POR_DEFECTO)
+    + bonus.opcionesExtra + opcionesExtraEtapa;
+  const pesos = pesosCompensados(cantidadBase, totalQueHubieraSalido);
   const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
   const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
-  const elegidas = sortearPorRareza(rng, elegibles, total, pesos);
+  const elegidas = sortearPorRareza(rng, elegibles, cantidadBase, pesos);
 
   const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;
   if (bonus.bonusValor === 0 && bonusEtapa === 0) return elegidas;

@@ -119,38 +119,92 @@ describe('repartirMejoras', () => {
     }
   });
 
-  it('el entrenador de elite da una opcion mas (sea cual sea la base, con cantidad fija para aislar el bonus)', () => {
+  // Cambio 1 (feedback del usuario: "una acción trae 5 opciones, eso no está
+  // bien, son 2 o máximo 3"): base(3) + entrenador(+1) + etapa temprana(+1/+2)
+  // llegaba a repartir 5 cartas. El tope ahora es DURO: el entrenador de
+  // elite ya NO agrega una carta más, sea cual sea la base — ver el test de
+  // "sube la calidad" más abajo para lo que pasó a ganar en su lugar.
+  it('el entrenador de elite ya NO agrega una carta mas (tope duro de 3): la cantidad repartida es siempre la base', () => {
     const conEntrenador = repartirMejoras(createRng(4), {
       jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional', cantidad: 3,
     });
-    expect(conEntrenador).toHaveLength(4);
-    // El bonus se suma encima sea cual sea la base que salió (Pedido del
-    // coordinador, v4: "el bonus de bonusCartas tiene que seguir
-    // funcionando encima de la cantidad que salga").
+    expect(conEntrenador).toHaveLength(3);
     const conEntrenadorBaseReducida = repartirMejoras(createRng(4), {
       jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional', cantidad: 2,
     });
-    expect(conEntrenadorBaseReducida).toHaveLength(3);
+    expect(conEntrenadorBaseReducida).toHaveLength(2);
   });
 
-  // Sistema 2, corrección del coordinador: en juvenil/amateur hay más
-  // opciones para elegir (además del bonus de mods) — "mejor de más
-  // cartas" empuja el promedio sin tocar ningún valor, así que nunca puede
-  // acercar una normal/rara a una legendaria. Cantidad fijada en 3 acá para
-  // aislar el bonus de etapa de la variación de cantidad de v4 (probada
-  // aparte, más arriba).
-  it('en juvenil hay mas opciones para elegir que en profesional', () => {
+  // Sistema 2, corrección del coordinador: en juvenil/amateur el bonus de
+  // etapa temprana existe (ver bonus de mods, probado más abajo), pero desde
+  // el Cambio 1 ya no se traduce en MÁS cartas — el tope de 3 es duro para
+  // cualquier etapa. Cantidad fijada en 3 acá para aislar el bonus de etapa
+  // de la variación de cantidad de v4 (probada aparte, más arriba).
+  it('en juvenil ya NO hay mas opciones para elegir que en profesional (tope duro de 3)', () => {
     const juvenil = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'juvenil', cantidad: 3 });
     const profesional = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'profesional', cantidad: 3 });
-    expect(juvenil.length).toBeGreaterThan(profesional.length);
+    expect(juvenil.length).toBe(profesional.length);
     expect(profesional).toHaveLength(3);
   });
 
-  it('el bonus de etapa temprana (opciones extra) tambien se suma encima de la cantidad base que haya salido', () => {
+  it('el bonus de etapa temprana ya NO se suma como cartas de mas: la cantidad repartida es siempre la base', () => {
     const juvenilBase3 = repartirMejoras(createRng(1), { jugador: jugador(), etapa: 'juvenil', cantidad: 3 });
-    expect(juvenilBase3).toHaveLength(5);
+    expect(juvenilBase3).toHaveLength(3);
     const juvenilBase2 = repartirMejoras(createRng(1), { jugador: jugador(), etapa: 'juvenil', cantidad: 2 });
-    expect(juvenilBase2).toHaveLength(4);
+    expect(juvenilBase2).toHaveLength(2);
+  });
+
+  // El caso más extremo posible (entrenador + etapa temprana + base
+  // reducida, lo que antes hubiera repartido hasta 5 cartas): el tope de 3
+  // sigue siendo duro, sobre muchas semillas, no solo en un caso puntual.
+  it('nunca reparte mas de 3 cartas, ni siquiera combinando entrenador de elite + etapa temprana (tope duro, Cambio 1)', () => {
+    for (let semilla = 1; semilla <= 300; semilla += 1) {
+      const cartas = repartirMejoras(createRng(semilla), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil',
+      });
+      expect(cartas.length).toBeLessThanOrEqual(3);
+    }
+  });
+
+  // Lo que antes eran "opciones extra" (más cartas) ahora tiene que
+  // notarse como MEJOR CALIDAD: a igual cantidad de cartas (3, fijada acá
+  // para aislar el efecto), un jugador con entrenador de elite o en etapa
+  // temprana ve más legendarias que uno sin esos bonus, sobre muchas
+  // semillas — el beneficio no desapareció, solo cambió de forma.
+  it('el bonus de "opciones extra" del entrenador/etapa temprana ahora sube la chance de legendaria en vez de agregar cartas', () => {
+    const catalogoAmplio = [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `n${i}`, titulo: `N${i}`, texto: 't', mods: { potencia: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal',
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `r${i}`, titulo: `R${i}`, texto: 't', mods: { potencia: 2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'rara',
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        id: `l${i}`, titulo: `L${i}`, texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria',
+      })),
+    ];
+    const N = 4000;
+    let sinBonus = 0;
+    let conEntrenador = 0;
+    let conEtapaTemprana = 0;
+    for (let semilla = 1; semilla <= N; semilla += 1) {
+      const base = repartirMejoras(createRng(semilla), {
+        jugador: jugador(), etapa: 'profesional', cantidad: 3, catalogo: catalogoAmplio,
+      });
+      if (base.some((c) => c.rareza === 'legendaria')) sinBonus += 1;
+
+      const entrenador = repartirMejoras(createRng(semilla + 10_000_000), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional', cantidad: 3, catalogo: catalogoAmplio,
+      });
+      if (entrenador.some((c) => c.rareza === 'legendaria')) conEntrenador += 1;
+
+      const etapaTemprana = repartirMejoras(createRng(semilla + 20_000_000), {
+        jugador: jugador(), etapa: 'juvenil', cantidad: 3, catalogo: catalogoAmplio,
+      });
+      if (etapaTemprana.some((c) => c.rareza === 'legendaria')) conEtapaTemprana += 1;
+    }
+    expect(conEntrenador).toBeGreaterThan(sinBonus);
+    expect(conEtapaTemprana).toBeGreaterThan(sinBonus);
   });
 
   it('el entrenador mejora los numeros positivos', () => {
