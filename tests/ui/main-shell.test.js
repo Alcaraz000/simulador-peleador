@@ -277,6 +277,84 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 });
 
+// Hallazgo 1 de la revisión final (antes de publicar la v2): el timer del
+// roll de una carta con azar (dopaje/chantaje/entrenador) nunca se cancela.
+// Si el jugador entra a la Ficha ANTES de que el roll termine, el timer
+// dispara igual en segundo plano: mostrarDesenlace() llama a asegurarShell(),
+// que detecta que el shell ya no está dentro de `contenedor` (la Ficha lo
+// reemplazó) y lo RECONSTRUYE con mount() — borrando la pantalla de Ficha sin
+// que el jugador haya tocado "Cerrar". Este bloque necesita el roll REAL (con
+// temporizador), no el atajo de prefers-reduced-motion del resto del
+// archivo: con motion reducido el roll resuelve en el mismo tick del click y
+// nunca queda "en curso" para poder irse a la Ficha a mitad de camino.
+describe('main.js: el roll de una carta con azar no le puede robar la pantalla al jugador (hallazgo 1, revisión final v2)', () => {
+  it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
+    window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
+
+    // semilla 31 -> carta "entrenador", la opción "cambiar" SI tiene
+    // probabilidades (mismo caso ya usado más arriba para probar el roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    continuar();
+
+    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    expect(tarjetaAzar).toBeTruthy();
+
+    tarjetaAzar.click();
+
+    // El roll está en curso (dura entre 1200 y 1800ms, ver DURACION_MS en
+    // roll.js): a los 400ms todavía no llegó al desenlace.
+    vi.advanceTimersByTime(400);
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
+
+    // El jugador se va a la Ficha ANTES de que el roll termine.
+    cont.querySelector('[data-accion="ficha"]').click();
+    expect(cont.querySelector('.shell')).toBeNull();
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+
+    // Se deja correr el timer del roll en segundo plano (2000ms cubre de
+    // sobra los 1500ms de duración nominal): la Ficha tiene que seguir en
+    // pantalla, intacta, hasta que el jugador toque "Cerrar" — nunca antes.
+    vi.advanceTimersByTime(2000);
+
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+    expect(cont.querySelector('.shell')).toBeNull();
+  });
+
+  // El comportamiento elegido para no sorprender al jugador (ver el
+  // comentario en main.js junto a `cancelarRollPendiente`): el roll es
+  // cosmético, el resultado real ya se decidió de forma síncrona al elegir la
+  // carta. Si el jugador se va a la Ficha a mitad del roll, al volver tiene
+  // que encontrar el desenlace YA resuelto (nunca las 3 tarjetas de nuevo, ni
+  // una pantalla en blanco) — ni pierde la carta ni el resultado que le tocó.
+  it('volver de la Ficha después de interrumpir el roll muestra el desenlace ya resuelto, no la carta de nuevo', () => {
+    window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
+
+    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    continuar();
+
+    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    tarjetaAzar.click();
+    vi.advanceTimersByTime(400);
+
+    cont.querySelector('[data-accion="ficha"]').click();
+    vi.advanceTimersByTime(2000); // el roll termina en segundo plano, en la Ficha
+
+    cont.querySelector('[data-accion="cerrar"]').click();
+
+    // De vuelta en el tablero: ya está el desenlace (no las 3 tarjetas de la
+    // carta de nuevo), con una de las dos crónicas posibles de esa rama.
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('.panel-decision-grilla')).toBeNull();
+    const desenlace = cont.querySelector('.panel-decision-desenlace');
+    expect(desenlace).toBeTruthy();
+    expect(desenlace.textContent).toMatch(/aprendés cosas nuevas|No enganchaste con el método/);
+
+    // Y "Seguir" funciona con normalidad: lleva de vuelta al estado ocioso.
+    desenlace.querySelector('.boton').click();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+});
+
 // Regresión pedida en la revisión de las Tasks 5.3/5.4: con la tienda como
 // popup, el tablero queda VISIBLE detrás mientras se compra. Que la plata
 // del panel izquierdo quedara congelada ahí rompía las dos reglas de la v2

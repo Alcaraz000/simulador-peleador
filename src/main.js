@@ -135,6 +135,37 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   let shellActual = null;
   let pintarCentro = () => {};
 
+  // --- El roll de una carta con azar no le puede robar la pantalla --------
+  // (Hallazgo 1 de la revisión final): dopaje/chantaje/entrenador disparan un
+  // roll con suspenso (animarRoll, 1.2-1.8s) cuyo timer, sin esto, sigue
+  // corriendo aunque el jugador se vaya a la Ficha — una pantalla completa
+  // que reemplaza `contenedor`. Si el timer termina ahí, `mostrarDesenlace`
+  // llama a `asegurarShell()`, que ve que el shell ya no está DENTRO de
+  // `contenedor` y lo reconstruye con `mount()`: la Ficha desaparece sin que
+  // el jugador tocara "Cerrar".
+  //
+  // `cancelarRollPendiente` guarda, mientras un roll está en curso, la
+  // función que hay que llamar SI el jugador abandona el tablero antes de
+  // que termine (mismo patrón que `raiz._limpiarAccion` en
+  // ui/screens/fight.js: quien puede interrumpir el timer es quien lo
+  // conoce). La decisión de diseño de QUÉ pasa con la carta pendiente: el
+  // roll es puramente cosmético — `resolverOpcion` ya consumió el rng y
+  // decidió el resultado de forma síncrona ANTES de que `animarRoll` arranque
+  // a animar (ver beatCarta). O sea que "el roll ya se resolvió internamente"
+  // es SIEMPRE cierto en el momento en que esto se puede llegar a cancelar:
+  // no hay ningún caso real de "todavía no se resolvió, dejalo elegir de
+  // nuevo". Cancelar entonces significa parar el timer, aplicar YA el
+  // resultado a `partida` (sin pintar nada — el tablero no está a la vista) y
+  // dejar `pintarCentro` apuntando al desenlace, para que aparezca solo
+  // cuando el jugador vuelva del tablero completo: ni pierde la carta ni el
+  // resultado que ya le tocó, y no hay ninguna sorpresa (nada cambia en
+  // pantalla mientras está en la Ficha).
+  let cancelarRollPendiente = null;
+
+  function abandonarRollPendiente() {
+    if (cancelarRollPendiente) cancelarRollPendiente();
+  }
+
   function asegurarShell() {
     if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
     shellActual = crearShell(contenedor);
@@ -259,7 +290,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
   // `abrirFicha`/`abrirTienda` reemplazan `contenedor` entero (ficha) o abren
   // un popup (tienda): al cerrar, siempre se vuelve al mismo tablero.
+  //
+  // Antes de reemplazar `contenedor`, se cancela cualquier roll pendiente
+  // (Hallazgo 1): es la única transición de las tres que menciona el panel
+  // izquierdo (Ficha, Historial —ambas pasan por acá—, Tienda) que se lleva
+  // puesto el shell entero; Tienda abre un popup y el tablero sigue montado
+  // detrás, así que un roll terminando ahí no tiene el mismo problema.
   function abrirFicha(jugador, seccion = 'atributos') {
+    abandonarRollPendiente();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -385,11 +423,28 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
         if (opcion.probabilidades) {
           const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
-          animarRoll(nodoTarjeta, {
+          const controlador = animarRoll(nodoTarjeta, {
             indiceGanador: resuelto.indiceGanador,
             cantidad: opcion.probabilidades.length,
-            onFin: aplicarYMostrar,
+            onFin: () => {
+              cancelarRollPendiente = null;
+              aplicarYMostrar();
+            },
           });
+          // Ver el comentario largo junto a la declaración de
+          // `cancelarRollPendiente`: si el jugador se va del tablero antes de
+          // que el roll termine, esto para el timer y aplica YA el resultado
+          // (que `resolverOpcion` ya decidió más arriba) sin pintar nada —
+          // solo deja el desenlace listo para cuando `volverAlTablero` vuelva
+          // a llamar a `pintarCentro`.
+          cancelarRollPendiente = () => {
+            controlador.detener();
+            cancelarRollPendiente = null;
+            partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+            pintarCentro = () => renderDesenlace(centroContenido(), {
+              titulo, texto: resuelto.texto || carta.texto, deltasTexto: resuelto.deltasTexto, onContinuar: irADashboard,
+            });
+          };
           return;
         }
         aplicarYMostrar();
