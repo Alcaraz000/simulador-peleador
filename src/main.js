@@ -181,6 +181,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (cancelarDadoPendiente) cancelarDadoPendiente();
   }
 
+  // Misma familia de problema una vez más, ahora para la entrada escalonada
+  // de noticias nuevas (Task v3, feedback del usuario: "que se vayan
+  // sumando"): panel-noticias.js deja timers cortos (250-400ms entre una y
+  // la siguiente) corriendo mientras revela cada noticia. `noticiasVistas`
+  // vive ACÁ (no en el panel) porque tiene que sobrevivir a través de TODA la
+  // sesión de carrera, no solo un render: el tablero se remonta en cada beat
+  // (montarTablero), así que sin este Set persistente la misma tanda
+  // reanimaría su entrada en cada repintado mientras siga marcada "nueva".
+  let cancelarNoticiasPendiente = null;
+  const noticiasVistas = new Set();
+
+  function abandonarNoticiasPendientes() {
+    if (cancelarNoticiasPendiente) cancelarNoticiasPendiente();
+  }
+
   function asegurarShell() {
     if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
     shellActual = crearShell(contenedor);
@@ -226,7 +241,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     ]));
     renderCalendario(shell.regiones.centro.querySelector('[data-bloque="calendario"]'), { partida });
 
-    shell.montarDerecha(el('div', {}, [
+    // `class:'stack'` (v3, feedback del usuario: "está muy pegada al módulo
+    // de arriba del próximo combate"): antes este wrapper no tenía clase, así
+    // que el gap:10px de `.shell-derecha` (pensado para sus hijos DIRECTOS)
+    // nunca llegaba a aplicarse entre próxima/noticias — los dos vivían
+    // pegados dentro de este único hijo. `.stack` es el mismo respiro que ya
+    // separa a todos los demás paneles del tablero.
+    shell.montarDerecha(el('div', { class: 'stack' }, [
       el('div', { dataset: { bloque: 'proxima' } }),
       el('div', { dataset: { bloque: 'noticias' } }),
     ]));
@@ -237,10 +258,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         if (rival) abrirFicha(rival, 'atributos');
       },
     });
-    renderPanelNoticias(shell.regiones.derecha.querySelector('[data-bloque="noticias"]'), {
+
+    // Cancela cualquier entrada de noticias que haya quedado a mitad de
+    // camino de un montaje anterior (p. ej. el jugador encadena beats más
+    // rápido que el intervalo entre una noticia y la siguiente): este mismo
+    // montarTablero() ya va a reemplazar esos nodos, así que sus timers
+    // quedarían apuntando a un panel que ya no está — se cortan ANTES de
+    // pintar el nuevo, nunca quedan corriendo en segundo plano.
+    abandonarNoticiasPendientes();
+    const controladorNoticias = renderPanelNoticias(shell.regiones.derecha.querySelector('[data-bloque="noticias"]'), {
       noticias: partida.noticias,
       onLeidas: (nuevas) => { partida = { ...partida, noticias: nuevas }; },
+      noticiasAnimadas: noticiasVistas,
     });
+    cancelarNoticiasPendiente = () => {
+      controladorNoticias.detener();
+      cancelarNoticiasPendiente = null;
+    };
 
     return shell;
   }
@@ -360,6 +394,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   function abrirFicha(jugador, seccion = 'atributos') {
     abandonarRollPendiente();
     abandonarDadoPendiente();
+    abandonarNoticiasPendientes();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -587,7 +622,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
-        partida = { ...partida, jugador: paso.jugador };
+        // Pendiente conocido (bug reportado): `proximaPelea` se guarda al armar
+        // la cola del bloque (ver armarCola, career.js) pero antes no se
+        // limpiaba acá — el panel de la derecha seguía mostrando al rival
+        // rechazado durante el resto del bloque, como si la pelea siguiera en
+        // pie. Se limpia en el momento en que la oferta deja de estar vigente.
+        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
         irADashboard();
       },
     }));
@@ -700,7 +740,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
     elegirArchirrival(rivalidades);
 
-    partida = { ...partida, jugador, rivalidades };
+    // Mismo pendiente que en beatOferta/onRechazar: la pelea que se acaba de
+    // cerrar ya no está "en camino" — sin esto, el panel de próxima pelea
+    // seguía mostrando al rival ya peleado hasta que arrancaba el bloque
+    // siguiente (bug reportado: "seguía apareciendo un peleador aunque no
+    // haya elegido ni confirmado ninguno todavía").
+    partida = {
+      ...partida, jugador, rivalidades, proximaPelea: null,
+    };
 
     renderResultadoTarjeta(contenedor, {
       titulo: 'Después de la pelea',

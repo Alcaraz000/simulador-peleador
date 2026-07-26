@@ -349,6 +349,59 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     }
   });
 
+  // Bug reportado por el usuario: "cuando terminé una pelea, en la pantalla
+  // principal seguía apareciendo un peleador aunque no haya elegido ni
+  // confirmado ninguno todavía". Causa: `partida.proximaPelea` se guarda al
+  // armar la cola del bloque (armarCola, career.js) pero nunca se limpiaba
+  // al pelear ni al rechazar la oferta — quedaba fantasma en el panel de la
+  // derecha hasta que el bloque siguiente lo pisaba con una oferta nueva (o
+  // con null si no había).
+  describe('el panel de próxima pelea no queda fantasma después de resolverla (bug reportado)', () => {
+    it('después de pelear (ganar o perder), el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+
+      // El panel de la derecha ya muestra al rival ANTES de aceptar (se arma
+      // junto con la cola del bloque, ver proximaPelea en career.js).
+      const textoAntes = cont.querySelector('.shell-derecha').textContent;
+      expect(textoAntes).not.toContain('Todavía no hay nada firmado');
+
+      cont.querySelector('.shell-centro [data-accion="aceptar"]').click();
+      jugarPeleaCompleta(cont);
+
+      // De vuelta en el tablero: la pelea ya se peleó, no hay ninguna otra
+      // firmada todavía (recién se decide en el próximo bloque).
+      expect(cont.querySelector('.shell')).toBeTruthy();
+      const textoDespues = cont.querySelector('.shell-derecha').textContent;
+      expect(textoDespues).toContain('Todavía no hay nada firmado');
+    });
+
+    it('después de rechazar una oferta, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+      expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+
+      cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
+
+      expect(cont.querySelector('.shell')).toBeTruthy();
+      expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
+    });
+  });
+
   it('una partida v1 guardada (sin semanaGlobal/apellido/entrenador) no rompe: arranca una carrera nueva', () => {
     const storage = crearStorageFalso();
     storage.setItem(CLAVE_ACCESO, '1');
