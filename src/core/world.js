@@ -7,8 +7,8 @@ import { clamp } from './stats.js';
 export const EDAD_RETIRO = 40;
 export const ANIO_INICIAL = 2026;
 
-export function crearMundo(rng, { disciplina, categoria, cantidad = 10 }) {
-  const roster = crearRoster(rng, { disciplina, categoria, cantidad });
+export function crearMundo(rng, { disciplina, categoria, cantidad = 10, apodosReservados = [] }) {
+  const roster = crearRoster(rng, { disciplina, categoria, cantidad, apodosReservados });
   return {
     disciplina,
     categoria,

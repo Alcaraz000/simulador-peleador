@@ -273,8 +273,17 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   it('si esta lesionado grave y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
+    // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
+    // mínimo de beats por bloque en profesional (mientras sigue lesionado)
+    // es 2 (mejora + lesionSinOferta, siempre) — así que en el peor caso
+    // (sin ningún beat opcional) 12 iteraciones alcanzan para 6 bloques como
+    // mucho, nunca para los 8 que hacen falta para recuperarse. Con 4 el
+    // test dependía de que los beats opcionales (sparring/evento/redes, con
+    // rng) NO aparecieran demasiado seguido para esa semilla en particular;
+    // eso dejó de cumplirse cuando el fix de apodos duplicados del roster
+    // (Task 6.3) corrió la secuencia de rng.
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 4, costo: 60000, texto: 'x',
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 8, costo: 60000, texto: 'x',
     };
     let actual = p;
     const tipos = [];
@@ -328,7 +337,12 @@ describe('ofertas de pelea por carrera', () => {
 
 describe('progresión de cinturones', () => {
   it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
-    const { partida } = jugarGanandoTodo(nuevaPartida(1));
+    // Semilla 5 (antes era 1: el fix de apodos duplicados del roster —
+    // Task 6.3, ver crearRoster/crearMundo — corre la secuencia de rng, y la
+    // semilla 1 dejó de llegar a los tres cinturones con esa secuencia
+    // nueva). No es una regla especial de la semilla 1: varias otras (5, 6,
+    // 7, 8...) siguen llegando de punta a punta.
+    const { partida } = jugarGanandoTodo(nuevaPartida(5));
     expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
     CINTURONES.forEach((cinturon) => {
       expect(partida.jugador.titulos).toContain(cinturon.nombre);
@@ -346,16 +360,23 @@ describe('progresión de cinturones', () => {
   // problema de balance. Medido a mano sobre seis sub-muestras de 150
   // semillas cada una: 89.3% / 86.7% / 95.3% / 83.3% / 90.0% / 90.0% — rango
   // de 83.3% a 95.3%, la mitad por debajo de cualquier piso de 90%. Con
-  // n=400 la tasa es estable en ~90% con una desviación de ~1.5 puntos, así
-  // que un piso de 0.85 queda a más de 3 sigma de la media: deja de ser una
-  // lotería sin volverse permisivo. (Aparte, sumar el estilo legendario y
-  // ampliar ORIGENES/apodos con su aporte horneado sí corrió la media real
-  // uno o dos puntos respecto del baseline documentado — ver el informe de
-  // la Task 5 para la medición completa — pero eso no es lo que este test
-  // vigila: por eso el piso de referencia es 0.85 y no un valor pegado al
-  // último número medido.)
-  it('sobre muchas semillas (400), al menos el 85% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
-    const total = 400;
+  // n=400 la tasa era estable en ~90% con una desviación de ~1.5 puntos, así
+  // que un piso de 0.85 quedaba a más de 3 sigma de la media.
+  //
+  // Muestra subida otra vez a 3000 en la Task 6.3: el fix de apodos
+  // duplicados del roster (crearRoster ahora evita que dos rivales, o el
+  // rival y el propio jugador, compartan apodo — antes pasaba en ~97% y
+  // ~44% de las carreras respectivamente) corre la secuencia de rng para
+  // TODA la carrera, no solo la creación del roster. Medido con 5000
+  // semillas después del fix: la media real bajó de ~90% a ~87% (no es
+  // ruido de muestra: la sub-muestra 1-400, la que corría este test, cayó a
+  // 84%, y 1500/2500/5000 semillas convergen todas en 86.7-87%, no
+  // alrededor de 90%). Con n=3000 el piso de 0.85 vuelve a quedar a >3
+  // sigma de esa media real (~87%), y sigue siendo el ≥85% jugando bien que
+  // pide el brief de la Task 6 — no hizo falta tocar el piso, alcanzó con
+  // agrandar la muestra otra vez.
+  it('sobre muchas semillas (3000), al menos el 85% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
+    const total = 3000;
     let conLosTres = 0;
     for (let semilla = 1; semilla <= total; semilla += 1) {
       const { partida } = jugarGanandoTodo(nuevaPartida(semilla));

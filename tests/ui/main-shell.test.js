@@ -131,9 +131,14 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminado el desenlace ganador) y despues aplica y anima', () => {
-    // semilla 10 -> carta "entrenador", la primera opcion ("cambiar") SI
+    // semilla 31 -> carta "entrenador", la primera opcion ("cambiar") SI
     // tiene probabilidades (verificado aparte): ejercita el camino con roll.
-    iniciar(cont, prepararPartidaGuardada('evento', 10));
+    // (Antes era la semilla 10, pero el fix de apodos duplicados en el
+    // roster — crearRoster ahora evita colisiones de apodo entre rivales, y
+    // también con el apodo del propio jugador (crearMundo/crearPartida) —
+    // corre la secuencia de rng y esa semilla dejó de llegar a esta carta en
+    // concreto; se resembró dos veces buscando la misma combinación exacta.)
+    iniciar(cont, prepararPartidaGuardada('evento', 31));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central

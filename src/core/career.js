@@ -91,6 +91,11 @@ export function crearPartida({ jugador, semilla }) {
     disciplina: jugador.disciplina,
     categoria: jugador.categoria,
     cantidad: 12,
+    // El pool "normal" de apodos del jugador (nicknames.js) se superpone con
+    // el pool de apodos de los rivales (names.js): sin reservar el propio,
+    // un rival al azar podía terminar con el MISMO apodo que el jugador
+    // (ver crearRoster en roster.js).
+    apodosReservados: jugador.apodo ? [jugador.apodo] : [],
   });
   return {
     version: 1,
