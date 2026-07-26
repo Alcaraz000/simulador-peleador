@@ -335,11 +335,15 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
 
       // Abre la tienda (popup) y la cierra sin comprar nada (fondos casi
       // siempre insuficientes al arranque; alcanza con que abra/cierre limpio).
+      // El popup (abrirPopup, popup.js) se appendea a document.body, NO
+      // adentro de `cont`: hay que buscar el botón de cerrar en `document`,
+      // si no, el popup queda abierto (con su listener global de Escape
+      // colgado) sin que nadie lo note en un test de una sola carrera.
       const botonTienda = cont.querySelector('[data-accion="tienda"]');
       if (botonTienda) {
         botonTienda.click();
         revisarTodo(cont, 'tienda');
-        const cerrarPopup = cont.querySelector('.popup-cerrar');
+        const cerrarPopup = document.querySelector('.popup-cerrar');
         if (cerrarPopup) cerrarPopup.click();
       }
 
