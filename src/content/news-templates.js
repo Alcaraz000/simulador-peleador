@@ -124,4 +124,48 @@ export const PLANTILLAS = {
       'Otra marca para el currículum de {nombre}, que no para de sumar.',
     ],
   },
+  // Pedido v6 ("las noticias también deberían nombrar al jugador... te lo
+  // sacaron"): faltaba el reverso de `titulo` — perder el cinturón, no solo
+  // ganarlo o defenderlo.
+  titulo_perdido: {
+    titulares: [
+      '{rival} le bajó el {titulo} a {apodo}.',
+      'Cambio de manos forzado: {nombre} perdió el {titulo} ante {rival}.',
+      'Se terminó el reinado: {apodo} ya no tiene el {titulo}.',
+    ],
+    cuerpos: [
+      'Nadie lo esperaba tan pronto, pero el cinturón ya tiene otro dueño.',
+      'En el gimnasio de {nombre} ya prometen ir por la revancha apenas se pueda.',
+      '{rival} no dio ventajas y el {titulo} cambió de manos sin discusión.',
+    ],
+  },
+  // "ganaste una revancha": distinto del tipo `revancha` de arriba (que
+  // anuncia que el cruce SE VIENE) — este es el resultado, ya jugado.
+  revancha_ganada: {
+    titulares: [
+      '{apodo} se cobró la revancha ante {rival}.',
+      'Esta vez sí: {nombre} dio vuelta la historia con {rival}.',
+      'Cuentas saldadas: {apodo} venció a {rival} en la revancha.',
+    ],
+    cuerpos: [
+      'La primera vez había quedado una espina, y esta victoria la saca del todo.',
+      'Nadie puede decir ahora que fue casualidad.',
+      'El folclore de la rivalidad suma un capítulo más, esta vez a favor de {nombre}.',
+    ],
+  },
+  // "debutaste como profesional": distinto del `debut` que ya emite
+  // noticiasDeSucesos para un NPC nuevo (ese usa el titular armado desde
+  // `suceso.texto`, nunca esta plantilla) — este es el propio.
+  debut: {
+    titulares: [
+      '{apodo} debuta como profesional.',
+      'Primer paso en la categoría rentada: {nombre} ya es profesional.',
+      'Nuevo nombre en la categoría: debutó {apodo}.',
+    ],
+    cuerpos: [
+      'El camino recién empieza, pero ya queda una primera marca en el papel.',
+      'En el gimnasio de {nombre} lo tienen claro: esto es apenas el principio.',
+      'Todavía no lo conoce nadie afuera del barrio, pero eso está por cambiar.',
+    ],
+  },
 };

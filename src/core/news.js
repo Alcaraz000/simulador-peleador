@@ -132,6 +132,7 @@ const ETIQUETAS_TIPO = {
   derrota: 'Resultado',
   titulo: 'Título',
   defensa: 'Título',
+  titulo_perdido: 'Título',
   retiro: 'Retiro',
   lesion: 'Lesión',
   ranking: 'Ranking',
@@ -139,6 +140,7 @@ const ETIQUETAS_TIPO = {
   debut: 'Debut',
   escandalo: 'Escándalo',
   revancha: 'Rivalidad',
+  revancha_ganada: 'Rivalidad',
   record: 'Récord',
 };
 

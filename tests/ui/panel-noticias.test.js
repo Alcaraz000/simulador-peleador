@@ -4,10 +4,10 @@ import {
 import { renderPanelNoticias } from '../../src/ui/screens/panel-noticias.js';
 
 function noticia({
-  id, tipo = 'victoria', titular = 'Titular', cuerpo = 'Cuerpo de la noticia.', nueva = false, fecha = 2026,
+  id, tipo = 'victoria', titular = 'Titular', cuerpo = 'Cuerpo de la noticia.', nueva = false, fecha = 2026, propia = false,
 }) {
   return {
-    id, tipo, titular, cuerpo, fecha, nueva,
+    id, tipo, titular, cuerpo, fecha, nueva, propia,
   };
 }
 
@@ -79,6 +79,31 @@ describe('renderPanelNoticias', () => {
     renderPanelNoticias(cont, { noticias, onLeidas: () => { llamado = true; } });
     cont.querySelector('[data-accion="abrir-noticias"]').click();
     expect(llamado).toBe(false);
+  });
+
+  // Pedido v6 ("las noticias también deberían nombrar al jugador... que se
+  // distinga de una noticia del mundo"): una noticia propia (cerrarPelea,
+  // main.js) se marca aparte en el DOM, con su propio chip "TU CARRERA" —
+  // nunca se confunde con una noticia genérica del mundo.
+  it('una noticia "propia" (hito del jugador) se distingue con su propio chip y clase', () => {
+    const noticias = [
+      noticia({ id: 'mundo', propia: false }),
+      noticia({ id: 'mia', propia: true, titular: 'Ganaste el título' }),
+    ];
+    renderPanelNoticias(cont, { noticias });
+
+    const itemMundo = cont.querySelector('[data-noticia="mundo"]');
+    const itemMia = cont.querySelector('[data-noticia="mia"]');
+    expect(itemMundo.classList.contains('propia')).toBe(false);
+    expect(itemMia.classList.contains('propia')).toBe(true);
+    expect(itemMia.textContent).toContain('TU CARRERA');
+    expect(itemMundo.textContent).not.toContain('TU CARRERA');
+  });
+
+  it('una noticia que no es "propia" no muestra el chip TU CARRERA', () => {
+    const noticias = [noticia({ id: 'n1', propia: false })];
+    renderPanelNoticias(cont, { noticias });
+    expect(cont.textContent).not.toContain('TU CARRERA');
   });
 });
 

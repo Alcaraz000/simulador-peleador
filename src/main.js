@@ -2,8 +2,9 @@ import { createRng } from './core/rng.js';
 import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
 } from './core/career.js';
-import { tablaRanking } from './core/world.js';
-import { hitosDePelea, hitoDeEtapa } from './core/hitos.js';
+import { tablaRanking, rankingDelJugador } from './core/world.js';
+import { hitosDePelea, hitoDeEtapa, noticiaDeHitoJugador } from './core/hitos.js';
+import { generarNoticia, agregarNoticias } from './core/news.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -872,6 +873,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onCerrar: () => {
         const final = resultadoNegociacion(negociacion);
         partida = firmarPelea(partida, { oferta: { ...oferta, bolsa: final.bolsa } });
+        // Pedido v6 ("las noticias también deberían nombrar al jugador...
+        // pelea de revancha"): se firma acá, con la bolsa ya cerrada — recién
+        // ahora el cruce es un hecho, no una posibilidad. Mismo rng
+        // "cosmético" que el resto de esta función (nunca el compartido de
+        // la carrera).
+        if (oferta.esRevancha) {
+          const noticia = generarNoticia(rng, {
+            tipo: 'revancha',
+            datos: {
+              nombre: partida.jugador.nombre,
+              apodo: partida.jugador.apodo,
+              rival: oferta.rivalApodo ?? oferta.rivalNombre,
+            },
+            fecha: partida.mundo.anio,
+          });
+          partida = { ...partida, noticias: agregarNoticias(partida.noticias, [{ ...noticia, propia: true }]) };
+        }
         irADashboard();
       },
       // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
@@ -1050,6 +1068,34 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       // basta con un número que cambie pelea a pelea.
       contexto: jugador.historial.length,
     });
+
+    // Pedido v6 ("las noticias también deberían nombrar al jugador cuando
+    // ocurren cosas importantes"): a lo sumo UNA noticia propia por pelea
+    // (noticiaDeHitoJugador ya elige cuál, con su propia prioridad — ver
+    // core/hitos.js), armada con la MISMA maquinaria que ya usan las
+    // noticias del mundo (generarNoticia/PLANTILLAS, news.js/news-templates.js).
+    // El rng que se usa acá es el "cosmético" de main.js (el mismo que ya
+    // tira la lesión unas líneas más arriba en esta función) — nunca el rng
+    // compartido de la carrera (core/career.js), que es el que calibra el
+    // ritmo de toda la partida y no hay que correr de más.
+    const noticiaHito = noticiaDeHitoJugador({
+      hitos,
+      oferta,
+      resultado: pelea.resultado,
+      jugadorAntes,
+      jugador,
+      rankingAntes: rankingDelJugador(partida.mundo, jugadorAntes),
+      rankingDespues: rankingDelJugador(partida.mundo, jugador),
+    });
+    if (noticiaHito) {
+      const noticia = generarNoticia(rng, {
+        tipo: noticiaHito.tipo, datos: noticiaHito.datos, fecha: partida.mundo.anio,
+      });
+      // `propia` distingue esta noticia de las que cuentan lo que le pasa al
+      // resto del mundo — el feed la resalta (ver panel-noticias.js): es tu
+      // carrera, tiene que notarse.
+      partida = { ...partida, noticias: agregarNoticias(partida.noticias, [{ ...noticia, propia: true }]) };
+    }
 
     return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,

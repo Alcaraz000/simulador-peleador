@@ -6,10 +6,15 @@ import {
 } from '../../src/core/news.js';
 
 describe('plantillas', () => {
-  it('cubre los diez tipos de noticia', () => {
+  // Pedido v6 ("las noticias también deberían nombrar al jugador"): se
+  // suman titulo_perdido ("te lo sacaron"), revancha_ganada ("ganaste una
+  // revancha") y debut ("debutaste como profesional") — antes solo `titulo`/
+  // `defensa`/`revancha`/`record`/`ranking` estaban definidos pero ninguno se
+  // usaba de verdad (generarNoticia no se llamaba desde ningún lado).
+  it('cubre los trece tipos de noticia', () => {
     expect(Object.keys(PLANTILLAS).sort()).toEqual([
-      'defensa', 'derrota', 'escandalo', 'lesion', 'ranking',
-      'record', 'retiro', 'revancha', 'titulo', 'victoria',
+      'debut', 'defensa', 'derrota', 'escandalo', 'lesion', 'ranking',
+      'record', 'retiro', 'revancha', 'revancha_ganada', 'titulo', 'titulo_perdido', 'victoria',
     ]);
   });
 

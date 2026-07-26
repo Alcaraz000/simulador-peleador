@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  hitosDePelea, hitoDeEtapa, textoDeHito,
+  hitosDePelea, hitoDeEtapa, textoDeHito, noticiaDeHitoJugador,
 } from '../../src/core/hitos.js';
 
 // Sistema 4 (feedback del usuario: "faltan popups cuando pasen cosas
@@ -206,5 +206,194 @@ describe('textoDeHito', () => {
     const a = textoDeHito({ tipo: 'defensa_exitosa', cinturon: 'Cinturón nacional', contexto: 7 });
     const b = textoDeHito({ tipo: 'defensa_exitosa', cinturon: 'Cinturón nacional', contexto: 7 });
     expect(a).toEqual(b);
+  });
+});
+
+// Pedido v6 ("las noticias también deberían nombrar al jugador cuando
+// ocurren cosas importantes"): a diferencia del popup (hitosDePelea, arriba,
+// que se muestra SIEMPRE que hay algo que contar), acá se elige A LO SUMO
+// un hito por pelea para el FEED de noticias, con su propia prioridad —
+// título/récord pesan distinto que un simple salto en el ranking. Pura, sin
+// rng: la variedad de texto la resuelve generarNoticia (news.js) con SU
+// propio rng, aparte.
+describe('noticiaDeHitoJugador', () => {
+  function jugador(extra = {}) {
+    return {
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', record: { v: 5, d: 1, e: 0 }, defensasCinturon: {}, ...extra,
+    };
+  }
+
+  function ofertaBase(extra = {}) {
+    return {
+      rivalApodo: 'El Zurdo', rivalNombre: 'Ramón Diaz', cinturonId: 'regional', esRevancha: false, ...extra,
+    };
+  }
+
+  it('sin ningun hito y sin salto de ranking, no genera noticia', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 4, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 5, d: 1, e: 0 } }),
+    });
+    expect(r).toBeNull();
+  });
+
+  it('titulo_ganado se traduce a tipo "titulo" con el nombre del cinturon y el rival', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'titulo_ganado', cinturon: 'Cinturón regional' }],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador(),
+      jugador: jugador(),
+    });
+    expect(r.tipo).toBe('titulo');
+    expect(r.datos).toMatchObject({ nombre: 'Lucas Ortiz', apodo: 'El Relámpago', rival: 'El Zurdo', titulo: 'Cinturón regional' });
+  });
+
+  it('titulo_perdido se traduce a tipo "titulo_perdido"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'titulo_perdido', cinturon: 'Cinturón regional' }],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'rival' },
+      jugadorAntes: jugador(),
+      jugador: jugador(),
+    });
+    expect(r.tipo).toBe('titulo_perdido');
+    expect(r.datos.titulo).toBe('Cinturón regional');
+  });
+
+  it('defensa_exitosa se traduce a tipo "defensa" con el numero de defensas del cinturon', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'defensa_exitosa', cinturon: 'Cinturón regional' }],
+      oferta: ofertaBase({ cinturonId: 'regional' }),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador(),
+      jugador: jugador({ defensasCinturon: { regional: 3 } }),
+    });
+    expect(r.tipo).toBe('defensa');
+    expect(r.datos.titulo).toBe('Cinturón regional');
+    expect(r.datos.numero).toBe(3);
+  });
+
+  it('ganar una pelea de revancha (sin otro hito) se traduce a "revancha_ganada"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase({ esRevancha: true }),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 5, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 6, d: 1, e: 0 } }),
+    });
+    expect(r.tipo).toBe('revancha_ganada');
+  });
+
+  it('perder una revancha NO genera "revancha_ganada"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase({ esRevancha: true }),
+      resultado: { ganador: 'rival' },
+      jugadorAntes: jugador({ record: { v: 5, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 5, d: 2, e: 0 } }),
+    });
+    expect(r).toBeNull();
+  });
+
+  it('primera_pelea (debut profesional) se traduce a tipo "debut"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'primera_pelea' }],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 0, d: 0, e: 0 } }),
+      jugador: jugador({ record: { v: 1, d: 0, e: 0 } }),
+    });
+    expect(r.tipo).toBe('debut');
+    expect(r.datos).toEqual({ nombre: 'Lucas Ortiz', apodo: 'El Relámpago' });
+  });
+
+  it('llegar a un múltiplo de 10 en el récord de victorias se traduce a tipo "record"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 9, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 10, d: 1, e: 0 } }),
+    });
+    expect(r.tipo).toBe('record');
+    expect(r.datos.numero).toBe(10);
+  });
+
+  it('sumar una victoria que NO cae en un multiplo de 10 no genera "record"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 10, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 11, d: 1, e: 0 } }),
+    });
+    expect(r).toBeNull();
+  });
+
+  it('un salto grande hacia arriba en el ranking se traduce a tipo "ranking"', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 5, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 6, d: 1, e: 0 } }),
+      rankingAntes: 40,
+      rankingDespues: 25,
+    });
+    expect(r.tipo).toBe('ranking');
+    expect(r.datos.numero).toBe(25);
+  });
+
+  it('un salto chico en el ranking (de rutina) no genera noticia', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 5, d: 1, e: 0 } }),
+      jugador: jugador({ record: { v: 6, d: 1, e: 0 } }),
+      rankingAntes: 40,
+      rankingDespues: 38,
+    });
+    expect(r).toBeNull();
+  });
+
+  it('prioridad: titulo_ganado le gana a un salto de ranking simultaneo', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'titulo_ganado', cinturon: 'Cinturón regional' }],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador(),
+      jugador: jugador(),
+      rankingAntes: 40,
+      rankingDespues: 20,
+    });
+    expect(r.tipo).toBe('titulo');
+  });
+
+  it('prioridad: el debut le gana a un record de victorias simultaneo', () => {
+    const r = noticiaDeHitoJugador({
+      hitos: [{ tipo: 'primera_pelea' }],
+      oferta: ofertaBase(),
+      resultado: { ganador: 'jugador' },
+      jugadorAntes: jugador({ record: { v: 9, d: 0, e: 0 } }),
+      jugador: jugador({ record: { v: 10, d: 0, e: 0 } }),
+    });
+    expect(r.tipo).toBe('debut');
+  });
+
+  it('no muta ninguno de sus argumentos', () => {
+    const hitos = [{ tipo: 'titulo_ganado', cinturon: 'Cinturón regional' }];
+    const oferta = ofertaBase();
+    const jugadorAntesArg = jugador();
+    const jugadorArg = jugador();
+    const antes = JSON.stringify({ hitos, oferta, jugadorAntesArg, jugadorArg });
+    noticiaDeHitoJugador({
+      hitos, oferta, resultado: { ganador: 'jugador' }, jugadorAntes: jugadorAntesArg, jugador: jugadorArg,
+    });
+    expect(JSON.stringify({ hitos, oferta, jugadorAntesArg, jugadorArg })).toBe(antes);
   });
 });
