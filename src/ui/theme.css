@@ -238,10 +238,37 @@ h2 { font-size: 17px; font-weight: 800; }
 .tarjeta.rara .tarjeta-icono { background: #111a26; color: #7fa6e0; }
 .tarjeta.legendaria .tarjeta-icono { background: #2a2008; color: var(--dorado); }
 
-.tarjeta-titulo { font-size: 14px; font-weight: 800; margin-top: 9px; }
+/* Tamaño fijo (pedido general del usuario): título y descripción siempre
+   miden lo mismo, sin importar cuánto texto traiga cada opción, para que una
+   grilla de tarjetas no quede deforme por una descripción más larga que otra.
+   El texto de más se corta con "…" (line-clamp): el contenido completo sigue
+   en el DOM, solo se recorta lo visible. */
+.tarjeta-titulo {
+  font-size: 14px;
+  font-weight: 800;
+  margin-top: 9px;
+  height: 36px;
+  line-height: 18px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 .tarjeta.legendaria .tarjeta-titulo { color: var(--dorado); }
 
-.tarjeta-desc { font-size: 11px; color: var(--texto-medio); margin-top: 5px; }
+.tarjeta-desc {
+  font-size: 11px;
+  color: var(--texto-medio);
+  margin-top: 5px;
+  height: 60px;
+  line-height: 15px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
 
 .tarjeta-efectos { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; }
 
@@ -278,6 +305,16 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-decision-grilla {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* Grilla de 2 columnas: para cuando hay exactamente 2 o 4 tarjetas (origen y
+   estilo en la creación del peleador). Con 2 tarjetas evita la tercera
+   columna vacía de .panel-decision-grilla (quedaban mal centradas); con 4
+   arma un 2×2 prolijo en vez de 3 arriba + 1 sola abajo con un hueco enorme. */
+.panel-decision-grilla-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -612,8 +649,17 @@ h2 { font-size: 17px; font-weight: 800; }
 .paso-titulo { margin-bottom: 10px; }
 .paso-titulo .etiqueta { display: inline; }
 
+/* Paso todavía no habilitado: el título se apaga a gris (las tarjetas de
+   adentro ya se apagan solas vía .tarjeta:disabled). El módulo entero nunca
+   se oculta — el jugador tiene que ver de entrada los 4 pasos que va a
+   decidir, no que vayan apareciendo de la nada. */
+.paso-titulo-bloqueado .dorado { color: var(--texto-sutil); }
+
 .creacion-campo { display: flex; align-items: center; gap: 8px; }
 .creacion-campo > svg { flex: 0 0 auto; }
+/* El control (input/botón único, o un grupo de chips .fila) ocupa el resto
+   del ancho de la fila junto al ícono. */
+.creacion-campo > *:not(svg) { flex: 1; min-width: 0; }
 
 .creacion-control {
   width: 100%;
@@ -630,6 +676,23 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 input.creacion-control { cursor: text; }
+
+/* Chips de opción directa (mano hábil, disciplina, categoría): mismo control
+   visual que .creacion-control, uno por opción, agrupados en un .fila. Nada
+   de <select> salvo nacionalidad (que sigue siendo el botón de arriba). */
+.creacion-chip {
+  text-align: center;
+  font-weight: 700;
+}
+
+.creacion-chip:hover { border-color: var(--borde-fuerte); }
+
+.creacion-chip.elegida {
+  border-color: var(--dorado);
+  color: var(--dorado);
+  background: #1a1408;
+  box-shadow: 0 0 0 1px var(--dorado);
+}
 
 .creacion-nacionalidad {
   display: flex;
