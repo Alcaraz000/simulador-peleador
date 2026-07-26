@@ -66,6 +66,65 @@ describe('catalogo de eventos', () => {
   });
 });
 
+// Task v3 ("cartas nuevas con azar"): el pedido explícito del usuario — al
+// menos 8 cartas nuevas con `probabilidades`, repartidas entre etapas (no
+// todas en profesional, como pasaba con dopaje/chantaje/entrenador), con el
+// patrón "arriesgar (con probabilidades) o no arriesgar (la otra opción, que
+// no hace nada)", y con que "se cae la pelea" sea una consecuencia real —
+// cancele de verdad la oferta pendiente vía `caePelea` — no solo texto.
+describe('cartas de riesgo (Task v3)', () => {
+  const conProbabilidades = () => [
+    ...CARTAS_EVENTO.flatMap((c) => c.opciones.map((o) => ({ carta: c, opcion: o }))),
+    ...CARTAS_REDES.flatMap((c) => c.opciones.map((o) => ({ carta: c, opcion: o }))),
+  ].filter(({ opcion }) => opcion.probabilidades);
+
+  it('hay al menos 8 opciones con probabilidades en todo el juego (evento + redes), sin contar las 3 históricas de profesional', () => {
+    const historicas = new Set(['dopaje', 'chantaje', 'entrenador']);
+    const nuevas = conProbabilidades().filter(({ carta }) => !historicas.has(carta.id));
+    expect(nuevas.length).toBeGreaterThanOrEqual(8);
+  });
+
+  it('las cartas con azar ya no viven solo en profesional/veterano: al menos una es elegible desde juvenil', () => {
+    const conAzarEnJuvenil = CARTAS_EVENTO.filter(
+      (c) => c.etapas.includes('juvenil') && c.opciones.some((o) => o.probabilidades),
+    );
+    expect(conAzarEnJuvenil.length).toBeGreaterThanOrEqual(1);
+  });
+
+  // Solo las cartas nuevas con el patrón BINARIO "arriesgar o no" (2
+  // opciones: la de riesgo y la segura) — el pedido explícito del usuario de
+  // "rechazar no hace nada" es para ese patrón puntual. Las históricas
+  // (dopaje/chantaje/entrenador) ya existían antes y sí le dan un consuelo
+  // chico a la opción segura; 'polemica_calculada' (redes) sigue el patrón de
+  // 3 tonos preexistente de CARTAS_REDES (provocador/humilde/promocional),
+  // no el binario, así que tampoco aplica acá.
+  it('cada carta nueva con el patrón binario arriesgar-o-no trae una opción segura que no hace nada (sin mods ni efectos)', () => {
+    const historicas = new Set(['dopaje', 'chantaje', 'entrenador']);
+    for (const { carta, opcion } of conProbabilidades()) {
+      if (historicas.has(carta.id) || carta.opciones.length !== 2) continue;
+      const segura = carta.opciones.find((o) => o.id !== opcion.id && !o.probabilidades);
+      expect(segura, `la carta "${carta.id}" no tiene una opción segura junto a "${opcion.id}"`).toBeTruthy();
+      expect(Object.keys(segura.mods ?? {})).toHaveLength(0);
+      expect(segura.efectos).toBeUndefined();
+    }
+  });
+
+  it('al menos 2 cartas nuevas tienen una rama que hace caer la pelea de verdad (caePelea, no solo texto)', () => {
+    const conCaePelea = conProbabilidades().filter(
+      ({ opcion }) => opcion.probabilidades.some((r) => r.caePelea),
+    );
+    expect(conCaePelea.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('toda rama de probabilidades suma 100% via porcentajesDe (repetido: mismas cartas nuevas)', () => {
+    for (const { opcion } of conProbabilidades()) {
+      const pesos = opcion.probabilidades.map((r) => r.peso);
+      expect(pesos.every((p) => p >= 0)).toBe(true);
+      expect(pesos.some((p) => p > 0)).toBe(true);
+    }
+  });
+});
+
 describe('catalogo de redes', () => {
   it('tiene al menos ocho cartas de tres opciones', () => {
     expect(CARTAS_REDES.length).toBeGreaterThanOrEqual(8);
@@ -198,6 +257,10 @@ describe('resolverOpcion', () => {
         { peso: 1, mods: { potencia: 2 } },
         { peso: 1, mods: { potencia: -2 } },
       ] },
+      { id: 'apuesta', texto: 'Apuesta', probabilidades: [
+        { peso: 0, mods: { potencia: 2 }, texto: 'Salió bien.', efectos: { fama: 4 } },
+        { peso: 1, mods: {}, texto: 'Se cayó la pelea.', efectos: { fama: -8 }, caePelea: true },
+      ] },
     ],
   };
 
@@ -282,5 +345,39 @@ describe('resolverOpcion', () => {
       const deltaAplicado = paso.jugador.atributos.potencia - yo.atributos.potencia;
       expect(deltaAplicado).toBe(ramaGanadora.mods.potencia);
     }
+  });
+
+  // Task v3 ("cartas nuevas con azar"): una rama de `probabilidades` puede
+  // traer su propio `efectos` (dinero/fama, distinto según qué rama salió) y
+  // `caePelea` (la consecuencia "se te cae la pelea" tiene que ser real).
+  describe('efectos por rama y caePelea', () => {
+    it('con peso 1 en la rama mala, aplica el efectos de ESA rama (no el de la opcion, que no tiene) y expone caePelea', () => {
+      const yo = jugador({ fama: 50 });
+      const paso = resolverOpcion(createRng(1), { jugador: yo, carta, opcionId: 'apuesta' });
+      expect(paso.jugador.fama).toBe(42);
+      expect(paso.caePelea).toBe(true);
+      expect(paso.deltasTexto).toContain('-8 Fama');
+    });
+
+    it('una opcion sin probabilidades nunca cae la pelea', () => {
+      const paso = resolverOpcion(createRng(1), { jugador: jugador(), carta, opcionId: 'directo' });
+      expect(paso.caePelea).toBe(false);
+    });
+
+    it('el efectos de la rama ganadora no pisa el de una rama que no salió (determinista sobre la MISMA tirada)', () => {
+      const cartaCargada = {
+        ...carta,
+        opciones: [
+          { id: 'segura', texto: 'Segura', probabilidades: [
+            { peso: 1, mods: {}, texto: 'ok', efectos: { fama: 3 } },
+            { peso: 0, mods: {}, texto: 'no sale nunca', efectos: { fama: -50 }, caePelea: true },
+          ] },
+        ],
+      };
+      const yo = jugador({ fama: 10 });
+      const paso = resolverOpcion(createRng(2), { jugador: yo, carta: cartaCargada, opcionId: 'segura' });
+      expect(paso.jugador.fama).toBe(13);
+      expect(paso.caePelea).toBe(false);
+    });
   });
 });
