@@ -38,7 +38,13 @@ function bloquePelea(partida, onVerRival) {
       el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
         rival ? bandera(rival.nacionalidad, { ancho: 18 }) : null,
         el('div', { style: 'flex:1;min-width:0' }, [
-          el('div', { class: 'titulo', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+          // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
+          // relleno no tienen apodo (null): sin este resguardo mostraba
+          // literalmente '"null" Nombre'.
+          el('div', {
+            class: 'titulo',
+            text: oferta.rivalApodo ? `"${oferta.rivalApodo}" ${oferta.rivalNombre}` : oferta.rivalNombre,
+          }),
           el('div', { class: 'desc', text: `MEDIA ${oferta.rivalMedia} · ${oferta.rivalRecord}` }),
         ]),
       ]),

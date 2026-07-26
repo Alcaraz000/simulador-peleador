@@ -1,5 +1,7 @@
 import { buscarRival } from './world.js';
-import { mediaDe, recordTexto } from './fighter.js';
+import {
+  mediaDe, recordTexto, apodoParaMostrar, nombreConApodo,
+} from './fighter.js';
 import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
 
@@ -114,9 +116,15 @@ export function fraseEntrenador(jugador, oferta) {
   // offers.test.js) ni `rivalId` (mismo problema, viene de fighter.js). Con
   // el apodo + la bolsa + lo que está en juego alcanza para variar sin
   // depender de esos contadores.
-  const indice = indiceEstable(`${oferta.rivalApodo}|${oferta.bolsa}|${oferta.enJuego}|${categoria}`, pool.length);
+  // El marcador {rival} se usa siempre SOLO (nunca junto al nombre): con el
+  // roster de 100 (Pedido 1) la mayoría de los rivales de relleno no tienen
+  // apodo, así que cae al nombre — `rellenar` (más abajo) ya resguarda contra
+  // null/undefined con un `?? ''`, pero eso dejaba la frase sin el rival
+  // ("...mano a mano con ."), no solo evitaba el "null" literal.
+  const mote = oferta.rivalApodo ?? oferta.rivalNombre;
+  const indice = indiceEstable(`${mote}|${oferta.bolsa}|${oferta.enJuego}|${categoria}`, pool.length);
   return rellenar(pool[indice], {
-    rival: oferta.rivalApodo,
+    rival: mote,
     bolsa: `US$ ${Math.round(oferta.bolsa).toLocaleString('es-AR')}`,
     enJuego: oferta.enJuego,
   });
@@ -205,16 +213,21 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     ? cinturon.nombre
     : nivel.id === 'eliminatoria' ? 'Puesto de retador' : 'Subís al ranking si ganás';
 
+  // Con el roster de 100 (Pedido 1), la mayoría de los rivales de relleno no
+  // tienen apodo (null, pool de solo 16 nombres): `mote` se usa SOLO (nunca
+  // "null" en pantalla) y `nombreConApodo` arma el combo "Apodo" Nombre sin
+  // duplicar el nombre cuando no hay apodo.
+  const mote = apodoParaMostrar(rival);
   contadorOferta += 1;
   const gancho = nivel.id === 'defensa'
-    ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${rival.apodo} es el retador oficial.`
+    ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${mote} es el retador oficial.`
     : nivel.id === 'titulo'
-      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${rival.apodo} tiene lo que querés.`
+      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${mote} tiene lo que querés.`
       : esRevancha
-        ? `${rival.apodo} quiere la revancha. Vos sabés lo que pasó la última vez.`
+        ? `${mote} quiere la revancha. Vos sabés lo que pasó la última vez.`
         : rival.esParodia
           ? `${rival.nombre} te nombró en una entrevista. El teléfono no para.`
-          : `"${rival.apodo}" ${rival.nombre} te quiere cruzar.`;
+          : `${nombreConApodo(rival)} te quiere cruzar.`;
 
   const oferta = {
     id: `of_${contadorOferta}`,

@@ -59,7 +59,10 @@ export function hitosDePelea({
   }
 
   if (!archirrivalAntesId && archirrivalDespuesId) {
-    hitos.push({ tipo: 'rivalidad_consagrada', rival: oferta.rivalApodo, contexto });
+    // `rival` se usa siempre SOLO en el texto del hito (nunca junto al
+    // nombre): con el roster de 100 (Pedido 1) la mayoría de los rivales de
+    // relleno no tienen apodo, así que cae al nombre en vez de mostrar "null".
+    hitos.push({ tipo: 'rivalidad_consagrada', rival: oferta.rivalApodo ?? oferta.rivalNombre, contexto });
   }
 
   if ((jugadorAntes.historial?.length ?? 0) === 0) {

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import {
   CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto, repartirOrigenes,
-  nombreConApodo,
+  nombreConApodo, apodoParaMostrar,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
 import { NACIONALIDADES, NOMBRES_POR_PAIS } from '../../src/content/names.js';
@@ -275,5 +275,25 @@ describe('nombreConApodo', () => {
   it('sin apodo (undefined), muestra solo el nombre', () => {
     const { apodo, ...sinApodo } = crearPeleador(base);
     expect(nombreConApodo(sinApodo)).toBe('Lucas Ortiz');
+  });
+});
+
+// Pedido 1 (v6, roster de 100): con solo 16 apodos posibles (names.js) para
+// ~95 rivales de relleno, la mayoría termina SIN apodo (null) — antes,
+// cualquier NPC generado tenía garantizado un apodo, así que este caso nunca
+// pasaba en producción para un rival de verdad. `apodoParaMostrar` es la
+// versión de `nombreConApodo` para los lugares que muestran SOLO el mote
+// (marcador de pelea, chip de archirrival, título del campamento) — mismo
+// resguardo, sin duplicar el nombre al lado.
+describe('apodoParaMostrar', () => {
+  it('con apodo, devuelve el apodo', () => {
+    const p = crearPeleador(base);
+    expect(apodoParaMostrar(p)).toBe('El Relámpago');
+  });
+
+  it('sin apodo (null), devuelve el nombre, nunca "null"', () => {
+    const p = crearPeleador({ ...base, apodo: null, apodoId: null });
+    expect(apodoParaMostrar(p)).toBe('Lucas Ortiz');
+    expect(apodoParaMostrar(p)).not.toContain('null');
   });
 });

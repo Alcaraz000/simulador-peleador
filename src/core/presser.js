@@ -25,7 +25,11 @@ export function crearCareo(rng, { oferta, rondas = 3 }) {
   return {
     ofertaId: oferta.id,
     rivalId: oferta.rivalId,
-    rivalApodo: oferta.rivalApodo,
+    // Se usa siempre SOLO (nunca junto al nombre — ver prefacioHablante y
+    // NARRACION_CAREO en ui/screens/presser.js), así que cae al nombre si no
+    // hay apodo (roster de 100, Pedido 1: la mayoría de los rivales de
+    // relleno no tienen uno) en vez de mostrar "null".
+    rivalApodo: oferta.rivalApodo ?? oferta.rivalNombre,
     personalidad,
     tell: TELLS[personalidad] ?? TELLS.respetuoso,
     hype: HYPE_INICIAL + (oferta.esTitulo ? 15 : 0),

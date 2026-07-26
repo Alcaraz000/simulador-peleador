@@ -176,17 +176,36 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
   };
 }
 
+// Fracción de los activos que define el tope del bono de récord (ver más
+// abajo): con 12 rivales (v5) daría ~4, muy por debajo del piso de 12 que ya
+// tenía el juego, así que `Math.max` deja ese piso viejo intacto para
+// rosters chicos (los que ya usan varios tests) y solo escala hacia arriba
+// con rosters grandes.
+const FRACCION_TOPE_BONUS_RECORD = 0.3;
+const TOPE_BONUS_RECORD_MINIMO = 12;
+
 /**
- * Ranking del jugador dentro de su categoría: cuántos activos del roster lo superan.
- * El jugador no vive en el roster, así que su puesto se calcula comparando MEDIA
- * y ajustando por su récord (ganar te acerca a la cima).
+ * Ranking del jugador dentro de su categoría: cuántos activos del roster lo
+ * superan. El jugador no vive en el roster, así que su puesto se calcula
+ * comparando MEDIA y ajustando por su récord (ganar te acerca a la cima,
+ * perder te aleja).
+ *
+ * Pedido 1 (v6, "escalar tiene que costar y ser volátil"): con 12 rivales el
+ * bono de récord tenía un tope fijo de ±12 — cubría casi toda la tabla. Con
+ * el roster de 100 (la "montaña") ese mismo tope apenas corre un escalón en
+ * una tabla mucho más densa, así que deja de sentirse ganado. El tope ahora
+ * escala con la cantidad de activos (`FRACCION_TOPE_BONUS_RECORD`), sin bajar
+ * nunca del piso de 12 que ya tenía el juego: una racha sostenida de verdad
+ * (ganar mucho, o perder mucho) mueve el puesto en proporción al tamaño real
+ * de la categoría, sea de 12 o de 100.
  */
 export function rankingDelJugador(mundo, jugador) {
   const activos = mundo.roster.filter((p) => !p.retirado);
   if (activos.length === 0) return 1;
   const miMedia = mediaDe(jugador);
   const bonusRecord = jugador.record.v - jugador.record.d * 2;
-  const puntaje = miMedia + clamp(bonusRecord, -12, 12);
+  const tope = Math.max(TOPE_BONUS_RECORD_MINIMO, Math.round(activos.length * FRACCION_TOPE_BONUS_RECORD));
+  const puntaje = miMedia + clamp(bonusRecord, -tope, tope);
   const mejores = activos.filter((p) => mediaDe(p) > puntaje).length;
   return clamp(mejores + 1, 1, activos.length + 1);
 }

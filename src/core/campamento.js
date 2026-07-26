@@ -37,7 +37,10 @@ export function decidirLargoCampamento(rng, oferta) {
 }
 
 function rellenar(texto, oferta) {
-  return texto.replace(/\{rival\}/g, oferta.rivalApodo);
+  // {rival} se usa siempre SOLO (nunca junto al nombre): con el roster de
+  // 100 (Pedido 1) la mayoría de los rivales de relleno no tienen apodo, así
+  // que cae al nombre en vez de mostrar "null" en las cartas de campamento.
+  return texto.replace(/\{rival\}/g, oferta.rivalApodo ?? oferta.rivalNombre);
 }
 
 /** Elige una carta de campamento para esta etapa y ya la deja lista para mostrar (marcador {rival} relleno). */

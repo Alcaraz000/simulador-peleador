@@ -195,6 +195,44 @@ describe('rankingDelJugador', () => {
     expect(puesto).toBeGreaterThanOrEqual(1);
     expect(puesto).toBeLessThanOrEqual(m.roster.length + 1);
   });
+
+  // Pedido 1 (v6, "escalar tiene que costar y ser volátil: ganar te sube,
+  // perder te baja"). Con 12 rivales (v5) el bono de récord tenía un tope
+  // fijo de ±12 — con 100 (Pedido 1) ese mismo tope apenas corre un escalón
+  // en una tabla mucho más densa. El tope ahora escala con la cantidad de
+  // activos, así que una racha real (ganar o perder) sigue moviendo el
+  // puesto de forma proporcional al tamaño de la montaña.
+  it('con un roster grande, perder duele: una racha de derrotas empeora mucho el puesto', () => {
+    const m = crearMundo(createRng(50), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    const base = { ...m.roster[50], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const rachaMala = { ...base, record: { v: 0, d: 8, e: 0, ko: 0, sub: 0, dec: 0 } };
+    expect(rankingDelJugador(m, rachaMala)).toBeGreaterThan(rankingDelJugador(m, base));
+  });
+
+  it('con un roster grande (100), el tope del bono de récord escala más allá de 12', () => {
+    // Con el tope viejo (fijo en ±12), un récord de v:12 y uno de v:40 dan
+    // EXACTAMENTE el mismo bono (ambos saturan en +12) y por lo tanto el
+    // mismo puesto. Con el tope escalado (Pedido 1), a 100 rivales activos
+    // el tope sube (~30), así que una racha mucho más larga (v:40) SÍ tiene
+    // que traducirse en un puesto distinto (mejor) que una de v:12.
+    const m = crearMundo(createRng(51), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    const base = { ...m.roster[50], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const rachaModesta = rankingDelJugador(m, { ...base, record: { v: 12, d: 0, e: 0, ko: 8, sub: 0, dec: 4 } });
+    const rachaEnorme = rankingDelJugador(m, { ...base, record: { v: 40, d: 0, e: 0, ko: 30, sub: 0, dec: 10 } });
+    expect(rachaEnorme).toBeLessThan(rachaModesta);
+  });
+
+  it('con un roster chico (12), el comportamiento de siempre no cambia: tope efectivo sigue en 12', () => {
+    const m = crearMundo(createRng(52), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 12 });
+    const base = { ...m.roster[6], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    // Una racha ganadora enorme (muy por encima de lo que un tope de 12
+    // permitiría acreditar) no debería dar MÁS bono que uno más chico que ya
+    // toca el tope — confirma que el tope efectivo sigue en 12 para rosters
+    // chicos, sin regresión respecto de v5.
+    const conTope = rankingDelJugador(m, { ...base, record: { v: 12, d: 0, e: 0, ko: 8, sub: 0, dec: 4 } });
+    const masAlla = rankingDelJugador(m, { ...base, record: { v: 40, d: 0, e: 0, ko: 30, sub: 0, dec: 10 } });
+    expect(masAlla).toBe(conTope);
+  });
 });
 
 describe('buscarRival', () => {

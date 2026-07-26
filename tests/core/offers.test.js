@@ -90,6 +90,27 @@ describe('generarOferta', () => {
     expect(generarOferta(createRng(8), { jugador: jugador(), mundo: m, etapa: 'profesional' })).toBeNull();
   });
 
+  // Pedido 1 (v6, roster de 100): con el pool de apodos (16) muy por debajo
+  // de 100 rivales, la mayoría de los rivales de relleno quedan sin apodo
+  // (null) — antes esto no podía pasar en producción (todo NPC generado
+  // tenía uno garantizado). Sobre muchas semillas, ningún texto de la oferta
+  // debería mostrar el string "null" ni quedar vacío donde iría el rival.
+  it('nunca muestra "null" en los textos, tenga o no apodo el rival', () => {
+    let vioSinApodo = false;
+    for (let s = 1; s <= 60; s += 1) {
+      const oferta = generarOferta(createRng(s), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+      if (!oferta) continue;
+      if (!oferta.rivalApodo) vioSinApodo = true;
+      expect(oferta.textoGancho).not.toContain('null');
+      expect(oferta.fraseEntrenador).not.toContain('null');
+      expect(oferta.textoGancho.length).toBeGreaterThan(0);
+      expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
+    }
+    // Confirma que el caso "sin apodo" de verdad se ejerció en esta muestra
+    // (si no, el test de arriba no estaría probando nada nuevo).
+    expect(vioSinApodo).toBe(true);
+  });
+
   it('es determinista', () => {
     const a = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
     const b = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
@@ -264,9 +285,13 @@ describe('opinionEntrenador', () => {
 });
 
 describe('fraseEntrenador', () => {
-  it('menciona al rival', () => {
+  // Con el roster de 100 (Pedido 1), la mayoría de los rivales de relleno no
+  // tienen apodo (null) — la frase tiene que caer al nombre en ese caso, no
+  // mostrar "null" ni quedarse sin mencionar al rival.
+  it('menciona al rival (por apodo si tiene, si no por nombre)', () => {
     const oferta = generarOferta(createRng(4), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
-    expect(oferta.fraseEntrenador).toContain(oferta.rivalApodo);
+    expect(oferta.fraseEntrenador).toContain(oferta.rivalApodo ?? oferta.rivalNombre);
+    expect(oferta.fraseEntrenador).not.toContain('null');
   });
 
   it('en una pelea de titulo puede nombrar lo que esta en juego', () => {

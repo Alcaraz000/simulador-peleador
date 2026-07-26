@@ -36,7 +36,13 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
     el('p', { class: 'medio', text: oferta.textoGancho }),
     el('div', { class: 'panel' }, [
       el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
-        el('div', { style: 'font-size:18px;font-weight:800;flex:1;min-width:0', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+        // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
+        // relleno no tienen apodo (null): sin este resguardo mostraba
+        // literalmente '"null" Nombre'.
+        el('div', {
+          style: 'font-size:18px;font-weight:800;flex:1;min-width:0',
+          text: oferta.rivalApodo ? `"${oferta.rivalApodo}" ${oferta.rivalNombre}` : oferta.rivalNombre,
+        }),
         // Puesto en el ranking del rival (Task v3, pedido textual): junto al
         // nombre, así el jugador ve de un vistazo contra quién se mide sin
         // ir a buscarlo a la tabla de posiciones.

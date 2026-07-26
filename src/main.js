@@ -747,11 +747,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const { oferta, ultimo } = beat.datos;
 
     function pintarSparring() {
-      const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
       const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
-        titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
+        // La oferta ya trae rivalApodo/rivalNombre propios (self-contained,
+        // sin depender de encontrarlo en el roster) — con el roster de 100
+        // (Pedido 1), la mayoría de los rivales de relleno no tienen apodo
+        // (null): sin el resguardo, esto mostraba literalmente "null".
+        titulo: `Campamento · contra "${oferta.rivalApodo ?? oferta.rivalNombre}"`,
         bajada: 'Los rounds fuertes antes de la pelea',
         onGolpe: (evento) => {
           sparring = registrarGolpe(sparring, evento);

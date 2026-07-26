@@ -2,7 +2,7 @@ import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
 import {
-  mediaDe, recordTexto, CATEGORIAS,
+  mediaDe, recordTexto, CATEGORIAS, apodoParaMostrar,
 } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
@@ -349,7 +349,7 @@ function bloqueRecursos(partida) {
   }
 
   return el('div', { class: 'panel' }, [
-    el('div', { class: 'etiqueta rojo', text: `vs ${datosArchi.apodo}` }),
+    el('div', { class: 'etiqueta rojo', text: `vs ${apodoParaMostrar(datosArchi)}` }),
     el('div', { style: 'font-weight:800;margin-top:6px', text: h2hTexto(archi) }),
   ]);
 }

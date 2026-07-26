@@ -196,3 +196,14 @@ export function recordTexto(peleador) {
 export function nombreConApodo(peleador) {
   return peleador.apodo ? `"${peleador.apodo}" ${peleador.nombre}` : peleador.nombre;
 }
+
+// Mismo resguardo que `nombreConApodo`, para los lugares que muestran SOLO
+// el mote (sin el nombre al lado): marcador de pelea, chip de archirrival,
+// título del campamento. Pedido 1 (v6, roster de 100): con un pool de solo
+// 16 apodos posibles para ~95 rivales de relleno, la mayoría de los NPC
+// generados quedan sin apodo (null) — antes, cualquier NPC tenía uno
+// garantizado, así que este caso nunca pasaba en producción para un rival de
+// verdad (solo para partidas guardadas viejas). Ahora es el camino normal.
+export function apodoParaMostrar(peleador) {
+  return peleador.apodo ?? peleador.nombre;
+}
