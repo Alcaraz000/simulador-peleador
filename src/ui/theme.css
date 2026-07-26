@@ -74,16 +74,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .fila > * { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 8px; }
 
-.media-num {
-  font-size: 52px;
-  font-weight: 800;
-  color: var(--rojo);
-  line-height: 0.9;
-  letter-spacing: -2px;
-}
-
-.delta-sube { color: var(--verde); font-size: 10px; }
-.delta-baja { color: var(--rojo); font-size: 10px; }
 .dorado { color: var(--dorado); }
 .verde { color: var(--verde); }
 .rojo { color: var(--rojo); }
@@ -107,7 +97,6 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 .boton.secundario { background: #241012; color: var(--texto); }
-.boton.verde-cta { background: var(--verde); color: #0c1a0e; }
 .boton:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .carta {
@@ -471,7 +460,6 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 
-.delta-sube { animation: latido 0.5s ease 2; display: inline-block; }
 .log > p { animation: aparecer 0.25s ease both; }
 .log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
 .pao.activo { animation: latido 0.6s ease infinite; }
