@@ -83,6 +83,27 @@ describe('renderNegociacion', () => {
     expect(window.getComputedStyle(contador).flexGrow).toBe('0');
   });
 
+  // Hallazgo al verificar visualmente el fix de arriba (npm run dev + captura
+  // real): "Paciencia del promotor: 100/100" se partía en varias líneas
+  // adentro de su propia fila (`flex:0 0 auto`), aunque hay de sobra de
+  // ancho libre en el panel. Causa: esa fila anidada (ícono + texto) hereda
+  // `.fila > * { flex:1; min-width:0 }` para SUS hijos, y con un hijo
+  // encogible el tamaño "auto" que el navegador le calcula a la fila
+  // exterior queda angosto — un problema previo a la corrección de APRIETES,
+  // ya existía en el código, solo que quedaba más disimulado antes de que el
+  // contador dejara de estirarse.
+  it('la etiqueta de paciencia no se parte en varias lineas (aunque sobre ancho en el panel)', () => {
+    cargarCSS();
+    const negociacion = crearNegociacion(oferta);
+    renderNegociacion(cont, {
+      negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
+    });
+    const etiquetaPaciencia = [...cont.querySelectorAll('b')]
+      .find((n) => n.textContent.includes('Paciencia'));
+    expect(etiquetaPaciencia).toBeTruthy();
+    expect(window.getComputedStyle(etiquetaPaciencia).whiteSpace).toBe('nowrap');
+  });
+
   it('el boton de rechazar siempre esta presente y dispara el callback', () => {
     let rechazado = false;
     const negociacion = crearNegociacion(oferta);
