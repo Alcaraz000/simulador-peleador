@@ -435,6 +435,41 @@ describe('aplicarResultado', () => {
     expect(paso.jugador.historial[0].metodo).toBe('ko');
   });
 
+  // Task v3 ("fechas de cuándo se ganaron/defendieron títulos", pedido
+  // textual del usuario): la fecha del hito hay que guardarla EN el momento
+  // en que se resuelve la pelea, no reconstruirla después — para eso
+  // `aplicarResultado` recibe `semanaGlobal` (el reloj de la partida,
+  // calendario.js) y lo estampa en cada entrada del historial.
+  it('guarda la semana global de la partida como fecha del hito', () => {
+    const paso = aplicarResultado(jugador(), {
+      oferta: oferta(), mundo: mundo(), semanaGlobal: 57,
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+    });
+    expect(paso.jugador.historial[0].fecha).toBe(57);
+  });
+
+  it('sin semanaGlobal, la fecha queda null (no revienta)', () => {
+    const paso = aplicarResultado(jugador(), {
+      oferta: oferta(), mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+    });
+    expect(paso.jugador.historial[0].fecha).toBeNull();
+  });
+
+  // Causa real de "frases repetidas" en legacy.js: una defensa exitosa
+  // (nivel 'defensa') y una conquista de título (nivel 'titulo') comparten
+  // `esTitulo: true` y `resultado: 'v'`, pero son hitos distintos. Sin
+  // `esObligatoria` en el historial, legacy.js no podía distinguirlos y les
+  // ponía la MISMA frase ("se quedó con el X") a ambos.
+  it('guarda si el hito de titulo fue una defensa, no una conquista', () => {
+    const o = { ...oferta(), esTitulo: true, esObligatoria: true, enJuego: 'Cinturón regional' };
+    const paso = aplicarResultado(jugador({ titulos: ['Cinturón regional'] }), {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'decision', round: 12, texto: 'Ganó' },
+    });
+    expect(paso.jugador.historial[0].esObligatoria).toBe(true);
+  });
+
   it('no muta el jugador original', () => {
     const yo = jugador();
     const antes = JSON.stringify(yo);

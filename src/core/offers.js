@@ -276,7 +276,15 @@ export function rechazarOferta(jugador, oferta) {
   return { jugador: nuevo, texto };
 }
 
-export function aplicarResultado(jugador, { oferta, resultado }) {
+// `semanaGlobal` (el reloj de la partida, ver calendario.js) llega opcional
+// para no romper a los llamadores que todavía no lo pasan (scripts/
+// balance-sim.mjs, algunos tests): sin él, el hito queda con `fecha: null`
+// en vez de reventar. `main.js` sí lo manda siempre (partida.semanaGlobal en
+// el momento en que se cierra la pelea), que es el dato que necesita
+// legacy.js para mostrar cuándo se ganó/defendió cada título (Task v3,
+// pedido textual del usuario) — se guarda ACÁ, en el momento del hito, en
+// vez de reconstruirlo después con datos que ya no están disponibles.
+export function aplicarResultado(jugador, { oferta, resultado, semanaGlobal = null }) {
   const nuevo = clonarJugador(jugador);
   const titulosGanados = [];
   const gano = resultado.ganador === 'jugador';
@@ -340,6 +348,12 @@ export function aplicarResultado(jugador, { oferta, resultado }) {
     bolsa: oferta.bolsa,
     enJuego: oferta.enJuego,
     esTitulo: oferta.esTitulo,
+    // Distingue "conquistó el título" de "lo defendió" (ambos son
+    // esTitulo+resultado:'v'): legacy.js lo necesita para no ponerles a los
+    // dos la misma frase de "se quedó con el cinturón" (ver el comentario
+    // de la causa real en legacy.js).
+    esObligatoria: oferta.esObligatoria ?? false,
+    fecha: semanaGlobal,
   });
 
   const texto = gano
