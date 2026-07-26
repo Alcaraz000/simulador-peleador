@@ -485,7 +485,7 @@ describe('avanzarBloque', () => {
 });
 
 describe('ofertas de pelea bloqueadas por lesion', () => {
-  it('si esta lesionado grave y le tocaba pelea, avisa en vez de quedarse callado', () => {
+  it('si esta lesionado y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
     // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
@@ -511,7 +511,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     expect(tipos).toContain('lesionSinOferta');
   });
 
-  it('sin lesion grave, esa misma situacion ofrece pelea con normalidad', () => {
+  it('sin lesion, esa misma situacion ofrece pelea con normalidad', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     let actual = p;
@@ -525,42 +525,47 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     expect(tipos).not.toContain('lesionSinOferta');
   });
 
-  // Sistema 1 (feedback del usuario: "verificá que puedePelear() bloquee de
-  // verdad, en todos los caminos"): confirma el límite exacto de severidad —
-  // leve y moderada siguen ofreciendo pelea a propósito (no todo golpe te
-  // saca de circulación), solo severidad 3 (grave) corta la oferta. Único
-  // punto de generación de ofertas en todo el juego es armarCola (acá abajo,
-  // vía siguienteBeat) — no hay otro camino que pueda saltarse el gate.
-  it('con lesion leve o moderada, sigue ofreciendo pelea (no bloquea de más)', () => {
+  // Corrección del coordinador (segunda ronda): el usuario fue textual —
+  // "hasta no estar recuperado de una lesión, no puede aparecer una pelea
+  // nueva" — sin matices. Antes solo bloqueaba severidad 3; ahora CUALQUIER
+  // lesión activa (leve o moderada incluida) corta la oferta igual que la
+  // grave. Único punto de generación de ofertas en todo el juego es
+  // armarCola (acá abajo, vía siguienteBeat) — no hay otro camino que pueda
+  // saltarse el gate.
+  it('con lesion leve o moderada, TAMBIÉN bloquea la oferta (sin matices de severidad)', () => {
+    // bloquesRestantes en 8 con 12 iteraciones, mismo margen de seguridad que
+    // el test de la lesión grave (arriba): el mínimo de beats por bloque en
+    // profesional mientras sigue lesionado es 2 (mejora + lesionSinOferta),
+    // así que 12 iteraciones nunca alcanzan a agotar las 8 que hacen falta
+    // para curarse — sin este margen, una duración corta podía curarse a
+    // mitad del loop y hacer aparecer una oferta legítima (ya sano),
+    // arruinando el test.
     for (const severidad of [1, 2]) {
       const p = nuevaPartida();
       p.etapaIndice = 2;
       p.jugador.estado.lesion = {
-        id: 'x', nombre: 'x', severidad, bloquesRestantes: 2, costo: 1, texto: 'x',
+        id: 'x', nombre: 'x', severidad, bloquesRestantes: 8, costo: 1, texto: 'x',
       };
-      const { beat } = siguienteBeat(p);
-      expect(beat.tipo).toBe('mejora'); // primer beat del bloque siempre es mejora
-      // Sigue buscando la oferta en los próximos beats del mismo bloque.
-      let actual = siguienteBeat(p).partida;
+      let actual = p;
       const tipos = [];
-      for (let i = 0; i < 5; i++) {
+      for (let i = 0; i < 12; i++) {
         const paso = siguienteBeat(actual);
         actual = paso.partida;
         if (paso.beat) tipos.push(paso.beat.tipo);
       }
-      expect(tipos).toContain('oferta');
-      expect(tipos).not.toContain('lesionSinOferta');
+      expect(tipos).not.toContain('oferta');
+      expect(tipos).toContain('lesionSinOferta');
     }
   });
 
   // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
   // 0 vía recuperar(), avanzarBloque), las ofertas vuelven solas en el
   // próximo bloque, sin que el jugador tenga que hacer nada especial.
-  it('en cuanto se cura de una lesion grave, las ofertas vuelven sin trabas', () => {
+  it('en cuanto se cura, las ofertas vuelven sin trabas', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
     };
     let actual = p;
     let vioOferta = false;
@@ -597,6 +602,18 @@ describe('ofertas de pelea por carrera', () => {
     });
   });
 });
+
+// Sistema 1, corrección del coordinador ("cualquier lesión bloquea las
+// ofertas — medí el efecto colateral, y si las ofertas caen por debajo de
+// 12 o los tres cinturones bajan del 85%, la palanca correcta es que las
+// lesiones duren menos o sean menos frecuentes, nunca aflojar el gate"): los
+// tests de esa medición (con lesiones reales aplicándose pelea a pelea, no
+// solo las 10 semillas de arriba) viven en su propio archivo —
+// tests/core/career-lesiones-reales.test.js — para que Vitest los aísle en
+// su propio worker: sumar sus dos tests de 3000 semillas a los que ya corren
+// acá (ritmo de la carrera, progresión de cinturones, también 3000 cada uno)
+// hacía crecer el heap del mismo worker hasta quedarse sin memoria (medido
+// en esa corrección).
 
 describe('progresión de cinturones', () => {
   it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
