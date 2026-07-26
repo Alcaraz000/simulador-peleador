@@ -34,6 +34,21 @@ export function promedioReaccion(sparring) {
   return Math.round(sparring.tiempos.reduce((a, b) => a + b, 0) / sparring.tiempos.length);
 }
 
+// Pedido v6 ("quiero que el timer sea por todo el juego, no solo por cada
+// golpe"): el reloj de la UI (ui/screens/sparring.js) ya no es por pao, es
+// uno solo para toda la sesión. Cuando se acaba, el minijuego tiene que
+// cortar YA (no quedarse esperando el golpe que falta) — esta función marca
+// `terminado` con lo que ya se acumuló hasta ese momento, sin tocar nada
+// más: los golpes que sí llegaste a pegar siguen contando para
+// `resultadoSparring` tal cual (ratio sobre `objetivos`, promedio sobre los
+// tiempos ya registrados). Pura e idempotente: si ya estaba terminado (llegó
+// a completar la secuencia un instante antes de que expire el reloj), no
+// hace nada.
+export function terminarPorTiempo(sparring) {
+  if (sparring.terminado) return sparring;
+  return { ...sparring, terminado: true };
+}
+
 // Bug reportado por el usuario: "el minijuego de sparring, ¿tiene algún
 // efecto? No parece". La causa real tenía dos partes:
 //

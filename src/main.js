@@ -11,7 +11,7 @@ import { resolverOpcion } from './core/events.js';
 import { aplicarResultado, rechazarOferta } from './core/offers.js';
 import { crearNegociacion, jugarMovida, resultadoNegociacion } from './core/negotiation.js';
 import { crearCareo, responderCareo, resultadoCareo } from './core/presser.js';
-import { registrarGolpe, resultadoSparring } from './core/sparring.js';
+import { registrarGolpe, resultadoSparring, terminarPorTiempo } from './core/sparring.js';
 import { registrarCruce, elegirArchirrival, subirHeat } from './core/rivalry.js';
 import { comprar } from './core/money.js';
 import { tirarLesion, aplicarLesion, curarConDinero } from './core/injuries.js';
@@ -720,6 +720,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           sparring = registrarGolpe(sparring, evento);
           pintarSparring();
         },
+        // Pedido v6: un solo reloj para TODA la sesión (ya no por golpe). Si
+        // se acaba el tiempo, el minijuego corta ya con lo que se llevaba
+        // acumulado — no se queda esperando el golpe que falta.
+        onTiempoAgotado: () => {
+          sparring = terminarPorTiempo(sparring);
+          pintarSparring();
+        },
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
@@ -786,6 +793,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         bajada: 'Los rounds fuertes antes de la pelea',
         onGolpe: (evento) => {
           sparring = registrarGolpe(sparring, evento);
+          pintarSparring();
+        },
+        onTiempoAgotado: () => {
+          sparring = terminarPorTiempo(sparring);
           pintarSparring();
         },
         onTerminar: () => {
