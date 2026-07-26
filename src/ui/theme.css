@@ -411,6 +411,16 @@ h2 { font-size: 17px; font-weight: 800; }
   justify-content: center;
 }
 
+/* El botón queda disabled mientras dura (evita un segundo click a mitad de
+   camino), pero el dado no se ve apagado como un botón inactivo común: es el
+   gesto de la carrera, tiene que verse vivo mientras gira. Selector con la
+   misma especificidad que `.boton:disabled` (una clase + :disabled) para
+   pisarlo de verdad, no solo por orden de declaración. */
+.boton.boton-tirando-dado:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
 .boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
 
 @media (min-width: 900px) {
