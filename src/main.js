@@ -540,7 +540,35 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'campSparring') return beatCampSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
+    if (beat.tipo === 'peleasResueltas') return beatPeleasResueltas(beat);
     return irADashboard();
+  }
+
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas
+  // de trámite (esPeleaImportante, offers.js; armarLotePeleas, tramite.js) ya
+  // llegan acá RESUELTAS — career.js las aplicó al jugador dentro de
+  // armarCola, antes de que este beat exista. Acá solo hay que mostrar el
+  // resumen con sabor (titulo/texto ya armados por resumenLote) y un
+  // detalle corto de cada combate, mismo layout que cualquier otro
+  // desenlace (título + texto + Seguir).
+  const METODO_TEXTO_TRAMITE = {
+    ko: 'KO', tko: 'TKO', decision: 'decisión', sumision: 'sumisión',
+  };
+
+  function beatPeleasResueltas(beat) {
+    const { titulo, texto, resultados } = beat.datos;
+    const deltasTexto = resultados.map((r) => {
+      const rival = r.rivalApodo ?? r.rivalNombre;
+      const veredicto = r.resultado === 'v' ? 'Ganaste' : r.resultado === 'e' ? 'Empataste' : 'Perdiste';
+      const metodo = METODO_TEXTO_TRAMITE[r.metodo] ?? r.metodo;
+      return `${veredicto} vs ${rival} (${metodo})`;
+    });
+    centro(() => renderDesenlace(centroContenido(), {
+      titulo,
+      texto,
+      deltasTexto,
+      onContinuar: irADashboard,
+    }));
   }
 
   // 'lesionSinOferta' es un beat simple (nada que jugar, solo un aviso) que

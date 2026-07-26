@@ -1,7 +1,7 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { ETIQUETAS } from '../../core/stats.js';
 import { getDisciplina } from '../../core/disciplines.js';
-import { recordTexto, nombreConApodo } from '../../core/fighter.js';
+import { recordTexto, recordAmateurTexto, nombreConApodo } from '../../core/fighter.js';
 
 const METODOS = { ko: 'KO', tko: 'TKO', sumision: 'Sumisión', decision: 'Decisión', descalificacion: 'DQ' };
 
@@ -37,10 +37,22 @@ export function renderFicha(contenedor, { jugador, seccion = 'atributos', onCerr
       }),
     ])));
 
+  // v6 ("las peleas amateur no cuentan ni en el ranking ni en el
+  // historial... si querés mostrar el récord amateur por separado en algún
+  // lado, dale, pero que no se mezcle"): una línea aparte, chica, solo si
+  // hubo alguna pelea de formación — nunca sumada al récord profesional de
+  // arriba.
+  const totalAmateur = jugador.recordAmateur
+    ? jugador.recordAmateur.v + jugador.recordAmateur.d + jugador.recordAmateur.e
+    : 0;
+
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta', text: 'Ficha del peleador' }),
     el('h1', { text: nombreConApodo(jugador).toUpperCase() }),
     el('div', { class: 'etiqueta', text: `Récord ${recordTexto(jugador)} · ${fmtDinero(jugador.dinero)} ganados` }),
+    totalAmateur > 0
+      ? el('div', { class: 'medio', style: 'font-size:11px', text: `Amateur (no cuenta para el ranking): ${recordAmateurTexto(jugador)}` })
+      : null,
     seccion === 'historial' ? historial : atributos,
     el('button', { class: 'boton', 'data-accion': 'cerrar', text: 'Volver', onClick: onCerrar }),
   ]));

@@ -9,7 +9,7 @@ import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
 import { h2hTexto } from '../../core/rivalry.js';
 import { rankingDelJugador } from '../../core/world.js';
-import { faseFisicaJugador, etapaActual } from '../../core/career.js';
+import { faseFisicaJugador, etapaActual, fraseDeEtapa } from '../../core/career.js';
 
 // El peleador (v2): antes una sola columna izquierda larguísima. La reforma
 // de grilla 3×3 (v4, feedback del usuario: "en PC está muy en vertical y no
@@ -251,11 +251,17 @@ function bloqueRincon(jugador) {
 // pide como bloque PERMANENTE, junto a ranking, en la columna izquierda
 // ("Categoría + Ranking"): el jugador tiene que poder ver en qué categoría
 // está aunque esté en medio de una decisión, no solo entre beats.
+// v6, segunda vuelta ("'Veterano' no es una categoría nueva... el peleador
+// sigue siendo profesional"): el NOMBRE sigue viniendo de `etapaActual`
+// (siempre "Profesional" del debut al retiro, nunca "Veterano" — ETAPAS ya
+// no tiene esa entrada), pero la FRASE usa `fraseDeEtapa`, que sí envejece
+// con el jugador (etiqueta de sabor por edad, ver tagContenido en
+// career.js) aunque la etapa mecánica sea siempre la misma.
 function bloqueEtapa(partida) {
   const etapa = etapaActual(partida);
   return el('div', { class: 'panel' }, [
     el('div', { class: 'dorado', style: 'font-weight:800;letter-spacing:1px', text: etapa.nombre.toUpperCase() }),
-    el('div', { class: 'medio', style: 'font-size:12px;margin-top:4px', text: etapa.frase }),
+    el('div', { class: 'medio', style: 'font-size:12px;margin-top:4px', text: fraseDeEtapa(partida) }),
   ]);
 }
 

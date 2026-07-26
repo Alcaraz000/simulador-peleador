@@ -5,7 +5,11 @@
 // pintar el popup de verdad (abrirPopup, ui/components/popup.js) es
 // responsabilidad de main.js. Deliberadamente acotado a momentos RAROS: un
 // hito por pelea cerrada como mucho (ver prioridad en `hitosDePelea`), y
-// las transiciones de etapa son apenas tres en toda la carrera.
+// las transiciones de etapa son apenas dos en toda la carrera (v6, segunda
+// vuelta: ETAPAS pasó de cuatro entradas a tres — juvenil, amateur,
+// profesional — así que solo quedan dos saltos: juvenil->amateur y
+// amateur->profesional; "veterano" ya no es una etapa real, ver
+// tagContenido en career.js).
 
 import { rachaActual } from './stats-carrera.js';
 import {

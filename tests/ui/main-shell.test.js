@@ -291,6 +291,29 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): la mayoría
+  // de las peleas de una carrera se resuelven solas — este beat es el
+  // resumen con sabor de ese lote (armarLotePeleas/resumenLote, tramite.js),
+  // ya aplicado al jugador ANTES de que este beat exista. Mismo layout que
+  // cualquier otro desenlace (título + texto + Seguir), con el detalle de
+  // cada combate como "deltas".
+  it('peleasResueltas: muestra el resumen de tramite (con detalle de cada combate) y Seguir vuelve al estado ocioso', () => {
+    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 1));
+    continuar();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    const desenlace = cont.querySelector('.panel-decision-desenlace');
+    expect(desenlace).toBeTruthy();
+    expect(desenlace.textContent.length).toBeGreaterThan(0);
+
+    cont.querySelector('.panel-decision-desenlace .boton').click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
     // semilla 2: con el rebalance del campamento (Task v3), probSparring bajó
     // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
@@ -366,19 +389,29 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
       nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     });
-    // Semilla 14, etapa profesional (forzada): el bloque trae un 'evento'
-    // Y, más adelante en la misma cola, una 'oferta' — ofertaPendiente (dato
-    // interno) ya queda seteado antes de llegar a ninguno de los dos
-    // (verificado aparte); proximaPelea (lo que muestra el panel) sigue null
-    // porque todavía no se firmó nada. (Antes semilla 4 con probPelea:1 en
-    // profesional garantizaba esto siempre; la Ronda v6, Pedido 3, bajó
-    // probPelea a 0.85 -"1 o 2 peleas por año"-, así que ya no alcanza
-    // cualquier semilla: 14 sí trae los dos beats en la misma cola.)
-    const inicial = { ...crearPartida({ jugador, semilla: 14 }), etapaIndice: 2 };
-    const partida = avanzarHasta(inicial, 'evento');
+    // v6, segunda vuelta: en profesional ya no todos los bloques traen una
+    // oferta JUGABLE (la mayoría de los cupos de pelea se resuelven solos,
+    // ver armarLotePeleas en tramite.js), así que ya no alcanza con buscar
+    // una semilla fija que "dé la casualidad" de traer 'evento' y 'oferta'
+    // juntos en la misma cola natural — se arma a mano: se avanza bloque a
+    // bloque hasta encontrar uno con una oferta jugable pendiente (mismo
+    // criterio que primerPasoConOfertaPendiente en career.test.js), y se le
+    // ANTEPONE el 'evento' sintético a esa oferta real ya encontrada. Lo que
+    // importa para este test es la MECÁNICA (cancelar la oferta pendiente
+    // de verdad, no solo en el texto), no la composición natural de la cola.
+    let actual = { ...crearPartida({ jugador, semilla: 14 }), etapaIndice: 2 };
+    for (let intentos = 0; intentos < 80 && !actual.ofertaPendiente; intentos += 1) {
+      const primerPaso = siguienteBeat(actual);
+      if (primerPaso.partida.ofertaPendiente) { actual = primerPaso.partida; break; }
+      let siguiente = primerPaso.partida;
+      while (siguiente.cola.length > 0) siguiente = siguienteBeat(siguiente).partida;
+      actual = siguiente;
+    }
+    const partida = actual;
     expect(partida.ofertaPendiente).not.toBeNull();
     expect(partida.proximaPelea).toBeNull();
-    expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
+    const ofertaBeat = partida.cola.find((b) => b.tipo === 'oferta');
+    expect(ofertaBeat).toBeTruthy();
 
     const cartaSintetica = {
       id: 'riesgo_de_prueba', categoria: 'evento', titulo: 'Riesgo de prueba', texto: 'x',
@@ -393,7 +426,7 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
     };
     const conCartaSintetica = {
       ...partida,
-      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, partida.cola[1]],
+      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, ofertaBeat],
     };
     guardar(conCartaSintetica, storage);
     return storage;
