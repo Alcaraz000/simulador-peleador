@@ -53,6 +53,33 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     expect(cont.textContent).toContain('PASO 1');
   });
 
+  // Segunda vez que se reporta ("sigue sin parecerse al mockup"). El diseño
+  // pide dos filas: apellido | mano hábil arriba; disciplina | nacionalidad |
+  // categoría abajo — antes eran 4 filas verticales sueltas (apellido +
+  // nacionalidad juntos arriba, mano/disciplina/categoría cada uno solo en
+  // su propia fila de ancho completo debajo).
+  it('fila superior: apellido y mano hábil van juntos, sin disciplina/nacionalidad/categoría', () => {
+    irAPaso1();
+    const filaSuperior = cont.querySelector('[data-fila="datos-superior"]');
+    expect(filaSuperior).toBeTruthy();
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="apellido"]'))).toBe(true);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="mano"]'))).toBe(true);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="disciplina"]'))).toBe(false);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="nacionalidad"]'))).toBe(false);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="categoria"]'))).toBe(false);
+  });
+
+  it('fila inferior: disciplina, nacionalidad y categoría van juntas, sin apellido/mano', () => {
+    irAPaso1();
+    const filaInferior = cont.querySelector('[data-fila="datos-inferior"]');
+    expect(filaInferior).toBeTruthy();
+    expect(filaInferior.contains(cont.querySelector('[data-campo="disciplina"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="nacionalidad"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="categoria"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="apellido"]'))).toBe(false);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="mano"]'))).toBe(false);
+  });
+
   it('la nacionalidad es un botón, no un <select> con emoji', () => {
     irAPaso1();
     const campo = cont.querySelector('[data-campo="nacionalidad"]');

@@ -208,14 +208,23 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
     // se apaga con `visibility:hidden` una vez que ya se avanzó de paso —
     // sigue ocupando su lugar, solo que invisible (clickearlo de nuevo no
     // hace nada raro: `siguiente()` es idempotente).
+    //
+    // Segunda vez que se reporta ("sigue sin parecerse al mockup"): el diseño
+    // pide dos filas (`docs/superpowers/specs/2026-07-25-v2-diseno.md`),
+    // apellido | mano hábil arriba y disciplina | nacionalidad | categoría
+    // abajo — antes apellido y nacionalidad compartían la fila de arriba y
+    // mano/disciplina/categoría bajaban cada uno solo, en una fila de ancho
+    // completo propia (mucho más vertical de lo pedido).
     const filaDatos = el('div', { class: 'stack' }, [
-      el('div', { class: 'fila' }, [
+      el('div', { class: 'fila', dataset: { fila: 'datos-superior' } }, [
         filaConIcono(icono('persona', { tamano: 16, color: 'var(--texto-sutil)' }), campoApellido),
-        botonNacionalidad,
+        filaConIcono(icono('mano', { tamano: 16, color: 'var(--texto-sutil)' }), grupoMano),
       ]),
-      filaConIcono(icono('mano', { tamano: 16, color: 'var(--texto-sutil)' }), grupoMano),
-      filaConIcono(icono('guante', { tamano: 16, color: 'var(--texto-sutil)' }), grupoDisciplina),
-      filaConIcono(icono('balanza', { tamano: 16, color: 'var(--texto-sutil)' }), grupoCategoria),
+      el('div', { class: 'fila', dataset: { fila: 'datos-inferior' } }, [
+        filaConIcono(icono('guante', { tamano: 16, color: 'var(--texto-sutil)' }), grupoDisciplina),
+        botonNacionalidad,
+        filaConIcono(icono('balanza', { tamano: 16, color: 'var(--texto-sutil)' }), grupoCategoria),
+      ]),
       el('div', { class: 'rojo campo-error', 'data-error': '', text: estado.error }),
       el('button', {
         class: 'boton',

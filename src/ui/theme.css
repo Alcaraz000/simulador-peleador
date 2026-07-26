@@ -962,6 +962,15 @@ input.creacion-control { cursor: text; }
 .creacion-chip {
   text-align: center;
   font-weight: 700;
+  /* Fila inferior (v4): disciplina, nacionalidad y categoría comparten una
+     sola fila de 3 columnas -- a 390px cada columna queda angosta (~115px) y
+     un chip de 2 palabras ("Peso mediano") podía envolver a dos líneas
+     dentro de la altura fija de 46px, desbordando el botón. Mismo criterio
+     que .creacion-nacionalidad-nombre: una sola línea, con "…" si no entra.
+     */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .creacion-chip:hover { border-color: var(--borde-fuerte); }
