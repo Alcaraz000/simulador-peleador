@@ -100,6 +100,13 @@ const PATHS = {
     'M8 16h.01',
     'M16 16h.01',
   ],
+
+  // Lista/ranking (v3): botón "ver tabla" en el bloque de récord/ranking del
+  // tablero (feedback del usuario: quiere ver quiénes están arriba y abajo).
+  lista: [
+    'M8 6h13', 'M8 12h13', 'M8 18h13',
+    'M3 6h.01', 'M3 12h.01', 'M3 18h.01',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

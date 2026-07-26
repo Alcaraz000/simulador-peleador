@@ -1,5 +1,6 @@
 import { createRng } from './core/rng.js';
 import { crearPartida, siguienteBeat } from './core/career.js';
+import { tablaRanking } from './core/world.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -36,6 +37,7 @@ import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
 import { renderPanelAvance } from './ui/screens/panel-avance.js';
 import { renderCalendario } from './ui/screens/panel-calendario.js';
+import { renderRanking } from './ui/screens/ranking.js';
 import { animarRoll } from './ui/components/roll.js';
 import { animarAtributos, destacarAtributos } from './ui/components/animar-numero.js';
 import { animarDado } from './ui/components/dado.js';
@@ -213,7 +215,17 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         renderPanelPeleador(shellActual.regiones.izquierda, propsPanelIzquierda());
       }),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
+      onVerRanking: () => abrirRanking(),
     };
+  }
+
+  // Popup con la tabla de posiciones completa (Task v3, feedback del
+  // usuario: "no puedo ver quiénes están por encima o por debajo de mí").
+  // `tablaRanking` (world.js) ya arma el roster activo + el jugador en su
+  // puesto real, coherente con los rivales que ofrece buscarRival — mismo
+  // popup que la tienda: el tablero sigue montado y visible detrás.
+  function abrirRanking() {
+    renderRanking({ filas: tablaRanking(partida.mundo, partida.jugador) });
   }
 
   // Asegura el shell y REFRESCA los paneles laterales con la partida actual

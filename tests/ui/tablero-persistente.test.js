@@ -402,6 +402,35 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     });
   });
 
+  // Feedback textual del usuario: "Ranking aparece, pero no puedo ver
+  // quiénes están por encima o por debajo de mí (y debe coincidir con los
+  // peleadores a los que me enfrente)". Verifica de punta a punta, por la UI
+  // real: el botón del bloque de récord/ranking abre la tabla, y el rival
+  // que después ofrece el juego ya figuraba ahí con el mismo apodo.
+  describe('el bloque de récord/ranking abre la tabla de posiciones (bug reportado)', () => {
+    it('la tabla se abre como popup, con el jugador destacado, y es coherente con el rival que ofrece la próxima pelea', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+
+      const apodoRival = cont.querySelector('.shell-derecha').textContent.match(/"([^"]+)"/)[1];
+
+      cont.querySelector('.shell-izquierda [data-accion="ver-ranking"]').click();
+
+      const popup = document.querySelector('.popup-overlay');
+      expect(popup).toBeTruthy();
+      expect(popup.textContent).toContain('Ranking');
+      expect(popup.textContent).toContain(apodoRival);
+      expect(document.querySelectorAll('.tabla-ranking-fila-jugador')).toHaveLength(1);
+    });
+  });
+
   it('una partida v1 guardada (sin semanaGlobal/apellido/entrenador) no rompe: arranca una carrera nueva', () => {
     const storage = crearStorageFalso();
     storage.setItem(CLAVE_ACCESO, '1');

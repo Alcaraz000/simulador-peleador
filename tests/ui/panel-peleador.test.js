@@ -220,4 +220,21 @@ describe('renderPanelPeleador', () => {
     expect(tienda).toBe(1);
     expect(historial).toBe(1);
   });
+
+  // Feedback del usuario: "ranking aparece, pero no puedo ver quiénes están
+  // por encima o por debajo de mí" — el botón vive DENTRO del bloque de
+  // récord/ranking (que ya es clickeable entero hacia el historial), así que
+  // tiene que disparar SU callback propio sin activar también onHistorial.
+  it('el botón "ver ranking" dispara onVerRanking, sin disparar también onHistorial', () => {
+    const p = partidaBase();
+    let ranking = 0; let historial = 0;
+    renderPanelPeleador(cont, {
+      partida: p,
+      onVerRanking: () => { ranking += 1; },
+      onHistorial: () => { historial += 1; },
+    });
+    cont.querySelector('[data-accion="ver-ranking"]').click();
+    expect(ranking).toBe(1);
+    expect(historial).toBe(0);
+  });
 });

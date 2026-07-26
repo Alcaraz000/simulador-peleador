@@ -719,6 +719,42 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .popup-cuerpo { margin-top: 12px; }
 
+/* Tabla de posiciones como popup (Task v3, feedback del usuario: "no puedo
+   ver quiénes están por encima o por debajo mío"). Reusa `.panel`/`.fila`
+   como base; la fila del jugador se destaca con un borde dorado, mismo
+   criterio que `.tarjeta-elegida`. */
+.tabla-ranking-fila { padding: 9px 12px; }
+.tabla-ranking-puesto {
+  flex: 0 0 auto;
+  width: 30px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--texto-sutil);
+}
+
+.tabla-ranking-fila-jugador { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
+.tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
+
+/* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
+   (panel-peleador.js): mismo criterio de tamaño que .boton-tienda, a escala
+   más chica porque comparte fila con la etiqueta "Ranking". */
+.tabla-ranking-boton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex: 0 0 auto;
+  background: #241012;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  color: var(--texto-medio);
+  cursor: pointer;
+}
+
+.tabla-ranking-boton:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+
 /* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
 .popup-banderas-grilla {
   display: grid;

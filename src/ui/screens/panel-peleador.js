@@ -168,7 +168,27 @@ function rachita(jugador) {
   })));
 }
 
-function bloqueHistorial(jugador) {
+// El botón "ver tabla" (v3, feedback del usuario: "no puedo ver quiénes
+// están por encima o por debajo de mí") vive DENTRO del bloque de
+// récord/ranking, que ya es clickeable entero hacia el historial de la
+// Ficha (dataset accion="historial", ver renderPanelPeleador más abajo).
+// stopPropagation evita que ese click de afuera dispare onHistorial además
+// de onVerRanking — mismo patrón que el botón de la tienda en bloqueDinero.
+function botonVerRanking(onVerRanking) {
+  const boton = el('button', {
+    class: 'tabla-ranking-boton',
+    type: 'button',
+    dataset: { accion: 'ver-ranking' },
+    'aria-label': 'Ver tabla de posiciones',
+  }, [icono('lista', { tamano: 13 })]);
+  boton.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    onVerRanking();
+  });
+  return boton;
+}
+
+function bloqueHistorial(jugador, onVerRanking) {
   const totalPeleas = peleasTotales(jugador);
   const ranking = totalPeleas === 0 ? 'Sin clasificar' : (jugador.ranking ? `#${jugador.ranking}` : 'Sin clasificar');
 
@@ -181,7 +201,10 @@ function bloqueHistorial(jugador) {
         el('div', { class: 'nombre etiqueta', text: 'Récord' }),
       ]),
       el('div', { style: 'flex:1;min-width:0' }, [
-        el('div', { class: 'etiqueta', text: 'Ranking' }),
+        el('div', { class: 'fila', style: 'align-items:center;justify-content:space-between;gap:6px' }, [
+          el('div', { class: 'etiqueta', text: 'Ranking' }),
+          botonVerRanking(onVerRanking),
+        ]),
         el('div', { style: 'font-weight:800', text: ranking }),
       ]),
     ]),
@@ -232,7 +255,7 @@ function bloqueDinero(jugador) {
 }
 
 export function renderPanelPeleador(region, {
-  partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {},
+  partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {}, onVerRanking = () => {},
 }) {
   const { jugador } = partida;
 
@@ -245,7 +268,7 @@ export function renderPanelPeleador(region, {
     onTienda();
   });
 
-  const historial = bloqueHistorial(jugador);
+  const historial = bloqueHistorial(jugador, onVerRanking);
   historial.addEventListener('click', () => onHistorial(jugador));
 
   mount(region, el('div', { class: 'stack panel-peleador' }, [
