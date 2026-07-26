@@ -1,4 +1,13 @@
-import { EDAD_INICIAL } from './fighter.js';
+import { ETAPAS } from './career.js';
+
+// v6, segunda vuelta ("las peleas amateur no cuentan ni en el ranking ni en
+// el historial"): "Debutaste a los X" en la pantalla de legado (ver
+// legacy.js) tiene que hablar del debut PROFESIONAL (21 años, ver
+// ETAPAS.profesional.edadDesde en career.js) — no de EDAD_INICIAL (15, el
+// arranque del personaje en juvenil), que era lo que se mostraba antes de
+// esta ronda. `jugador.historial` (de acá en más, pro-only) ya reflejaba
+// solo lo profesional; el rótulo de la edad de debut se quedó atrás.
+const EDAD_DEBUT_PROFESIONAL = ETAPAS.find((e) => e.id === 'profesional').edadDesde;
 
 export function rachaActual(historial) {
   let racha = 0;
@@ -52,7 +61,7 @@ export function estadisticasDeCarrera(partida) {
     bolsaMayor: historial.reduce((a, p) => Math.max(a, p.bolsa ?? 0), 0),
     roundsPeleados,
     promedioRoundPorPelea: historial.length === 0 ? 0 : Math.round(roundsPeleados / historial.length),
-    edadDebut: EDAD_INICIAL,
+    edadDebut: EDAD_DEBUT_PROFESIONAL,
     edadRetiro: Math.floor(jugador.edad),
     titulosGanados: historial.filter((p) => p.esTitulo && p.resultado === 'v').length,
     defensasExitosas: jugador.defensas ?? 0,
