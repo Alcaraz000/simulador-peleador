@@ -29,7 +29,6 @@ import { renderNegociacion } from './ui/screens/negotiation.js';
 import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
-import { renderEstadisticas } from './ui/screens/stats.js';
 
 import { crearShell } from './ui/shell.js';
 import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
@@ -870,7 +869,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
   // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {
-    const paso = aplicarResultado(partida.jugador, { oferta, resultado: pelea.resultado });
+    // `semanaGlobal` (Task v3, "fechas de cuándo se ganaron/defendieron
+    // títulos"): se estampa EN el momento del hito, no se reconstruye
+    // después — ver el comentario en aplicarResultado (offers.js).
+    const paso = aplicarResultado(partida.jugador, {
+      oferta, resultado: pelea.resultado, semanaGlobal: partida.semanaGlobal,
+    });
     let jugador = paso.jugador;
 
     const danoRecibido = 100 - pelea.aguante.jugador;
@@ -904,18 +908,18 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const legado = calcularLegado(partida);
     partida = { ...partida, legado };
     persistir();
+    // Task v3, pedido textual: "las estadísticas también deben estar acá,
+    // no al clickear en el botón 'Ver estadísticas'" — la pantalla final
+    // muestra todo junto, sin una segunda pantalla detrás de un botón.
     renderLegado(contenedor, {
       legado,
+      estadisticas: estadisticasDeCarrera(partida),
       jugador: partida.jugador,
       onNuevaCarrera: () => {
         borrar(storage);
         partida = null;
         arrancar();
       },
-      onVerEstadisticas: () => renderEstadisticas(contenedor, {
-        estadisticas: estadisticasDeCarrera(partida),
-        onCerrar: finDeCarrera,
-      }),
     });
   }
 

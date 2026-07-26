@@ -316,7 +316,7 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
     expect(anomalias).toEqual([]);
   });
 
-  it('carrera con estilo mentón de hierro, visita la ficha y la tienda a mitad de camino, revisa estadísticas al final', () => {
+  it('carrera con estilo mentón de hierro, visita la ficha y la tienda a mitad de camino, revisa el legado con estadisticas al final', () => {
     document.body.innerHTML = '<div id="app"></div>';
     cont = document.getElementById('app');
     const dateNowOriginal = Date.now;
@@ -355,14 +355,9 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
       }
       expect(cont.querySelector('[data-accion="nueva"]')).toBeTruthy();
 
-      // Fin de carrera: ver estadísticas y volver.
-      const botonEstadisticas = cont.querySelector('[data-accion="estadisticas"]');
-      if (botonEstadisticas) {
-        botonEstadisticas.click();
-        revisarTodo(cont, 'estadisticas');
-        const volver = cont.querySelector('[data-accion="cerrar"]');
-        if (volver) volver.click();
-      }
+      // Fin de carrera: las estadísticas ya están en la propia pantalla de
+      // legado (Task v3, pedido textual: no quedan detrás de un botón).
+      revisarTodo(cont, 'legado-1004');
     } finally {
       Date.now = dateNowOriginal;
     }
