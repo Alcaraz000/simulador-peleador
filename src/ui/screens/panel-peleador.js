@@ -9,13 +9,24 @@ import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
 import { h2hTexto } from '../../core/rivalry.js';
 import { rankingDelJugador } from '../../core/world.js';
-import { faseFisicaJugador } from '../../core/career.js';
+import { faseFisicaJugador, etapaActual } from '../../core/career.js';
 
-// Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
-// (renderDashboard, que mezclaba esto con el botón "Continuar" y se
-// redibujaba entero en cada beat), este panel vive en la región izquierda
-// del shell y se repinta solo cuando cambian los datos del jugador: nunca
-// desaparece mientras el jugador decide en el panel central.
+// El peleador (v2): antes una sola columna izquierda larguísima. La reforma
+// de grilla 3×3 (v4, feedback del usuario: "en PC está muy en vertical y no
+// se aprovecha bien el ancho") reparte este mismo contenido en varios
+// paneles PERSISTENTES, cada uno con su celda fija en el tablero — nunca se
+// reacomodan entre sí ni se ocultan mientras el jugador decide (pedido
+// general "nada se mueve"):
+//   - renderPanelPeleador: personaje (media/nombre/datos) + cinturones + tu
+//     rincón + etapa/categoría + historial/ranking — columna izquierda.
+//   - renderPanelAtributos / renderPanelEstado: columna central, arriba del
+//     módulo de decisión (que sigue siendo lo único que cambia ahí).
+//   - renderPanelDinero / renderPanelRecursos: columna derecha, junto al
+//     calendario y la próxima pelea/noticias (ver main.js, montarTablero).
+// Antes de esta reforma todo esto vivía junto en un solo renderPanelPeleador
+// que pintaba la columna izquierda entera; se mantiene acá porque comparten
+// los mismos helpers de datos (fighter.js, coach.js, stats.js) y no hay
+// ganancia real en separarlos en archivos aparte.
 
 const BASE = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
 const MANO_TEXTO = { derecha: 'Derecha', zurda: 'Zurda' };
@@ -128,11 +139,9 @@ function filaAtributo(clave, { base, aporte }) {
 // ningún lado del tablero: las tarjetas los modifican igual que a los
 // atributos de combate (aplicarCarta reparte por los tres grupos, ver
 // cards.js) y el jugador leía "+10 Forma" en una tarjeta sin que ese número
-// apareciera en ninguna parte (queja del usuario). Se muestran acá, en una
-// sección aparte y VISUALMENTE separada de los 6 de combate (que son los
-// únicos con aporte de entrenador) — nunca mezclados en la misma lista.
-// Fatiga y lesión quedan afuera: ya tienen su lugar en otra parte del
-// tablero (panel-avance.js) y no hace falta duplicarlas acá.
+// apareciera en ninguna parte (queja del usuario). Fatiga y lesión quedan
+// afuera: ya tienen su lugar en otra parte del tablero (panel-avance.js) y
+// no hace falta duplicarlas acá.
 const ESTADO_VISIBLE = ['menton', 'disciplinaPersonal', 'forma', 'moral'];
 
 function filaEstado(jugador, clave) {
@@ -140,7 +149,11 @@ function filaEstado(jugador, clave) {
   return filaAtributo(clave, { base: valor, aporte: 0 });
 }
 
-function bloqueAtributos(jugador) {
+// Atributos y Estado eran un solo panel (`bloqueAtributos`) antes de la
+// reforma de grilla 3×3: el mockup los pide como dos celdas propias (columna
+// central, arriba del módulo de decisión — nunca mezclados con las tarjetas
+// de combate, que son las únicas con aporte de entrenador).
+function bloqueAtributosSolo(jugador) {
   const disciplina = getDisciplina(jugador.disciplina);
   const claves = disciplina.usaGrappling ? [...BASE, 'grappling'] : BASE;
   const desglose = atributosConEntrenador(jugador);
@@ -151,7 +164,12 @@ function bloqueAtributos(jugador) {
     ]),
     el('div', { class: 'panel-peleador-atributos' },
       claves.map((c) => filaAtributo(c, desglose[c]))),
-    el('div', { class: 'etiqueta panel-peleador-estado-titulo', text: 'Estado' }),
+  ]);
+}
+
+function bloqueEstadoSolo(jugador) {
+  return el('div', { class: 'panel' }, [
+    el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Estado' }),
     el('div', { class: 'panel-peleador-atributos' },
       ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
   ]);
@@ -175,6 +193,19 @@ function bloqueRincon(jugador) {
     entrenador.frase
       ? el('div', { class: 'medio', style: 'font-style:italic;margin-top:8px;font-size:11px', text: `"${entrenador.frase}"` })
       : null,
+  ]);
+}
+
+// Etapa actual (nombre + frase de sabor): vivía en panel-avance.js (visible
+// solo en el estado ocioso) hasta la reforma de grilla 3×3 — el mockup la
+// pide como bloque PERMANENTE, junto a ranking, en la columna izquierda
+// ("Categoría + Ranking"): el jugador tiene que poder ver en qué categoría
+// está aunque esté en medio de una decisión, no solo entre beats.
+function bloqueEtapa(partida) {
+  const etapa = etapaActual(partida);
+  return el('div', { class: 'panel' }, [
+    el('div', { class: 'dorado', style: 'font-weight:800;letter-spacing:1px', text: etapa.nombre.toUpperCase() }),
+    el('div', { class: 'medio', style: 'font-size:12px;margin-top:4px', text: etapa.frase }),
   ]);
 }
 
@@ -282,19 +313,19 @@ function bloqueDinero(jugador) {
   ]);
 }
 
+// Columna izquierda del tablero: quién sos (personaje), tu rincón, y en qué
+// categoría/puesto estás. A diferencia de la v1 (renderDashboard, que
+// mezclaba esto con el botón "Continuar" y se redibujaba entero en cada
+// beat), este panel vive en la región izquierda del shell y se repinta solo
+// cuando cambian los datos del jugador: nunca desaparece mientras el jugador
+// decide en el módulo central.
 export function renderPanelPeleador(region, {
-  partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {}, onVerRanking = () => {},
+  partida, onFicha = () => {}, onHistorial = () => {}, onVerRanking = () => {},
 }) {
   const { jugador, mundo } = partida;
 
   const cabecera = cuadroMedia(jugador);
   cabecera.addEventListener('click', () => onFicha(jugador));
-
-  const dinero = bloqueDinero(jugador);
-  dinero.querySelector('[data-accion="tienda"]').addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    onTienda();
-  });
 
   const historial = bloqueHistorial(jugador, mundo, onVerRanking);
   historial.addEventListener('click', () => onHistorial(jugador));
@@ -302,10 +333,46 @@ export function renderPanelPeleador(region, {
   mount(region, el('div', { class: 'stack panel-peleador' }, [
     cabecera,
     bloqueCinturones(jugador),
-    bloqueAtributos(jugador),
     bloqueRincon(jugador),
+    bloqueEtapa(partida),
     historial,
-    bloqueRecursos(jugador, partida),
-    dinero,
   ]));
+}
+
+// Columna central, arriba del módulo de decisión: los 6-7 atributos de
+// combate. Se repinta con el mismo ritmo que siempre tuvo la columna
+// izquierda (una vez por transición del tablero, ver montarTablero en
+// main.js) — nunca en cada micro-render de un mismo beat (un golpe de
+// sparring, un frame del roll), así que el jugador nunca los pierde de vista
+// mientras compara las opciones de la decisión actual.
+export function renderPanelAtributos(region, { jugador }) {
+  mount(region, bloqueAtributosSolo(jugador));
+}
+
+// Columna central: menton/disciplina/forma/moral, separados de los
+// atributos de combate (mismo criterio que antes, cuando compartían un solo
+// panel: nunca mezclados, porque solo los de combate llevan aporte de
+// entrenador).
+export function renderPanelEstado(region, { jugador }) {
+  mount(region, bloqueEstadoSolo(jugador));
+}
+
+// Columna derecha, junto al calendario: dinero y acceso a la tienda (mudados
+// acá desde la columna izquierda por la reforma de grilla 3×3 — el mockup
+// los agrupa con el calendario: "Calendario + Botón tienda, ahí dentro se ve
+// el dinero").
+export function renderPanelDinero(region, { jugador, onTienda = () => {} }) {
+  const dinero = bloqueDinero(jugador);
+  dinero.querySelector('[data-accion="tienda"]').addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    onTienda();
+  });
+  mount(region, dinero);
+}
+
+// Columna derecha: Fama y el cara a cara con el archirrival, junto a la
+// próxima pelea (mudado desde la columna izquierda — el mockup los agrupa:
+// "Fama y 'vs clásico rival' + Próxima pelea").
+export function renderPanelRecursos(region, { partida }) {
+  mount(region, bloqueRecursos(partida.jugador, partida));
 }

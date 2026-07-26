@@ -33,7 +33,9 @@ import { renderLegado } from './ui/screens/legacy.js';
 import { mostrarHito } from './ui/screens/hitos.js';
 
 import { crearShell } from './ui/shell.js';
-import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
+import {
+  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero, renderPanelRecursos,
+} from './ui/screens/panel-peleador.js';
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
@@ -256,19 +258,30 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     return shellActual;
   }
 
-  // Arma los props de la columna izquierda del shell. La ficha/tienda que se
-  // abren desde acá siempre vuelven al MISMO tablero (volverAlTablero): ya no
-  // hace falta que cada llamador decida "adónde volver" a mano.
+  // Arma los props de la columna izquierda del shell. La ficha que se abre
+  // desde acá siempre vuelve al MISMO tablero (volverAlTablero): ya no hace
+  // falta que cada llamador decida "adónde volver" a mano.
   function propsPanelIzquierda() {
     return {
       partida,
       onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
-      onTienda: () => abrirTienda(() => {
-        renderPanelPeleador(shellActual.regiones.izquierda, propsPanelIzquierda());
-      }),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
       onVerRanking: () => abrirRanking(),
     };
+  }
+
+  // Dinero + tienda viven en la columna derecha (grilla 3×3, v4: mudados
+  // desde la izquierda — mockup "Calendario + Botón tienda, ahí adentro se ve
+  // el dinero"). `refrescarDinero` es el equivalente de lo que antes hacía
+  // `onTienda` repintando toda la izquierda: ahora es quirúrgico, solo el
+  // sub-nodo de dinero (no toca calendario/recursos/próxima/noticias, que
+  // viven al lado en la misma columna y no cambiaron).
+  function propsPanelDinero() {
+    return { jugador: partida.jugador, onTienda: () => abrirTienda(refrescarDinero) };
+  }
+
+  function refrescarDinero() {
+    renderPanelDinero(shellActual.regiones.derecha.querySelector('[data-bloque="dinero"]'), propsPanelDinero());
   }
 
   // Popup con la tabla de posiciones completa (Task v3, feedback del
@@ -280,41 +293,49 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderRanking({ filas: tablaRanking(partida.mundo, partida.jugador) });
   }
 
-  // Asegura el shell y REFRESCA los paneles laterales con la partida actual
-  // (izquierda: peleador; derecha: próxima pelea + noticias), más el
-  // calendario del centro. Se llama en cada transición del tablero (nuevo
-  // beat, o volver al estado ocioso) — nunca en cada micro-render dentro de
-  // un mismo beat (p. ej. cada golpe del sparring, o cada frame del roll de
-  // azar, repintan solo `centroContenido()` directo).
-  //
-  // La región central queda armada con DOS sub-nodos estables, igual que ya
-  // hace la derecha con próxima/noticias: `calendario` (siempre el mismo
-  // contenido mientras no cambie `semanaGlobal`, ver panel-calendario.js —
-  // pedido del coordinador: es información permanente del jugador, no puede
-  // vivir donde el celular la esconde) y `contenido`, donde va lo que sea que
-  // esté pasando ahora (el panel de avance, una decisión, el sparring). Quien
-  // pinta un beat nunca toca `shell.regiones.centro` directo: usa
-  // `centroContenido()`.
+  // Asegura el shell y REFRESCA los tres paneles del tablero con la partida
+  // actual, según la grilla 3×3 (v4, feedback del usuario: "en PC no se
+  // aprovecha bien el ancho"):
+  //   - izquierda: personaje, tu rincón, categoría/ranking.
+  //   - centro: atributos, estado, y lo que esté pasando ahora (contenido).
+  //   - derecha: calendario+dinero, fama+próxima pelea, noticias.
+  // Se llama en cada transición del tablero (nuevo beat, o volver al estado
+  // ocioso) — nunca en cada micro-render dentro de un mismo beat (p. ej. cada
+  // golpe del sparring, o cada frame del roll de azar, repintan solo
+  // `centroContenido()` directo). Quien pinta un beat nunca toca
+  // `shell.regiones.centro` directo: usa `centroContenido()`.
   function montarTablero() {
     const shell = asegurarShell();
     renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
 
+    // Atributos y estado (arriba, siempre los mismos mientras no cambien los
+    // datos del jugador) + contenido (lo que cambia: el panel de avance, una
+    // decisión, el sparring) — el jugador nunca los pierde de vista mientras
+    // decide, la garantía central del rediseño.
     shell.montarCentro(el('div', { class: 'stack' }, [
-      el('div', { dataset: { bloque: 'calendario' } }),
+      el('div', { dataset: { bloque: 'atributos' } }),
+      el('div', { dataset: { bloque: 'estado' } }),
       el('div', { dataset: { bloque: 'contenido' } }),
     ]));
-    renderCalendario(shell.regiones.centro.querySelector('[data-bloque="calendario"]'), { partida });
+    renderPanelAtributos(shell.regiones.centro.querySelector('[data-bloque="atributos"]'), { jugador: partida.jugador });
+    renderPanelEstado(shell.regiones.centro.querySelector('[data-bloque="estado"]'), { jugador: partida.jugador });
 
     // `class:'stack'` (v3, feedback del usuario: "está muy pegada al módulo
     // de arriba del próximo combate"): antes este wrapper no tenía clase, así
-    // que el gap:10px de `.shell-derecha` (pensado para sus hijos DIRECTOS)
-    // nunca llegaba a aplicarse entre próxima/noticias — los dos vivían
-    // pegados dentro de este único hijo. `.stack` es el mismo respiro que ya
-    // separa a todos los demás paneles del tablero.
+    // que el gap:10px de `.shell-region` (pensado para sus hijos DIRECTOS)
+    // nunca llegaba a aplicarse entre módulos — vivían pegados dentro de este
+    // único hijo. `.stack` es el mismo respiro que ya separa a todos los
+    // demás paneles del tablero.
     shell.montarDerecha(el('div', { class: 'stack' }, [
+      el('div', { dataset: { bloque: 'calendario' } }),
+      el('div', { dataset: { bloque: 'dinero' } }),
+      el('div', { dataset: { bloque: 'recursos' } }),
       el('div', { dataset: { bloque: 'proxima' } }),
       el('div', { dataset: { bloque: 'noticias' } }),
     ]));
+    renderCalendario(shell.regiones.derecha.querySelector('[data-bloque="calendario"]'), { partida });
+    renderPanelDinero(shell.regiones.derecha.querySelector('[data-bloque="dinero"]'), propsPanelDinero());
+    renderPanelRecursos(shell.regiones.derecha.querySelector('[data-bloque="recursos"]'), { partida });
     renderPanelProxima(shell.regiones.derecha.querySelector('[data-bloque="proxima"]'), {
       partida,
       onVerRival: (rivalId) => {
@@ -395,18 +416,20 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // animación de números + el resalte verde/rojo de SOLO las filas de
   // atributo que cambiaron (antes, `shell.destacar('izquierda')` hacía
   // brillar TODO el módulo izquierdo por cualquier cambio — queja textual).
+  // Desde la grilla 3×3 (v4) los atributos/estado viven en la columna
+  // CENTRAL, no en la izquierda — ver montarTablero.
   //
   // El ORDEN importa: animar tiene que pasar DESPUÉS de irADashboard() (que
-  // llama a montarTablero(), y esa SIEMPRE repinta la izquierda desde cero —
-  // ver montarTablero). Animar ANTES se pierde en el mismo tick: mount() no
-  // diffea, así que el segundo repintado deja huérfanos los nodos que
-  // `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
+  // llama a montarTablero(), y esa SIEMPRE repinta atributos/estado desde
+  // cero — ver montarTablero). Animar ANTES se pierde en el mismo tick:
+  // mount() no diffea, así que el segundo repintado deja huérfanos los nodos
+  // que `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
   // navegador llegue a pintar ese estado intermedio.
   function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
     partida = { ...partida, jugador, rivalidades };
     irADashboard();
-    animarAtributos(shellActual.regiones.izquierda, deltas);
-    destacarAtributos(shellActual.regiones.izquierda, deltas);
+    animarAtributos(shellActual.regiones.centro, deltas);
+    destacarAtributos(shellActual.regiones.centro, deltas);
   }
 
   // Al tocar "Continuar" se tira el dado (Task v3, pedido textual: "el juego

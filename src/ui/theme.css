@@ -346,42 +346,32 @@ h2 { font-size: 17px; font-weight: 800; }
    que el tope, así que no cambia nada ahí. */
 .negociacion-movidas .tarjeta { max-width: 210px; margin: 0 auto; }
 
-/* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
-   (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
-   pelea + noticias) queda colapsada detrás de un botón en celular. */
+/* Shell persistente (v2), grilla 3×3 (v4): tres regiones montadas una sola
+   vez. Mobile-first (las tres apiladas, en el mismo orden que en escritorio)
+   con una grilla real desde 900px, aprovechando el ancho de PC (feedback del
+   usuario: "está muy en vertical y no se aprovecha bien"). Cada región es su
+   propia columna que apila sus 2-3 módulos de forma independiente (ver el
+   comentario largo al principio de shell.js): ninguna comparte fila con las
+   otras, así que un módulo que crece nunca reacomoda ni desplaza los de al
+   lado — la garantía "nada se mueve" que pidió el usuario. */
 #app:has(.shell) { max-width: none; padding: 0; }
 
 .shell {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 1200px;
+  /* 1400px (subido desde 1200px al pasar a grilla): izquierda y derecha
+     ahora llevan más módulos que antes (dinero/calendario/fama se sumaron a
+     la derecha) y piden un poco más de ancho fijo cada una -- sin subir el
+     techo del shell, eso le hubiera comido ancho al centro, que es "el
+     corazón" del tablero (módulo de acciones/decisiones) y tiene que quedar
+     con MÁS lugar que antes, no menos. */
+  max-width: 1400px;
   margin: 0 auto;
   padding: 12px 14px 48px;
 }
 
-.shell-region { min-width: 0; }
-
-.shell-centro { display: flex; flex-direction: column; gap: 10px; }
-
-.shell-derecha { display: none; }
-.shell.shell-derecha-abierta .shell-derecha { display: flex; flex-direction: column; gap: 10px; }
-
-.shell-boton-derecha {
-  display: block;
-  width: 100%;
-  background: var(--superficie-alta);
-  color: var(--texto);
-  border: 1px solid var(--borde);
-  border-radius: 9px;
-  padding: 11px;
-  font-family: var(--fuente);
-  font-weight: 800;
-  font-size: 12px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  cursor: pointer;
-}
+.shell-region { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
 @keyframes destaque-shell {
   0%, 100% { box-shadow: none; }
@@ -436,12 +426,24 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
 
-@media (min-width: 900px) {
-  .shell { flex-direction: row; align-items: flex-start; }
-  .shell-izquierda { flex: 0 0 242px; }
-  .shell-centro { flex: 1 1 auto; min-width: 0; }
-  .shell-derecha { flex: 0 0 262px; display: flex !important; flex-direction: column; gap: 10px; }
-  .shell-boton-derecha { display: none; }
+/* Grilla real de 3 columnas (v4): izquierda (personaje/rincón/categoría) y
+   derecha (calendario+dinero/fama+próxima/noticias) con un ancho cómodo para
+   sus tarjetas; el centro (atributos/estado/decisión, "el corazón" del
+   tablero) se lleva el resto. El `minmax(380px, 1fr)` del centro no es
+   cosmético: en grillas CSS, las columnas de rango fijo (izquierda/derecha)
+   se "maximizan" ANTES que la columna `1fr` reciba espacio, así que sin un
+   piso el centro podía quedar angosto justo cerca del breakpoint (una grilla
+   de 3 tarjetas de decisión con su ícono de 42px fijo no entra en mucho
+   menos de 380px sin desbordar). El breakpoint sube a 960px (desde 900px)
+   para que ese piso + los de izquierda/derecha siempre entren sin
+   desbordar horizontalmente. */
+@media (min-width: 960px) {
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(230px, 280px) minmax(380px, 1fr) minmax(250px, 300px);
+    align-items: start;
+    gap: 16px;
+  }
 }
 
 /* Tablero: columna izquierda (v2) */
@@ -502,12 +504,6 @@ h2 { font-size: 17px; font-weight: 800; }
   padding: 3px 8px;
   opacity: 0.8;
 }
-
-/* Sección "Estado" (v3): mentón, disciplina personal, forma y moral, ya
-   modificados por las tarjetas pero sin ningún lugar en el tablero hasta
-   ahora. Visualmente separada de los 6 atributos de combate (los únicos con
-   aporte de entrenador) con un filete y su propia etiqueta chica. */
-.panel-peleador-estado-titulo { margin: 10px 0 8px; padding-top: 9px; border-top: 1px solid var(--borde); }
 
 .tu-rincon .rincon-iniciales {
   flex: 0 0 auto;

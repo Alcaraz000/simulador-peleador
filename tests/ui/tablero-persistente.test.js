@@ -279,12 +279,13 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-izquierda')).toBeTruthy();
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
-    // El botón de avanzar la carrera y la etapa actual viven en el CENTRO
-    // del shell, no en una pantalla aparte.
+    // El botón de avanzar la carrera vive en el CENTRO del shell, no en una
+    // pantalla aparte. La etapa actual (v4, grilla 3×3) es un bloque
+    // permanente de la columna izquierda, junto a categoría/ranking.
     const boton = cont.querySelector('.shell-centro [data-accion="siguiente"]');
     expect(boton).toBeTruthy();
     expect(boton.textContent).toContain('Continuar');
-    expect(cont.querySelector('.shell-centro').textContent.toUpperCase()).toContain('JUVENIL');
+    expect(cont.querySelector('.shell-izquierda').textContent.toUpperCase()).toContain('JUVENIL');
   });
 
   it('durante una racha de beats (incluidas ofertas rechazadas) el shell NUNCA se recrea, por identidad de nodo', () => {
@@ -325,10 +326,10 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
 
     // El caso de uso que motivó el rediseño: decidir sobre la oferta viendo
-    // el tablero completo alrededor — el calendario (arriba, en el centro) y
-    // el peleador (ranking/récord/dinero, a la izquierda).
-    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    // el tablero completo alrededor — el calendario y el dinero (columna
+    // derecha, v4) y el peleador (ranking/récord, a la izquierda).
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-izquierda').textContent).toContain('Ranking');
   });
 
@@ -341,16 +342,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     iniciar(cont, prepararStorage(partida));
 
     expect(cont.querySelector('.shell-centro').textContent).toContain('Mano fracturada');
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroAntes).toBe('US$ 100K');
 
     cont.querySelector('.shell-centro [data-accion="curar"]').click();
 
     // El aviso de lesión desaparece del centro...
     expect(cont.querySelector('.shell-centro').textContent).not.toContain('Mano fracturada');
-    // ...y la plata del panel izquierdo ya refleja el costo pagado
-    // (100000 - 22000 = 78000), sin perder el tablero de vista.
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('US$ 78K');
+    // ...y la plata del panel de dinero (columna derecha, v4) ya refleja el
+    // costo pagado (100000 - 22000 = 78000), sin perder el tablero de vista.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('US$ 78K');
     expect(cont.querySelector('.shell')).toBeTruthy();
   });
 
@@ -394,7 +395,9 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     iniciar(cont, prepararStorage(partida));
 
     const textoEsperado = fechaDe(semanaGuardada, ANIO_INICIAL).texto;
-    expect(cont.querySelector('.shell-centro').textContent).toContain(textoEsperado);
+    // Calendario en la columna derecha (v4, grilla 3×3: "Calendario + Botón
+    // tienda"), no en el centro.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain(textoEsperado);
     // Y no quedó pegada en la semana 1 (el bug que rompería si la carga
     // ignorara semanaGlobal y el calendario mostrara siempre el arranque).
     expect(textoEsperado).not.toBe(fechaDe(1, ANIO_INICIAL).texto);

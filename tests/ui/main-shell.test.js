@@ -115,7 +115,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
 
     // No se fija un número exacto (Sistema 2, corrección del coordinador:
@@ -272,8 +272,8 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
-    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Semana');
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
     expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeTruthy();
 
@@ -561,12 +561,14 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
 
 // Regresión pedida en la revisión de las Tasks 5.3/5.4: con la tienda como
 // popup, el tablero queda VISIBLE detrás mientras se compra. Que la plata
-// del panel izquierdo quedara congelada ahí rompía las dos reglas de la v2
-// ("el tablero nunca desaparece" y "los cambios se ven ocurrir") — antes no
-// se notaba porque las pantallas se reemplazaban enteras, pero acá el
-// tablero sigue a la vista. `abrirTienda`/`propsPanelIzquierda` en main.js
-// ahora refrescan SOLO el panel izquierdo del shell en cada compra.
-describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo detrás del popup', () => {
+// quedara congelada ahí rompía las dos reglas de la v2 ("el tablero nunca
+// desaparece" y "los cambios se ven ocurrir") — antes no se notaba porque las
+// pantallas se reemplazaban enteras, pero acá el tablero sigue a la vista.
+// Dinero se mudó a la columna derecha con la reforma de grilla 3×3 (v4):
+// `abrirTienda`/`refrescarDinero` en main.js ahora refrescan quirúrgicamente
+// SOLO ese sub-nodo (`[data-bloque="dinero"]`), no toda la columna derecha —
+// calendario/recursos/próxima/noticias, que viven al lado, no se tocan.
+describe('main.js: la tienda abierta durante un beat refresca el panel de dinero (derecha) detrás del popup', () => {
   function partidaConBeatYPlata(dinero) {
     const storage = crearStorageFalso();
     storage.setItem(CLAVE_ACCESO, '1');
@@ -582,17 +584,22 @@ describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo
     return storage;
   }
 
-  it('comprar dentro del popup actualiza la plata detrás, sin cerrar el popup ni tocar el centro/derecha del shell', () => {
+  it('comprar dentro del popup actualiza la plata detrás, sin cerrar el popup ni tocar el centro del shell ni el resto de la derecha', () => {
     iniciar(cont, partidaConBeatYPlata(200000));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     const refCentro = cont.querySelector('.shell-centro');
     const refDerecha = cont.querySelector('.shell-derecha');
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    // Referencia de un sub-nodo VECINO del dinero, dentro de la misma columna
+    // (calendario): tiene que sobrevivir intacto, prueba de que el refresco
+    // es quirúrgico y no repinta toda la columna derecha.
+    const refCalendario = cont.querySelector('.shell-derecha [data-bloque="calendario"]');
+    expect(refCalendario).toBeTruthy();
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroAntes).toBeTruthy();
 
-    cont.querySelector('.shell-izquierda [data-accion="tienda"]').click();
+    cont.querySelector('.shell-derecha [data-accion="tienda"]').click();
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
 
     document.querySelector('[data-item="kinesiologo"]').click();
@@ -600,31 +607,32 @@ describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo
     // El popup sigue abierto (uno solo, no se cerró ni se duplicó)...
     expect(document.querySelectorAll('.popup-overlay')).toHaveLength(1);
     // ...el foco no se escapó hacia atrás, al panel que se acaba de repintar...
-    expect(cont.querySelector('.shell-izquierda').contains(document.activeElement)).toBe(false);
-    // ...y el panel izquierdo, DETRÁS del popup, ya muestra la plata nueva
+    expect(cont.querySelector('.shell-derecha').contains(document.activeElement)).toBe(false);
+    // ...y el panel de dinero, DETRÁS del popup, ya muestra la plata nueva
     // (200000 - 16000 del kinesiólogo, precio recalibrado en Sistema 3 = 184000).
-    const dineroDespues = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    const dineroDespues = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroDespues).not.toBe(dineroAntes);
     expect(dineroDespues).toBe('US$ 184K');
 
-    // El centro y la derecha del shell no se tocaron: la garantía del shell
-    // (montarCentro nunca toca las columnas laterales) sigue en pie aunque
-    // ahora también se repinte la izquierda por una compra.
+    // El centro no se tocó, la región derecha sigue siendo el mismo nodo, y
+    // su vecino (calendario) ni se repintó: solo el sub-nodo de dinero
+    // cambió.
     expect(cont.querySelector('.shell-centro')).toBe(refCentro);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+    expect(cont.querySelector('.shell-derecha [data-bloque="calendario"]')).toBe(refCalendario);
   });
 
   it('un item impagable dentro del popup no rompe nada y el panel de atrás sigue mostrando la misma plata', () => {
     iniciar(cont, partidaConBeatYPlata(0));
     continuar();
 
-    cont.querySelector('.shell-izquierda [data-accion="tienda"]').click();
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    cont.querySelector('.shell-derecha [data-accion="tienda"]').click();
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
 
     document.querySelector('[data-item="manager"]').click();
 
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
-    const dineroDespues = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    const dineroDespues = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroDespues).toBe(dineroAntes);
   });
 });
