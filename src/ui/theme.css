@@ -9,13 +9,44 @@
   --verde: #8fd694;
   --texto: #f1e2e2;
   --texto-medio: #b08a8a;
-  --texto-sutil: #8a6a6a;
+  /* #957777 (antes #8a6a6a): mismo tono rosa-tierra apagado, apenas más
+     claro. El original medía 3.98-4.14:1 contra los fondos donde vive
+     (etiquetas, nombres de tile) — bajo el 4.5:1 que pide AA para texto
+     chico (las etiquetas van en 7.5-9px, muy lejos del piso de "texto
+     grande" que se conforma con 3:1). Este valor mide ≥4.5:1 contra las
+     CUATRO superficies reales donde aparece (fondo, superficie,
+     superficie-alta, y el chip más oscuro de "aporte del entrenador"),
+     verificado con la fórmula de contraste relativo de WCAG 2.1. */
+  --texto-sutil: #957777;
   --radio: 10px;
   --ancho: 430px;
   --fuente: 'Bahnschrift', 'Segoe UI', system-ui, sans-serif;
+  /* Curvas propias (auditoría UI/UX v4): las de fábrica (`ease`, `ease-out`)
+     son débiles y no transmiten "esto respondió al toque". Se usan en los
+     controles que entran/salen o dan feedback de toque (botón, carta,
+     tarjeta, popup) — el resto (roll con suspenso, dado, dados de
+     minijuego) queda con sus curvas propias ya afinadas, sin tocar. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 * { box-sizing: border-box; }
+
+/* Foco visible consistente (auditoría UI/UX v4): antes cada control dependía
+   del anillo azul por defecto del navegador (o de nada, en los que traían
+   `outline` sin querer). Una sola regla de base, con el dorado que ya usa el
+   resto del juego para "esto está elegido/activo" (.tarjeta-elegida,
+   .silueta-zona:focus-visible) — nunca se dispara con el mouse, solo con
+   teclado, así que no cambia nada del feedback por click/touch que ya
+   existía. Los selectores más específicos que ya fijaban su propio
+   :focus-visible (.carta, .silueta-zona) se suman a esto, no lo reemplazan. */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--dorado);
+  outline-offset: 2px;
+}
 
 body {
   margin: 0;
@@ -157,14 +188,26 @@ h2 { font-size: 17px; font-weight: 800; }
   justify-items: center;
 }
 
+/* <button> (antes <div>: no llegaba con teclado). padding:0 + font
+   heredada resetean el look de botón nativo; el círculo lo sigue dando
+   .pao, igual que siempre. */
 .pao {
   width: 72px;
   height: 72px;
+  padding: 0;
   border-radius: 50%;
   background: var(--superficie-alta);
   border: 2px solid var(--borde);
+  font-family: var(--fuente);
   cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s var(--ease-out);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .pao:hover { border-color: var(--borde-fuerte); }
+}
+
+.pao:active { transform: scale(0.94); }
 
 .pao.activo {
   background: radial-gradient(circle, var(--dorado), var(--rojo));
@@ -701,10 +744,16 @@ h2 { font-size: 17px; font-weight: 800; }
 .silueta-zona:hover circle { filter: brightness(1.25); }
 
 /* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
-   elegida, flecha en movimiento que hay que frenar con un click. */
+   elegida, flecha en movimiento que hay que frenar con un click (o Enter/
+   Espacio: es un <button>, no un <div> — mismo motivo que .pao). width:100%
+   + padding:0 resetean el ancho encogido y el padding por defecto que
+   traería un <button> nativo; el resto del look ya lo daba esta clase. */
 .barra-precision-pista {
   position: relative;
+  display: block;
+  width: 100%;
   height: 28px;
+  padding: 0;
   background: #241012;
   border: 1px solid var(--borde-fuerte);
   border-radius: 14px;

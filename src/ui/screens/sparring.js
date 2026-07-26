@@ -35,8 +35,13 @@ export function renderSparring(contenedor, {
   const relleno = el('i', { style: 'width:100%' });
   const barraTiempo = el('div', { class: 'barra barra-sparring' }, [relleno]);
 
-  const paos = Array.from({ length: 6 }, (_, i) => el('div', {
-    class: 'pao', 'data-pao': String(i),
+  // <button> (no <div>): antes no se podía llegar a un pao con el teclado
+  // (sin tabindex/role, Tab lo saltaba entero). aria-label describe el
+  // número — el color/animación de "activo" ya avisa cuál pegar, pero un
+  // lector de pantalla no ve el resplandor dorado.
+  const paos = Array.from({ length: 6 }, (_, i) => el('button', {
+    type: 'button',
+    class: 'pao', 'data-pao': String(i), 'aria-label': `Pao ${i + 1}`,
     onClick: () => {
       if (activo === null) return;
       const acerto = i === activo;
