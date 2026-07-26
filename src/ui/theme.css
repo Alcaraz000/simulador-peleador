@@ -794,6 +794,28 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .popup-cuerpo { margin-top: 12px; }
 
+/* Popup de hitos de carrera (Sistema 4: título ganado/perdido, defensa,
+   avance de etapa...). Centrado y con el ícono en una placa redonda: un
+   momento grande merece más ceremonia que una tarjeta de decisión común. */
+.hito-popup { text-align: center; align-items: center; }
+
+.hito-popup-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 4px auto 0;
+  border-radius: 50%;
+}
+
+.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); }
+.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); }
+.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); }
+
+.hito-popup-titulo { margin: 4px 0 0; font-size: 20px; }
+.hito-popup-texto { margin: 0; }
+
 /* Tabla de posiciones como popup (Task v3, feedback del usuario: "no puedo
    ver quiénes están por encima o por debajo mío"). Reusa `.panel`/`.fila`
    como base; la fila del jugador se destaca con un borde dorado, mismo

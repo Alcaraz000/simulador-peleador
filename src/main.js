@@ -1,8 +1,9 @@
 import { createRng } from './core/rng.js';
 import {
-  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea,
+  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
 } from './core/career.js';
 import { tablaRanking } from './core/world.js';
+import { hitosDePelea, hitoDeEtapa } from './core/hitos.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -29,6 +30,7 @@ import { renderNegociacion } from './ui/screens/negotiation.js';
 import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
+import { mostrarHito } from './ui/screens/hitos.js';
 
 import { crearShell } from './ui/shell.js';
 import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
@@ -473,12 +475,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     });
   }
 
+  // Sistema 4 (feedback del usuario: "faltan popups cuando pasen cosas
+  // importantes: [...] cuando se avanza de categoría"): `siguiente()` es el
+  // ÚNICO llamador de `siguienteBeat` en todo main.js, así que es el único
+  // lugar donde hace falta comparar la etapa antes/después — nunca puede
+  // haber un cambio de etapa que se escape sin pasar por acá. El popup se
+  // muestra COMO OVERLAY sobre lo que se acaba de pintar (mismo patrón que
+  // la tienda: el tablero sigue montado y visible detrás), nunca reemplaza
+  // el beat real.
   function siguiente() {
+    const etapaAntes = etapaActual(partida).id;
     const paso = siguienteBeat(partida);
     partida = paso.partida;
+    const hitoEtapa = hitoDeEtapa({ etapaAnteriorId: etapaAntes, etapaNueva: etapaActual(partida) });
     if (partida.terminada) return finDeCarrera();
-    if (!paso.beat) return irADashboard();
+    if (!paso.beat) { irADashboard(); if (hitoEtapa) mostrarHito(hitoEtapa); return; }
     jugarBeat(paso.beat);
+    if (hitoEtapa) mostrarHito(hitoEtapa);
   }
 
   function jugarBeat(beat) {
@@ -876,7 +889,18 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         // título) y vuelve a pintar la MISMA pantalla con `despues` puesto:
         // el resultado post-pelea vive acá adentro, no en una pantalla nueva
         // (Task v3, pedido textual).
-        onFin: () => pintar([], cerrarPelea(oferta, pelea)),
+        onFin: () => {
+          const resumen = cerrarPelea(oferta, pelea);
+          pintar([], resumen);
+          // Sistema 4 (feedback del usuario: "faltan popups cuando [...] se
+          // gana un cinturón, cuando se pierde un cinturón..."): el popup se
+          // muestra COMO OVERLAY sobre la pantalla de resultado que se acaba
+          // de pintar (mismo patrón que la tienda), nunca la reemplaza. Como
+          // mucho UNO por pelea (el más importante que haya salido: ver el
+          // orden de prioridad en hitosDePelea, core/hitos.js) — "que no
+          // moleste" es pedido explícito del usuario.
+          if (resumen.hitos.length > 0) mostrarHito(resumen.hitos[0]);
+        },
         onContinuar: irADashboard,
       });
     }
@@ -895,6 +919,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
   // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {
+    // Estado "antes" para detectar hitos (Sistema 4, core/hitos.js): tiene
+    // que leerse ACÁ, antes de que `partida` se reasigne más abajo — un
+    // historial vacío ahora mismo es "esta es la primera pelea", y el
+    // archirrival de ahora es el punto de comparación para "recién se
+    // consagra una rivalidad".
+    const jugadorAntes = partida.jugador;
+    const archirrivalAntesId = (partida.rivalidades ?? []).find((r) => r.esArchirrival)?.rivalId ?? null;
+
     // `semanaGlobal` (Task v3, "fechas de cuándo se ganaron/defendieron
     // títulos"): se estampa EN el momento del hito, no se reconstruye
     // después — ver el comentario en aplicarResultado (offers.js).
@@ -913,6 +945,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const signo = pelea.resultado.ganador === 'jugador' ? 'v' : pelea.resultado.ganador === 'rival' ? 'd' : 'e';
     const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
     elegirArchirrival(rivalidades);
+    const archirrivalDespuesId = rivalidades.find((r) => r.esArchirrival)?.rivalId ?? null;
 
     // La pelea firmada que se acaba de cerrar ya no es la "próxima pelea" —
     // sin esto, el panel de próxima pelea seguía mostrando al rival ya
@@ -923,10 +956,26 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       ...partida, jugador, rivalidades, proximaPelea: null,
     };
 
+    const tituloGanado = paso.titulosGanados[0] ?? null;
+    const hitos = hitosDePelea({
+      oferta,
+      resultado: pelea.resultado,
+      tituloGanado,
+      jugadorAntes,
+      defensasActuales: oferta.cinturonId ? (jugador.defensasCinturon?.[oferta.cinturonId] ?? null) : null,
+      archirrivalAntesId,
+      archirrivalDespuesId,
+      // Entropía para la variante de texto (Sistema 4, hitos-lines.js): no
+      // es una decisión de juego, así que no hace falta el rng compartido —
+      // basta con un número que cambie pelea a pelea.
+      contexto: jugador.historial.length,
+    });
+
     return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,
       deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
-      tituloGanado: paso.titulosGanados[0] ?? null,
+      tituloGanado,
+      hitos,
     };
   }
 
