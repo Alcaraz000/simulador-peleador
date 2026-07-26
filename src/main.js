@@ -20,7 +20,6 @@ import { el, fmtDinero } from './ui/dom.js';
 
 import { renderLogin } from './ui/screens/login.js';
 import { renderCreacion } from './ui/screens/create.js';
-import { renderResultadoTarjeta } from './ui/screens/card.js';
 import { renderTienda } from './ui/screens/shop.js';
 import { renderCareo } from './ui/screens/presser.js';
 import { renderSparring } from './ui/screens/sparring.js';
@@ -459,11 +458,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (brief de la Task 6.1) pasan a vivir en la misma región central del
   // tablero, reusando renderDesenlace (mismo layout: título + texto + botón
   // Seguir, sin deltas). Esto deja huérfano a renderNoticias (screens/news.js
-  // — se borra junto con sus tests). `renderResultadoTarjeta` sigue en uso en
-  // el resultado post-pelea (cerrarPelea, pantalla completa junto con el
-  // resto de la pipeline de la pelea) — el rechazo de oferta se sumó a la
-  // lista de cosas que resuelven en el centro (ver beatOferta), así que ya no
-  // lo usa.
+  // — se borra junto con sus tests). `renderResultadoTarjeta` (screens/card.js)
+  // quedó huérfano después (Task v3): el resultado post-pelea pasó a vivir
+  // DENTRO de la propia pantalla de pelea (renderPelea con `despues`), así
+  // que se borró junto con su test — el rechazo de oferta ya resolvía en el
+  // centro (ver beatOferta) desde antes.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
     const bloques = lesion?.bloquesRestantes ?? null;
@@ -720,6 +719,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // momentos; si ese round termina en rincón o golpe de gracia, el panel de
   // acción se encarga de mostrarlo (adentro de la misma pantalla) una vez
   // que la narración termina.
+  //
+  // Task v3, pedido textual ("Debe incluirse un botón que sea para empezar
+  // la pelea"): antes `avanzar()` se llamaba de una acá abajo y la
+  // narración arrancaba sola apenas se elegía el plan. Ahora el primer
+  // `pintar([])` solo arma el esqueleto (con `pelea.pendiente === 'inicio'`)
+  // y `renderPelea` se encarga de mostrar el botón; recién `onEmpezar` dispara
+  // el primer `avanzar()`.
   function pelear(oferta, plan) {
     const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
     let pelea = crearPelea({
@@ -727,11 +733,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       disciplina: partida.jugador.disciplina, nivel: oferta.nivelPelea, plan, rng,
     });
 
-    function pintar(momentos) {
+    function pintar(momentos, despues) {
       renderPelea(contenedor, {
         pelea,
         momentos,
+        despues,
         ventanaMs: VENTANA_MS,
+        onEmpezar: avanzar,
         onSeguir: avanzar,
         onInstruccion: (id) => {
           pelea = aplicarInstruccionRincon(pelea, id);
@@ -742,7 +750,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           pelea = paso.pelea;
           pintar(paso.eventos);
         },
-        onFin: () => cerrarPelea(oferta, pelea),
+        // "Ver qué pasó después" calcula las consecuencias (dinero, lesión,
+        // título) y vuelve a pintar la MISMA pantalla con `despues` puesto:
+        // el resultado post-pelea vive acá adentro, no en una pantalla nueva
+        // (Task v3, pedido textual).
+        onFin: () => pintar([], cerrarPelea(oferta, pelea)),
+        onContinuar: irADashboard,
       });
     }
 
@@ -752,9 +765,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       pintar(paso.eventos);
     }
 
-    avanzar();
+    pintar([]);
   }
 
+  // Calcula las consecuencias de la pelea ya terminada (récord, dinero,
+  // fama, lesión, título, rivalidades) y actualiza `partida` — pero NO
+  // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
+  // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {
     const paso = aplicarResultado(partida.jugador, { oferta, resultado: pelea.resultado });
     let jugador = paso.jugador;
@@ -779,12 +796,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       ...partida, jugador, rivalidades, proximaPelea: null,
     };
 
-    renderResultadoTarjeta(contenedor, {
-      titulo: 'Después de la pelea',
+    return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,
       deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
-      onContinuar: irADashboard,
-    });
+      tituloGanado: paso.titulosGanados[0] ?? null,
+    };
   }
 
   function finDeCarrera() {

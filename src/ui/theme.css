@@ -609,12 +609,17 @@ h2 { font-size: 17px; font-weight: 800; }
    acción viven en el mismo esqueleto, montado una sola vez. */
 .pantalla-pelea .panel + .panel { margin-top: 8px; }
 
-.marcador-cabecera { justify-content: space-between; align-items: center; }
-.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; flex: 0 1 auto; }
-.marcador-derecha { flex-direction: row-reverse; text-align: right; }
-.marcador-vs { flex: 0 0 auto; }
+/* Marcador agrupado por peleador (Task v3, pedido textual: "¿no debería ir
+   de un lado las del peleador y del otro las del contrincante?"): una sola
+   fila con dos columnas — cada una trae nombre+bandera y, debajo, SU
+   aguante y SU fatiga — y el VS centrado entre las dos. */
+.marcador-cuerpo { align-items: flex-start; }
+.marcador-lado { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.marcador-der { text-align: right; }
+.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; }
+.marcador-derecha { flex-direction: row-reverse; }
+.marcador-vs { flex: 0 0 auto; align-self: center; }
 
-.marcador-barras { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .marcador-stat-cab { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; color: var(--texto-medio); }
 .marcador-stat-cab .valor { font-size: 12px; color: var(--texto); margin-left: auto; }
 .marcador-stat .barra { height: 6px; }
