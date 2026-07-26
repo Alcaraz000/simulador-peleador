@@ -4,7 +4,6 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import { crearSparring } from '../../src/core/sparring.js';
 import { crearCareo } from '../../src/core/presser.js';
 import { crearNegociacion } from '../../src/core/negotiation.js';
-import { renderTienda } from '../../src/ui/screens/shop.js';
 import { renderCareo } from '../../src/ui/screens/presser.js';
 import { renderSparring } from '../../src/ui/screens/sparring.js';
 import { renderNegociacion } from '../../src/ui/screens/negotiation.js';
@@ -26,44 +25,6 @@ let cont;
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
   cont = document.getElementById('app');
-});
-
-describe('renderTienda', () => {
-  it('lista staff y lujos', () => {
-    renderTienda(cont, { jugador: jugador({ dinero: 200000 }), onComprar: () => {}, onCerrar: () => {} });
-    expect(cont.querySelectorAll('[data-item]').length).toBeGreaterThanOrEqual(10);
-    expect(cont.textContent).toContain('Entrenador de elite');
-  });
-
-  it('muestra la plata disponible', () => {
-    renderTienda(cont, { jugador: jugador({ dinero: 1200000 }), onComprar: () => {}, onCerrar: () => {} });
-    expect(cont.textContent).toContain('US$ 1,2M');
-  });
-
-  it('deshabilita lo que no se puede pagar', () => {
-    renderTienda(cont, { jugador: jugador({ dinero: 0 }), onComprar: () => {}, onCerrar: () => {} });
-    const caros = [...cont.querySelectorAll('[data-item]')].filter((b) => b.disabled);
-    expect(caros.length).toBeGreaterThan(0);
-  });
-
-  it('marca lo ya comprado', () => {
-    renderTienda(cont, { jugador: jugador({ dinero: 999999, staff: ['entrenador'] }), onComprar: () => {}, onCerrar: () => {} });
-    expect(cont.querySelector('[data-item="entrenador"]').textContent).toMatch(/equipo/i);
-  });
-
-  it('comprar devuelve el id', () => {
-    let comprado = null;
-    renderTienda(cont, { jugador: jugador({ dinero: 999999 }), onComprar: (id) => { comprado = id; }, onCerrar: () => {} });
-    cont.querySelector('[data-item="kinesiologo"]').click();
-    expect(comprado).toBe('kinesiologo');
-  });
-
-  it('cerrar dispara el callback', () => {
-    let cerrado = false;
-    renderTienda(cont, { jugador: jugador(), onComprar: () => {}, onCerrar: () => { cerrado = true; } });
-    cont.querySelector('[data-accion="cerrar"]').click();
-    expect(cerrado).toBe(true);
-  });
 });
 
 describe('renderCareo', () => {

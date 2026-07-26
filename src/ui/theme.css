@@ -74,16 +74,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .fila > * { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 8px; }
 
-.media-num {
-  font-size: 52px;
-  font-weight: 800;
-  color: var(--rojo);
-  line-height: 0.9;
-  letter-spacing: -2px;
-}
-
-.delta-sube { color: var(--verde); font-size: 10px; }
-.delta-baja { color: var(--rojo); font-size: 10px; }
 .dorado { color: var(--dorado); }
 .verde { color: var(--verde); }
 .rojo { color: var(--rojo); }
@@ -107,7 +97,6 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 .boton.secundario { background: #241012; color: var(--texto); }
-.boton.verde-cta { background: var(--verde); color: #0c1a0e; }
 .boton:disabled { opacity: 0.45; cursor: not-allowed; }
 
 .carta {
@@ -182,8 +171,255 @@ h2 { font-size: 17px; font-weight: 800; }
   box-shadow: 0 0 24px rgba(242, 193, 78, 0.55);
 }
 
+/* Tarjeta unificada (v2): mejoras, eventos, redes, apodos, orígenes, estilos,
+   golpe de gracia. Estructura vertical fija: fila de etiqueta de rareza (altura
+   reservada, nunca toca el ícono) → ícono → título → descripción → efectos. */
+.tarjeta {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  padding: 10px 13px 13px;
+  text-align: center;
+  color: var(--texto);
+  font-family: var(--fuente);
+  cursor: pointer;
+}
+
+.tarjeta:disabled { opacity: 0.45; cursor: not-allowed; }
+
+.tarjeta.rara {
+  border-color: #3a5a8a;
+  box-shadow: 0 0 0 1px rgba(90, 140, 220, 0.2);
+}
+
+.tarjeta.legendaria {
+  background: linear-gradient(160deg, #241a08, var(--superficie));
+  border-color: var(--dorado);
+  box-shadow: 0 0 22px rgba(242, 193, 78, 0.2);
+}
+
+/* Fila reservada: altura fija aunque esté vacía (normales), así todas las
+   tarjetas de una grilla miden igual. La etiqueta vive acá, nunca en la fila
+   del ícono, y por eso jamás lo tapa. */
+.tarjeta-etiqueta-fila {
+  height: 18px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+}
+
+.tarjeta-etiqueta {
+  font-size: 7px;
+  letter-spacing: 1px;
+  font-weight: 800;
+  padding: 2px 6px;
+  border-radius: 20px;
+  line-height: 1.4;
+}
+
+.tarjeta-etiqueta.rara { background: #111a26; border: 1px solid #3a5a8a; color: #7fa6e0; }
+.tarjeta-etiqueta.legendaria { background: #2a2008; border: 1px solid var(--dorado); color: var(--dorado); }
+
+.tarjeta-icono {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1f1113;
+  color: var(--dorado);
+}
+
+.tarjeta.rara .tarjeta-icono { background: #111a26; color: #7fa6e0; }
+.tarjeta.legendaria .tarjeta-icono { background: #2a2008; color: var(--dorado); }
+
+.tarjeta-titulo { font-size: 14px; font-weight: 800; margin-top: 9px; }
+.tarjeta.legendaria .tarjeta-titulo { color: var(--dorado); }
+
+.tarjeta-desc { font-size: 11px; color: var(--texto-medio); margin-top: 5px; }
+
+.tarjeta-efectos { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; }
+
+.tarjeta-efecto {
+  border-radius: 20px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.tarjeta-efecto.positivo { background: #16240f; border: 1px solid #2c4a30; color: var(--verde); }
+.tarjeta-efecto.negativo { background: #241012; border: 1px solid #4a2c2c; color: #e0a0a0; }
+.tarjeta-efecto.leve { background: #241c08; border: 1px solid #4a3a12; color: #e0b25a; }
+
+/* Roll con suspenso (animarRoll en roll.js): mientras hay un resultado
+   iluminado, los demás se atenúan; al terminar queda fijo el ganador. */
+.tarjeta-efecto { transition: opacity 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease; }
+.tarjeta-efecto.iluminado { box-shadow: 0 0 0 1px currentColor, 0 0 14px rgba(242, 193, 78, 0.35); transform: scale(1.04); }
+.tarjeta-efectos:has(.iluminado) .tarjeta-efecto:not(.iluminado) { opacity: 0.35; }
+
+.tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
+.tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
+.tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
+.tarjeta:not(:disabled):active { transform: translateY(0) scale(0.99); }
+
 @media (min-width: 720px) {
   #app { max-width: 560px; }
+}
+
+/* Panel de decisión (v2): vive en la región central del shell. La grilla es
+   siempre de 3, igual que .grilla-paos — se achica pero no se apila, así el
+   jugador compara las tres opciones de un vistazo aun en celular. */
+.panel-decision-grilla {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.panel-decision-desenlace .boton { margin-top: 4px; }
+
+/* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
+   (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
+   pelea + noticias) queda colapsada detrás de un botón en celular. */
+#app:has(.shell) { max-width: none; padding: 0; }
+
+.shell {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 12px 14px 48px;
+}
+
+.shell-region { min-width: 0; }
+
+.shell-centro { display: flex; flex-direction: column; gap: 10px; }
+
+.shell-derecha { display: none; }
+.shell.shell-derecha-abierta .shell-derecha { display: flex; flex-direction: column; gap: 10px; }
+
+.shell-boton-derecha {
+  display: block;
+  width: 100%;
+  background: var(--superficie-alta);
+  color: var(--texto);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: 11px;
+  font-family: var(--fuente);
+  font-weight: 800;
+  font-size: 12px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@keyframes destaque-shell {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 2px var(--dorado), 0 0 20px rgba(242, 193, 78, 0.45); }
+}
+
+.shell-destacada { animation: destaque-shell 0.9s ease; border-radius: 12px; }
+
+@media (min-width: 900px) {
+  .shell { flex-direction: row; align-items: flex-start; }
+  .shell-izquierda { flex: 0 0 242px; }
+  .shell-centro { flex: 1 1 auto; min-width: 0; }
+  .shell-derecha { flex: 0 0 262px; display: flex !important; flex-direction: column; gap: 10px; }
+  .shell-boton-derecha { display: none; }
+}
+
+/* Tablero: columna izquierda (v2) */
+.panel-peleador-cabecera { cursor: pointer; }
+
+.rango-media {
+  flex: 0 0 auto;
+  width: 58px;
+  height: 58px;
+  border-radius: 12px;
+  border: 2px solid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rango-media-num { font-size: 24px; font-weight: 800; line-height: 1; }
+
+.panel-peleador-atributos { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+
+.panel-peleador-atributo {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 6px;
+  border-radius: 5px;
+}
+
+.panel-peleador-atributo.con-aporte { background: #1a1408; }
+.panel-peleador-atributo .valor { font-size: 13px; }
+.aporte-entrenador { font-size: 9.5px; color: var(--dorado); font-weight: 800; }
+
+.tu-rincon .rincon-iniciales {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  border-radius: 11px;
+  background: #2a1618;
+  color: var(--dorado);
+  font-weight: 800;
+  font-size: 11px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Botón de tienda: centrado con padding de sobra para que el ícono nunca se
+   vea cortado (corrección puntual del diseño v2). */
+.boton-tienda {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  flex: 0 0 auto;
+  border-radius: 9px;
+}
+
+/* Próxima pelea + noticias: columna derecha (v2) */
+.panel-noticias-boton {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--texto);
+  padding: 0 0 8px;
+  font-family: var(--fuente);
+  cursor: pointer;
+}
+
+.panel-noticias-lista { display: flex; flex-direction: column; gap: 8px; }
+.panel-noticias-lista > * + * { margin-top: 0; }
+
+.noticia-item { padding: 10px 11px; }
+.noticia-item.nueva { border-color: var(--rojo); }
+
+/* Alto fijo con scroll interno: no crece indefinidamente con la carrera. */
+.panel-noticias-lista { padding-right: 2px; }
+.panel-noticias-lista::-webkit-scrollbar { width: 6px; }
+.panel-noticias-lista::-webkit-scrollbar-thumb { background: var(--borde-fuerte); border-radius: 3px; }
+
+@media (max-width: 899.98px) {
+  .panel-noticias-lista { display: none; }
+  .panel-noticias.panel-noticias-abierta .panel-noticias-lista { display: flex; margin-top: 8px; }
 }
 
 @keyframes aparecer {
@@ -224,12 +460,267 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 
-.delta-sube { animation: latido 0.5s ease 2; display: inline-block; }
 .log > p { animation: aparecer 0.25s ease both; }
 .log > p.destacado { animation: aparecer 0.25s ease both, destello 0.5s ease 0.2s both; }
 .pao.activo { animation: latido 0.6s ease infinite; }
 
 .pelea-ko { animation: sacudon 0.45s ease; }
+
+/* Pantalla de pelea unificada (Task 4.3): marcador fijo, crónica y panel de
+   acción viven en el mismo esqueleto, montado una sola vez. */
+.pantalla-pelea .panel + .panel { margin-top: 8px; }
+
+.marcador-cabecera { justify-content: space-between; align-items: center; }
+.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; flex: 0 1 auto; }
+.marcador-derecha { flex-direction: row-reverse; text-align: right; }
+.marcador-vs { flex: 0 0 auto; }
+
+.marcador-barras { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.marcador-stat-cab { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; color: var(--texto-medio); }
+.marcador-stat-cab .valor { font-size: 12px; color: var(--texto); margin-left: auto; }
+.marcador-stat .barra { height: 6px; }
+
+.marcador-jurados, .marcador-golpes { margin-top: 10px; }
+
+.cronica-pelea .log { max-height: 220px; overflow-y: auto; }
+
+/* Silueta del rival (golpe de gracia, Task 4.4): las zonas son botones SVG
+   accesibles por teclado (tabindex+role=button ya vienen del propio <g>). */
+.silueta-rival { display: block; width: 100%; }
+.silueta-zona { cursor: pointer; }
+.silueta-zona:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
+.silueta-zona:hover circle { filter: brightness(1.25); }
+
+/* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
+   elegida, flecha en movimiento que hay que frenar con un click. */
+.barra-precision-pista {
+  position: relative;
+  height: 28px;
+  background: #241012;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 14px;
+  overflow: hidden;
+  cursor: pointer;
+}
+
+.barra-precision-pista .franja { position: absolute; top: 0; bottom: 0; }
+.barra-precision-pista .franja.al-aire { background: #3a1a1a; }
+.barra-precision-pista .franja.roza { background: #7a5a12; }
+.barra-precision-pista .franja-verde { position: absolute; top: 0; bottom: 0; background: #2f8a3a; }
+
+.barra-precision-flecha {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px #fff;
+  transform: translateX(-50%);
+  transition: left 0.05s linear;
+}
+
+/* Popup genérico (Task 5.3/5.4): overlay centrado sobre TODO (tablero,
+   creación), nunca una pantalla propia. Se usa para el picker de
+   nacionalidad y para la tienda entera. */
+.popup-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(8, 4, 4, 0.72);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 1000;
+  animation: aparecer 0.15s ease both;
+}
+
+.popup-panel {
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  background: var(--superficie-alta);
+  border: 1px solid var(--borde);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.popup-cabecera {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.popup-titulo {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+}
+
+/* Botón de cerrar (X): mismo criterio que .boton-tienda — área clickeable de
+   sobra para que el ícono nunca se vea cortado ni quede difícil de tocar. */
+.popup-cerrar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  color: var(--texto-medio);
+  cursor: pointer;
+}
+
+.popup-cerrar:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+
+.popup-cuerpo { margin-top: 12px; }
+
+/* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
+.popup-banderas-grilla {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.popup-bandera-boton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 6px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 10px;
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.popup-bandera-boton:hover { border-color: var(--borde-fuerte); }
+.popup-bandera-boton.elegida { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
+.popup-bandera-nombre { text-align: center; }
+
+/* Creación del peleador (Task 5.3): paso 1 con controles parejos (46px),
+   cada uno con su ícono al lado — nunca emoji de bandera, siempre bandera()
+   de flags.js para nacionalidad. */
+.paso-titulo { margin-bottom: 10px; }
+.paso-titulo .etiqueta { display: inline; }
+
+.creacion-campo { display: flex; align-items: center; gap: 8px; }
+.creacion-campo > svg { flex: 0 0 auto; }
+
+.creacion-control {
+  width: 100%;
+  height: 46px;
+  box-sizing: border-box;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  padding: 0 12px;
+  color: var(--texto);
+  font-family: var(--fuente);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+input.creacion-control { cursor: text; }
+
+.creacion-nacionalidad {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: left;
+}
+
+.creacion-nacionalidad-nombre {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tarjeta ya elegida en un paso (origen/apodo/estilo): a diferencia de las
+   tarjetas de un beat (mejora/evento), acá NUNCA se deshabilitan al elegir
+   — el jugador tiene que poder volver atrás y elegir otra. El anillo dorado
+   marca cuál quedó elegida sin tapar el color propio de su rareza. */
+.tarjeta.tarjeta-elegida { outline: 2px solid var(--dorado); outline-offset: 2px; }
+
+/* Tienda como popup (Task 5.4). Reusa `.carta` como base (mismo botón, mismo
+   `.carta:disabled` de siempre) y le suma capas propias para que "no te
+   alcanza" y "ya lo tenés" NO se vean igual: antes los dos casos quedaban
+   apagados parejo y el precio de lo impagable seguía en VERDE (el color de
+   "sí podés"), así que no se leía como deshabilitado de verdad. */
+.tienda-seccion-titulo { margin: 14px 0 8px; }
+.tienda-seccion-titulo:first-child { margin-top: 0; }
+
+.tienda-disponible {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.tienda-item-icono {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #1f1113;
+  color: var(--dorado);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tienda-item-staff {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.tienda-item-info { flex: 1; min-width: 0; }
+.tienda-item-nombre { font-weight: 800; letter-spacing: 0.3px; }
+.tienda-item-desc { font-size: 11.5px; color: var(--texto-medio); margin-top: 2px; }
+
+.tienda-precio { flex: 0 0 auto; font-weight: 800; font-size: 12.5px; white-space: nowrap; }
+.tienda-precio.verde { color: var(--verde); }
+.tienda-precio.sutil { color: var(--texto-sutil); }
+.tienda-precio.dorado { display: flex; align-items: center; gap: 4px; color: var(--dorado); }
+
+/* "No te alcanza": apagado DE VERDAD — además de la opacidad reducida de
+   .carta:disabled, se le saca el color (grayscale) y el precio queda en gris
+   en vez de verde, para que nunca se confunda con "sí podés comprarlo". */
+.tienda-item.no-alcanza { filter: grayscale(0.65); }
+.tienda-item.no-alcanza .tienda-item-icono { color: var(--texto-sutil); background: #1a1010; }
+
+/* "Ya lo tenés": logrado, no apagado — se distingue con un borde dorado en
+   vez de con la opacidad de .carta:disabled (por eso pisa esa regla acá). */
+.tienda-item.comprado { opacity: 1; border-color: var(--dorado); }
+.tienda-item.comprado .tienda-item-icono { color: var(--dorado); }
+
+.tienda-lujos-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.tienda-item-lujo {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 6px;
+  padding: 14px 10px;
+}
+
+.tienda-item-lujo .tienda-item-icono { width: 42px; height: 42px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

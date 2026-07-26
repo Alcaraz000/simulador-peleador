@@ -3,7 +3,6 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
 import { calcularLegado } from '../../src/core/legacy.js';
 import { renderLegado } from '../../src/ui/screens/legacy.js';
-import { renderNoticias } from '../../src/ui/screens/news.js';
 import { renderFicha } from '../../src/ui/screens/profile.js';
 
 function jugadorConCarrera() {
@@ -66,41 +65,13 @@ describe('renderLegado', () => {
     expect(vistas).toBe(true);
   });
 
-  it('muestra la bandera del peleador y el trofeo de sus titulos', () => {
+  it('muestra la bandera del peleador como SVG (no emoji) y el trofeo de sus titulos', () => {
     const jugador = jugadorConCarrera();
     const partida = { ...crearPartida({ jugador, semilla: 1 }), jugador };
     renderLegado(cont, { legado: calcularLegado(partida), jugador, onNuevaCarrera: () => {} });
-    expect(cont.textContent).toContain('🇦🇷');
+    expect(cont.querySelector('svg.bandera-svg')).toBeTruthy();
+    expect(cont.textContent).not.toContain('🇦🇷');
     expect(cont.textContent).toContain('🏆');
-  });
-});
-
-describe('renderNoticias', () => {
-  it('lista los titulares', () => {
-    const noticias = [
-      { id: 'n1', tipo: 'victoria', titular: 'Fulano noqueó a Mengano.', fecha: 2030 },
-      { id: 'n2', tipo: 'retiro', titular: 'Zutano se retira.', fecha: 2030 },
-    ];
-    renderNoticias(cont, { noticias, onContinuar: () => {} });
-    expect(cont.querySelectorAll('[data-noticia]')).toHaveLength(2);
-    expect(cont.textContent).toContain('Zutano se retira.');
-  });
-
-  it('con el feed vacio avisa que no pasó nada', () => {
-    renderNoticias(cont, { noticias: [], onContinuar: () => {} });
-    expect(cont.textContent.length).toBeGreaterThan(0);
-    expect(cont.querySelector('[data-accion="continuar"]')).toBeTruthy();
-  });
-
-  it('muestra una etiqueta legible del tipo, no el id crudo', () => {
-    const noticias = [
-      { id: 'n1', tipo: 'victoria', titular: 'Fulano noqueó a Mengano.', fecha: 2030 },
-      { id: 'n2', tipo: 'sponsor', titular: 'Te firmó una marca de indumentaria.', fecha: 2030 },
-    ];
-    renderNoticias(cont, { noticias, onContinuar: () => {} });
-    expect(cont.textContent).not.toContain('· victoria');
-    expect(cont.textContent).not.toContain('· sponsor');
-    expect(cont.textContent).toContain('Sponsor');
   });
 });
 

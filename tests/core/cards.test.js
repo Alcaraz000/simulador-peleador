@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { CARTAS_MEJORA } from '../../src/content/cards-improve.js';
-import { formatearMods, repartirMejoras, aplicarCarta, resolverProbabilidad } from '../../src/core/cards.js';
+import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
+import {
+  formatearMods, repartirMejoras, aplicarCarta, resolverProbabilidad, porcentajesDe,
+} from '../../src/core/cards.js';
+
+const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
+const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
 
 function jugador(extra = {}) {
   return {
@@ -32,6 +38,27 @@ describe('catalogo de mejoras', () => {
   it('ninguna carta de la v1 toca el grappling', () => {
     for (const carta of CARTAS_MEJORA) {
       expect('grappling' in carta.mods).toBe(false);
+    }
+  });
+
+  it('toda carta declara una rareza valida', () => {
+    for (const carta of CARTAS_MEJORA) {
+      expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+    }
+  });
+
+  it('la mayoria de las cartas son normales', () => {
+    const normales = CARTAS_MEJORA.filter((c) => c.rareza === 'normal');
+    expect(normales.length).toBeGreaterThan(CARTAS_MEJORA.length / 2);
+  });
+
+  it('tiene entre 2 y 3 legendarias, potentes de verdad', () => {
+    const legendarias = CARTAS_MEJORA.filter((c) => c.rareza === 'legendaria');
+    expect(legendarias.length).toBeGreaterThanOrEqual(2);
+    expect(legendarias.length).toBeLessThanOrEqual(3);
+    for (const carta of legendarias) {
+      const sumaPositivos = Object.values(carta.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+      expect(sumaPositivos).toBeGreaterThanOrEqual(8);
     }
   });
 });
@@ -95,6 +122,38 @@ describe('repartirMejoras', () => {
   it('respeta el filtro de etapa', () => {
     const cartas = repartirMejoras(createRng(7), { jugador: jugador(), etapa: 'juvenil' });
     for (const carta of cartas) expect(carta.etapas).toContain('juvenil');
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    let totalCartas = 0;
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+      for (const carta of cartas) {
+        conteo[carta.rareza] += 1;
+        totalCartas += 1;
+      }
+    }
+    const pct = (n) => (100 * conteo[n]) / totalCartas;
+    expect(pct('normal')).toBeGreaterThan(55);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(40);
+    expect(pct('legendaria')).toBeLessThan(15);
+  });
+
+  it('si una rareza no tiene cartas elegibles para la etapa/disciplina, igual completa la cantidad pedida con lo que haya', () => {
+    const catalogoChico = [
+      { id: 'n1', titulo: 'N1', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'n2', titulo: 'N2', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'n3', titulo: 'N3', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'n4', titulo: 'N4', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+    ];
+    for (let semilla = 1; semilla <= 20; semilla += 1) {
+      const cartas = repartirMejoras(createRng(semilla), {
+        jugador: jugador(), etapa: 'profesional', catalogo: catalogoChico,
+      });
+      expect(cartas).toHaveLength(3);
+    }
   });
 });
 
@@ -166,5 +225,72 @@ describe('resolverProbabilidad', () => {
   it('con una sola opcion siempre da esa', () => {
     const unica = { probabilidades: [{ peso: 1, mods: { forma: 5 }, texto: 'única' }] };
     expect(resolverProbabilidad(createRng(3), unica).resultado.forma).toBe(5);
+  });
+
+  it('el indice devuelto identifica la rama ganadora por referencia, no por texto (aunque el texto se repita o falte)', () => {
+    const conTextosIguales = {
+      probabilidades: [
+        { peso: 1, mods: { forma: 3 } },
+        { peso: 1, mods: { forma: -3 } },
+      ],
+    };
+    let vistoIndice0 = false;
+    let vistoIndice1 = false;
+    for (let s = 1; s <= 200; s++) {
+      const { resultado, indice } = resolverProbabilidad(createRng(s), conTextosIguales);
+      // la rama que dice el indice tiene que ser exactamente (misma referencia)
+      // la que se aplicó, no una adivinada por texto.
+      expect(conTextosIguales.probabilidades[indice].mods).toBe(resultado);
+      if (indice === 0) vistoIndice0 = true;
+      if (indice === 1) vistoIndice1 = true;
+    }
+    expect(vistoIndice0).toBe(true);
+    expect(vistoIndice1).toBe(true);
+  });
+});
+
+describe('porcentajesDe', () => {
+  it('da array vacio si la opcion no tiene probabilidades', () => {
+    expect(porcentajesDe({ id: 'x', texto: 't' })).toEqual([]);
+  });
+
+  it('reparte pesos iguales en mitades exactas', () => {
+    const opcion = { probabilidades: [{ peso: 1 }, { peso: 1 }] };
+    expect(porcentajesDe(opcion)).toEqual([50, 50]);
+  });
+
+  it('respeta el orden y la proporcion de los pesos', () => {
+    const opcion = { probabilidades: [{ peso: 6 }, { peso: 4 }] };
+    expect(porcentajesDe(opcion)).toEqual([60, 40]);
+  });
+
+  it('cuando el reparto no cierra redondo, el resto va a la entrada de mayor peso y la suma da 100', () => {
+    const opcion = { probabilidades: [{ peso: 1 }, { peso: 1 }, { peso: 1 }] };
+    const pct = porcentajesDe(opcion);
+    expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+    expect(pct[0]).toBe(34);
+    expect(pct[1]).toBe(33);
+    expect(pct[2]).toBe(33);
+  });
+
+  it('con todos los pesos en cero, reparte parejo y la suma sigue dando 100', () => {
+    const tresEnCero = { probabilidades: [{ peso: 0 }, { peso: 0 }, { peso: 0 }] };
+    const pct = porcentajesDe(tresEnCero);
+    expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+    expect(pct).toEqual([34, 33, 33]);
+
+    const dosEnCero = { probabilidades: [{ peso: 0 }, { peso: 0 }] };
+    expect(porcentajesDe(dosEnCero).reduce((a, b) => a + b, 0)).toBe(100);
+  });
+
+  it('siempre suma exactamente 100 para todas las opciones con probabilidades del catalogo de eventos', () => {
+    for (const carta of CARTAS_EVENTO) {
+      for (const opcion of carta.opciones) {
+        if (!opcion.probabilidades) continue;
+        const pct = porcentajesDe(opcion);
+        expect(pct.length).toBe(opcion.probabilidades.length);
+        expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+      }
+    }
   });
 });

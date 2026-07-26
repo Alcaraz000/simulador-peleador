@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   ATRIBUTOS, ETIQUETAS, crearAtributos, crearEstado, clamp,
   calcularMedia, aplicarModificadores, etiquetaEstado,
+  RANGOS_MEDIA, rangoDeMedia,
 } from '../../src/core/stats.js';
 
 describe('atributos', () => {
@@ -94,5 +95,49 @@ describe('etiquetaEstado', () => {
   it('describe la fatiga al reves que la forma', () => {
     expect(etiquetaEstado('fatiga', 85)).toBe('FUNDIDO');
     expect(etiquetaEstado('fatiga', 15)).toBe('ENTERO');
+  });
+});
+
+describe('RANGOS_MEDIA y rangoDeMedia', () => {
+  it('define los cinco rangos en orden creciente', () => {
+    expect(Object.keys(RANGOS_MEDIA)).toEqual(['hierro', 'bronce', 'plata', 'oro', 'platino']);
+  });
+
+  it('cada rango define color y nombre', () => {
+    for (const rango of Object.values(RANGOS_MEDIA)) {
+      expect(rango.color).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(rango.nombre).toBeTruthy();
+    }
+  });
+
+  it('clasifica hierro de 1 a 49', () => {
+    expect(rangoDeMedia(1).id).toBe('hierro');
+    expect(rangoDeMedia(49).id).toBe('hierro');
+    expect(rangoDeMedia(1).color).toBe('#9aa0a6');
+  });
+
+  it('clasifica bronce de 50 a 64', () => {
+    expect(rangoDeMedia(50).id).toBe('bronce');
+    expect(rangoDeMedia(64).id).toBe('bronce');
+  });
+
+  it('clasifica plata de 65 a 79', () => {
+    expect(rangoDeMedia(65).id).toBe('plata');
+    expect(rangoDeMedia(79).id).toBe('plata');
+  });
+
+  it('clasifica oro de 80 a 89', () => {
+    expect(rangoDeMedia(80).id).toBe('oro');
+    expect(rangoDeMedia(89).id).toBe('oro');
+  });
+
+  it('clasifica platino de 90 a 99', () => {
+    expect(rangoDeMedia(90).id).toBe('platino');
+    expect(rangoDeMedia(99).id).toBe('platino');
+  });
+
+  it('no rompe fuera de rango: valores extremos caen en el extremo mas cercano', () => {
+    expect(rangoDeMedia(0).id).toBe('hierro');
+    expect(rangoDeMedia(150).id).toBe('platino');
   });
 });

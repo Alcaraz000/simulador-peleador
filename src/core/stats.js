@@ -74,3 +74,20 @@ export function etiquetaEstado(nombre, valor) {
   }
   return escala[escala.length - 1][1];
 }
+
+// Rangos visuales de MEDIA (tablero, v2): el cuadrado de MEDIA se colorea
+// según el rango, con la etiqueta del rango al lado.
+export const RANGOS_MEDIA = {
+  hierro: { id: 'hierro', nombre: 'Hierro', min: 1, max: 49, color: '#9aa0a6' },
+  bronce: { id: 'bronce', nombre: 'Bronce', min: 50, max: 64, color: '#c87f3a' },
+  plata: { id: 'plata', nombre: 'Plata', min: 65, max: 79, color: '#c9d1d9' },
+  oro: { id: 'oro', nombre: 'Oro', min: 80, max: 89, color: '#f2c14e' },
+  platino: { id: 'platino', nombre: 'Platino', min: 90, max: 99, color: '#6fe0e8' },
+};
+
+export function rangoDeMedia(media) {
+  const valor = clamp(Math.round(media), LIMITES_ATRIBUTO.min, LIMITES_ATRIBUTO.max);
+  const rango = Object.values(RANGOS_MEDIA).find((r) => valor >= r.min && valor <= r.max);
+  const elegido = rango ?? RANGOS_MEDIA.hierro;
+  return { id: elegido.id, nombre: elegido.nombre, color: elegido.color };
+}

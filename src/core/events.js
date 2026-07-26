@@ -1,4 +1,4 @@
-import { aplicarCarta, resolverProbabilidad, formatearMods } from './cards.js';
+import { aplicarCarta, resolverProbabilidad, formatearMods, elegirPorRareza } from './cards.js';
 import { subirHeat } from './rivalry.js';
 import { clamp } from './stats.js';
 import { CARTAS_EVENTO } from '../content/cards-events.js';
@@ -9,7 +9,7 @@ export function elegirEvento(rng, { jugador, etapa, categoria = null }) {
     (c) => c.etapas.includes(etapa) && (categoria === null || c.categoria === categoria),
   );
   const fuente = elegibles.length > 0 ? elegibles : CARTAS_EVENTO;
-  return rng.pick(fuente);
+  return elegirPorRareza(rng, fuente);
 }
 
 export function elegirCartaRedes(rng, { jugador, oferta = null }) {
@@ -17,7 +17,7 @@ export function elegirCartaRedes(rng, { jugador, oferta = null }) {
     const deSemana = CARTAS_REDES.find((c) => c.id === 'post_pelea_grande');
     if (deSemana) return deSemana;
   }
-  return rng.pick(CARTAS_REDES);
+  return elegirPorRareza(rng, CARTAS_REDES);
 }
 
 export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = [], rivalObjetivoId = null }) {
@@ -26,11 +26,13 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
 
   let mods = { ...(opcion.mods ?? {}) };
   let texto = opcion.textoResultado ?? '';
+  let indiceGanador = null;
 
   if (opcion.probabilidades) {
     const tirada = resolverProbabilidad(rng, opcion);
     mods = { ...mods, ...tirada.resultado };
     texto = tirada.texto;
+    indiceGanador = tirada.indice;
   }
 
   const paso = aplicarCarta(jugador, { ...carta, mods });
@@ -58,6 +60,8 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
     jugador: nuevo,
     rivalidades: nuevasRivalidades,
     texto,
+    deltas: paso.deltas,
     deltasTexto: [...deltasTexto, ...extras],
+    indiceGanador,
   };
 }

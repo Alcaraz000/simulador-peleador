@@ -3,7 +3,7 @@ import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPelea } from '../../src/core/fight.js';
 import {
-  INSTRUCCIONES_RINCON, ZONAS_GOLPE, avanzarPelea, estadoRincon,
+  INSTRUCCIONES_RINCON, ZONAS_GOLPE, POSTURAS, avanzarPelea, estadoRincon,
   aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia,
 } from '../../src/core/fight-interactive.js';
 
@@ -122,6 +122,36 @@ describe('golpe de gracia', () => {
     expect(Object.keys(ZONAS_GOLPE)).toContain(info.zonaAbierta);
     expect(info.zonas).toHaveLength(3);
     expect(info.ventanaMs).toBeGreaterThan(0);
+  });
+
+  it('abrir la ventana tambien informa la postura del rival', () => {
+    const info = abrirGolpeDeGracia(peleaConRivalGroggy());
+    expect(Object.keys(POSTURAS)).toContain(info.postura);
+  });
+
+  it('la zona informada como abierta coincide con la que marca la postura', () => {
+    for (let semilla = 1; semilla <= 30; semilla++) {
+      const pelea = { ...armar({ semilla }), aguante: { jugador: 80, rival: 12 }, pendiente: 'golpe' };
+      const info = abrirGolpeDeGracia(pelea);
+      expect(POSTURAS[info.postura].zonas[info.zonaAbierta]).toBe('abierto');
+      const abiertaEnInfo = info.zonas.find((z) => z.id === info.zonaAbierta);
+      expect(abiertaEnInfo.estado).toBe('abierto');
+    }
+  });
+
+  it('define las cuatro posturas', () => {
+    expect(Object.keys(POSTURAS).sort()).toEqual(
+      ['contra_cuerdas', 'cubre_un_lado', 'guardia_alta', 'manos_abajo'].sort(),
+    );
+  });
+
+  it('cada postura deja al menos una zona abierta y una tapada', () => {
+    for (const postura of Object.values(POSTURAS)) {
+      const estados = Object.values(postura.zonas);
+      expect(estados).toContain('abierto');
+      expect(estados).toContain('tapado');
+      expect(Object.keys(postura.zonas).sort()).toEqual(['higado', 'menton', 'sien']);
+    }
   });
 
   it('la zona que muestra la ventana siempre coincide con la que se resuelve como acierto', () => {

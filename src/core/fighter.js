@@ -2,18 +2,40 @@ import { crearAtributos, crearEstado, calcularMedia, aplicarModificadores, clamp
 import { getDisciplina, pesosDe } from './disciplines.js';
 import { ESTILOS, estilosDisponibles } from './styles.js';
 import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, NOMBRES_POR_PAIS, GIMNASIOS } from '../content/names.js';
+import { crearEntrenadorDe } from './coach.js';
+import { NICKNAMES } from '../content/nicknames.js';
+import { sortearPorRareza } from './cards.js';
 
 export const CATEGORIAS = {
   pluma: { id: 'pluma', nombre: 'Peso pluma', pesoMin: 55, pesoMax: 57, alturaMedia: 170 },
   mediano: { id: 'mediano', nombre: 'Peso mediano', pesoMin: 70, pesoMax: 73, alturaMedia: 180 },
 };
 
+// Pool de orígenes (Paso 2 de la creación): rareza + efectos distintos.
+// Los normales quedan como en la v1 (sin tocarles los mods); se suman dos
+// normales, dos raros y un legendario nuevos. Las legendarias no se
+// nerfean: son raras (5% en repartirOrigenes) y pegan fuerte cuando tocan.
 export const ORIGENES = [
-  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', mods: { potencia: 3, menton: 3, tecnica: -3 } },
-  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', mods: { tecnica: 4, disciplinaPersonal: 5, potencia: -2 } },
-  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', mods: { iq: 5, tecnica: 2, menton: -2 } },
-  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', mods: { cardio: 4, disciplinaPersonal: 3, iq: -3 } },
+  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', rareza: 'normal', mods: { potencia: 3, menton: 3, tecnica: -3 } },
+  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', rareza: 'normal', mods: { tecnica: 4, disciplinaPersonal: 5, potencia: -2 } },
+  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', rareza: 'normal', mods: { iq: 5, tecnica: 2, menton: -2 } },
+  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', rareza: 'normal', mods: { cardio: 4, disciplinaPersonal: 3, iq: -3 } },
+  { id: 'amateur_de_toda_la_vida', nombre: 'Amateur de toda la vida', descripcion: 'Torneos federados desde los diez años: subiste a un cuadrilátero antes que a un colectivo solo.', rareza: 'normal', mods: { tecnica: 3, iq: 2, potencia: -2 } },
+  { id: 'videos_viejos', nombre: 'VHS y madrugadas', descripcion: 'Aprendiste mirando peleas grabadas mil veces, cuadro por cuadro.', rareza: 'normal', mods: { tecnica: 3, defensa: 2, cardio: -2 } },
+  { id: 'sangre_importada', nombre: 'Sangre importada', descripcion: 'Un familiar boxeó afuera y te dejó mañas que acá nadie enseña.', rareza: 'rara', mods: { tecnica: 4, velocidad: 3, disciplinaPersonal: -3 } },
+  { id: 'becado_desde_pibe', nombre: 'Becado desde pibe', descripcion: 'Un sponsor te becó temprano: nutrición y material que la mayoría ni sueña.', rareza: 'rara', mods: { cardio: 4, potencia: 3, iq: -2 } },
+  { id: 'sangre_de_campeon', nombre: 'Sangre de campeón', descripcion: 'Tu apellido ya es un cinturón colgado en la pared del gimnasio. Ahora te toca a vos.', rareza: 'legendaria', mods: { tecnica: 5, potencia: 4, iq: 4, cardio: -3 } },
 ];
+
+/**
+ * Reparte 2 orígenes sin repetir para el Paso 2 de la creación, respetando
+ * la distribución de rarezas del proyecto (ver sortearPorRareza en cards.js
+ * — el mismo algoritmo que ya usa repartirMejoras, reusado en vez de
+ * reimplementado).
+ */
+export function repartirOrigenes(rng) {
+  return sortearPorRareza(rng, ORIGENES, 2);
+}
 
 export const EDAD_INICIAL = 15;
 
@@ -35,7 +57,11 @@ function baseAtributos(disciplina, mediaObjetivo) {
 
 export function crearPeleador(opciones) {
   const {
-    nombre, apodo, nacionalidad, disciplina, estilo, categoria,
+    // `apellido` es el contrato nuevo (v2: "solo apellido, no nombre
+    // completo"); `nombre` sigue existiendo tal cual para no romper a los
+    // NPCs (parodies.js, roster.js) ni ~20 archivos de test que ya lo usan.
+    // Si viene `apellido`, gana: el peleador queda con `nombre = apellido`.
+    nombre, apellido, apodo, apodoId, nacionalidad, disciplina, estilo, categoria,
     mano = 'derecha', altura, alcance, origen = 'barrio',
     esJugador = false, edad = EDAD_INICIAL, media = 40,
     gimnasio = GIMNASIOS[0], personalidad = 'respetuoso',
@@ -51,10 +77,24 @@ export function crearPeleador(opciones) {
   const orig = ORIGENES.find((o) => o.id === origen);
   if (!orig) throw new Error(`Origen desconocido: ${origen}`);
 
+  let nick = null;
+  if (apodoId) {
+    nick = NICKNAMES.find((n) => n.id === apodoId);
+    if (!nick) throw new Error(`Apodo desconocido: ${apodoId}`);
+  }
+
+  // Cada estilo trae su entrenador (coach.js). Su aporte se hornea acá abajo
+  // en `atributos`, exactamente igual que el estilo/origen/apodo: NO es un
+  // overlay que solo pinte la UI. `entrenador.aporte` se conserva tal cual
+  // en el peleador devuelto como desglose informativo ("de estos 69, 6 los
+  // pone tu entrenador" — ver atributosConEntrenador en coach.js), pero el
+  // número que de verdad pelea (media, ranking, ofertas) ya lo incluye.
+  const entrenador = crearEntrenadorDe(estilo);
+
   let atributos = baseAtributos(disciplina, media);
   let especiales = { disciplinaPersonal: 40, menton: 40 };
 
-  for (const mods of [est.mods, orig.mods]) {
+  for (const mods of [est.mods, orig.mods, nick?.mods ?? {}, entrenador?.aporte ?? {}]) {
     const soloAtributos = {};
     const soloEspeciales = {};
     for (const [clave, valor] of Object.entries(mods)) {
@@ -71,7 +111,11 @@ export function crearPeleador(opciones) {
   return {
     id: nuevoId(esJugador ? 'jug' : 'riv'),
     esJugador,
-    nombre, apodo, nacionalidad,
+    nombre: apellido ?? nombre,
+    apellido: apellido ?? null,
+    apodo: apodo ?? nick?.nombre ?? null,
+    apodoId: nick?.id ?? null,
+    nacionalidad,
     disciplina, estilo, categoria,
     mano,
     altura: altura ?? cat.alturaMedia,
@@ -80,6 +124,7 @@ export function crearPeleador(opciones) {
     edad,
     atributos,
     especiales,
+    entrenador,
     estado: crearEstado(),
     record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     dinero: 0,

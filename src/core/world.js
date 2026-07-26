@@ -7,8 +7,8 @@ import { clamp } from './stats.js';
 export const EDAD_RETIRO = 40;
 export const ANIO_INICIAL = 2026;
 
-export function crearMundo(rng, { disciplina, categoria, cantidad = 10 }) {
-  const roster = crearRoster(rng, { disciplina, categoria, cantidad });
+export function crearMundo(rng, { disciplina, categoria, cantidad = 10, apodosReservados = [] }) {
+  const roster = crearRoster(rng, { disciplina, categoria, cantidad, apodosReservados });
   return {
     disciplina,
     categoria,
@@ -51,7 +51,16 @@ function declive(peleador, rng) {
   peleador.atributos.cardio = clamp(peleador.atributos.cardio - rng.int(0, 2), 1, 99);
 }
 
-export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = false } = {}) {
+/**
+ * Avanza el mundo un bloque de carrera.
+ *
+ * `anio` permite que quien llama imponga el año del calendario. La carrera lo
+ * usa siempre: los bloques duran 1 a 1.3 años, así que acumular años enteros
+ * acá haría que el mundo se atrasara varios años respecto del calendario y de
+ * la edad del jugador. Sin `anio` se cae al conteo propio (útil en tests del
+ * mundo aislado). El envejecimiento del roster sigue yendo por `aniosPasados`.
+ */
+export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = false, anio = null } = {}) {
   const roster = clonarRoster(mundo.roster);
   const sucesos = [];
   let campeonId = mundo.campeonId;
@@ -131,7 +140,7 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
     mundo: {
       ...mundo,
       roster: ordenado,
-      anio: mundo.anio + Math.round(aniosPasados),
+      anio: anio ?? mundo.anio + Math.round(aniosPasados),
       campeonId,
       titulares: [...mundo.titulares],
     },

@@ -1,5 +1,5 @@
 import { createRng } from './rng.js';
-import { crearMundo, avanzarMundo, rankingDelJugador } from './world.js';
+import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './world.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { generarOferta, CINTURONES } from './offers.js';
@@ -8,6 +8,7 @@ import { noticiasDeSucesos, agregarNoticias } from './news.js';
 import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
+import { semanasDeBloque, fechaDe } from './calendario.js';
 
 // Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver armarCola).
 export const PERIODO_NOTICIAS = 4;
@@ -26,6 +27,16 @@ const PERDIDA_CARDIO_DECLIVE = 1;
 // en world.js): mientras el jugador lo tiene puesto, el mundo no debe coronar
 // ni declarar vacante a nadie más (ver avanzarMundo).
 const NOMBRE_CINTURON_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
+
+// La noticia de sponsor se arma acá mismo (no sale de PLANTILLAS en
+// news-templates.js: el titular ya viene armado desde money.js). El cuerpo
+// es atmosférico, sin marcadores, para cumplir el mismo contrato de
+// "toda noticia tiene titular y cuerpo" que las demás.
+const CUERPOS_SPONSOR = [
+  'La plata entra sola: para eso están los contratos de imagen.',
+  'Nada como un buen cheque para bajar la presión antes de la próxima pelea.',
+  'El mánager ya está pidiendo que le manden el logo para el pantalón.',
+];
 
 function declivePorEdadJugador(jugador) {
   const umbral = tieneStaff(jugador, 'preparador')
@@ -80,6 +91,11 @@ export function crearPartida({ jugador, semilla }) {
     disciplina: jugador.disciplina,
     categoria: jugador.categoria,
     cantidad: 12,
+    // El pool "normal" de apodos del jugador (nicknames.js) se superpone con
+    // el pool de apodos de los rivales (names.js): sin reservar el propio,
+    // un rival al azar podía terminar con el MISMO apodo que el jugador
+    // (ver crearRoster en roster.js).
+    apodosReservados: jugador.apodo ? [jugador.apodo] : [],
   });
   return {
     version: 1,
@@ -92,6 +108,12 @@ export function crearPartida({ jugador, semilla }) {
     etapaIndice: 0,
     bloque: 1,
     bloqueGlobal: 1,
+    // Calendario del tablero (v2): semana 1-indexada desde el arranque de la
+    // carrera (ver calendario.js). proximaPelea guarda la oferta que ya está
+    // "en camino" este bloque (aunque el jugador todavía no llegó a ese beat
+    // en la cola), para que el panel de próxima pelea pueda mostrarla.
+    semanaGlobal: 1,
+    proximaPelea: null,
     cola: [],
     beatActual: null,
     historialBeats: 0,
@@ -132,6 +154,7 @@ export function avanzarBloque(partida) {
   const etapa = etapaActual(nueva);
 
   nueva.jugador.edad += etapa.aniosPorBloque;
+  nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque);
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
@@ -145,6 +168,10 @@ export function avanzarBloque(partida) {
   const paso = avanzarMundo(nueva.mundo, rng, {
     aniosPasados: Math.round(etapa.aniosPorBloque),
     jugadorEsCampeon: nueva.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL),
+    // El año lo manda el calendario, no el conteo del mundo: los bloques duran
+    // 1 a 1.3 años y acumular enteros dejaba al mundo ~4 años atrás del
+    // tablero y de la edad del jugador al final de la carrera.
+    anio: fechaDe(nueva.semanaGlobal, ANIO_INICIAL).anio,
   });
   nueva.mundo = paso.mundo;
 
@@ -160,7 +187,12 @@ export function avanzarBloque(partida) {
       // por error, lo que la mostraba como si fuera algo malo.
       tipo: 'sponsor',
       titular: sponsor.texto,
+      // No consume del rng compartido (ver el comentario en noticiasDeSucesos,
+      // news.js): el ritmo de la carrera está calibrado contra esa secuencia
+      // exacta, y esto es solo variedad de texto, no una decisión de juego.
+      cuerpo: CUERPOS_SPONSOR[nueva.bloqueGlobal % CUERPOS_SPONSOR.length],
       fecha: paso.mundo.anio,
+      nueva: true,
     });
   }
   nueva.noticias = agregarNoticias(nueva.noticias, nuevas);
@@ -173,6 +205,10 @@ function armarCola(partida) {
   const rng = rngDe(partida);
   const etapa = etapaActual(partida);
   const cola = [];
+  // Si este bloque trae una oferta de pelea, se guarda acá para que el
+  // tablero (panel-proxima.js) pueda mostrarla incluso antes de que el
+  // jugador llegue a ese beat puntual dentro de la cola.
+  let proximaPelea = null;
 
   cola.push({
     tipo: 'mejora',
@@ -204,7 +240,13 @@ function armarCola(partida) {
         rivalidades: partida.rivalidades,
         forzarTitulo,
       });
-      if (oferta) cola.push({ tipo: 'oferta', datos: { oferta } });
+      if (oferta) {
+        cola.push({ tipo: 'oferta', datos: { oferta } });
+        proximaPelea = {
+          oferta,
+          semanaObjetivo: (partida.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque),
+        };
+      }
     } else {
       // Le tocaba pelea pero está lesionado grave (ver puedePelear en
       // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
@@ -222,7 +264,7 @@ function armarCola(partida) {
     cola.push({ tipo: 'noticias', datos: {} });
   }
 
-  return { cola, rngEstado: rng.estado() };
+  return { cola, rngEstado: rng.estado(), proximaPelea };
 }
 
 export function siguienteBeat(partida) {
@@ -245,6 +287,7 @@ export function siguienteBeat(partida) {
     const armado = armarCola(nueva);
     nueva.cola = armado.cola;
     nueva.rngEstado = armado.rngEstado;
+    nueva.proximaPelea = armado.proximaPelea;
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }

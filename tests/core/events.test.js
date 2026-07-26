@@ -5,6 +5,8 @@ import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import { CARTAS_REDES } from '../../src/content/cards-social.js';
 import { elegirEvento, elegirCartaRedes, resolverOpcion } from '../../src/core/events.js';
 
+const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
+
 function jugador(extra = {}) {
   return {
     ...crearPeleador({
@@ -43,6 +45,25 @@ describe('catalogo de eventos', () => {
     expect(categorias).toContain('evento');
     expect(categorias).toContain('vida');
   });
+
+  it('toda carta declara una rareza valida', () => {
+    for (const carta of CARTAS_EVENTO) {
+      expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+    }
+  });
+
+  it('tiene 1 o 2 eventos legendarios, potentes de verdad', () => {
+    const legendarios = CARTAS_EVENTO.filter((c) => c.rareza === 'legendaria');
+    expect(legendarios.length).toBeGreaterThanOrEqual(1);
+    expect(legendarios.length).toBeLessThanOrEqual(2);
+    for (const carta of legendarios) {
+      const sumaPositivos = carta.opciones.reduce((acc, o) => {
+        const deMods = Object.values(o.mods ?? {}).filter((v) => v > 0).reduce((a, b) => a + b, 0);
+        return Math.max(acc, deMods);
+      }, 0);
+      expect(sumaPositivos).toBeGreaterThanOrEqual(8);
+    }
+  });
 });
 
 describe('catalogo de redes', () => {
@@ -54,6 +75,21 @@ describe('catalogo de redes', () => {
   it('siempre hay una opcion que sube el heat del rival', () => {
     for (const carta of CARTAS_REDES) {
       expect(carta.opciones.some((o) => (o.efectos?.heatRival ?? 0) > 0)).toBe(true);
+    }
+  });
+
+  it('toda carta declara una rareza valida', () => {
+    for (const carta of CARTAS_REDES) {
+      expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+    }
+  });
+
+  it('tiene al menos una carta de redes legendaria, potente de verdad', () => {
+    const legendarias = CARTAS_REDES.filter((c) => c.rareza === 'legendaria');
+    expect(legendarias.length).toBeGreaterThanOrEqual(1);
+    for (const carta of legendarias) {
+      const famaMaxima = Math.max(...carta.opciones.map((o) => o.efectos?.fama ?? 0));
+      expect(famaMaxima).toBeGreaterThanOrEqual(10);
     }
   });
 });
@@ -74,12 +110,76 @@ describe('elegirEvento', () => {
     const b = elegirEvento(createRng(3), { jugador: jugador(), etapa: 'profesional' });
     expect(a.id).toBe(b.id);
   });
+
+  it('la carta elegida trae su rareza intacta', () => {
+    const carta = elegirEvento(createRng(14), { jugador: jugador(), etapa: 'profesional' });
+    expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirEvento(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(45);
+    expect(pct('legendaria')).toBeLessThan(15);
+  });
+
+  // Guarda de contenido (Task 6.2, revisión del coordinador): en juvenil y
+  // amateur, categoría 'evento' llegó a tener UN SOLO elemento elegible
+  // (sparring_idolo, el único con etapas: SIEMPRE — todos los demás eran
+  // etapas: PRO). elegirPorRareza no tiene margen para que el peso
+  // "legendaria" (~5%) importe cuando es la única carta del pool: salía
+  // garantizado, no por suerte (medido: 56% de las carreras, no ~5%). Este
+  // test vigila que el pool de 'evento' en juvenil/amateur tenga variedad
+  // real y que la proporción de rarezas vuelva a acercarse a 70/25/5, no
+  // que "haya al menos una carta más" y siga estando desbalanceado.
+  it('sobre muchas semillas en juvenil, la categoria "evento" tambien cae cerca de 70/25/5 (no solo la legendaria)', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirEvento(createRng(semilla), { jugador: jugador(), etapa: 'juvenil', categoria: 'evento' });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(45);
+    expect(pct('legendaria')).toBeLessThan(15);
+  });
+
+  it('en juvenil y amateur, la categoria "evento" tiene mas de una carta elegible (no solo la legendaria)', () => {
+    for (const etapa of ['juvenil', 'amateur']) {
+      const elegibles = CARTAS_EVENTO.filter((c) => c.categoria === 'evento' && c.etapas.includes(etapa));
+      expect(elegibles.length).toBeGreaterThanOrEqual(4);
+      expect(elegibles.some((c) => c.rareza === 'normal')).toBe(true);
+    }
+  });
 });
 
 describe('elegirCartaRedes', () => {
   it('devuelve una carta del catalogo', () => {
     const carta = elegirCartaRedes(createRng(4), { jugador: jugador() });
     expect(CARTAS_REDES.map((c) => c.id)).toContain(carta.id);
+  });
+
+  it('la carta elegida trae su rareza intacta', () => {
+    const carta = elegirCartaRedes(createRng(15), { jugador: jugador() });
+    expect(RAREZAS_VALIDAS).toContain(carta.rareza);
+  });
+
+  it('sobre muchas semillas, la distribucion de rarezas cae cerca de 70/25/5', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirCartaRedes(createRng(semilla), { jugador: jugador() });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('legendaria')).toBeLessThan(15);
   });
 });
 
@@ -94,6 +194,10 @@ describe('resolverOpcion', () => {
         { peso: 1, mods: { forma: -5 }, texto: 'Salió mal.' },
       ] },
       { id: 'picante', texto: 'Picante', efectos: { heatRival: 20 } },
+      { id: 'ambiguo', texto: 'Ambiguo', probabilidades: [
+        { peso: 1, mods: { potencia: 2 } },
+        { peso: 1, mods: { potencia: -2 } },
+      ] },
     ],
   };
 
@@ -156,5 +260,27 @@ describe('resolverOpcion', () => {
     const a = resolverOpcion(createRng(13), { jugador: jugador(), carta, opcionId: 'riesgo' });
     const b = resolverOpcion(createRng(13), { jugador: jugador(), carta, opcionId: 'riesgo' });
     expect(a.texto).toBe(b.texto);
+  });
+
+  it('expone los deltas crudos ademas de deltasTexto, sin romper deltasTexto', () => {
+    const yo = jugador();
+    const paso = resolverOpcion(createRng(5), { jugador: yo, carta, opcionId: 'directo' });
+    expect(paso.deltas).toEqual({ cardio: 5 });
+    expect(paso.deltasTexto).toEqual(['+5 Cardio']);
+  });
+
+  it('no tiene indiceGanador cuando la opcion no tiene azar', () => {
+    const paso = resolverOpcion(createRng(5), { jugador: jugador(), carta, opcionId: 'directo' });
+    expect(paso.indiceGanador).toBeNull();
+  });
+
+  it('expone indiceGanador y coincide con el mod realmente aplicado, aunque las dos ramas no tengan texto (caso que fallaba comparando strings)', () => {
+    for (let s = 1; s <= 200; s += 1) {
+      const yo = jugador();
+      const paso = resolverOpcion(createRng(s), { jugador: yo, carta, opcionId: 'ambiguo' });
+      const ramaGanadora = carta.opciones.find((o) => o.id === 'ambiguo').probabilidades[paso.indiceGanador];
+      const deltaAplicado = paso.jugador.atributos.potencia - yo.atributos.potencia;
+      expect(deltaAplicado).toBe(ramaGanadora.mods.potencia);
+    }
   });
 });

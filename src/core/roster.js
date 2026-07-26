@@ -41,15 +41,31 @@ export function crearDesdeParodia(parodia) {
   return peleador;
 }
 
-export function crearRoster(rng, { disciplina, categoria, cantidad = 10 }) {
+// `apodosReservados` (Task 6.3): además de los apodos que se van usando
+// DENTRO del roster, el llamador puede reservar apodos de afuera — el caso
+// real es el del jugador (career.js pasa `[jugador.apodo]`), para que un
+// rival aleatorio no termine compartiendo apodo con el propio jugador (el
+// pool "normal" de NICKNAMES, que arma el apodo del jugador, se superpone
+// case por caso con el pool APODOS de los rivales).
+export function crearRoster(rng, {
+  disciplina, categoria, cantidad = 10, apodosReservados = [],
+}) {
   const roster = [];
   const nombresUsados = new Set();
+  // El pool de APODOS (names.js) es chico (16) frente a un roster típico de
+  // 10-12: sin este control, dos rivales activos con el MISMO apodo ("La
+  // Bestia" Fulano contra "La Bestia" Mengano) salía en ~97% de las carreras
+  // medidas — se sentía como un bug de contenido, no una coincidencia real de
+  // boxeo. Mismo patrón que `nombresUsados` de acá arriba, aplicado también
+  // al apodo.
+  const apodosUsados = new Set(apodosReservados.filter(Boolean));
 
   for (const parodia of parodiasDe(disciplina, categoria, 'activo')) {
     if (roster.length >= cantidad) break;
     const peleador = crearDesdeParodia(parodia);
     roster.push(peleador);
     nombresUsados.add(peleador.nombre);
+    if (peleador.apodo) apodosUsados.add(peleador.apodo);
   }
 
   let intentos = 0;
@@ -62,7 +78,9 @@ export function crearRoster(rng, { disciplina, categoria, cantidad = 10 }) {
       personalidad: rng.pick(PERSONALIDADES),
     });
     if (nombresUsados.has(candidato.nombre)) continue;
+    if (candidato.apodo && apodosUsados.has(candidato.apodo)) continue;
     nombresUsados.add(candidato.nombre);
+    if (candidato.apodo) apodosUsados.add(candidato.apodo);
     roster.push(candidato);
   }
 
