@@ -54,22 +54,34 @@ function filaConIcono(iconoNodo, control) {
   return el('div', { class: 'creacion-campo' }, [iconoNodo, control]);
 }
 
-// Grupo de opciones en chip para un campo del paso 1 (mano hábil, disciplina,
-// categoría): un botón por valor posible, todo a la vista, sin desplegable.
-function opcionChip(valor, texto, elegida, onElegir) {
+// Grupo de opciones para un campo del paso 1 (mano hábil, disciplina,
+// categoría): un control "segmentado" (un solo borde compartido, sin gap
+// entre opciones) en vez de una tarjeta suelta por opción.
+//
+// Bug reportado (v4, verificación visual): con dos tarjetas independientes
+// por campo (borde + padding propios + gap entre ellas), la fila de 3
+// columnas de 390px le dejaba a "Mediano"/"Derecha" tan poco lugar que se
+// truncaban ("Media…", después de acortar el texto todavía "M…"). El
+// problema no era el texto (ya era el nombre corto) ni el ancho de la
+// fila: era el "chrome" repetido de dos bordes + dos paddings + un gap por
+// cada par de opciones. Un control segmentado (un solo borde alrededor de
+// las N opciones, un divisor fino entre ellas) le devuelve ese espacio al
+// texto sin tocar el layout de 3 columnas ni el ancho de la fila.
+function opcionSegmento(valor, texto, elegida, onElegir) {
   return el('button', {
     type: 'button',
     dataset: { opcion: valor },
-    class: `creacion-control creacion-chip${elegida ? ' elegida' : ''}`,
+    class: `creacion-segmento${elegida ? ' elegida' : ''}`,
     'aria-pressed': elegida ? 'true' : 'false',
     text: texto,
     onClick: () => onElegir(valor),
   });
 }
 
-function grupoChips(campo, opciones, valorActual, onElegir) {
-  return el('div', { class: 'fila', dataset: { campo } },
-    opciones.map((op) => opcionChip(op.valor, op.texto, valorActual === op.valor, onElegir)));
+function grupoChips(campo, opciones, valorActual, onElegir, etiquetaAria) {
+  return el('div', {
+    class: 'creacion-segmentado', dataset: { campo }, role: 'group', 'aria-label': etiquetaAria,
+  }, opciones.map((op) => opcionSegmento(op.valor, op.texto, valorActual === op.valor, onElegir)));
 }
 
 export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.now()) }) {
@@ -182,13 +194,14 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
       icono('flecha', { tamano: 12, color: 'var(--texto-sutil)' }),
     ]);
 
-    const grupoMano = grupoChips('mano', MANOS, estado.mano, (v) => { estado.mano = v; pintar(); });
+    const grupoMano = grupoChips('mano', MANOS, estado.mano, (v) => { estado.mano = v; pintar(); }, 'Mano hábil');
 
     const grupoDisciplina = grupoChips(
       'disciplina',
       Object.values(DISCIPLINAS).map((d) => ({ valor: d.id, texto: d.nombre })),
       estado.disciplina,
       (v) => { estado.disciplina = v; pintar(); },
+      'Disciplina',
     );
 
     // Nombre corto en el chip (v4, verificación visual): "Peso pluma"/"Peso
@@ -205,6 +218,7 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
       }),
       estado.categoria,
       (v) => { estado.categoria = v; pintar(); },
+      'Categoría',
     );
 
     // Espacio de error y botón "Siguiente" SIEMPRE montados (pedido general

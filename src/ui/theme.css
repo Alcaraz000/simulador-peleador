@@ -932,9 +932,25 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .creacion-campo { display: flex; align-items: center; gap: 8px; }
 .creacion-campo > svg { flex: 0 0 auto; }
-/* El control (input/botón único, o un grupo de chips .fila) ocupa el resto
-   del ancho de la fila junto al ícono. */
+/* El control (input/botón único, o un grupo segmentado .creacion-segmentado)
+   ocupa el resto del ancho de la fila junto al ícono. */
 .creacion-campo > *:not(svg) { flex: 1; min-width: 0; }
+
+/* Reparto desparejo de la fila inferior (disciplina | nacionalidad |
+   categoría), a propósito: con las 3 columnas parejas (1fr cada una) la de
+   categoría —la más apretada, 2 opciones contra 1 sola en disciplina— era la
+   que más sufría el espacio angosto de 390px. Grid (no flex) para fijar
+   proporciones exactas: disciplina hoy tiene un solo valor ("Boxeo", entra
+   sobrado en menos espacio), nacionalidad ya se cuida sola con su propio
+   "…" (.creacion-nacionalidad-nombre), y categoría recibe la porción más
+   grande de las tres. Sin @media: a cualquier ancho le viene bien, incluido
+   el desktop (#app tope 560px), no solo el celular donde se detectó el bug.
+   Si el catálogo de disciplinas crece algún día, este reparto es lo primero
+   a revisar. */
+.fila[data-fila="datos-inferior"] {
+  display: grid;
+  grid-template-columns: 0.7fr 1.1fr 1.2fr;
+}
 
 .creacion-control {
   width: 100%;
@@ -952,31 +968,55 @@ h2 { font-size: 17px; font-weight: 800; }
 
 input.creacion-control { cursor: text; }
 
-/* Chips de opción directa (mano hábil, disciplina, categoría): mismo control
-   visual que .creacion-control, uno por opción, agrupados en un .fila. Nada
-   de <select> salvo nacionalidad (que sigue siendo el botón de arriba). */
-.creacion-chip {
-  text-align: center;
+/* Control segmentado (mano hábil, disciplina, categoría, Paso 1): reemplaza
+   a los chips sueltos de antes (Task v4 bug reportado, verificación visual:
+   "Mediano" se truncaba a "Media…" en la fila de 390px — y ya acortado a
+   "Mediano" seguía sin entrar). No era el texto ni el ancho de la fila: era
+   el borde+padding de CADA chip más el gap entre ellos, que le robaba lugar
+   al texto en una columna angosta. Acá hay un solo borde para todo el
+   grupo — mismo alto (46px) y mismo radio que .creacion-control, pero las
+   opciones adentro comparten una sola caja con un divisor fino en vez de
+   dos tarjetas independientes. Nada de <select> salvo nacionalidad (que
+   sigue siendo el botón de arriba). */
+.creacion-segmentado {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.creacion-segmento {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  border: none;
+  background: none;
+  color: var(--texto);
+  font-family: var(--fuente);
   font-weight: 700;
-  /* Fila inferior (v4): disciplina, nacionalidad y categoría comparten una
-     sola fila de 3 columnas -- a 390px cada columna queda angosta (~115px) y
-     un chip de 2 palabras ("Peso mediano") podía envolver a dos líneas
-     dentro de la altura fija de 46px, desbordando el botón. Mismo criterio
-     que .creacion-nacionalidad-nombre: una sola línea, con "…" si no entra.
-     */
+  font-size: 12.5px;
+  text-align: center;
+  padding: 0 4px;
+  cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s var(--ease-out);
 }
 
-.creacion-chip:hover { border-color: var(--borde-fuerte); }
+.creacion-segmento + .creacion-segmento { border-left: 1px solid var(--borde); }
+.creacion-segmento:hover { background: var(--superficie-alta); }
+.creacion-segmento:active { transform: scale(0.97); }
 
-.creacion-chip.elegida {
-  border-color: var(--dorado);
-  color: var(--dorado);
+.creacion-segmento.elegida {
   background: #1a1408;
-  box-shadow: 0 0 0 1px var(--dorado);
+  color: var(--dorado);
 }
+
+.creacion-segmento.elegida:hover { background: #1a1408; }
 
 .creacion-nacionalidad {
   display: flex;
