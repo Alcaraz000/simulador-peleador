@@ -147,7 +147,10 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
     return 'sparring';
   }
 
-  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta');
+  // Con exactamente 2 opciones, la decisión usa `.panel-decision-grilla-2`
+  // en vez de la de 3 columnas de siempre (fix v3: no dejar una tercera
+  // columna vacía) — hay que buscar en ambas.
+  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta');
   if (tarjetaDecision) {
     tarjetaDecision.click();
     vi.runAllTimers();

@@ -38,11 +38,22 @@ function peleasTotales(jugador) {
   return v + d + e;
 }
 
+// Cabecera del peleador (revisión v3, feedback del usuario): antes, la MEDIA
+// (58×58) y el nombre/datos compartían una misma fila (`.fila` con la MEDIA
+// `flex:0 0 auto` y un `div flex:1` al lado) — en la columna angosta del
+// tablero (242px) el nombre le quedaban ~160px y se partía en tres líneas, y
+// la línea de datos (categoría·mano·edad / gimnasio·forma), aunque no
+// envolvía, se veía angosta con un espacio muerto a la derecha comparada con
+// el resto del panel. Ahora la MEDIA es un badge chico en la esquina
+// superior derecha (su propia fila, junto a la etiqueta del rango), y el
+// nombre + las dos líneas de datos usan el ANCHO COMPLETO del panel debajo,
+// sin compartir fila con nada.
 function cuadroMedia(jugador) {
   const media = mediaDe(jugador);
   const rango = rangoDeMedia(media);
   return el('div', { class: 'panel panel-peleador-cabecera', dataset: { accion: 'ficha' } }, [
-    el('div', { class: 'fila', style: 'align-items:center' }, [
+    el('div', { class: 'panel-peleador-cabecera-top' }, [
+      el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
       el('div', {
         class: 'rango-media',
         dataset: { rangoMedia: rango.id },
@@ -50,23 +61,21 @@ function cuadroMedia(jugador) {
       }, [
         el('div', { class: 'rango-media-num', text: String(media) }),
       ]),
-      el('div', { style: 'flex:1;min-width:0' }, [
-        el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
-        el('h1', { style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
-          bandera(jugador.nacionalidad, { ancho: 20 }),
-          `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
-        ]),
-        el('div', {
-          class: 'etiqueta',
-          text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
-        }),
-        el('div', {
-          class: 'etiqueta',
-          style: 'margin-top:2px',
-          text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
-        }),
-      ]),
     ]),
+    el('h1', { class: 'panel-peleador-nombre', style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
+      bandera(jugador.nacionalidad, { ancho: 20 }),
+      `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
+    ]),
+    el('div', {
+      class: 'etiqueta',
+      style: 'margin-top:6px',
+      text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
+    }),
+    el('div', {
+      class: 'etiqueta',
+      style: 'margin-top:2px',
+      text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
+    }),
   ]);
 }
 
@@ -96,6 +105,22 @@ function filaAtributo(clave, { base, aporte }) {
   ]);
 }
 
+// Especiales (`jugador.especiales`) y estado (`jugador.estado`) no vivían en
+// ningún lado del tablero: las tarjetas los modifican igual que a los
+// atributos de combate (aplicarCarta reparte por los tres grupos, ver
+// cards.js) y el jugador leía "+10 Forma" en una tarjeta sin que ese número
+// apareciera en ninguna parte (queja del usuario). Se muestran acá, en una
+// sección aparte y VISUALMENTE separada de los 6 de combate (que son los
+// únicos con aporte de entrenador) — nunca mezclados en la misma lista.
+// Fatiga y lesión quedan afuera: ya tienen su lugar en otra parte del
+// tablero (panel-avance.js) y no hace falta duplicarlas acá.
+const ESTADO_VISIBLE = ['menton', 'disciplinaPersonal', 'forma', 'moral'];
+
+function filaEstado(jugador, clave) {
+  const valor = clave in jugador.especiales ? jugador.especiales[clave] : jugador.estado[clave];
+  return filaAtributo(clave, { base: valor, aporte: 0 });
+}
+
 function bloqueAtributos(jugador) {
   const disciplina = getDisciplina(jugador.disciplina);
   const claves = disciplina.usaGrappling ? [...BASE, 'grappling'] : BASE;
@@ -103,10 +128,13 @@ function bloqueAtributos(jugador) {
   return el('div', { class: 'panel' }, [
     el('div', { class: 'fila', style: 'justify-content:space-between;align-items:center;margin-bottom:8px' }, [
       el('div', { class: 'etiqueta', text: 'Atributos' }),
-      el('div', { class: 'etiqueta dorado', style: 'letter-spacing:0.5px', text: '◐ aporte del entrenador' }),
+      el('span', { class: 'panel-peleador-aporte-etiqueta', text: 'aporte del entrenador' }),
     ]),
     el('div', { class: 'panel-peleador-atributos' },
       claves.map((c) => filaAtributo(c, desglose[c]))),
+    el('div', { class: 'etiqueta panel-peleador-estado-titulo', text: 'Estado' }),
+    el('div', { class: 'panel-peleador-atributos' },
+      ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
   ]);
 }
 

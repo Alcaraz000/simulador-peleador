@@ -156,6 +156,54 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain(p.jugador.gimnasio);
   });
 
+  // Diagnóstico del coordinador: las tarjetas modifican mentón/disciplina
+  // personal (jugador.especiales) y forma/moral (jugador.estado) igual que a
+  // los atributos de combate, pero ninguno de los cuatro aparecía en ningún
+  // lado del tablero — el jugador leía "+10 Forma" en una tarjeta sin poder
+  // verificarlo nunca. Fatiga y lesión quedan afuera a propósito (ya se
+  // muestran en panel-avance.js).
+  describe('seccion de estado (mentón, disciplina, forma, moral)', () => {
+    it('muestra mentón, disciplina personal, forma y moral con sus valores', () => {
+      const p = partidaBase();
+      p.jugador.especiales = { disciplinaPersonal: 47, menton: 63 };
+      p.jugador.estado = { ...p.jugador.estado, forma: 72, moral: 55 };
+      renderPanelPeleador(cont, { partida: p });
+
+      const filaMenton = cont.querySelector('[data-atributo="menton"]');
+      const filaDisciplina = cont.querySelector('[data-atributo="disciplinaPersonal"]');
+      const filaForma = cont.querySelector('[data-atributo="forma"]');
+      const filaMoral = cont.querySelector('[data-atributo="moral"]');
+
+      expect(filaMenton.querySelector('.valor').textContent).toBe('63');
+      expect(filaDisciplina.querySelector('.valor').textContent).toBe('47');
+      expect(filaForma.querySelector('.valor').textContent).toBe('72');
+      expect(filaMoral.querySelector('.valor').textContent).toBe('55');
+    });
+
+    it('no muestra fatiga ni lesion en la seccion de estado (ya viven en otro lado del tablero)', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.querySelector('[data-atributo="fatiga"]')).toBeNull();
+      expect(cont.querySelector('[data-atributo="lesion"]')).toBeNull();
+    });
+
+    it('las filas de estado no llevan el badge de aporte del entrenador (eso es solo de los 6 de combate)', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      const filaForma = cont.querySelector('[data-atributo="forma"]');
+      expect(filaForma.classList.contains('con-aporte')).toBe(false);
+      expect(filaForma.querySelector('.aporte-entrenador')).toBeNull();
+    });
+  });
+
+  it('"aporte del entrenador" se muestra como una etiqueta chica, no como un titulo', () => {
+    const p = partidaBase();
+    renderPanelPeleador(cont, { partida: p });
+    const tag = cont.querySelector('.panel-peleador-aporte-etiqueta');
+    expect(tag).toBeTruthy();
+    expect(tag.textContent).toContain('aporte del entrenador');
+  });
+
   it('dispara los callbacks de ficha, tienda e historial', () => {
     const p = partidaBase();
     let ficha = 0; let tienda = 0; let historial = 0;

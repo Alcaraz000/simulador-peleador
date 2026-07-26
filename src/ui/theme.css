@@ -364,6 +364,25 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .shell-destacada { animation: destaque-shell 0.9s ease; border-radius: 12px; }
 
+/* Resalte por FILA de atributo (v3): reemplaza el flash de TODO el módulo
+   izquierdo (.shell-destacada, ya no se usa para esto) — al aplicar una
+   tarjeta, solo se destacan un momento las filas que de verdad cambiaron:
+   verde si subieron, rojo si bajaron. Mismo patrón que destaque-shell (0.9s,
+   arranca y termina en "sin brillo") para no necesitar sacarse la clase a
+   mano con un timer aparte. */
+@keyframes destaque-fila-positiva {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px var(--verde), 0 0 14px rgba(143, 214, 148, 0.45); }
+}
+
+@keyframes destaque-fila-negativa {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px var(--rojo), 0 0 14px rgba(239, 68, 68, 0.45); }
+}
+
+.panel-peleador-atributo.destaque-positivo { animation: destaque-fila-positiva 0.9s ease; }
+.panel-peleador-atributo.destaque-negativo { animation: destaque-fila-negativa 0.9s ease; }
+
 @media (min-width: 900px) {
   .shell { flex-direction: row; align-items: flex-start; }
   .shell-izquierda { flex: 0 0 242px; }
@@ -375,18 +394,31 @@ h2 { font-size: 17px; font-weight: 800; }
 /* Tablero: columna izquierda (v2) */
 .panel-peleador-cabecera { cursor: pointer; }
 
+/* Cabecera del peleador (v3): la MEDIA es un badge chico en la esquina
+   superior derecha de su propia fila (junto a la etiqueta del rango); el
+   nombre y los datos van DEBAJO, a todo el ancho del panel — nunca comparten
+   fila con el badge, así no se aprietan ni dejan espacio muerto. */
+.panel-peleador-cabecera-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-peleador-nombre { margin-top: 6px; font-size: 18px; line-height: 1.2; }
+
 .rango-media {
   flex: 0 0 auto;
-  width: 58px;
-  height: 58px;
-  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
   border: 2px solid;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.rango-media-num { font-size: 24px; font-weight: 800; line-height: 1; }
+.rango-media-num { font-size: 19px; font-weight: 800; line-height: 1; }
 
 .panel-peleador-atributos { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
 
@@ -401,6 +433,28 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-peleador-atributo.con-aporte { background: #1a1408; }
 .panel-peleador-atributo .valor { font-size: 13px; }
 .aporte-entrenador { font-size: 9.5px; color: var(--dorado); font-weight: 800; }
+
+/* "aporte del entrenador" (v3): antes era un segundo título del mismo peso
+   visual que "Atributos" (queja del usuario); ahora es una etiqueta chica y
+   atenuada, como un chip informativo, no un encabezado más. */
+.panel-peleador-aporte-etiqueta {
+  flex: 0 0 auto;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--texto-sutil);
+  background: #1a1408;
+  border-radius: 20px;
+  padding: 3px 8px;
+  opacity: 0.8;
+}
+
+/* Sección "Estado" (v3): mentón, disciplina personal, forma y moral, ya
+   modificados por las tarjetas pero sin ningún lugar en el tablero hasta
+   ahora. Visualmente separada de los 6 atributos de combate (los únicos con
+   aporte de entrenador) con un filete y su propia etiqueta chica. */
+.panel-peleador-estado-titulo { margin: 10px 0 8px; padding-top: 9px; border-top: 1px solid var(--borde); }
 
 .tu-rincon .rincon-iniciales {
   flex: 0 0 auto;
