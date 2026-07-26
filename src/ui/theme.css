@@ -346,11 +346,11 @@ h2 { font-size: 17px; font-weight: 800; }
   animation: aparecer 0.25s ease both;
 }
 
-.tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.tarjeta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
 .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
 .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
 .tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
-.tarjeta:not(:disabled):active { transform: translateY(0) scale(0.99); }
+.tarjeta:not(:disabled):active { transform: translateY(0) scale(0.97); }
 
 @media (min-width: 720px) {
   #app { max-width: 560px; }
@@ -687,13 +687,13 @@ h2 { font-size: 17px; font-weight: 800; }
 #app > .stack > *:nth-child(3) { animation-delay: 0.06s; }
 #app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
 
-.carta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.carta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
 .carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
-.carta:active { transform: translateY(0) scale(0.99); }
+.carta:active { transform: translateY(0) scale(0.97); }
 
-.boton { transition: transform 0.1s ease, filter 0.15s ease; }
+.boton { transition: transform 0.14s var(--ease-out), filter 0.15s ease; }
 .boton:hover { filter: brightness(1.08); }
-.boton:active { transform: scale(0.98); }
+.boton:active { transform: scale(0.97); }
 
 .barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 
@@ -858,7 +858,15 @@ h2 { font-size: 17px; font-weight: 800; }
   justify-content: center;
   padding: 16px;
   z-index: 1000;
-  animation: aparecer 0.15s ease both;
+  /* Solo el fondo se desvanece (no tiene "de dónde viene": es un velo de
+     pantalla completa, trasladarlo no significa nada) — el panel de adentro
+     trae su propia entrada, ver .popup-panel. */
+  animation: popup-fondo-aparece 0.15s ease both;
+}
+
+@keyframes popup-fondo-aparece {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .popup-panel {
@@ -870,6 +878,15 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 14px;
   padding: 14px;
+  /* Modal (no anclado a un disparador puntual): transform-origin queda en el
+     centro por defecto a propósito. Arranca en 0.96 (nunca 0, nada aparece
+     de la nada) — no en cero. */
+  animation: popup-panel-aparece 0.2s var(--ease-out) both;
+}
+
+@keyframes popup-panel-aparece {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .popup-cabecera {
