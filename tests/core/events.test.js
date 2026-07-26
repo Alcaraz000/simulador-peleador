@@ -128,6 +128,36 @@ describe('elegirEvento', () => {
     expect(pct('rara')).toBeLessThan(45);
     expect(pct('legendaria')).toBeLessThan(15);
   });
+
+  // Guarda de contenido (Task 6.2, revisión del coordinador): en juvenil y
+  // amateur, categoría 'evento' llegó a tener UN SOLO elemento elegible
+  // (sparring_idolo, el único con etapas: SIEMPRE — todos los demás eran
+  // etapas: PRO). elegirPorRareza no tiene margen para que el peso
+  // "legendaria" (~5%) importe cuando es la única carta del pool: salía
+  // garantizado, no por suerte (medido: 56% de las carreras, no ~5%). Este
+  // test vigila que el pool de 'evento' en juvenil/amateur tenga variedad
+  // real y que la proporción de rarezas vuelva a acercarse a 70/25/5, no
+  // que "haya al menos una carta más" y siga estando desbalanceado.
+  it('sobre muchas semillas en juvenil, la categoria "evento" tambien cae cerca de 70/25/5 (no solo la legendaria)', () => {
+    const conteo = { normal: 0, rara: 0, legendaria: 0 };
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const carta = elegirEvento(createRng(semilla), { jugador: jugador(), etapa: 'juvenil', categoria: 'evento' });
+      conteo[carta.rareza] += 1;
+    }
+    const pct = (n) => (100 * conteo[n]) / 500;
+    expect(pct('normal')).toBeGreaterThan(50);
+    expect(pct('rara')).toBeGreaterThan(10);
+    expect(pct('rara')).toBeLessThan(45);
+    expect(pct('legendaria')).toBeLessThan(15);
+  });
+
+  it('en juvenil y amateur, la categoria "evento" tiene mas de una carta elegible (no solo la legendaria)', () => {
+    for (const etapa of ['juvenil', 'amateur']) {
+      const elegibles = CARTAS_EVENTO.filter((c) => c.categoria === 'evento' && c.etapas.includes(etapa));
+      expect(elegibles.length).toBeGreaterThanOrEqual(4);
+      expect(elegibles.some((c) => c.rareza === 'normal')).toBe(true);
+    }
+  });
 });
 
 describe('elegirCartaRedes', () => {

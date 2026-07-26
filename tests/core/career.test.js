@@ -375,6 +375,23 @@ describe('progresión de cinturones', () => {
   // sigma de esa media real (~87%), y sigue siendo el ≥85% jugando bien que
   // pide el brief de la Task 6 — no hizo falta tocar el piso, alcanzó con
   // agrandar la muestra otra vez.
+  //
+  // Revisión del coordinador (misma Task 6.3, después de sumar contenido de
+  // 'evento' para juvenil/amateur — ver events.test.js): pidió intentar
+  // bajar a n=1000 antes de aceptar n=3000, porque n=3000 triplicó el
+  // tiempo de este test solo. Medido: n=1000 (semillas 1-1000) da 86.50%,
+  // apenas ~1.6 puntos sobre el piso de 0.85 — con la desviación real de
+  // ~1.06pp a ese tamaño de muestra, son ~1.6 sigma, no los ">2 sigma
+  // largos" que se esperaba. Seis sub-muestras de 1000 semillas cada una
+  // (1-1000, 1001-2000, ..., 5001-6000) dieron 86.5% / 86.4% / 87.5% /
+  // 85.3% / 89.4% / 88.8% — una de las seis quedó a apenas 0.3 puntos del
+  // piso. Con n=3000 esa misma dispersión no se vio (86.80%, y n=5000 da
+  // 87.02%: convergen). Se decidió, según el criterio que dio el
+  // coordinador ("si con 1000 resulta inestable, dejá 3000"), mantener
+  // n=3000: no es una preferencia por la suite lenta porque sí, es que la
+  // muestra de 1000 no deja margen suficiente para el próximo cambio de
+  // contenido que vuelva a correr esta secuencia de rng compartida (van
+  // dos en esta misma task).
   it('sobre muchas semillas (3000), al menos el 85% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
     const total = 3000;
     let conLosTres = 0;

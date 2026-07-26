@@ -1,7 +1,58 @@
 const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
 const PRO = ['profesional', 'veterano'];
+const JOVEN = ['juvenil', 'amateur'];
 
 export const CARTAS_EVENTO = [
+  // Juvenil/amateur (Task 6.2, revisión del coordinador): antes de esto, la
+  // categoría 'evento' en estas dos etapas tenía UNA sola carta elegible —
+  // sparring_idolo, la legendaria (ver el comentario más abajo) — porque
+  // todas las demás eran etapas: PRO. Con un pool de uno, "legendaria ~5%"
+  // no significaba nada: salía garantizado (medido: 56% de las carreras).
+  // Estas cinco son propias de esa edad (16-20), no versiones diluidas de
+  // las de profesional: la escuela, la plata, el laburo, el club que te
+  // sostenía, la familia que no te banca. Con esto el pool de 'evento' en
+  // juvenil/amateur pasa a tener el mismo peso normal/rara/legendaria que
+  // el resto del catálogo (ver el test de distribución en events.test.js).
+  {
+    id: 'escuela_o_gimnasio', categoria: 'evento', titulo: 'El examen y el sparring', etapas: JOVEN, rareza: 'normal',
+    texto: 'La profesora avisa: si faltás a la prueba, repetís la materia. Justo cae el mismo día que el sparring fuerte.',
+    opciones: [
+      { id: 'rendir', texto: 'Rendir el examen.', mods: { disciplinaPersonal: 5, forma: -3 } },
+      { id: 'entrenar', texto: 'Faltar y entrenar.', mods: { forma: 4, disciplinaPersonal: -5 } },
+    ],
+  },
+  {
+    id: 'laburo_para_bancarse', categoria: 'evento', titulo: 'El turno tarde', etapas: JOVEN, rareza: 'normal',
+    texto: 'En el almacén te ofrecen turno tarde: buena plata, pero se cruza con el horario fuerte del gimnasio.',
+    opciones: [
+      { id: 'tomar', texto: 'Tomar el turno.', efectos: { dinero: 15000 }, mods: { forma: -4 } },
+      { id: 'rechazar', texto: 'Rechazarlo y seguir entrenando full.', mods: { forma: 5, disciplinaPersonal: 2 } },
+    ],
+  },
+  {
+    id: 'familia_no_ve_futuro', categoria: 'evento', titulo: 'Che, dejá el boxeo', etapas: JOVEN, rareza: 'normal',
+    texto: 'En casa insisten: "esto no te va a dar de comer". Quieren que te anotes en un curso y dejes el gimnasio.',
+    opciones: [
+      { id: 'plantarte', texto: 'Plantarte: esto lo seguís haciendo.', mods: { disciplinaPersonal: 5, moral: -4 } },
+      { id: 'ceder', texto: 'Anotarte en el curso igual, para tenerlos tranquilos.', mods: { moral: 6, forma: -4 } },
+    ],
+  },
+  {
+    id: 'club_que_cierra', categoria: 'evento', titulo: 'El club baja la persiana', etapas: JOVEN, rareza: 'rara',
+    texto: 'El club de tu barrio no pudo pagar el alquiler. De un día para el otro, no hay más gimnasio ahí.',
+    opciones: [
+      { id: 'gimnasio_lejos', texto: 'Buscar un gimnasio más lejos, con mejor equipamiento.', mods: { tecnica: 4, defensa: 2, forma: -3 } },
+      { id: 'como_se_pueda', texto: 'Armar algo con lo que hay: la plaza, el club de la parroquia, lo que aparezca.', mods: { disciplinaPersonal: 6, potencia: -2 } },
+    ],
+  },
+  {
+    id: 'primer_viaje_afuera', categoria: 'evento', titulo: 'La primera vez que salís a pelear', etapas: JOVEN, rareza: 'rara',
+    texto: 'Te toca viajar solo, por primera vez, a pelear a otra provincia. Doce horas de micro y una cama que no es la tuya.',
+    opciones: [
+      { id: 'aprovechar', texto: 'Aprovechar el viaje: conocer, mirar otros gimnasios, hacer contactos.', mods: { iq: 4, disciplinaPersonal: 2, cardio: -2 } },
+      { id: 'enfocarte', texto: 'No distraerte con nada: dormir, comer bien, pensar solo en la pelea.', mods: { forma: 6, cardio: 2 } },
+    ],
+  },
   {
     id: 'dopaje', categoria: 'evento', titulo: 'El sobre en el vestuario', etapas: PRO, rareza: 'rara',
     texto: 'Un tipo de traje te deja un sobre. "Es legal en casi todos lados", dice. Casi.',
