@@ -114,9 +114,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
-    // semilla 1 -> carta "cancelacion", ninguna opcion tiene probabilidades
-    // (verificado aparte con el catalogo real): ejercita el camino sin roll.
-    iniciar(cont, prepararPartidaGuardada('evento', 1));
+    // semilla 2 -> carta "escuela_o_gimnasio", ninguna opcion tiene
+    // probabilidades (verificado aparte con el catalogo real): ejercita el
+    // camino sin roll. (Antes era la semilla 1 con "cancelacion": las cartas
+    // de riesgo nuevas de Task v3 — ver cards-events.js — corren la secuencia
+    // de rng de 'evento' y esa semilla dejó de llegar a esa carta puntual.)
+    iniciar(cont, prepararPartidaGuardada('evento', 2));
     continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
@@ -133,16 +136,14 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 52 -> el PRIMER beat 'evento' de esta carrera es justo la
-    // carta "entrenador", cuya primera opción ("cambiar") tiene
-    // probabilidades (verificado aparte): ejercita el camino con roll.
-    // (Antes era la semilla 31, pero el rebalance del campamento de
-    // preparación — Task v3: 'mejora' ahora se salta con
-    // partida.saltarProximaMejora en el bloque que sigue a una pelea
-    // firmada, ver el comentario en armarCola/career.js — corre la
-    // secuencia de rng de toda carrera que llega a firmar una pelea, y esa
-    // semilla dejó de llegar a esta carta en concreto.)
-    iniciar(cont, prepararPartidaGuardada('evento', 52));
+    // semilla 5 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
+    // cards-events.js), cuya opción "aceptar" tiene probabilidades
+    // (verificado aparte): ejercita el camino con roll. (Antes era la
+    // semilla 52 con "entrenador"/"cambiar": las cartas nuevas de riesgo
+    // corren la secuencia de rng de 'evento' y esa semilla dejó de llegar a
+    // esa carta puntual.)
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -152,9 +153,9 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     const refIzquierda = cont.querySelector('.shell-izquierda');
     const refDerecha = cont.querySelector('.shell-derecha');
 
-    // "entrenador" tiene exactamente 2 opciones -> grilla de 2 columnas
-    // (fix v3), no la de 3 de siempre.
-    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    // "desafio_de_la_vereda" tiene exactamente 2 opciones -> grilla de 2
+    // columnas (fix v3), no la de 3 de siempre.
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
     expect(tarjetaAzar.querySelectorAll('.tarjeta-efecto').length).toBe(2);
 
@@ -173,7 +174,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(iluminados).toHaveLength(1);
     const resultado = tarjetaAzar.querySelector('.tarjeta-resultado');
     expect(resultado).toBeTruthy();
-    expect(resultado.textContent).toMatch(/aprendés cosas nuevas|No enganchaste con el método/);
+    expect(resultado.textContent).toMatch(/El barrio entero se entera|la lección aprendida/);
 
     // Todavía no se aplicó el efecto ni se volvió al estado ocioso: la
     // tarjeta con el resultado se deja un momento a la vista (pausa de
@@ -292,6 +293,72 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 });
 
+// Task v3 ("cartas nuevas con azar"): la consecuencia "se cae la pelea" tiene
+// que ser real de punta a punta, no solo un texto en la tarjeta — este
+// bloque verifica el camino completo por la UI (main.js), no solo la lógica
+// pura de career.js/events.js (ya cubierta en sus propios tests). Para que el
+// resultado sea determinístico sin depender de la suerte del roll interno
+// (que usa un rng aparte, sembrado en `iniciar()`), la carta real que salió
+// se reemplaza por una sintética con una sola rama posible (peso 0 en la
+// segura, peso 1 en la de `caePelea: true`) — el resto de la partida (la
+// oferta pendiente de verdad, generada por `armarCola`) queda intacto.
+describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no solo en el texto)', () => {
+  function partidaConOfertaYCartaDeRiesgo() {
+    const storage = crearStorageFalso();
+    storage.setItem(CLAVE_ACCESO, '1');
+    const jugador = crearPeleador({
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+    });
+    // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
+    // Y, más adelante en la misma cola, una 'oferta' — proximaPelea ya queda
+    // seteado antes de llegar a ninguno de los dos (verificado aparte).
+    const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
+    const partida = avanzarHasta(inicial, 'evento');
+    expect(partida.proximaPelea).not.toBeNull();
+    expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
+
+    const cartaSintetica = {
+      id: 'riesgo_de_prueba', categoria: 'evento', titulo: 'Riesgo de prueba', texto: 'x',
+      etapas: ['profesional'], rareza: 'normal',
+      opciones: [
+        { id: 'aceptar', texto: 'Arriesgarse', probabilidades: [
+          { peso: 0, mods: {}, texto: 'no sale nunca en este test' },
+          { peso: 1, mods: {}, efectos: { fama: -10 }, caePelea: true, texto: 'Se cayó la pelea, de verdad.' },
+        ] },
+        { id: 'rechazar', texto: 'No arriesgarse', mods: {} },
+      ],
+    };
+    const conCartaSintetica = {
+      ...partida,
+      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, partida.cola[1]],
+    };
+    guardar(conCartaSintetica, storage);
+    return storage;
+  }
+
+  it('elegir la rama que cae la pelea saca la oferta de la cola y limpia proximaPelea: el panel de la derecha deja de mostrar al rival', () => {
+    iniciar(cont, partidaConOfertaYCartaDeRiesgo());
+    continuar();
+
+    // Antes de elegir: el panel de "próxima pelea" (columna derecha) todavía
+    // muestra al rival — la oferta sigue en danza.
+    expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+
+    const tarjetaRiesgo = cont.querySelector('[data-opcion="aceptar"]');
+    expect(tarjetaRiesgo).toBeTruthy();
+    tarjetaRiesgo.click();
+    vi.runAllTimers();
+
+    // Después: la pelea se cayó de verdad. El panel de la derecha ya no
+    // muestra al rival (volvió al estado vacío), y "Continuar" no lleva a
+    // ningún beat de tipo 'oferta' — se sacó de la cola, no solo del texto.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
+    expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeNull();
+    expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeNull();
+  });
+});
+
 // Hallazgo 1 de la revisión final (antes de publicar la v2): el timer del
 // roll de una carta con azar (dopaje/chantaje/entrenador) nunca se cancela.
 // Si el jugador entra a la Ficha ANTES de que el roll termine, el timer
@@ -307,12 +374,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 52 -> carta "entrenador", la opción "cambiar" SI tiene
+    // semilla 5 -> carta "desafio_de_la_vereda", la opción "aceptar" SI tiene
     // probabilidades (mismo caso ya usado más arriba para probar el roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 52));
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
 
     tarjetaAzar.click();
@@ -347,10 +414,10 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    iniciar(cont, prepararPartidaGuardada('evento', 52));
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
     vi.advanceTimersByTime(400);
 

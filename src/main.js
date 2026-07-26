@@ -1,5 +1,7 @@
 import { createRng } from './core/rng.js';
-import { crearPartida, siguienteBeat, firmarPelea } from './core/career.js';
+import {
+  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea,
+} from './core/career.js';
 import { tablaRanking } from './core/world.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
@@ -62,8 +64,12 @@ function efectosDeMods(mods = {}) {
 
 // Para una rama de azar (varios mods juntos bajo un mismo porcentaje), el
 // signo de la píldora se decide por el balance neto, no atributo por
-// atributo (la fatiga cuenta invertida: menos fatiga suma).
-function signoDeRama(mods) {
+// atributo (la fatiga cuenta invertida: menos fatiga suma). `caePelea`
+// (Task v3, "cartas nuevas con azar") siempre pesa negativo, aunque la rama
+// también traiga algún mod positivo suelto: perder la pelea que tenías en
+// danza es la consecuencia grave, no un detalle menor.
+function signoDeRama(mods, { caePelea = false } = {}) {
+  if (caePelea) return 'negativo';
   const neto = Object.entries(mods).reduce(
     (acc, [clave, valor]) => acc + (clave === 'fatiga' ? -valor : valor), 0,
   );
@@ -76,6 +82,25 @@ function fmtDineroSigno(n) {
   return `${n > 0 ? '+' : '-'}US$ ${Math.abs(n).toLocaleString('es-AR')}`;
 }
 
+// Texto completo de una rama de `probabilidades`: los mods (como siempre) más,
+// si esa rama en particular los declara (Task v3, "cartas nuevas con azar"),
+// su propio dinero/fama y el aviso "Se cae la pelea" — todo en la MISMA
+// píldora (que ya lleva el % adelante, puesto por `labelEfecto` en card.js),
+// para que el jugador vea de un vistazo qué arriesga en esa rama puntual.
+function textoDeRama(opcion, rama) {
+  const partes = [];
+  const modsTexto = formatearMods({ ...(opcion.mods ?? {}), ...rama.mods }).join(' ');
+  if (modsTexto) partes.push(modsTexto);
+  if (typeof rama.efectos?.dinero === 'number' && rama.efectos.dinero !== 0) {
+    partes.push(fmtDineroSigno(rama.efectos.dinero));
+  }
+  if (typeof rama.efectos?.fama === 'number' && rama.efectos.fama !== 0) {
+    partes.push(`${rama.efectos.fama > 0 ? '+' : ''}${rama.efectos.fama} Fama`);
+  }
+  if (rama.caePelea) partes.push('Se cae la pelea');
+  return partes.join(' · ');
+}
+
 // Arma los `efectos` (píldoras) de una opción de evento/redes: si tiene
 // `probabilidades`, una píldora por rama con su porcentaje (via
 // porcentajesDe, Task 3.1); si no, una píldora por mod fijo más las de
@@ -84,8 +109,8 @@ function efectosDeOpcion(opcion) {
   const porcentajes = porcentajesDe(opcion);
   if (porcentajes.length > 0) {
     return opcion.probabilidades.map((rama, i) => ({
-      texto: formatearMods({ ...(opcion.mods ?? {}), ...rama.mods }).join(' '),
-      signo: signoDeRama({ ...(opcion.mods ?? {}), ...rama.mods }),
+      texto: textoDeRama(opcion, rama),
+      signo: signoDeRama({ ...(opcion.mods ?? {}), ...rama.mods }, { caePelea: rama.caePelea }),
       probabilidad: porcentajes[i],
     }));
   }
@@ -450,21 +475,24 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'campSparring') return beatCampSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
-    if (beat.tipo === 'noticias') return beatNoticias();
     return irADashboard();
   }
 
-  // 'lesionSinOferta' y 'noticias' son beats simples (nada que jugar, solo un
-  // aviso) que en la v1/pre-6.1 abrían su PROPIA pantalla completa
-  // (renderResultadoTarjeta / renderNoticias). Con "los beats van al centro"
-  // (brief de la Task 6.1) pasan a vivir en la misma región central del
-  // tablero, reusando renderDesenlace (mismo layout: título + texto + botón
-  // Seguir, sin deltas). Esto deja huérfano a renderNoticias (screens/news.js
-  // — se borra junto con sus tests). `renderResultadoTarjeta` (screens/card.js)
-  // quedó huérfano después (Task v3): el resultado post-pelea pasó a vivir
-  // DENTRO de la propia pantalla de pelea (renderPelea con `despues`), así
-  // que se borró junto con su test — el rechazo de oferta ya resolvía en el
-  // centro (ver beatOferta) desde antes.
+  // 'lesionSinOferta' es un beat simple (nada que jugar, solo un aviso) que
+  // en la v1/pre-6.1 abría su PROPIA pantalla completa (renderResultadoTarjeta).
+  // Con "los beats van al centro" (brief de la Task 6.1) pasa a vivir en la
+  // misma región central del tablero, reusando renderDesenlace (mismo layout:
+  // título + texto + botón Seguir, sin deltas). El beat 'noticias' (mismo
+  // patrón, pero para "circuló algo, mirá a la derecha") se sacó del todo
+  // (Task v3, "cartas nuevas + progresión"): las noticias ya viven siempre
+  // visibles en la columna derecha (panel-noticias.js), así que interrumpir
+  // la carrera para avisar lo mismo que ya se ve al lado era presupuesto de
+  // ritmo gastado en nada — ver el comentario largo sobre ETAPAS en
+  // career.js. `renderResultadoTarjeta` (screens/card.js) quedó huérfano
+  // antes (Task v3): el resultado post-pelea pasó a vivir DENTRO de la propia
+  // pantalla de pelea (renderPelea con `despues`), así que se borró junto con
+  // su test — el rechazo de oferta ya resolvía en el centro (ver beatOferta)
+  // desde antes.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
     const bloques = lesion?.bloquesRestantes ?? null;
@@ -473,20 +501,6 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       texto: lesion
         ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
         : 'Nadie te ofrece pelear mientras estás lesionado.',
-      deltasTexto: [],
-      onContinuar: irADashboard,
-    }));
-  }
-
-  function beatNoticias() {
-    // El feed de noticias (panel-noticias.js, columna derecha) ya está
-    // siempre visible y siempre actualizado en el tablero persistente: este
-    // beat solo le pone ritmo a la carrera (consume su turno) y avisa que
-    // circuló algo, en vez de forzar una pantalla aparte para lo mismo que ya
-    // se ve al lado.
-    centro(() => renderDesenlace(centroContenido(), {
-      titulo: 'El mundo sigue girando',
-      texto: 'Circularon resultados y rumores de otros peleadores esta semana. Date una vuelta por las noticias, a la derecha.',
       deltasTexto: [],
       onContinuar: irADashboard,
     }));
@@ -541,9 +555,19 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           rivalidades: partida.rivalidades, rivalObjetivoId,
         });
 
-        const aplicar = () => aplicarEfectoYSeguir({
-          jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
-        });
+        // `caePelea` (Task v3, "cartas nuevas con azar"): la rama que salió
+        // canceló de verdad la pelea que estuviera en danza este bloque, no
+        // solo en el texto de la tarjeta — ver cancelarProximaPelea en
+        // career.js. Se aplica ANTES de aplicarEfectoYSeguir (que pinta el
+        // tablero ocioso): así el panel de "próxima pelea" ya sale limpio en
+        // el mismo repintado, sin un instante intermedio con la oferta vieja
+        // todavía puesta.
+        const aplicar = () => {
+          if (resuelto.caePelea) partida = cancelarProximaPelea(partida);
+          aplicarEfectoYSeguir({
+            jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
+          });
+        };
 
         if (!opcion.probabilidades) { aplicar(); return; }
 
