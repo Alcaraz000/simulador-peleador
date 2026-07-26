@@ -4,7 +4,9 @@ import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { generarOferta, CINTURONES } from './offers.js';
 import { crearSparring } from './sparring.js';
-import { noticiasDeSucesos, agregarNoticias } from './news.js';
+import {
+  noticiasDeSucesos, agregarNoticias, marcarLeidas,
+} from './news.js';
 import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
@@ -195,7 +197,19 @@ export function avanzarBloque(partida) {
       nueva: true,
     });
   }
-  nueva.noticias = agregarNoticias(nueva.noticias, nuevas);
+  // Causa real del bug reportado ("todas las noticias dicen ÚLTIMO MOMENTO,
+  // aunque sean de antes"): `marcarLeidas` (news.js) apaga la marca "nueva",
+  // pero antes de este fix el ÚNICO lugar que la llamaba era el click del
+  // acordeón en panel-noticias.js — un gesto que en PC no hace falta nunca
+  // (la lista ya está siempre visible debajo del botón, ver
+  // `.panel-noticias-lista` en theme.css, sin display:none salvo en celular)
+  // y que en celular casi nadie toca ANTES de que llegue la próxima tanda.
+  // Sin ese click, "nueva" nunca se apagaba: cada tanda se sumaba encima de
+  // las anteriores y TODO el feed quedaba marcado como último momento para
+  // siempre. La marca tiene que apagarse sola cuando deja de ser la tanda más
+  // reciente: acá, al sumar esta tanda nueva, la anterior ya tuvo su
+  // bloque entero para mostrarse como tal — a partir de ahora es "vieja".
+  nueva.noticias = agregarNoticias(marcarLeidas(nueva.noticias), nuevas);
 
   nueva.rngEstado = rng.estado();
   return nueva;

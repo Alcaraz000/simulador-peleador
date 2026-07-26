@@ -193,6 +193,43 @@ describe('avanzarBloque', () => {
     expect(despues.noticias.length).toBeGreaterThan(0);
   });
 
+  // Causa real del bug reportado por el usuario ("todas las noticias dicen
+  // ÚLTIMO MOMENTO, aunque sean de antes"): antes de este fix, lo único que
+  // llamaba a `marcarLeidas` (news.js) era el click del acordeón en
+  // panel-noticias.js — un gesto que en PC no hace falta nunca (la lista ya
+  // está siempre visible debajo del botón) y que en la práctica casi nadie
+  // dispara antes de que llegue la siguiente tanda. `avanzarBloque` es el
+  // flujo real del juego que suma noticias nuevas (una vez por bloque): tiene
+  // que apagar la marca de la tanda anterior al sumar la propia.
+  it('una tanda anterior deja de estar marcada "nueva" al sumarse una tanda nueva (causa real del bug ÚLTIMO MOMENTO)', () => {
+    const p = nuevaPartida();
+    p.noticias = [{
+      id: 'noticia_vieja', tipo: 'victoria', titular: 'x', cuerpo: 'x', fecha: 2020, nueva: true,
+    }];
+    const despues = avanzarBloque(p);
+
+    const vieja = despues.noticias.find((n) => n.id === 'noticia_vieja');
+    expect(vieja).toBeTruthy();
+    expect(vieja.nueva).toBe(false);
+
+    // La tanda recién generada en ESTE bloque sí queda marcada como nueva.
+    const restantes = despues.noticias.filter((n) => n.id !== 'noticia_vieja');
+    expect(restantes.length).toBeGreaterThan(0);
+    expect(restantes.every((n) => n.nueva === true)).toBe(true);
+  });
+
+  it('avanzando varios bloques seguidos, nunca queda más de una tanda marcada "nueva" a la vez', () => {
+    let p = nuevaPartida();
+    for (let i = 0; i < 5; i += 1) p = avanzarBloque(p);
+
+    const idsDeLaUltimaTanda = p.noticias.filter((n) => n.nueva).map((n) => n.id);
+    expect(idsDeLaUltimaTanda.length).toBeGreaterThan(0);
+
+    const otraVuelta = avanzarBloque(p);
+    const siguenNuevas = otraVuelta.noticias.filter((n) => idsDeLaUltimaTanda.includes(n.id) && n.nueva);
+    expect(siguenNuevas).toHaveLength(0);
+  });
+
   it('recupera lesiones con el paso de los bloques', () => {
     const p = nuevaPartida();
     p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' };
