@@ -26,8 +26,21 @@ describe('niveles', () => {
 
   it('cada nivel mapea a un nivel de pelea valido', () => {
     for (const n of Object.values(NIVELES)) {
-      expect(['amateur', 'profesional', 'titulo']).toContain(n.nivelPelea);
+      expect(['amateur', 'profesional', 'eliminatoria', 'titulo']).toContain(n.nivelPelea);
     }
+  });
+
+  // Barrida de experto en boxeo (Pedido 4, v6): una eliminatoria define quién
+  // pasa a disputar el título — en el boxeo real, un final eliminator de un
+  // organismo importante casi siempre se pelea a distancia de campeonato (12
+  // rounds), no a la distancia genérica de una cartelera regional cualquiera
+  // (8). Antes `NIVELES.eliminatoria.nivelPelea` era 'profesional' a secas,
+  // así que compartía los mismos 8 rounds que un combate de trámite —
+  // desentonaba con que ya se trata como una pelea IMPORTANTE en todo lo
+  // demás (careo, campamento, bolsa 1.8x).
+  it('la eliminatoria tiene su propio nivel de pelea, distinto del regional de tramite', () => {
+    expect(NIVELES.eliminatoria.nivelPelea).not.toBe('profesional');
+    expect(NIVELES.eliminatoria.nivelPelea).not.toBe(NIVELES.regional.nivelPelea);
   });
 });
 

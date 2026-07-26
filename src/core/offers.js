@@ -8,7 +8,13 @@ import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/co
 export const NIVELES = {
   local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4, famaBase: 2 },
   regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1, famaBase: 4 },
-  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'profesional', multiplicadorBolsa: 1.8, famaBase: 7 },
+  // `nivelPelea: 'eliminatoria'` (Pedido 4, barrida de experto en boxeo): antes
+  // era 'profesional' a secas, así que se peleaba a 8 rounds — la misma
+  // distancia que una regional de trámite. Es la pelea que define el ascenso
+  // al puesto de retador: en el boxeo real, un final eliminator se juega a
+  // distancia de campeonato, no a la de una cartelera cualquiera (ver
+  // roundsPorNivel en disciplines.js, ahora con su propia entrada).
+  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8, famaBase: 7 },
   titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4, famaBase: 15 },
   defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2, famaBase: 10 },
 };
