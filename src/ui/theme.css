@@ -383,6 +383,23 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-peleador-atributo.destaque-positivo { animation: destaque-fila-positiva 0.9s ease; }
 .panel-peleador-atributo.destaque-negativo { animation: destaque-fila-negativa 0.9s ease; }
 
+/* Dado al tocar Continuar (v3): el gesto de transición entre beats. Gira y
+   "rebota" una vez, corto (750ms), sobre el propio botón. */
+@keyframes tirar-dado {
+  0%   { transform: rotate(0deg) scale(1); }
+  30%  { transform: rotate(150deg) scale(1.18); }
+  65%  { transform: rotate(260deg) scale(0.92); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.boton-tirando-dado {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
+
 @media (min-width: 900px) {
   .shell { flex-direction: row; align-items: flex-start; }
   .shell-izquierda { flex: 0 0 242px; }

@@ -88,6 +88,18 @@ const PATHS = {
     'M12 3c-3 3-3 15 0 18',
     'M12 3c3 3 3 15 0 18',
   ],
+
+  // Dado (v3): el gesto de "Continuar" a la siguiente decisión — el juego se
+  // llama así por algo. Cara de 5: cuadrado + 5 puntos (las esquinas y el
+  // centro), cada punto es un segmento de largo ~0 con linecap redondo.
+  dado: [
+    'M4 4h16v16H4z',
+    'M8 8h.01',
+    'M16 8h.01',
+    'M12 12h.01',
+    'M8 16h.01',
+    'M16 16h.01',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

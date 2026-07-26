@@ -18,7 +18,7 @@ describe('icono("tienda")', () => {
 describe('set de íconos nuevo (creación + tienda)', () => {
   const nombres = [
     'persona', 'mano', 'etiqueta', 'blanco', 'balanza', 'origen',
-    'cerebro', 'maletin', 'auto', 'casa', 'estrella', 'ancla', 'globo',
+    'cerebro', 'maletin', 'auto', 'casa', 'estrella', 'ancla', 'globo', 'dado',
   ];
 
   it.each(nombres)('%s se dibuja como un <svg> con al menos un <path>', (nombre) => {
