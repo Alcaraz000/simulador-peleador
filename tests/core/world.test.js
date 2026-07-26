@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
-import { crearMundo, avanzarMundo, recalcularRankings, buscarRival, rankingDelJugador } from '../../src/core/world.js';
-import { mediaDe } from '../../src/core/fighter.js';
+import {
+  crearMundo, avanzarMundo, recalcularRankings, buscarRival, rankingDelJugador, tablaRanking,
+} from '../../src/core/world.js';
+import { mediaDe, recordTexto, crearPeleador } from '../../src/core/fighter.js';
 
 const opciones = { disciplina: 'boxeo', categoria: 'pluma', cantidad: 10 };
 
@@ -185,5 +187,104 @@ describe('buscarRival', () => {
     const mundo = crearMundo(createRng(18), opciones);
     const todos = mundo.roster.map((p) => p.id);
     expect(buscarRival(mundo, { excluirIds: todos })).toBeNull();
+  });
+});
+
+function jugadorDePrueba(media = 55) {
+  return crearPeleador({
+    nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+    estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media, esJugador: true,
+  });
+}
+
+describe('tablaRanking', () => {
+  it('arma la tabla completa: todo el roster activo más el jugador', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    const activos = m.roster.filter((p) => !p.retirado);
+    expect(tabla).toHaveLength(activos.length + 1);
+  });
+
+  it('el jugador aparece marcado esJugador true, una sola vez', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    const filasJugador = tabla.filter((f) => f.esJugador);
+    expect(filasJugador).toHaveLength(1);
+    expect(filasJugador[0].id).toBe(jugador.id);
+  });
+
+  it('el puesto del jugador en la tabla coincide con rankingDelJugador', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    const fila = tabla.find((f) => f.esJugador);
+    expect(fila.ranking).toBe(rankingDelJugador(m, jugador));
+  });
+
+  it('los puestos son consecutivos de 1 a N, sin huecos ni repetidos', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    expect(tabla.map((f) => f.ranking)).toEqual(tabla.map((_, i) => i + 1));
+  });
+
+  it('un retirado no sigue apareciendo rankeado en la tabla', () => {
+    const m = mundo();
+    m.roster[0].retirado = true;
+    const idRetirado = m.roster[0].id;
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    expect(tabla.some((f) => f.id === idRetirado)).toBe(false);
+  });
+
+  it('no muta el mundo ni al jugador', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const antesMundo = JSON.stringify(m);
+    const antesJugador = JSON.stringify(jugador);
+    tablaRanking(m, jugador);
+    expect(JSON.stringify(m)).toBe(antesMundo);
+    expect(JSON.stringify(jugador)).toBe(antesJugador);
+  });
+
+  it('cada fila trae nombre, apodo, nacionalidad, media y récord legibles', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    for (const fila of tabla) {
+      expect(fila.nombre).toBeTruthy();
+      expect(fila.nacionalidad).toBeTruthy();
+      expect(typeof fila.media).toBe('number');
+      expect(typeof fila.record).toBe('string');
+    }
+  });
+
+  // El jugador quiere que la tabla "coincida con los peleadores a los que me
+  // enfrento": buscarRival (usado por generarOferta, offers.js) elige rivales
+  // del mismo mundo.roster — este test confirma que son literalmente los
+  // mismos datos, no una copia que se pueda desincronizar.
+  it('es coherente con buscarRival: el rival que se ofrece por cercanía de ranking aparece en la tabla con los mismos datos', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    const tabla = tablaRanking(m, jugador);
+    const rival = buscarRival(m, { rankingCerca: 3 });
+    const filaRival = tabla.find((f) => f.id === rival.id);
+    expect(filaRival).toBeTruthy();
+    expect(filaRival.nombre).toBe(rival.nombre);
+    expect(filaRival.apodo).toBe(rival.apodo);
+    expect(filaRival.media).toBe(mediaDe(rival));
+    expect(filaRival.record).toBe(recordTexto(rival));
+  });
+
+  it('la media y el récord del jugador en la tabla coinciden con los reales', () => {
+    const m = mundo();
+    const jugador = jugadorDePrueba();
+    jugador.record = { v: 5, d: 1, e: 0, ko: 3, sub: 0, dec: 2 };
+    const tabla = tablaRanking(m, jugador);
+    const fila = tabla.find((f) => f.esJugador);
+    expect(fila.media).toBe(mediaDe(jugador));
+    expect(fila.record).toBe(recordTexto(jugador));
   });
 });

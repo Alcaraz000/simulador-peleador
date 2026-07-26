@@ -1,5 +1,5 @@
 import { crearRoster } from './roster.js';
-import { mediaDe } from './fighter.js';
+import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 // `rankingDelJugador` (más abajo) es lo que habilita las peleas de título:
 // sin ranking, el jugador nunca calificaría para disputar un cinturón.
@@ -161,6 +161,37 @@ export function rankingDelJugador(mundo, jugador) {
   const puntaje = miMedia + clamp(bonusRecord, -12, 12);
   const mejores = activos.filter((p) => mediaDe(p) > puntaje).length;
   return clamp(mejores + 1, 1, activos.length + 1);
+}
+
+function filaDe(peleador, esJugador) {
+  return {
+    id: peleador.id,
+    nombre: peleador.nombre,
+    apodo: peleador.apodo,
+    nacionalidad: peleador.nacionalidad,
+    media: mediaDe(peleador),
+    record: recordTexto(peleador),
+    esJugador,
+  };
+}
+
+/**
+ * Tabla de posiciones completa: el roster activo (sin retirados, igual que
+ * `buscarRival` — así los mismos nombres que ofrece una pelea son los que
+ * aparecen acá) con el jugador insertado en su puesto real, calculado con
+ * `rankingDelJugador`. Pura y no muta ni `mundo` ni `jugador`: arma listas
+ * nuevas en cada llamada.
+ */
+export function tablaRanking(mundo, jugador) {
+  const activos = [...mundo.roster]
+    .filter((p) => !p.retirado)
+    .sort((a, b) => mediaDe(b) - mediaDe(a));
+
+  const filas = activos.map((p) => filaDe(p, false));
+  const miPuesto = rankingDelJugador(mundo, jugador);
+  filas.splice(clamp(miPuesto - 1, 0, filas.length), 0, filaDe(jugador, true));
+
+  return filas.map((fila, indice) => ({ ...fila, ranking: indice + 1 }));
 }
 
 export function buscarRival(mundo, { excluirIds = [], rankingCerca = null } = {}) {
