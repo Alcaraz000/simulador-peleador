@@ -658,6 +658,75 @@ h2 { font-size: 17px; font-weight: 800; }
   transition: left 0.05s linear;
 }
 
+/* Barra de paciencia del promotor (negociación, v3): mismo tratamiento
+   grueso y con borde que la barra de precisión del golpe de gracia
+   (referencia visual del mockup, sección C: pista redondeada, con borde,
+   26-28px de alto) en vez de la barrita fina de 8px de `.barra` — el pedido
+   textual del usuario fue justamente "la barra no es igual [al mockup]".
+   Acá no hay zona que acertar (no es un minijuego de puntería): una sola
+   franja cuyo COLOR viaja de verde a rojo según cuánta paciencia queda, el
+   mismo semáforo que ya usa el resto del juego para "bueno/ojo/peligro". */
+.barra-paciencia-pista {
+  position: relative;
+  height: 22px;
+  background: #241012;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.barra-paciencia-pista > i {
+  display: block;
+  height: 100%;
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease;
+}
+
+/* Campo "qué acaba de pasar" (Task v3, pedido textual: "falta un campo que
+   describa lo que acaba de ocurrir"): mismo tratamiento que la crónica de la
+   rama de azar en las tarjetas (.tarjeta-resultado), reusado acá para que la
+   negociación hable con la misma voz que el resto del juego. */
+.negociacion-evento {
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--texto-medio);
+  animation: aparecer 0.25s ease both;
+}
+
+/* Tonos del careo (v3): color FIJO por tono (Task v3, pedido textual:
+   "colores en la etiqueta según el tipo de respuesta, como en la
+   referencia"). Reutiliza exactamente la paleta que ya usan los efectos de
+   las tarjetas (verde/dorado/rojo) más el azul que ya identifica "RARA" en
+   .tarjeta-etiqueta — mismo lenguaje visual, ningún color nuevo. Aplicado
+   sobre el TÍTULO de la tarjeta de cada respuesta (ver presser.js). */
+.tarjeta[data-tono="provocador"] .tarjeta-titulo { color: var(--rojo); }
+.tarjeta[data-tono="frio"] .tarjeta-titulo { color: #7fa6e0; }
+.tarjeta[data-tono="humilde"] .tarjeta-titulo { color: var(--verde); }
+.tarjeta[data-tono="canchero"] .tarjeta-titulo { color: var(--dorado); }
+
+/* Resumen final del careo (Task v3, pedido textual: "mostrar un resumen de
+   las respuestas y qué consecuencias tuvo"): una fila compacta por ronda. */
+.careo-resumen-fila {
+  padding: 9px 12px;
+  gap: 8px;
+}
+
+.careo-resumen-tono {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 1px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.careo-resumen-tono.provocador { background: #241012; border: 1px solid #4a2c2c; color: var(--rojo); }
+.careo-resumen-tono.frio { background: #111a26; border: 1px solid #3a5a8a; color: #7fa6e0; }
+.careo-resumen-tono.humilde { background: #16240f; border: 1px solid #2c4a30; color: var(--verde); }
+.careo-resumen-tono.canchero { background: #2a2008; border: 1px solid var(--dorado); color: var(--dorado); }
+
 /* Popup genérico (Task 5.3/5.4): overlay centrado sobre TODO (tablero,
    creación), nunca una pantalla propia. Se usa para el picker de
    nacionalidad y para la tienda entera. */
