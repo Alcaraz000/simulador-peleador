@@ -53,6 +53,18 @@ describe('renderLogin', () => {
     expect(llamado).toBe(false);
   });
 
+  // Pedido general del usuario ("todo quieto"): el botón "Entrar al ring" no
+  // puede saltar de lugar cuando aparece el mensaje de error. La línea de
+  // error ya está montada (con su alto reservado) ANTES del primer intento,
+  // no recién cuando falla.
+  it('la linea de error ya esta montada desde el arranque, con el alto reservado', () => {
+    renderLogin(cont, { onEntrar: () => {}, storage: storageFalso() });
+    const error = cont.querySelector('[data-error]');
+    expect(error).toBeTruthy();
+    expect(error.classList.contains('campo-error')).toBe(true);
+    expect(error.textContent).toBe('');
+  });
+
   it('el acceso queda recordado y al volver a montar ya no pide login', () => {
     const storage = storageFalso();
     renderLogin(cont, { onEntrar: () => {}, storage });

@@ -198,6 +198,16 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
       (v) => { estado.categoria = v; pintar(); },
     );
 
+    // Espacio de error y botón "Siguiente" SIEMPRE montados (pedido general
+    // del usuario, "todo quieto"): antes se sacaban del DOM por completo
+    // (error: solo si había mensaje; botón: solo si `revelado < 2`), y como
+    // los pasos 2 a 4 están siempre a la vista debajo de este panel (nunca
+    // ocultos), sacar/poner cualquiera de los dos los empujaba hacia
+    // arriba/abajo. Ahora el alto queda reservado siempre: el error usa
+    // `.campo-error` (alto mínimo de una línea aunque esté vacío) y el botón
+    // se apaga con `visibility:hidden` una vez que ya se avanzó de paso —
+    // sigue ocupando su lugar, solo que invisible (clickearlo de nuevo no
+    // hace nada raro: `siguiente()` es idempotente).
     const filaDatos = el('div', { class: 'stack' }, [
       el('div', { class: 'fila' }, [
         filaConIcono(icono('persona', { tamano: 16, color: 'var(--texto-sutil)' }), campoApellido),
@@ -206,12 +216,15 @@ export function renderCreacion(contenedor, { onComenzar, rng = createRng(Date.no
       filaConIcono(icono('mano', { tamano: 16, color: 'var(--texto-sutil)' }), grupoMano),
       filaConIcono(icono('guante', { tamano: 16, color: 'var(--texto-sutil)' }), grupoDisciplina),
       filaConIcono(icono('balanza', { tamano: 16, color: 'var(--texto-sutil)' }), grupoCategoria),
-      estado.error ? el('div', { class: 'rojo', 'data-error': '', text: estado.error }) : null,
-      estado.revelado < 2
-        ? el('button', {
-          class: 'boton', type: 'button', 'data-accion': 'siguiente', text: 'Siguiente', onClick: siguiente,
-        })
-        : null,
+      el('div', { class: 'rojo campo-error', 'data-error': '', text: estado.error }),
+      el('button', {
+        class: 'boton',
+        type: 'button',
+        'data-accion': 'siguiente',
+        text: 'Siguiente',
+        onClick: siguiente,
+        style: estado.revelado < 2 ? null : 'visibility:hidden',
+      }),
     ]);
 
     return el('div', { class: 'panel', dataset: { paso: '1' } }, [tituloPaso(1, 'TUS DATOS'), filaDatos]);

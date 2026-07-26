@@ -908,6 +908,20 @@ h2 { font-size: 17px; font-weight: 800; }
    decidir, no que vayan apareciendo de la nada. */
 .paso-titulo-bloqueado .dorado { color: var(--texto-sutil); }
 
+/* Línea de error reservada de antemano (login y creación del peleador,
+   pedido general del usuario "todo quieto"): un div vacío mide 0px, así que
+   sin este alto mínimo el botón de abajo (Entrar/Siguiente) salta apenas
+   aparece el primer mensaje de error. 22px ≈ una línea al tamaño de fuente
+   por defecto del body (15px / line-height 1.45). */
+.campo-error { min-height: 22px; }
+
+/* Pregunta del careo (presser.js, pedido general "todo quieto"): cada ronda
+   trae una pregunta de largo distinto — 2 líneas reservadas (15px / 1.45 ≈
+   22px cada una) para que la grilla de respuestas de abajo no salte de
+   posición ronda a ronda. Una pregunta de 3 líneas (caso raro) igual entra
+   completa, solo empuja un poco menos que antes. */
+.careo-pregunta-texto { min-height: 44px; margin: 0; }
+
 .creacion-campo { display: flex; align-items: center; gap: 8px; }
 .creacion-campo > svg { flex: 0 0 auto; }
 /* El control (input/botón único, o un grupo de chips .fila) ocupa el resto

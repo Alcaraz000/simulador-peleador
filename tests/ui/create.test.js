@@ -115,6 +115,28 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     expect(cont.textContent).toContain('PASO 2');
   });
 
+  // Pedido general del usuario ("todo quieto"): los pasos 2 a 4 están
+  // siempre montados debajo del paso 1 — si "Siguiente" desaparece del DOM
+  // al usarlo, todo lo de abajo salta hacia arriba. El botón se apaga
+  // (invisible) pero sigue reservando su lugar en vez de desaparecer.
+  it('"Siguiente" sigue montado (oculto, no ausente) despues de avanzar', () => {
+    irAPaso1();
+    ponerApellido('Sosa');
+    cont.querySelector('[data-accion="siguiente"]').click();
+
+    const boton = cont.querySelector('[data-accion="siguiente"]');
+    expect(boton).toBeTruthy();
+    expect(boton.style.visibility).toBe('hidden');
+  });
+
+  it('la linea de error del paso 1 ya esta montada desde el arranque', () => {
+    irAPaso1();
+    const error = cont.querySelector('[data-error]');
+    expect(error).toBeTruthy();
+    expect(error.classList.contains('campo-error')).toBe(true);
+    expect(error.textContent).toBe('');
+  });
+
   it('todos los controles del paso 1 miden lo mismo (46px), incluidas las opciones en chip', () => {
     cargarCSS();
     irAPaso1();
