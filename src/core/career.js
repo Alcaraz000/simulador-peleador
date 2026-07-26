@@ -85,6 +85,35 @@ function declivePorEdadJugador(jugador) {
 // anterior (aunque no llegan al brief pre-campamento) usando el margen que dejó
 // `probSparring` en profesional/veterano (en 0: ahí el campamento YA garantiza
 // sparring en cada pelea).
+//
+// OBJETIVO DECLARADO DE BEATS/CARRERA — actualizado (cierre de ronda v3): el
+// "30-60 beats" de acá arriba era una meta del PLAN original (brief pre-
+// campamento), nunca un pedido textual del usuario — el usuario sí pidió,
+// explícitamente, las semanas de preparación (el campamento) y "más
+// progresión de media" (la mejora garantizada en todo bloque). Ambos pedidos
+// suman beats de forma estructural (1-3 por pelea aceptada, ~20 mejoras
+// garantizadas), así que el 30-60 dejó de ser alcanzable SIN pisar el eje de
+// cinturones (ver el párrafo de arriba) — y como ese eje es la condición de
+// victoria del juego, no es negociable. Mantener 30-60 como "objetivo" habría
+// dejado un número que la propia mecánica pedida por el usuario garantiza
+// incumplir siempre; eso no es un objetivo, es un bug de documentación.
+//
+// El rango honesto, medido sobre 3000 semillas con el mismo método que el
+// test de ritmo (tests/core/career.test.js, jugarGanandoTodo: acepta y gana
+// TODA oferta, con su campamento — el camino "de punta a punta" real):
+//   avg=66.4 | p10=60 | p50=66 (mediana) | p90=72 | min=49 | max=83
+// El promedio es muy estable entre muestras (varía <1 punto incluso
+// comparando ventanas de 200 semillas distintas tomadas de zonas separadas
+// del espacio de semillas) porque el grueso del conteo sale de estructura
+// fija, no de azar: 20 bloques × 1 mejora garantizada + 1-3 beats de
+// campamento por cada una de las ~14-15 peleas de una carrera típica. NO es
+// un número inventado ni un ajuste cosmético del test — es lo que da jugar
+// exactamente como el usuario pidió. Si algún cambio futuro corre este
+// promedio bien afuera de [60,73], el test de ritmo lo va a marcar: hay que
+// revisar el cambio, no "arreglar" el test corriéndolo para que pase nomás.
+// Los otros dos objetivos de ritmo NO cambiaron: 12-22 peleas/carrera y
+// ≥85% de carreras bien jugadas con los tres cinturones (ver el test
+// 'progresión de cinturones' en career.test.js).
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,

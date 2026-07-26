@@ -190,6 +190,20 @@ function resumen(nombre, resultados) {
   const sinLegendaria = resultados.filter((r) => r.legendariasTotal === 0);
 
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  // Objetivo declarado de beats/carrera (ver el comentario grande en
+  // career.js, arriba de ETAPAS): dejó de ser [30,60] — esa era una meta del
+  // plan original, pre-campamento, nunca un pedido del usuario, e insistir en
+  // ella significaría "corregir" un test hasta esconder un bug de
+  // documentación. El rango honesto medido (3000 semillas) es avg≈66,
+  // p10≈60, p90≈72, prácticamente todo dentro de [45,85]. Se sigue imprimiendo
+  // [30,60] acá abajo solo como referencia histórica de cuánto se alejó el
+  // ritmo real de ese número viejo, no como objetivo vigente.
+  const percentil = (arr, p) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const idx = (p / 100) * (s.length - 1);
+    const lo = Math.floor(idx); const hi = Math.ceil(idx);
+    return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (idx - lo);
+  };
   const fmtGrupo = (grupo, etiqueta) => {
     if (grupo.length === 0) return `  ${etiqueta}: (0 carreras)`;
     const m = grupo.map((r) => r.mediaFinal);
@@ -198,7 +212,8 @@ function resumen(nombre, resultados) {
   };
 
   console.log(`\n=== ${nombre} (n=${n}) ===`);
-  console.log(`beats/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | dentro de [30,60]=${beats.filter((b) => b >= 30 && b <= 60).length}/${n}`);
+  console.log(`beats/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | p10=${percentil(beats, 10).toFixed(1)} p50=${percentil(beats, 50).toFixed(1)} p90=${percentil(beats, 90).toFixed(1)}`);
+  console.log(`  rango honesto vigente [45,85]=${beats.filter((b) => b >= 45 && b <= 85).length}/${n} | referencia histórica [30,60]=${beats.filter((b) => b >= 30 && b <= 60).length}/${n}`);
   const debajoDe12 = ofertas.filter((o) => o < 12).length;
   const arribaDe22 = ofertas.filter((o) => o > 22).length;
   const debajoDe8 = ofertas.filter((o) => o < 8).length;

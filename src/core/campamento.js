@@ -23,10 +23,12 @@ export const SEMANAS_POR_BEAT_CAMPAMENTO = 3;
 
 // Chance de que el campamento sea largo (3 beats) en vez de corto (2). Baja a
 // propósito: con ~14-15 peleas por carrera, un campamento promedio cercano a
-// 3 beats no entra en el presupuesto de ritmo (30-60 beats/carrera — ver el
-// informe de rebalance del plan). Una pelea de título o una defensa
-// obligatoria (oferta.esTitulo) merece más ceremonia que una de relleno, así
-// que su chance es mayor, pero sigue siendo la excepción, no la regla.
+// 3 beats empuja el promedio de beats/carrera muy por encima del rango
+// honesto ya medido (~66 en promedio — ver el objetivo declarado en
+// career.js, arriba de ETAPAS, y el informe de rebalance del plan). Una
+// pelea de título o una defensa obligatoria (oferta.esTitulo) merece más
+// ceremonia que una de relleno, así que su chance es mayor, pero sigue
+// siendo la excepción, no la regla.
 const PROB_LARGO = { esTitulo: 0.12, normal: 0.03 };
 
 export function decidirLargoCampamento(rng, oferta) {
