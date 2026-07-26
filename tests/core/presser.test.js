@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { PREGUNTAS_CAREO } from '../../src/content/cards-presser.js';
-import { TONOS, TELLS, crearCareo, responderCareo, resultadoCareo } from '../../src/core/presser.js';
+import {
+  TONOS, TELLS, crearCareo, responderCareo, resultadoCareo,
+} from '../../src/core/presser.js';
 
 const oferta = {
   id: 'of_1', rivalId: 'riv_1', rivalApodo: 'El Ciclón', rivalNombre: 'Dyke Tyzon',
@@ -9,12 +11,29 @@ const oferta = {
 };
 
 describe('contenido del careo', () => {
-  it('tiene al menos ocho preguntas con cuatro respuestas', () => {
-    expect(PREGUNTAS_CAREO.length).toBeGreaterThanOrEqual(8);
+  it('tiene al menos catorce preguntas con cuatro respuestas', () => {
+    expect(PREGUNTAS_CAREO.length).toBeGreaterThanOrEqual(14);
     for (const p of PREGUNTAS_CAREO) {
       expect(p.respuestas).toHaveLength(4);
       expect(new Set(p.respuestas.map((r) => r.tono)).size).toBe(4);
     }
+  });
+
+  it('cada pregunta declara quien habla (rival o periodista), para no confundir voces', () => {
+    for (const p of PREGUNTAS_CAREO) {
+      expect(['rival', 'periodista']).toContain(p.hablante);
+    }
+  });
+
+  it('hay preguntas de ambas voces (no es todo el rival, ni todo periodista)', () => {
+    const hablantes = new Set(PREGUNTAS_CAREO.map((p) => p.hablante));
+    expect(hablantes.has('rival')).toBe(true);
+    expect(hablantes.has('periodista')).toBe(true);
+  });
+
+  it('los ids de las preguntas son unicos', () => {
+    const ids = PREGUNTAS_CAREO.map((p) => p.id);
+    expect(new Set(ids).size).toBe(ids.length);
   });
 
   it('define los cuatro tonos', () => {
@@ -30,12 +49,13 @@ describe('contenido del careo', () => {
 });
 
 describe('crearCareo', () => {
-  it('arranca en la ronda 1 con tres preguntas', () => {
+  it('arranca en la ronda 1 con tres preguntas y el historial vacio', () => {
     const careo = crearCareo(createRng(1), { oferta });
     expect(careo.ronda).toBe(1);
     expect(careo.rondas).toBe(3);
     expect(careo.preguntas).toHaveLength(3);
     expect(careo.terminado).toBe(false);
+    expect(careo.historial).toEqual([]);
   });
 
   it('trae el tell de la personalidad del rival', () => {
@@ -115,6 +135,40 @@ describe('responderCareo', () => {
   it('rechaza un tono desconocido', () => {
     const careo = crearCareo(createRng(18), { oferta });
     expect(() => responderCareo(careo, 'inventado', createRng(19))).toThrow(/inventado/);
+  });
+});
+
+describe('historial del careo (resumen final)', () => {
+  it('cada respuesta agrega una entrada con la pregunta, el tono, la respuesta y el evento', () => {
+    const careo = crearCareo(createRng(23), { oferta });
+    const pregunta1 = careo.preguntas[0];
+    const { careo: despues, evento } = responderCareo(careo, 'frio', createRng(24));
+
+    expect(despues.historial).toHaveLength(1);
+    const entrada = despues.historial[0];
+    expect(entrada.ronda).toBe(1);
+    expect(entrada.preguntaId).toBe(pregunta1.id);
+    expect(['rival', 'periodista']).toContain(entrada.hablante);
+    expect(entrada.preguntaTexto).toBe(pregunta1.texto);
+    expect(entrada.tono).toBe('frio');
+    expect(entrada.respuestaTexto).toBe(pregunta1.respuestas.find((r) => r.tono === 'frio').texto);
+    expect(entrada.evento).toEqual(evento);
+  });
+
+  it('el historial acumula una entrada por ronda, en orden', () => {
+    let careo = crearCareo(createRng(25), { oferta });
+    const tonos = ['provocador', 'humilde', 'canchero'];
+    for (let i = 0; i < 3; i++) careo = responderCareo(careo, tonos[i], createRng(i)).careo;
+    expect(careo.historial).toHaveLength(3);
+    expect(careo.historial.map((h) => h.ronda)).toEqual([1, 2, 3]);
+    expect(careo.historial.map((h) => h.tono)).toEqual(tonos);
+  });
+
+  it('no se agrega nada al historial si el careo ya termino', () => {
+    let careo = crearCareo(createRng(26), { oferta });
+    for (let i = 0; i < 3; i++) careo = responderCareo(careo, 'frio', createRng(i)).careo;
+    const { careo: igual } = responderCareo(careo, 'provocador', createRng(30));
+    expect(igual.historial).toHaveLength(3);
   });
 });
 

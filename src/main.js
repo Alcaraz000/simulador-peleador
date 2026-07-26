@@ -660,12 +660,30 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         const final = resultadoNegociacion(negociacion);
         careo({ ...oferta, bolsa: final.bolsa });
       },
+      // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
+      // botón "tiene que estar siempre disponible", incluso con la
+      // negociación bloqueada por un apriete fallido). Misma consecuencia
+      // que rechazar la oferta antes de negociar (ver beatOferta): pierde
+      // fama y vuelve al tablero, sin firmar nada.
+      onRechazar: () => {
+        const paso = rechazarOferta(partida.jugador, oferta);
+        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        irADashboard();
+      },
     });
     pintar();
   }
 
+  // El careo va en todas las peleas profesionales (Task v3, pedido textual:
+  // "solo me ocurrió en algunas peleas, no en todas ¿no debería estar en
+  // todas?"). Antes se saltaba con fama < 20 fuera de una pelea de título —
+  // como la fama arranca en 0, esto lo dejaba prácticamente afuera de toda
+  // la primera mitad de la carrera. El único portón que queda es de nivel:
+  // en juvenil/amateur (`nivelPelea === 'amateur'`, ver NIVELES en
+  // core/offers.js) todavía no hay rueda de prensa — no tiene sentido narrar
+  // una para un pibe de 15 años en un torneo local.
   function careo(oferta) {
-    if (!oferta.esTitulo && (partida.jugador.fama ?? 0) < 20) return elegirPlan(oferta);
+    if (oferta.nivelPelea === 'amateur') return elegirPlan(oferta);
     let estado = crearCareo(rng, { oferta });
     const pintar = () => renderCareo(contenedor, {
       careo: estado,

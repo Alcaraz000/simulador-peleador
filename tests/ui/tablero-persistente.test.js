@@ -137,8 +137,9 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
 // Juega la previa (negociación + careo opcional + plan) y la pelea entera
 // hasta volver al tablero. 'cerrar' en la negociación es SIEMPRE 0% riesgo
 // (negotiation.js) así que un solo click alcanza. El careo (3 rondas fijas)
-// solo aparece en pelea de título o con fama >= 20 — con el jugador recién
-// creado casi nunca, pero el loop lo maneja igual si aparece.
+// aparece en toda pelea profesional o de título (Task v3: ya no depende de
+// la fama) — solo se lo salta en juvenil/amateur, así que el loop lo maneja
+// por si acaso pero en la práctica casi siempre está presente.
 function jugarPeleaCompleta(cont) {
   const cerrar = cont.querySelector('[data-movida="cerrar"]');
   if (cerrar) cerrar.click();
