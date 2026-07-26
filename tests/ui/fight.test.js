@@ -457,6 +457,10 @@ describe('renderPelea — golpe de gracia', () => {
     cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
     vi.advanceTimersByTime(50);
     cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    // La barra ya no avisa en el mismo instante del click: primero se ve el
+    // efecto de impacto (verde/amarillo/error) y recién tras esa pausa breve
+    // se reporta el golpe hacia afuera (Pedido v6, ver barra-precision.js).
+    vi.advanceTimersByTime(500);
     expect(golpe).not.toBeNull();
     expect(golpe.aTiempo).toBe(true);
     expect(golpe.zonaElegida).toBe(info.zonaAbierta);
@@ -492,6 +496,8 @@ describe('renderPelea — golpe de gracia', () => {
     expect(golpe).toBeNull();
 
     cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    // Misma pausa de feedback que arriba antes de que se reporte el golpe.
+    vi.advanceTimersByTime(500);
     expect(golpe).not.toBeNull();
     expect(golpe.aTiempo).toBe(true);
     expect(golpe.zonaElegida).toBe(info.zonaAbierta);

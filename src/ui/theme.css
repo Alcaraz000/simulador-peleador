@@ -842,6 +842,15 @@ h2 { font-size: 17px; font-weight: 800; }
 .noticia-item { padding: 10px 11px; }
 .noticia-item.nueva { border-color: var(--rojo); }
 
+/* "Es tu carrera" (Pedido v6, hitos del jugador en el feed): franja dorada a
+   la izquierda, SIEMPRE presente en una noticia propia sin importar si
+   además está "nueva" — la urgencia (rojo, borde completo) y la autoría
+   (dorado, franja) son dos señales distintas, no se pisan. Sin franja
+   "nueva" propia, el borde completo también se pone dorado (nada compite por
+   el rojo). box-shadow inset: no reserva ancho nuevo, no empuja nada. */
+.noticia-item.propia { box-shadow: inset 3px 0 0 var(--dorado); }
+.noticia-item.propia:not(.nueva) { border-color: var(--dorado); }
+
 /* Entrada escalonada de noticias nuevas (v3, feedback del usuario: "que se
    vayan sumando", no todas de golpe): arrancan invisibles/corridas y cada una
    se revela un rato después de la anterior (panel-noticias.js). Con
@@ -878,9 +887,13 @@ h2 { font-size: 17px; font-weight: 800; }
   80%      { transform: translateX(2px); }
 }
 
+/* `--color-destello` (v6): parametrizado para que el golpe de gracia pueda
+   teñir el MISMO brillo de siempre de verde (clavado) sin duplicar el
+   keyframe — nada que ya usaba `destello` (.log > p.destacado) cambia,
+   porque el default es el mismo dorado de antes. */
 @keyframes destello {
   from { box-shadow: 0 0 0 rgba(242, 193, 78, 0); }
-  to   { box-shadow: 0 0 26px rgba(242, 193, 78, 0.65); }
+  to   { box-shadow: 0 0 26px var(--color-destello, rgba(242, 193, 78, 0.65)); }
 }
 
 #app > .stack > * { animation: aparecer 0.22s ease both; }
@@ -955,28 +968,59 @@ h2 { font-size: 17px; font-weight: 800; }
 .silueta-zona:focus-visible { outline: 2px solid var(--dorado); outline-offset: 2px; }
 .silueta-zona:hover circle { filter: brightness(1.25); }
 
-/* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
-   elegida, flecha en movimiento que hay que frenar con un click (o Enter/
-   Espacio: es un <button>, no un <div> — mismo motivo que .pao). width:100%
-   + padding:0 resetean el ancho encogido y el padding por defecto que
-   traería un <button> nativo; el resto del look ya lo daba esta clase. */
+/* Barra de precisión (golpe de gracia, paso 2, pulida v6 — "que se vea como
+   el momento importante que es"): franja verde según la zona elegida,
+   flecha en movimiento que hay que frenar con un click (o Enter/Espacio: es
+   un <button>, no un <div> — mismo motivo que .pao). width:100% + padding:0
+   resetean el ancho encogido y el padding por defecto que traería un
+   <button> nativo.
+   El envoltorio reserva SIEMPRE la fila de resultado (altura fija, aunque
+   esté vacía antes de resolver): el texto que aparece al frenar la flecha
+   nunca empuja nada de abajo (regla general del usuario: nada se mueve). */
+.barra-precision { display: flex; flex-direction: column; gap: 8px; }
+
 .barra-precision-pista {
   position: relative;
   display: block;
   width: 100%;
-  height: 28px;
+  height: 34px;
   padding: 0;
-  background: #241012;
+  background: linear-gradient(180deg, #1c0d0e, #241012 55%, #170b0c);
   border: 1px solid var(--borde-fuerte);
-  border-radius: 14px;
+  border-radius: 17px;
   overflow: hidden;
   cursor: pointer;
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55), inset 0 -1px 0 rgba(255, 255, 255, 0.04);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .barra-precision-pista .franja { position: absolute; top: 0; bottom: 0; }
-.barra-precision-pista .franja.al-aire { background: #3a1a1a; }
-.barra-precision-pista .franja.roza { background: #7a5a12; }
-.barra-precision-pista .franja-verde { position: absolute; top: 0; bottom: 0; background: #2f8a3a; }
+/* "Al aire": rayas diagonales de peligro, sutiles y estáticas (ningún
+   patrón que anime) — la zona muerta se lee como tal de un vistazo. */
+.barra-precision-pista .franja.al-aire {
+  background: repeating-linear-gradient(-45deg, #341718, #341718 6px, #2a1213 6px, #2a1213 12px);
+}
+.barra-precision-pista .franja.roza { background: linear-gradient(180deg, #8a6a1c, #6e4f10); }
+.barra-precision-pista .franja-verde {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(180deg, #4bc25a, #2f8a3a 60%, #226228);
+  box-shadow: inset 0 0 10px rgba(160, 255, 170, 0.35);
+}
+
+/* Marca del centro exacto del verde ("clavala acá"): puramente decorativa —
+   pointer-events:none para nunca robarle el click a la pista, y nunca
+   cambia de tamaño ni de lugar, es una guía fija. */
+.barra-precision-marca {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.55);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
 
 .barra-precision-flecha {
   position: absolute;
@@ -984,10 +1028,65 @@ h2 { font-size: 17px; font-weight: 800; }
   bottom: 0;
   width: 3px;
   background: #fff;
-  box-shadow: 0 0 10px #fff;
+  box-shadow: 0 0 10px #fff, 0 0 18px rgba(242, 193, 78, 0.5);
   transform: translateX(-50%);
   transition: left 0.05s linear;
 }
+/* Puntas tipo mira (arriba apuntando abajo, abajo apuntando arriba): leen
+   como un instrumento de precisión en vez de una raya lisa. Contenidas
+   dentro de la misma caja (0%/100% de alto de la flecha): nunca se salen
+   del recorte de `.barra-precision-pista` (overflow:hidden). */
+.barra-precision-flecha::before,
+.barra-precision-flecha::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  transform: translateX(-50%);
+}
+.barra-precision-flecha::before { top: 0; border-top: 6px solid #fff; }
+.barra-precision-flecha::after { bottom: 0; border-bottom: 6px solid #fff; }
+
+/* Fila de resultado: alto fijo, siempre presente (vacía antes de resolver) —
+   ver el comentario del envoltorio más arriba. */
+.barra-precision-resultado {
+  height: 18px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+/* Los tres desenlaces (Pedido v6: "que varíe según si clickeaste en el
+   verde, amarillo o si erraste"): reusan el MISMO lenguaje visual que ya
+   habla el resto del juego — el destello dorado de las líneas destacadas de
+   la crónica, el sacudón del nocaut — en vez de inventar animaciones
+   nuevas, para que el golpe de gracia se sienta parte del mismo juego. El
+   impacto limpio (verde) dura un poco más que el resto: es el momento
+   grande, se gana el derecho a un instante extra (sigue bien por debajo de
+   los 500ms). */
+.barra-precision.resultado-verde .barra-precision-pista {
+  --color-destello: rgba(143, 214, 148, 0.75);
+  animation: destello 0.42s ease-out both;
+  border-color: var(--verde);
+}
+.barra-precision.resultado-verde .barra-precision-resultado { color: var(--verde); }
+
+.barra-precision.resultado-roza .barra-precision-pista {
+  animation: destello 0.3s ease-out both;
+  border-color: var(--dorado);
+}
+.barra-precision.resultado-roza .barra-precision-resultado { color: var(--dorado); }
+
+.barra-precision.resultado-errado .barra-precision-pista {
+  animation: sacudon 0.32s ease-out both;
+  border-color: var(--rojo);
+  box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.55), 0 0 14px rgba(239, 68, 68, 0.45);
+}
+.barra-precision.resultado-errado .barra-precision-resultado { color: var(--rojo); }
 
 /* Campo "qué acaba de pasar" (Task v3, pedido textual: "falta un campo que
    describa lo que acaba de ocurrir"): mismo tratamiento que la crónica de la
