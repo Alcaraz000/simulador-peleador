@@ -319,16 +319,44 @@ function bloqueDinero(jugador) {
 // beat), este panel vive en la región izquierda del shell y se repinta solo
 // cuando cambian los datos del jugador: nunca desaparece mientras el jugador
 // decide en el módulo central.
+// Hace clickeable-por-teclado un panel que hoy solo escuchaba 'click' (dos
+// casos acá abajo: la cabecera del peleador y el bloque de historial).
+// Mismo criterio que .silueta-zona (silueta-rival.js): role=button +
+// tabindex=0 + Enter/Espacio disparan lo mismo que el click. Sin esto, Tab
+// saltaba directo de un botón real al siguiente y estas dos tarjetas —de
+// las más usadas del tablero: abren la ficha del peleador— quedaban
+// invisibles para quien navega solo con teclado.
+function hacerActivable(nodo, etiquetaAria, onActivar) {
+  nodo.setAttribute('role', 'button');
+  nodo.setAttribute('tabindex', '0');
+  nodo.setAttribute('aria-label', etiquetaAria);
+  nodo.addEventListener('click', onActivar);
+  nodo.addEventListener('keydown', (ev) => {
+    // `historial` (bloqueHistorial) trae adentro un <button> real (ver
+    // tabla de posiciones), que ya frena su propio click con
+    // stopPropagation. Un keydown SIEMPRE burbujea (a diferencia del click
+    // que ese botón ya frena), así que sin este chequeo, apretar Enter con
+    // el foco en el botón de adentro también activaría esta tarjeta entera
+    // por encima — el guard exige que la tecla haya sido apretada con el
+    // foco puesto en la tarjeta misma, no en un hijo interactivo.
+    if (ev.target !== nodo) return;
+    if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); onActivar(); }
+  });
+  return nodo;
+}
+
 export function renderPanelPeleador(region, {
   partida, onFicha = () => {}, onHistorial = () => {}, onVerRanking = () => {},
 }) {
   const { jugador, mundo } = partida;
 
-  const cabecera = cuadroMedia(jugador);
-  cabecera.addEventListener('click', () => onFicha(jugador));
+  const cabecera = hacerActivable(cuadroMedia(jugador), 'Ver ficha del peleador', () => onFicha(jugador));
 
-  const historial = bloqueHistorial(jugador, mundo, onVerRanking);
-  historial.addEventListener('click', () => onHistorial(jugador));
+  const historial = hacerActivable(
+    bloqueHistorial(jugador, mundo, onVerRanking),
+    'Ver historial de peleas',
+    () => onHistorial(jugador),
+  );
 
   mount(region, el('div', { class: 'stack panel-peleador' }, [
     cabecera,

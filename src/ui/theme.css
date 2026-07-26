@@ -441,13 +441,59 @@ h2 { font-size: 17px; font-weight: 800; }
   .shell {
     display: grid;
     grid-template-columns: minmax(230px, 280px) minmax(380px, 1fr) minmax(250px, 300px);
-    align-items: start;
+    align-items: stretch;
     gap: 16px;
+  }
+
+  /* Zócalo de cierre (v4, bug reportado: "queda espacio vacío al pie de las
+     columnas izquierda y centro cuando la de noticias es más alta", y a la
+     inversa apenas arranca la carrera, cuando todavía no hay noticias).
+     `align-items:stretch` (arriba, reemplaza a `start`) hace que las tres
+     columnas midan la altura de la más alta; sin nada más, eso solo dejaba
+     a las más cortas con un tramo de fondo liso de sobra al pie, que se leía
+     como "algo falta" en vez de "así se diseñó". Este pseudo-elemento
+     absorbe ese sobrante con un remate suave — nunca mueve ni reordena
+     ningún panel real (todos siguen anclados arriba, en el mismo lugar de
+     siempre: la garantía "nada se mueve" sigue intacta, esto es puro fondo
+     decorativo después del último panel). Si una columna YA es la más alta,
+     no le queda sobrante para repartir: el remate mide 0 y no se nota. */
+  .shell-izquierda::after,
+  .shell-centro::after,
+  .shell-derecha::after {
+    content: '';
+    flex: 1 1 auto;
+    min-height: 0;
+    border-radius: 12px;
+    /* Sin borde a propósito: un borde con box-sizing:border-box sigue
+       dibujándose aunque el alto resuelva 0 (columna ya más alta, sin
+       sobrante), y ahí SÍ tiene que desaparecer del todo. Solo el degradé,
+       que a 0px de alto no deja rastro. */
+    background: linear-gradient(180deg, transparent, rgba(36, 20, 22, 0.45));
   }
 }
 
-/* Tablero: columna izquierda (v2) */
-.panel-peleador-cabecera { cursor: pointer; }
+/* Tablero: columna izquierda (v2). Cabecera (ficha) e historial (v4,
+   auditoría UI/UX): las dos son paneles enteros que actúan como una sola
+   tarjeta clickeable (hacerActivable, panel-peleador.js) — antes solo la
+   cabecera avisaba con el cursor que se podía tocar; el bloque de
+   historial se veía igual a un panel informativo cualquiera aunque también
+   abría la ficha. Mismo lenguaje de :hover/:active que .carta/.tarjeta: un
+   control no puede sentirse muerto. */
+.panel-peleador-cabecera,
+[data-accion="historial"] {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.16s var(--ease-out);
+}
+
+.panel-peleador-cabecera:hover,
+[data-accion="historial"]:hover {
+  border-color: var(--borde-fuerte);
+}
+
+.panel-peleador-cabecera:active,
+[data-accion="historial"]:active {
+  transform: scale(0.99);
+}
 
 /* Cabecera del peleador (v3): la MEDIA es un badge chico en la esquina
    superior derecha de su propia fila (junto a la etiqueta del rango); el
