@@ -65,7 +65,26 @@ function prepararStorage(partida) {
 // rechazo, que viven dentro del tablero). `detenerEnOferta` para en seco
 // apenas aparece la tarjeta de la oferta, SIN clickear aceptar/rechazar —
 // para que el test pueda inspeccionarla tal cual se le muestra al jugador.
+//
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// dispara la pelea en el acto. Ahora arranca el campamento (2-3 beats más,
+// DENTRO del tablero — mismos selectores genéricos de sparring/decisión de
+// acá abajo, así que no hace falta un caso especial) y recién el ÚLTIMO beat
+// del campamento dispara careo → plan → pelea. `hayPantallaDePelea` detecta
+// ese momento (llegue como llegue: con o sin careo, según el nivel) y
+// `jugarDesdeCareo` lo atraviesa hasta volver al tablero.
+function hayPantallaDePelea(cont) {
+  return Boolean(
+    cont.querySelector('[data-tono]')
+    || cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]')
+    || cont.querySelector('[data-accion="empezar-pelea"]')
+    || cont.querySelector('[data-bloque="accion"]'),
+  );
+}
+
 function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
+  if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
+
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
   if (botonIdle) botonIdle.click();
 
@@ -118,8 +137,8 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
     if (detenerEnOferta) return 'oferta';
     if (aceptarOfertas) {
       aceptar.click();
-      jugarPeleaCompleta(cont);
-      return 'pelea';
+      resolverNegociacion(cont);
+      return 'oferta-firmada';
     }
     rechazar.click();
     const seguirDesenlace = cont.querySelector('.panel-decision-desenlace .boton');
@@ -134,18 +153,23 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
   return null;
 }
 
-// Juega la previa (negociación + careo opcional + plan) y la pelea entera
-// hasta volver al tablero. 'cerrar' en la negociación es SIEMPRE 0% riesgo
-// (negotiation.js) así que un solo click alcanza. El careo (3 rondas fijas)
-// aparece en toda pelea profesional o de título (Task v3: ya no depende de
-// la fama) — solo se lo salta en juvenil/amateur, así que el loop lo maneja
-// por si acaso pero en la práctica casi siempre está presente.
-function jugarPeleaCompleta(cont) {
+// La negociación arranca apenas se acepta la oferta (sin cambios: sigue
+// siendo pantalla completa, antes del campamento). 'cerrar' es SIEMPRE 0%
+// riesgo (negotiation.js) así que un solo click alcanza. Al cerrarla, ahora
+// `main.js` firma la pelea (campamento.js) y vuelve al tablero en vez de ir
+// directo a careo — por eso esta función YA NO sigue de largo hasta la
+// pelea: eso le toca al campamento, beat a beat, como cualquier otro.
+function resolverNegociacion(cont) {
   const cerrar = cont.querySelector('[data-movida="cerrar"]');
   if (cerrar) cerrar.click();
   const seguirNegociacion = cont.querySelector('[data-accion="seguir"]');
   if (seguirNegociacion) seguirNegociacion.click();
+}
 
+// Atraviesa careo (3 rondas fijas, si el nivel de la pelea lo trae — Task
+// v3: ya no depende de la fama, solo se lo salta en juvenil/amateur) → plan
+// → la pelea entera, hasta volver al tablero.
+function jugarDesdeCareo(cont) {
   let guardia = 0;
   while (cont.querySelector('[data-tono]') && guardia < 10) {
     guardia += 1;
@@ -193,6 +217,23 @@ function jugarPeleaCompleta(cont) {
 
   const continuarResultado = cont.querySelector('[data-accion="continuar"]');
   if (continuarResultado) continuarResultado.click();
+}
+
+// Camino directo (sin el loop de resolverUnPaso) para los tests que quieren
+// aceptar y llegar derecho al resultado de la pelea: negociación, TODO el
+// campamento (2-3 beats, aceptando la primera opción/terminando el sparring
+// en cada uno) y recién ahí careo/plan/pelea.
+function jugarPeleaCompleta(cont) {
+  resolverNegociacion(cont);
+
+  let guardia = 0;
+  while (!hayPantallaDePelea(cont) && guardia < 10) {
+    guardia += 1;
+    const tipo = resolverUnPaso(cont, { aceptarOfertas: true, detenerEnOferta: false });
+    if (tipo === null || tipo === 'pelea') break;
+  }
+
+  jugarDesdeCareo(cont);
 }
 
 let cont;

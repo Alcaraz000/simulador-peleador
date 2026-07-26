@@ -1,5 +1,5 @@
 import { createRng } from './core/rng.js';
-import { crearPartida, siguienteBeat } from './core/career.js';
+import { crearPartida, siguienteBeat, firmarPelea } from './core/career.js';
 import { tablaRanking } from './core/world.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
@@ -446,6 +446,8 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'evento') return beatCarta(beat, 'Decisión', 'alerta');
     if (beat.tipo === 'redes') return beatCarta(beat, 'Redes sociales', 'microfono');
     if (beat.tipo === 'sparring') return beatSparring(beat);
+    if (beat.tipo === 'campCarta') return beatCampCarta(beat);
+    if (beat.tipo === 'campSparring') return beatCampSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
     if (beat.tipo === 'noticias') return beatNoticias();
@@ -611,6 +613,70 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     centro(pintarSparring);
   }
 
+  // --- Campamento de preparación (Task v3, pedido textual: "al aceptar una
+  // pelea, va directo al combate, debería de haber unas semanas de
+  // preparación") -----------------------------------------------------------
+  // Estos dos beats viven DENTRO del tablero, con el mismo patrón que
+  // mejora/evento/sparring: `firmarPelea` (career.js) ya decidió cuántos son
+  // (2 o 3) y armó su contenido (campamento.js); acá solo hay que pintarlos y
+  // aplicar su efecto. La diferencia con los demás beats de decisión es el
+  // ÚLTIMO del campamento (`beat.datos.ultimo`): en vez de volver al estado
+  // ocioso, dispara la pipeline a pantalla completa de la pelea (careo → plan
+  // → pelea) — el mismo destino al que antes se llegaba apenas se aceptaba la
+  // oferta, ahora recién después de las semanas de preparación.
+  function beatCampCarta(beat) {
+    const { carta, oferta, ultimo } = beat.datos;
+    centro(() => renderPanelDecision(centroContenido(), {
+      titulo: 'Campamento',
+      bajada: carta.titulo,
+      texto: carta.texto,
+      rareza: carta.rareza,
+      opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, 'pesa')),
+      onElegir: (id) => {
+        const resuelto = resolverOpcion(rng, {
+          jugador: partida.jugador, carta, opcionId: id, rivalidades: partida.rivalidades,
+        });
+        if (ultimo) {
+          partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+          careo(oferta);
+          return;
+        }
+        aplicarEfectoYSeguir({ jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas });
+      },
+    }));
+  }
+
+  function beatCampSparring(beat) {
+    let sparring = beat.datos.sparring;
+    const { oferta, ultimo } = beat.datos;
+
+    function pintarSparring() {
+      const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
+      renderSparring(centroContenido(), {
+        sparring,
+        jugador: partida.jugador,
+        titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
+        bajada: 'Los rounds fuertes antes de la pelea',
+        onGolpe: (evento) => {
+          sparring = registrarGolpe(sparring, evento);
+          pintarSparring();
+        },
+        onTerminar: () => {
+          const resultado = resultadoSparring(sparring, partida.jugador);
+          const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
+          if (ultimo) {
+            partida = { ...partida, jugador: aplicado.jugador };
+            careo(oferta);
+            return;
+          }
+          aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
+        },
+      });
+    }
+
+    centro(pintarSparring);
+  }
+
   // Aceptar o rechazar una oferta es LA decisión más importante del juego
   // (revisión del coordinador tras la Task 6.1): es donde más rinde ver el
   // ranking, el récord, el dinero y el estado físico mientras se decide si
@@ -655,9 +721,16 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         negociacion = jugarMovida(negociacion, movidaId, rng).negociacion;
         pintar();
       },
+      // Task v3, pedido textual ("debería de haber unas semanas de
+      // preparación"): cerrar la negociación ya no dispara la pipeline de
+      // pelea en el acto — firma el contrato (firmarPelea, career.js) y
+      // vuelve al tablero. El campamento de 2-3 beats (beatCampCarta/
+      // beatCampSparring, más arriba) es lo próximo que va a jugar el
+      // jugador; recién su último beat llama a `careo`.
       onCerrar: () => {
         const final = resultadoNegociacion(negociacion);
-        careo({ ...oferta, bolsa: final.bolsa });
+        partida = firmarPelea(partida, { oferta: { ...oferta, bolsa: final.bolsa } });
+        irADashboard();
       },
       // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
       // botón "tiene que estar siempre disponible", incluso con la

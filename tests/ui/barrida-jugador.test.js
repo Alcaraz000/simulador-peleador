@@ -79,12 +79,34 @@ function revisarTodo(cont, etiqueta) {
 
 // --- Autoplayer de la UI real (mismo patrón que tests/ui/tablero-persistente,
 // copiado acá porque ese helper no se exporta) ---------------------------
-function jugarPeleaCompleta(cont) {
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// dispara la pelea en el acto — arranca un campamento de 2-3 beats más
+// DENTRO del tablero (mismos selectores de sparring/decisión de acá abajo,
+// nada especial) y recién el ÚLTIMO beat del campamento dispara careo → plan
+// → pelea. `hayPantallaDePelea` detecta ese momento (con o sin careo, según
+// el nivel) y `jugarDesdeCareo` lo atraviesa hasta volver al tablero.
+function hayPantallaDePelea(cont) {
+  return Boolean(
+    cont.querySelector('[data-tono]')
+    || cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]')
+    || cont.querySelector('[data-accion="empezar-pelea"]')
+    || cont.querySelector('[data-bloque="accion"]'),
+  );
+}
+
+// La negociación arranca apenas se acepta la oferta (sin cambios: sigue
+// siendo pantalla completa, antes del campamento). 'cerrar' es SIEMPRE 0%
+// riesgo (negotiation.js) así que un solo click alcanza. Al cerrarla, ahora
+// main.js firma la pelea (campamento.js) y vuelve al tablero en vez de ir
+// directo a careo.
+function resolverNegociacion(cont) {
   const cerrar = cont.querySelector('[data-movida="cerrar"]');
   if (cerrar) cerrar.click();
   const seguirNegociacion = cont.querySelector('[data-accion="seguir"]');
   if (seguirNegociacion) seguirNegociacion.click();
+}
 
+function jugarDesdeCareo(cont) {
   let guardia = 0;
   while (cont.querySelector('[data-tono]') && guardia < 10) {
     guardia += 1;
@@ -135,6 +157,8 @@ function jugarPeleaCompleta(cont) {
 }
 
 function resolverUnPaso(cont, { aceptarOfertas }) {
+  if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
+
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
   if (botonIdle) botonIdle.click();
 
@@ -177,8 +201,8 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
   if (aceptar || rechazar) {
     if (aceptarOfertas) {
       aceptar.click();
-      jugarPeleaCompleta(cont);
-      return 'pelea';
+      resolverNegociacion(cont);
+      return 'oferta-firmada';
     }
     rechazar.click();
     const seguirDesenlace = cont.querySelector('.panel-decision-desenlace .boton');
