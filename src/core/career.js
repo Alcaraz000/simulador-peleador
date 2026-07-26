@@ -13,14 +13,6 @@ import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 
-// Cada cuántos bloques se le muestra al jugador el beat de 'noticias' (ver
-// armarCola). Subido de 4 a 15 en el rebalance del campamento (Task v3): con
-// 2-3 beats de campamento por cada una de las ~14-15 peleas de la carrera, el
-// presupuesto de 30-60 beats no dejaba lugar para que 'noticias' apareciera
-// más de una vez. Sigue apareciendo (bloque 15) para que el jugador se ponga
-// al día del mundo al menos una vez en la carrera — no se elimina del todo.
-export const PERIODO_NOTICIAS = 15;
-
 // El jugador también sufre el declive de "las piernas" por la edad, igual que
 // los NPC en world.js (ahí es un roll de rng; acá es determinístico para no
 // alterar la racha de tiradas que ya calibra el ritmo de la carrera). El
@@ -62,42 +54,56 @@ function declivePorEdadJugador(jugador) {
 // (Task 17, primera vuelta) tocó solo estas probabilidades para bajar el total de
 // beats a 30-60, pero dejó el eje de cinturones casi inalcanzable (~5 ofertas de pelea
 // en toda la carrera). La causa real era el beat de 'noticias' incondicional en cada
-// bloque (comiéndose 20 de los 40 beats de piso). Con 'noticias' periódico
-// (PERIODO_NOTICIAS) el presupuesto se liberó y estas probabilidades se recalibraron
-// de nuevo con doble objetivo: 30-60 beats totales Y 12-22 ofertas de pelea por
-// carrera (nunca menos de 8). Ver el informe de la Task 17 para el detalle numérico.
-// Segundo ajuste (Task v3, "las semanas de preparación"): el campamento le
-// pone 2-3 beats a CADA pelea aceptada, y encima el bloque que sigue a una
-// pelea firmada ya se salta su propia mejora (ver el comentario en
-// armarCola) — el presupuesto de beats sueltos que le quedaba a cada etapa
-// se recalibró para que el total, CON campamento, siga entrando en 30-60.
-// `probSparring` baja fuerte (case 0 en profesional/veterano): ahí el
-// campamento YA garantiza sparring en cada pelea, y ahí es case donde antes
-// el usuario se quejaba de no verlo nunca — así que el suelto, ahora
-// redundante, es el primero que se sacrifica. `probEvento`/`probRedes` bajan
-// más donde más peleas (y por lo tanto más campamento) hay: profesional y
-// veterano. Juvenil/amateur, con pelea mucho menos frecuente, casi no se
-// tocan — ahí el contenido suelto sigue siendo la textura principal del
-// bloque.
+// bloque (comiéndose 20 de los 40 beats de piso). Con 'noticias' periódico el
+// presupuesto se liberó y estas probabilidades se recalibraron de nuevo con doble
+// objetivo: 30-60 beats totales Y 12-22 ofertas de pelea por carrera (nunca menos de
+// 8). Segundo ajuste (Task v3, "las semanas de preparación"): el campamento le puso
+// 2-3 beats a CADA pelea aceptada.
+// Tercer ajuste (Task v3, "cartas nuevas + progresión"): se sacó el beat 'noticias'
+// DEL TODO (las noticias ya viven siempre visibles en la columna derecha, así que
+// interrumpir la carrera para mostrarlas de nuevo era presupuesto de ritmo gastado en
+// algo que el jugador ya podía ver) y se devolvió la mejora garantizada a TODOS los
+// bloques (el bloque que seguía a una pelea firmada se la saltaba — iba en contra
+// de la progresión sentida: un jugador que peleaba mucho terminaba viendo MENOS
+// cartas de mejora, no más).
+//
+// Esto tensiona el presupuesto de ritmo de una forma que no tiene una solución limpia
+// con las cuatro metas a la vez (30-60 beats, 12-22 peleas, ≥85% tres cinturones,
+// progresión de MEDIA sentida). Medido con `node scripts/balance-sim.mjs` y con
+// `scripts/_tune.mjs` (mismo helper "sin crecimiento por cartas" que usa
+// career.test.js para medir cinturones, más estricto que balance-sim porque ahí la
+// MEDIA nunca sube): con 20 bloques fijos de mejora garantizada + 1 (oferta) + 2-3
+// (campamento) beats por cada pelea aceptada, bajar `probPelea` lo suficiente para
+// que el promedio de beats entre en 30-60 hunde el eje de cinturones bien por debajo
+// del 85% (menos peleas = menos chances de escalar el ranking y de defender el
+// título). El eje de cinturones es la condición de victoria del juego, así que se
+// priorizó: `probPelea` de profesional/veterano quedó cerca de los valores
+// originales (necesarios para volver a superar el 85%, con margen — medido en 87-88%
+// sobre 3000 semillas), y el promedio de beats por carrera quedó en ~65-67 (por
+// encima de 60 en la mayoría de las carreras, pero lejos del ~81 que daba la primera
+// combinación sin calibrar). `probEvento`/`probRedes` subieron respecto del recorte
+// anterior (aunque no llegan al brief pre-campamento) usando el margen que dejó
+// `probSparring` en profesional/veterano (en 0: ahí el campamento YA garantiza
+// sparring en cada pelea).
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,
-    probPelea: 0.18, probEvento: 0.12, probRedes: 0, probSparring: 0.12,
+    probPelea: 0.18, probEvento: 0.15, probRedes: 0, probSparring: 0.08,
     frase: 'Nadie sabe quién sos. Todavía.',
   },
   {
     id: 'amateur', nombre: 'Amateur', bloques: 3, aniosPorBloque: 1, edadDesde: 18,
-    probPelea: 0.4, probEvento: 0.14, probRedes: 0.08, probSparring: 0.06,
+    probPelea: 0.4, probEvento: 0.12, probRedes: 0.06, probSparring: 0.04,
     frase: 'El ascenso no consagra ídolos. Ganate el salto.',
   },
   {
     id: 'profesional', nombre: 'Profesional', bloques: 11, aniosPorBloque: 1.3, edadDesde: 21,
-    probPelea: 1, probEvento: 0.08, probRedes: 0.08, probSparring: 0,
+    probPelea: 1, probEvento: 0.02, probRedes: 0.02, probSparring: 0,
     frase: 'Acá se cobra y se sangra. Bienvenido.',
   },
   {
     id: 'veterano', nombre: 'Veterano', bloques: 3, aniosPorBloque: 1.3, edadDesde: 36,
-    probPelea: 0.7, probEvento: 0.08, probRedes: 0.04, probSparring: 0,
+    probPelea: 0.7, probEvento: 0.02, probRedes: 0.01, probSparring: 0,
     frase: 'Cada pelea puede ser la última. Elegí bien.',
   },
 ];
@@ -135,10 +141,6 @@ export function crearPartida({ jugador, semilla }) {
     // en la cola), para que el panel de próxima pelea pueda mostrarla.
     semanaGlobal: 1,
     proximaPelea: null,
-    // Se prende en firmarPelea (más abajo) y se apaga apenas arma el próximo
-    // bloque (armarCola): salta la mejora de ESE bloque nomás, nunca más de
-    // uno. Ver el comentario largo en armarCola.
-    saltarProximaMejora: false,
     cola: [],
     beatActual: null,
     historialBeats: 0,
@@ -247,22 +249,15 @@ function armarCola(partida) {
   // jugador llegue a ese beat puntual dentro de la cola.
   let proximaPelea = null;
 
-  // El bloque que arranca justo DESPUÉS de firmar una pelea (firmarPelea, más
-  // abajo) se salta su propia mejora: el campamento que se acaba de jugar ya
-  // trajo sus propias cartas de campamento (campamento.js), así que una
-  // mejora genérica encima se sentía redundante — y es, junto con el
-  // presupuesto del campamento mismo, lo que hizo entrar el ritmo de la
-  // carrera (30-60 beats) otra vez con 2-3 beats de campamento por pelea. No
-  // consume ninguna tirada de rng (a diferencia de sparring/evento/redes más
-  // abajo): el resto de la secuencia de esa carrera queda intacta cuando el
-  // flag está apagado, que es el caso normal (todo bloque que no viene justo
-  // después de una pelea).
-  if (!partida.saltarProximaMejora) {
-    cola.push({
-      tipo: 'mejora',
-      datos: { cartas: repartirMejoras(rng, { jugador: partida.jugador, etapa: etapa.id }) },
-    });
-  }
+  // Mejora garantizada en TODOS los bloques (Task v3, "progresión"): un
+  // intento anterior la salteaba en el bloque que seguía a una pelea firmada
+  // (el campamento ya trae sus propias cartas), pero eso castigaba justo al
+  // jugador que más pelea — menos cartas de mejora, no más. La progresión de
+  // MEDIA tiene que sentirse pase lo que pase con el calendario de peleas.
+  cola.push({
+    tipo: 'mejora',
+    datos: { cartas: repartirMejoras(rng, { jugador: partida.jugador, etapa: etapa.id }) },
+  });
 
   if (rng.chance(etapa.probSparring)) {
     cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: partida.jugador }) } });
@@ -304,40 +299,14 @@ function armarCola(partida) {
     }
   }
 
-  // El feed de noticias sigue actualizándose todos los bloques (via avanzarBloque),
-  // pero el BEAT que se lo muestra al jugador como pantalla propia no: si apareciera
-  // en cada uno de los 20 bloques, consumiría la mitad del presupuesto de ritmo sin
-  // ser una decisión jugable. Se muestra cada PERIODO_NOTICIAS bloques, así el jugador
-  // igual se pone al día periódicamente sin que sea el 50% de la carrera.
-  if (partida.bloqueGlobal % PERIODO_NOTICIAS === 0) {
-    cola.push({ tipo: 'noticias', datos: {} });
-  }
-
-  // Salvaguarda: si se saltó la mejora (saltarProximaMejora) y ADEMÁS ningún
-  // otro beat salió este bloque (sparring/evento/redes/pelea/noticias, todos
-  // con su propio azar), el bloque quedaría completamente vacío — el jugador
-  // vería "Continuar" dos veces seguidas sin que pasara nada, como si el
-  // juego se hubiera colgado. Nunca puede pasar: se fuerza la mejora igual,
-  // con su propia tirada de rng acá al final. No perturba la secuencia de
-  // rng de ningún bloque que sí trae contenido (el caso normal): esta rama
-  // solo se ejecuta en el caso nuevo que antes no existía (todo bloque tenía
-  // mejora garantizada, así que nunca podía estar vacío).
-  if (cola.length === 0) {
-    cola.push({
-      tipo: 'mejora',
-      datos: { cartas: repartirMejoras(rng, { jugador: partida.jugador, etapa: etapa.id }) },
-    });
-  }
-
   return { cola, rngEstado: rng.estado(), proximaPelea };
 }
 
 // Firma la pelea que el jugador acaba de aceptar (y, si hubo negociación, ya
 // tiene la bolsa final — ver main.js): en vez de ir directo al combate, arma
 // el campamento de preparación (campamento.js: 2 o 3 beats, siempre con
-// sparring) y lo mete AL FRENTE de lo que quede en la cola de este bloque
-// (típicamente nada, o como mucho el beat de 'noticias' periódico). Deja
-// `proximaPelea` con el semanaObjetivo real del campamento: el módulo de
+// sparring) y lo mete AL FRENTE de lo que quede en la cola de este bloque.
+// Deja `proximaPelea` con el semanaObjetivo real del campamento: el módulo de
 // "próxima pelea" del tablero (panel-proxima.js) ya sabe leer esto tal cual,
 // sin ningún cambio — usa el mismo `semanasHastaPelea` de siempre.
 export function firmarPelea(partida, { oferta }) {
@@ -349,8 +318,25 @@ export function firmarPelea(partida, { oferta }) {
   });
   nueva.cola = [...beats, ...nueva.cola];
   nueva.proximaPelea = { oferta, semanaObjetivo };
-  nueva.saltarProximaMejora = true;
   nueva.rngEstado = rng.estado();
+  return nueva;
+}
+
+// Cancela la pelea que estuviera en danza este bloque (si la hay): la usan
+// las cartas de riesgo (CARTAS_EVENTO/CARTAS_REDES, Task v3 "cartas nuevas")
+// cuyo desenlace malo es "se te cae la pelea" — ver `caePelea` en
+// resolverOpcion (events.js). armarCola siempre pone 'evento'/'redes' ANTES
+// que 'oferta' en la cola del mismo bloque, así que si hay una pelea en
+// danza cuando se resuelve una de estas cartas, es SIEMPRE la que este mismo
+// bloque acaba de generar (todavía no llegó el jugador a ese beat) — nunca
+// una de un campamento en curso (esos beats no son 'evento'/'redes'). Basta
+// con sacar el beat 'oferta' de la cola y limpiar `proximaPelea`; si no
+// había ninguna pelea en danza (proximaPelea ya null), no hace nada.
+export function cancelarProximaPelea(partida) {
+  if (!partida.proximaPelea) return partida;
+  const nueva = clonarPartida(partida);
+  nueva.cola = nueva.cola.filter((beat) => beat.tipo !== 'oferta');
+  nueva.proximaPelea = null;
   return nueva;
 }
 
@@ -375,9 +361,6 @@ export function siguienteBeat(partida) {
     nueva.cola = armado.cola;
     nueva.rngEstado = armado.rngEstado;
     nueva.proximaPelea = armado.proximaPelea;
-    // Se consume acá, apenas se arma la cola que lo respetó: nunca salta la
-    // mejora de DOS bloques seguidos por una sola pelea firmada.
-    nueva.saltarProximaMejora = false;
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }
@@ -397,11 +380,8 @@ export function siguienteBeat(partida) {
 }
 
 export function totalBeatsEstimado() {
-  const totalBloques = ETAPAS.reduce((a, e) => a + e.bloques, 0);
-  const noticias = Math.floor(totalBloques / PERIODO_NOTICIAS);
-  const opcionales = ETAPAS.reduce((total, etapa) => {
+  return ETAPAS.reduce((total, etapa) => {
     const porBloque = 1 + etapa.probSparring + etapa.probEvento + etapa.probRedes + etapa.probPelea;
     return total + etapa.bloques * porBloque;
   }, 0);
-  return noticias + opcionales;
 }
