@@ -1500,7 +1500,7 @@ input.creacion-control { cursor: text; }
    todo apilado como un resto al pie. */
 .pantalla-corta {
   position: relative;
-  min-height: min(560px, calc(100vh - 32px));
+  min-height: calc(100vh - 64px);
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -1511,16 +1511,24 @@ input.creacion-control { cursor: text; }
    del juego, para que ya desde acá se sienta el tono gótico-dorado del
    resto (pedido general: "con brillos, con efectos"). Puntual del login: no
    se repite en `.pantalla-corta` porque perdería su valor de firma si
-   apareciera en cualquier pantalla corta. */
-.pantalla-login::before {
+   apareciera en cualquier pantalla corta.
+   Vive en `.login-hero` (el envoltorio de la etiqueta + el h1), no en toda
+   `.pantalla-login`: como esta última se centra verticalmente, su alto
+   cambia con el viewport, y un resplandor anclado a un offset fijo desde su
+   borde superior quedaba flotando lejos del título en vez de detrás suyo.
+   Centrado con top/left 50% sobre `.login-hero` siempre queda pegado al
+   título, sea cual sea el alto de pantalla. */
+.login-hero { position: relative; }
+
+.login-hero::before {
   content: '';
   position: absolute;
-  top: -80px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
-  width: 340px;
-  height: 340px;
-  background: radial-gradient(circle, rgba(242, 193, 78, 0.1), rgba(239, 68, 68, 0.05) 45%, transparent 72%);
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  background: radial-gradient(circle, rgba(242, 193, 78, 0.14), rgba(239, 68, 68, 0.06) 45%, transparent 72%);
   pointer-events: none;
   z-index: -1;
 }

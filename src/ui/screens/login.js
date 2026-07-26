@@ -83,8 +83,10 @@ export function renderLogin(contenedor, { onEntrar, storage = storagePorDefecto(
   clave.addEventListener('keydown', alTeclear);
 
   mount(contenedor, el('div', { class: 'stack pantalla-corta pantalla-login' }, [
-    el('div', { class: 'etiqueta', text: 'Versión de prueba' }),
-    el('h1', { text: '🥊 Simulador de Carrera' }),
+    el('div', { class: 'stack login-hero' }, [
+      el('div', { class: 'etiqueta', text: 'Versión de prueba' }),
+      el('h1', { text: '🥊 Simulador de Carrera' }),
+    ]),
     el('p', { class: 'medio', text: 'Entrená. Peleá. Dejá tu legado. Ingresá para subir al ring.' }),
     el('div', { class: 'panel stack' }, [
       el('label', { class: 'stack' }, [
