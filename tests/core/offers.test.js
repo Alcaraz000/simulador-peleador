@@ -4,7 +4,7 @@ import { crearPeleador, mediaDe } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
 import {
   NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
-  proximoCinturon, puedeDisputar, cinturonActual,
+  proximoCinturon, puedeDisputar, cinturonActual, opinionEntrenador, fraseEntrenador,
 } from '../../src/core/offers.js';
 
 function jugador(extra = {}) {
@@ -202,6 +202,79 @@ describe('cinturones', () => {
     expect(oferta.enJuego).toBe('Cinturón regional');
     expect(oferta.cinturonId).toBe('regional');
     expect(oferta.textoGancho.toLowerCase()).toContain('cinturón');
+  });
+});
+
+describe('generarOferta — ranking del rival y opinion del entrenador', () => {
+  it('trae el puesto en el ranking del rival', () => {
+    const oferta = generarOferta(createRng(2), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(typeof oferta.rivalRanking).toBe('number');
+    expect(oferta.rivalRanking).toBeGreaterThan(0);
+  });
+
+  it('trae una frase del entrenador no vacia', () => {
+    const oferta = generarOferta(createRng(2), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
+    expect(oferta.opinionEntrenador.length).toBeGreaterThan(0);
+  });
+
+  it('la frase del entrenador es determinista para la misma oferta', () => {
+    const a = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    const b = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(a.fraseEntrenador).toBe(b.fraseEntrenador);
+  });
+});
+
+describe('opinionEntrenador', () => {
+  const base = () => jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } });
+
+  it('un rival mucho mas flojo da la categoria mas confiada', () => {
+    const oferta = { rivalMedia: mediaDe(base()) - 30, esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('muy_confiado');
+  });
+
+  it('un rival mucho mejor da la categoria menos recomendada', () => {
+    const oferta = { rivalMedia: mediaDe(base()) + 40, esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('no_recomendado');
+  });
+
+  it('medias parecidas dan una categoria pareja', () => {
+    const oferta = { rivalMedia: mediaDe(base()), esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('parejo');
+  });
+
+  it('mala forma, fatiga o lesion empeoran la opinion a igual matchup', () => {
+    const oferta = { rivalMedia: mediaDe(base()) + 3, esTitulo: false };
+    const sano = opinionEntrenador(base(), oferta);
+    const lesionado = jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: { nombre: 'algo' } } });
+    const golpeado = opinionEntrenador(lesionado, oferta);
+    const orden = ['muy_confiado', 'confiado', 'parejo', 'cauteloso', 'desafio', 'no_recomendado'];
+    expect(orden.indexOf(golpeado)).toBeGreaterThan(orden.indexOf(sano));
+  });
+
+  it('es pura: no muta jugador ni oferta', () => {
+    const yo = base();
+    const oferta = { rivalMedia: mediaDe(yo) + 3, esTitulo: false };
+    const antesYo = JSON.stringify(yo);
+    const antesOferta = JSON.stringify(oferta);
+    opinionEntrenador(yo, oferta);
+    expect(JSON.stringify(yo)).toBe(antesYo);
+    expect(JSON.stringify(oferta)).toBe(antesOferta);
+  });
+});
+
+describe('fraseEntrenador', () => {
+  it('menciona al rival', () => {
+    const oferta = generarOferta(createRng(4), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(oferta.fraseEntrenador).toContain(oferta.rivalApodo);
+  });
+
+  it('en una pelea de titulo puede nombrar lo que esta en juego', () => {
+    const oferta = generarOferta(createRng(6), {
+      jugador: jugador(), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
+    });
+    expect(oferta.esTitulo).toBe(true);
+    expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
   });
 });
 

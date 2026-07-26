@@ -1,6 +1,7 @@
 import { buscarRival } from './world.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
+import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
 
 export const NIVELES = {
   local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4, famaBase: 2 },
@@ -42,6 +43,83 @@ export function evaluarRiesgo(jugador, rival) {
   if (diferencia >= 8) return 'alto';
   if (diferencia <= -8) return 'bajo';
   return 'medio';
+}
+
+// --- Opinión del entrenador sobre ESTA pelea puntual (Task v3) -------------
+// Pedido textual del usuario: "una frase de tu entrenador (si recomienda, si
+// no, si cree que NO se puede ganar, si cree que hay pocas chances...)".
+// Pura y determinista (nada de rng: el criterio siempre da lo mismo para los
+// mismos números, así el jugador puede aprender a leerlo). Compara tu media
+// con la del rival y castiga el puntaje si llegás golpeado (forma baja,
+// fatiga alta, lesión) — exactamente los mismos datos que ya evalúa
+// `evaluarRiesgo`, pero acá se traduce a una opinión hablada, no a un chip.
+function ventajaPercibida(jugador, oferta) {
+  const estado = jugador.estado ?? {};
+  let ventaja = mediaDe(jugador) - oferta.rivalMedia;
+  if ((estado.forma ?? 60) < 40) ventaja -= 8;
+  if ((estado.fatiga ?? 0) > 60) ventaja -= 8;
+  if (estado.lesion) ventaja -= 15;
+  return ventaja;
+}
+
+// De más a menos favorable: cada escalón es una categoría de contenido en
+// content/coach-opinions.js (OPINIONES_ENTRENADOR). El orden importa para
+// los tests de "empeora/mejora" — se recorre de arriba a abajo y gana el
+// primer umbral que la ventaja alcanza.
+const ESCALONES_OPINION = [
+  { min: 18, id: 'muy_confiado' },
+  { min: 7, id: 'confiado' },
+  { min: -7, id: 'parejo' },
+  { min: -18, id: 'cauteloso' },
+  { min: -30, id: 'desafio' },
+  { min: -Infinity, id: 'no_recomendado' },
+];
+
+/** Categoría de opinión ('muy_confiado' ... 'no_recomendado') para esta pelea. */
+export function opinionEntrenador(jugador, oferta) {
+  const ventaja = ventajaPercibida(jugador, oferta);
+  return ESCALONES_OPINION.find((e) => ventaja >= e.min).id;
+}
+
+// Hash chico y estable (mismo idioma que `hashTexto` en news.js): elige una
+// variante de texto sin rng y sin contador de módulo aparte, así la MISMA
+// oferta siempre trae la MISMA frase (en cualquier corrida, o al recargar
+// una partida guardada) sin robarle una tirada al hilo de azar de la
+// carrera — acá no hay `rng` disponible ni hace falta: la variedad no es una
+// decisión de juego, es sabor.
+function indiceEstable(texto, modulo) {
+  let h = 0;
+  for (let i = 0; i < texto.length; i += 1) h = (h * 31 + texto.charCodeAt(i)) % 100000;
+  return h % modulo;
+}
+
+function rellenar(plantilla, datos) {
+  return plantilla.replace(/\{(\w+)\}/g, (_, clave) => String(datos[clave] ?? ''));
+}
+
+/**
+ * Frase completa del entrenador para esta oferta puntual: elige la
+ * categoría (`opinionEntrenador`) y una variante de texto de
+ * content/coach-opinions.js, ya con los marcadores rellenos. En una pelea de
+ * título usa el pool que además nombra el cinturón en juego, para que la
+ * opinión tenga en cuenta lo que está en juego, no solo el matchup.
+ */
+export function fraseEntrenador(jugador, oferta) {
+  const categoria = opinionEntrenador(jugador, oferta);
+  const pool = (oferta.esTitulo && OPINIONES_ENTRENADOR_TITULO[categoria]?.length > 0)
+    ? OPINIONES_ENTRENADOR_TITULO[categoria]
+    : OPINIONES_ENTRENADOR[categoria];
+  // Semilla del hash: NUNCA `oferta.id` (sale de un contador global, no del
+  // rng inyectado — ver el comentario de "es determinista" en
+  // offers.test.js) ni `rivalId` (mismo problema, viene de fighter.js). Con
+  // el apodo + la bolsa + lo que está en juego alcanza para variar sin
+  // depender de esos contadores.
+  const indice = indiceEstable(`${oferta.rivalApodo}|${oferta.bolsa}|${oferta.enJuego}|${categoria}`, pool.length);
+  return rellenar(pool[indice], {
+    rival: oferta.rivalApodo,
+    bolsa: `US$ ${Math.round(oferta.bolsa).toLocaleString('es-AR')}`,
+    enJuego: oferta.enJuego,
+  });
 }
 
 /** El cinturón más alto que el jugador tiene puesto (el que se defiende). */
@@ -138,7 +216,7 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
           ? `${rival.nombre} te nombró en una entrevista. El teléfono no para.`
           : `"${rival.apodo}" ${rival.nombre} te quiere cruzar.`;
 
-  return {
+  const oferta = {
     id: `of_${contadorOferta}`,
     rivalId: rival.id,
     rivalNombre: rival.nombre,
@@ -147,6 +225,10 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     rivalRecord: recordTexto(rival),
     rivalEstilo: rival.estilo,
     rivalPersonalidad: rival.personalidad,
+    // Puesto del rival en el ranking (Task v3, pedido textual): junto a su
+    // nombre en la oferta, para que el jugador no tenga que ir a buscarlo a
+    // la tabla de posiciones (ver world.js: crearRoster ya lo asigna).
+    rivalRanking: rival.ranking ?? null,
     nivel: nivel.id,
     nivelPelea: nivel.nivelPelea,
     bolsa,
@@ -163,6 +245,15 @@ export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], fo
     defensasObligatorias: nivel.id === 'defensa' ? cinturon.defensasObligatorias : null,
     textoGancho: gancho,
   };
+
+  // La opinión del entrenador (Task v3) se calcula sobre la oferta YA armada
+  // (necesita id/rivalApodo/bolsa/enJuego/esTitulo) y se hornea acá mismo,
+  // igual que `textoGancho`: no consume rng (ver el comentario en
+  // `indiceEstable`), así que no mueve la secuencia de azar de la carrera.
+  oferta.opinionEntrenador = opinionEntrenador(jugador, oferta);
+  oferta.fraseEntrenador = fraseEntrenador(jugador, oferta);
+
+  return oferta;
 }
 
 function clonarJugador(jugador) {

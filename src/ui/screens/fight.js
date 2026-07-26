@@ -12,23 +12,48 @@ import {
 
 const ETIQUETA_RIESGO = { bajo: 'Riesgo bajo', medio: 'Riesgo medio', alto: 'Riesgo alto' };
 
+// Un ícono por nivel de riesgo, con siluetas bien distintas entre sí (escudo
+// / medidor / octógono), y su color a tono con el resto del juego (verde =
+// bueno, dorado = ojo, rojo = peligro — mismo lenguaje que .tarjeta-efecto).
+const ICONO_RIESGO = { bajo: 'escudo', medio: 'medidor', alto: 'peligro' };
+const COLOR_RIESGO = { bajo: 'var(--verde)', medio: 'var(--dorado)', alto: 'var(--rojo)' };
+const CLASE_RIESGO = { bajo: 'verde', medio: 'dorado', alto: 'rojo' };
+
+function tileConIcono({ nombreIcono, color, valorTexto, valorClase = '', etiqueta }) {
+  return el('div', { class: 'tile' }, [
+    el('div', { style: 'display:flex;justify-content:center;margin-bottom:4px' }, [icono(nombreIcono, { tamano: 16, color })]),
+    el('div', { class: `valor ${valorClase}`.trim(), text: valorTexto }),
+    el('div', { class: 'nombre', text: etiqueta }),
+  ]);
+}
+
 export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechazar }) {
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: 'Oferta de pelea' }),
     el('h1', { text: oferta.esTitulo ? 'Pelea de título' : 'Te ofrecen una pelea' }),
     el('p', { class: 'medio', text: oferta.textoGancho }),
     el('div', { class: 'panel' }, [
-      el('div', { style: 'font-size:18px;font-weight:800', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+      el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
+        el('div', { style: 'font-size:18px;font-weight:800;flex:1;min-width:0', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+        // Puesto en el ranking del rival (Task v3, pedido textual): junto al
+        // nombre, así el jugador ve de un vistazo contra quién se mide sin
+        // ir a buscarlo a la tabla de posiciones.
+        oferta.rivalRanking
+          ? el('div', { class: 'etiqueta dorado', style: 'flex:0 0 auto', text: `#${oferta.rivalRanking}` })
+          : null,
+      ]),
       el('div', { class: 'etiqueta', text: `Media ${oferta.rivalMedia} · récord ${oferta.rivalRecord} · ${oferta.rivalEstilo}` }),
       el('div', { class: 'fila', style: 'margin-top:10px' }, [
-        el('div', { class: 'tile' }, [
-          el('div', { class: 'valor verde', text: fmtDinero(oferta.bolsa) }),
-          el('div', { class: 'nombre', text: 'Bolsa' }),
-        ]),
-        el('div', { class: 'tile' }, [
-          el('div', { class: 'valor', text: ETIQUETA_RIESGO[oferta.riesgo] }),
-          el('div', { class: 'nombre', text: 'Riesgo' }),
-        ]),
+        tileConIcono({
+          nombreIcono: 'billete', color: 'var(--verde)', valorTexto: fmtDinero(oferta.bolsa), valorClase: 'verde', etiqueta: 'Bolsa',
+        }),
+        tileConIcono({
+          nombreIcono: ICONO_RIESGO[oferta.riesgo],
+          color: COLOR_RIESGO[oferta.riesgo],
+          valorTexto: ETIQUETA_RIESGO[oferta.riesgo],
+          valorClase: CLASE_RIESGO[oferta.riesgo],
+          etiqueta: 'Riesgo',
+        }),
       ]),
       el('div', { class: 'chip', style: 'margin-top:10px', text: `En juego: ${oferta.enJuego}` }),
       oferta.esRevancha ? el('div', { class: 'chip rojo', text: 'Revancha' }) : null,
@@ -39,6 +64,13 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
         })
         : null,
     ]),
+    // Opinión del entrenador sobre ESTA pelea (Task v3, pedido textual): con
+    // criterio real (media, estado físico, lo que está en juego), no una
+    // frase de relleno siempre igual — ver opinionEntrenador en core/offers.js.
+    oferta.fraseEntrenador ? el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta', text: 'Tu entrenador opina' }),
+      el('p', { class: 'medio', style: 'font-style:italic;margin-top:6px', text: `"${oferta.fraseEntrenador}"` }),
+    ]) : null,
     el('button', { class: 'boton', dataset: { accion: 'aceptar' }, text: 'Aceptar la pelea', onClick: onAceptar }),
     el('button', { class: 'boton secundario', dataset: { accion: 'rechazar' }, text: 'Rechazar', onClick: onRechazar }),
   ]));

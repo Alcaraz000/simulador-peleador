@@ -20,9 +20,11 @@ const rival = crearPeleador({
 const oferta = {
   id: 'of_1', rivalId: rival.id, rivalNombre: rival.nombre, rivalApodo: rival.apodo,
   rivalMedia: 70, rivalRecord: '15-2', rivalEstilo: 'noqueador', rivalPersonalidad: 'agresivo',
+  rivalRanking: 4,
   nivel: 'titulo', nivelPelea: 'titulo', bolsa: 25000, riesgo: 'alto',
   enJuego: 'Título regional', esTitulo: true, esObligatoria: false, esRevancha: false,
   famaBase: 15, textoGancho: 'Dyke Tyzon te quiere cruzar.',
+  opinionEntrenador: 'desafio', fraseEntrenador: 'Contra Dyke Tyzon vas de underdog, pero por esta bolsa vale la pena.',
 };
 const peleaBase = () => crearPelea({ jugador, rival, disciplina: 'boxeo', nivel: 'profesional', plan: 'afuera', rng: createRng(1) });
 
@@ -54,6 +56,29 @@ describe('renderOferta', () => {
     cont.querySelector('[data-accion="rechazar"]').click();
     expect(aceptado).toBe(true);
     expect(rechazado).toBe(true);
+  });
+
+  it('muestra el puesto del rival en el ranking', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    expect(cont.textContent).toContain('#4');
+  });
+
+  it('muestra la frase del entrenador sobre esta pelea', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    expect(cont.textContent).toContain(oferta.fraseEntrenador);
+  });
+
+  it('la bolsa y el riesgo tienen icono', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    const tiles = cont.querySelectorAll('.tile');
+    expect(tiles).toHaveLength(2);
+    for (const tile of tiles) expect(tile.querySelector('svg')).toBeTruthy();
+  });
+
+  it('no rompe si la oferta no trae ranking ni frase de entrenador (compatibilidad)', () => {
+    const ofertaVieja = { ...oferta, rivalRanking: null, fraseEntrenador: null };
+    expect(() => renderOferta(cont, { oferta: ofertaVieja, jugador, onAceptar: noop, onRechazar: noop })).not.toThrow();
+    expect(cont.textContent).not.toContain('#4');
   });
 });
 

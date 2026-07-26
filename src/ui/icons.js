@@ -107,6 +107,37 @@ const PATHS = {
     'M8 6h13', 'M8 12h13', 'M8 18h13',
     'M3 6h.01', 'M3 12h.01', 'M3 18h.01',
   ],
+
+  // --- Oferta de pelea (v3): bolsa + nivel de riesgo, pedido textual del
+  // usuario ("agregar más iconos: bolsa, riesgo bajo, medio, alto"). ---
+
+  // Billete: la bolsa en juego (tile "Bolsa" de renderOferta).
+  billete: [
+    'M3 6h18a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1z',
+    'M12 9a3 3 0 1 0 0 6a3 3 0 1 0 0-6z',
+    'M6 9v.01', 'M18 15v.01',
+  ],
+
+  // Escudo: riesgo bajo (protegido, vas seguro).
+  escudo: [
+    'M12 3l7 3v6c0 4.5-3 8-7 9-4-1-7-4.5-7-9V6l7-3z',
+  ],
+
+  // Medidor: riesgo medio (aguja a mitad de camino).
+  medidor: [
+    'M4 16a8 8 0 0 1 16 0',
+    'M12 16 15.5 11',
+    'M12 16h.01',
+  ],
+
+  // Peligro (octógono, como un cartel de PARE): riesgo alto, silueta bien
+  // distinta del triángulo de "alerta" para que las tres bolsas de riesgo se
+  // distingan de un vistazo.
+  peligro: [
+    'M8.5 2h7L21 6.5v11L15.5 22h-7L2 17.5v-11z',
+    'M12 7v6',
+    'M12 16h.01',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {
