@@ -108,22 +108,108 @@ export function avanzarPelea(pelea) {
   };
 }
 
-// Qué instrucción del rincón conviene según cómo viene la pelea — mismo
-// criterio (diferencia en tarjetas + fatiga del jugador) que ya usaba
-// `consejo` más abajo, pero devuelto como un id concreto para que la UI
-// pueda marcar UNA tarjeta puntual como recomendada (Task v3, pedido
-// textual: "una pista de cuál te recomienda el entrenador ... que tenga
-// criterio real, no una sugerencia al azar"). Cuatro casos:
+// Qué instrucción es OBJETIVAMENTE la mejor jugada según cómo viene la
+// pelea (diferencia en tarjetas + fatiga del jugador) — la lectura "de
+// libro", la que tendría un entrenador perfecto e infalible. Cuatro casos:
 //   - abajo en tarjetas y sin gas: hay que primero recuperar el aliento.
 //   - abajo en tarjetas pero con gas: presionar para dar vuelta el marcador.
 //   - arriba (o empatado) y sin gas: cuidar la ventaja, no regalar nada.
 //   - arriba (o empatado) y con gas: buscar el nocaut mientras se puede.
+//
+// Esto NO es lo que el jugador ve en pantalla: es el criterio interno que
+// alimenta a `consejoRincon` de abajo, que decide si tu entrenador de carne
+// y hueso llega a leerla así (o ni siquiera abre la boca). Que esta función
+// sea pura y determinista es justamente lo que la hace testeable con casos
+// exactos (ver fight-interactive.test.js).
 export function instruccionRecomendada(pelea) {
   const { jugador, rival } = pelea.tarjetas;
   const diferencia = jugador - rival;
   const cansado = pelea.fatiga.jugador > 60;
   if (diferencia < 0) return cansado ? 'respirar' : 'acelerar';
   return cansado ? 'respirar' : 'cuerpo';
+}
+
+// Techo del catálogo de entrenadores (src/content/coaches.js): la suma de
+// aporte de Nicolino Lecho (tecnica 8 + iq 6 + velocidad 4 = 18), el
+// entrenador legendario. Se usa para normalizar "qué tan bueno es ESTE
+// cuerpo técnico" a 0-1 sin importar qué se agregue al catálogo más
+// adelante (un entrenador más fuerte simplemente empuja el tope).
+const APORTE_ENTRENADOR_TOPE = 18;
+
+// Qué tan buena es la lectura del cuerpo técnico actual del jugador (Task
+// v4, pedido textual: "fijate si el entrenador puede ser lo que determine
+// qué tan seguido acierta ... sería coherente con que elegir entrenador
+// importe"). Se deriva del aporte TOTAL que ya trae `crearPeleador`
+// horneado en los atributos (coach.js) — sin inventar un stat nuevo: un
+// entrenador que aporta más puntos en total es, por definición, uno mejor.
+// Piso en 0.2 (nunca completamente ciego) y techo en 1 (nunca infalible por
+// sí solo: la claridad de la situación también pesa, ver abajo).
+function calidadEntrenador(pelea) {
+  const aporte = pelea.snapshot?.jugador?.entrenador?.aporte ?? {};
+  const total = Object.values(aporte).reduce((acc, v) => acc + Math.abs(v), 0);
+  return clamp(total / APORTE_ENTRENADOR_TOPE, 0.2, 1);
+}
+
+// Qué tan clara está la pelea de leer, más allá de quién la mire: una
+// diferencia grande en tarjetas o una fatiga bien lejos del umbral de
+// "cansado" (60) es una lectura fácil hasta para un rincón mediocre. Cerca
+// del empate y cerca del umbral, hasta el mejor entrenador puede leerla
+// para cualquier lado.
+function claridadSituacion(pelea) {
+  const { jugador, rival } = pelea.tarjetas;
+  const porTarjetas = clamp(Math.abs(jugador - rival) / 3, 0, 1);
+  const porFatiga = clamp(Math.abs(pelea.fatiga.jugador - 60) / 40, 0, 1);
+  return Math.max(porTarjetas, porFatiga);
+}
+
+// Con un cuerpo técnico flojo y una pelea muy pareja, el consejo puede
+// directamente no llegar (silencio) casi 2 de cada 3 rounds; con el mejor
+// entrenador y la pelea clarísima, casi siempre va a decir algo — pero
+// nunca con el 100% de certeza (techo 0.9): el silencio también le puede
+// tocar al mejor rincón alguna vez.
+function probabilidadHabla(calidad, claridad) {
+  return clamp(0.35 + calidad * 0.3 + claridad * 0.25, 0.15, 0.9);
+}
+
+// Cuando SÍ habla, esta es la chance de que acierte la jugada objetivamente
+// correcta (`instruccionRecomendada`) en vez de tirar una de las otras dos.
+// Ni el mejor entrenador con la lectura más clara es infalible (techo
+// 0.97) — y un rincón mediocre en una pelea confusa puede estar más cerca
+// de acertar por moneda al aire que por criterio (piso 0.35, apenas por
+// encima de 1/3 al azar entre las tres opciones).
+function probabilidadAcierta(calidad, claridad) {
+  return clamp(0.5 + calidad * 0.3 + claridad * 0.2, 0.35, 0.97);
+}
+
+// El consejo que de verdad dice tu rincón este round — a diferencia de
+// `instruccionRecomendada` (la jugada ideal, siempre la misma para un
+// estado dado), esto puede no decir nada, o puede equivocarse. Task v4,
+// pedido textual: "no quiero que [el tip] aparezca siempre ... que cuando
+// lo haya no sea infalible". Usa el mismo patrón que `abrirGolpeDeGracia`
+// (ver más abajo): arranca del rngEstado YA guardado en la pelea sin
+// consumirlo/persistirlo, así que llamar esto varias veces sobre la MISMA
+// pelea siempre da el mismo resultado (estable mientras se está mirando el
+// rincón; solo cambia cuando avanza el round siguiente y el rngEstado real
+// se mueve).
+export function consejoRincon(pelea) {
+  const entrenador = pelea.snapshot?.jugador?.entrenador ?? null;
+  if (!entrenador) return null; // sin cuerpo técnico, no hay quién hable
+
+  const calidad = calidadEntrenador(pelea);
+  const claridad = claridadSituacion(pelea);
+
+  const rng = createRng(pelea.semilla);
+  rng.restaurar(pelea.rngEstado);
+
+  if (!rng.chance(probabilidadHabla(calidad, claridad))) return null;
+
+  const correcta = instruccionRecomendada(pelea);
+  const acierta = rng.chance(probabilidadAcierta(calidad, claridad));
+  const id = acierta
+    ? correcta
+    : rng.pick(Object.keys(INSTRUCCIONES_RINCON).filter((otro) => otro !== correcta));
+
+  return { id, entrenadorNombre: entrenador.nombre };
 }
 
 export function estadoRincon(pelea) {
@@ -150,7 +236,11 @@ export function estadoRincon(pelea) {
     fatigaRival: Math.round(pelea.fatiga.rival),
     aguanteRival: Math.round(pelea.aguante.rival),
     consejo,
-    recomendada: instruccionRecomendada(pelea),
+    // El tip puntual ("tirá tal cosa"), aparte del comentario general de
+    // arriba: puede venir null (el rincón no dice nada este round) o traer
+    // una jugada que no sea la ideal (ver consejoRincon). `null` cuando no
+    // hay entrenador o cuando no le tocó hablar.
+    tip: consejoRincon(pelea),
   };
 }
 

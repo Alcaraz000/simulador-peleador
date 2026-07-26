@@ -5,12 +5,13 @@ import { crearPelea } from '../../src/core/fight.js';
 import {
   INSTRUCCIONES_RINCON, ZONAS_GOLPE, POSTURAS, avanzarPelea, estadoRincon,
   aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia, instruccionRecomendada,
+  consejoRincon,
 } from '../../src/core/fight-interactive.js';
 
-function armar({ semilla = 1, nivel = 'profesional' } = {}) {
+function armar({ semilla = 1, nivel = 'profesional', estiloJugador = 'tecnico' } = {}) {
   const jugador = crearPeleador({
     nombre: 'Jugador', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
-    estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 60, esJugador: true,
+    estilo: estiloJugador, categoria: 'pluma', origen: 'barrio', media: 60, esJugador: true,
   });
   const rival = crearPeleador({
     nombre: 'Rival', apodo: 'El Otro', nacionalidad: 'MX', disciplina: 'boxeo',
@@ -68,10 +69,110 @@ describe('estadoRincon', () => {
     expect(estado.consejo.length).toBeGreaterThan(0);
   });
 
-  it('incluye una instruccion recomendada valida', () => {
+  // Task v4, pedido textual: el tip ya no es infalible ni siempre presente
+  // (ver describe('consejoRincon') más abajo para el criterio en detalle) —
+  // acá solo se prueba que `estadoRincon` expone el campo con la forma
+  // correcta en los dos casos posibles: ausente, o con un id válido + el
+  // nombre de quien lo firma.
+  it('el tip viene null o con un id valido de INSTRUCCIONES_RINCON y el nombre de quien lo dice', () => {
+    for (let semilla = 1; semilla <= 40; semilla++) {
+      const { pelea } = avanzarPelea(armar({ semilla }));
+      const estado = estadoRincon(pelea);
+      if (estado.tip === null) continue;
+      expect(Object.keys(INSTRUCCIONES_RINCON)).toContain(estado.tip.id);
+      expect(estado.tip.entrenadorNombre.length).toBeGreaterThan(0);
+    }
+  });
+});
+
+// Task v4, pedido textual: "ese tip parece hacer que el jugador siempre
+// gane, así que no quiero que aparezca siempre" + "que cuando lo haya no
+// sea infalible ... que dependa de qué tan buena sea la lectura de tu
+// entrenador y de lo clara que esté la situación".
+describe('consejoRincon', () => {
+  // Barre muchos rngEstado distintos para el MISMO estado de pelea: como
+  // `consejoRincon` arranca siempre del rngEstado ya guardado en la pelea
+  // (mismo patrón que abrirGolpeDeGracia) sin persistirlo, alcanza con variar
+  // ese valor para simular "muchos rounds distintos" sin tener que jugar
+  // partidas completas.
+  function muchasTiradas(pelea, cantidad = 400) {
+    const resultados = [];
+    for (let e = 1; e <= cantidad; e++) {
+      resultados.push(consejoRincon({ ...pelea, rngEstado: e }));
+    }
+    return resultados;
+  }
+
+  it('a veces no dice nada (no aparece siempre)', () => {
     const { pelea } = avanzarPelea(armar());
-    const estado = estadoRincon(pelea);
-    expect(Object.keys(INSTRUCCIONES_RINCON)).toContain(estado.recomendada);
+    const resultados = muchasTiradas(pelea);
+    expect(resultados.some((r) => r === null)).toBe(true);
+    expect(resultados.some((r) => r !== null)).toBe(true);
+  });
+
+  it('cuando habla, a veces se equivoca (no es infalible)', () => {
+    const { pelea } = avanzarPelea(armar());
+    const correcta = instruccionRecomendada(pelea);
+    const dichos = muchasTiradas(pelea).filter((r) => r !== null);
+    expect(dichos.some((r) => r.id === correcta)).toBe(true);
+    expect(dichos.some((r) => r.id !== correcta)).toBe(true);
+  });
+
+  it('firma el consejo con el nombre del entrenador actual del jugador', () => {
+    const { pelea } = avanzarPelea(armar());
+    const dichos = muchasTiradas(pelea).filter((r) => r !== null);
+    expect(dichos.length).toBeGreaterThan(0);
+    for (const r of dichos) expect(r.entrenadorNombre).toBe(pelea.snapshot.jugador.entrenador.nombre);
+  });
+
+  it('sin entrenador (cuerpo tecnico viejo/sin catalogo) nunca dice nada', () => {
+    const { pelea } = avanzarPelea(armar());
+    const sinEntrenador = { ...pelea, snapshot: { ...pelea.snapshot, jugador: { ...pelea.snapshot.jugador, entrenador: null } } };
+    const resultados = muchasTiradas(sinEntrenador);
+    expect(resultados.every((r) => r === null)).toBe(true);
+  });
+
+  it('es determinista: llamarlo dos veces sobre la MISMA pelea da el mismo resultado', () => {
+    const { pelea } = avanzarPelea(armar());
+    expect(consejoRincon(pelea)).toEqual(consejoRincon(pelea));
+  });
+
+  it('no muta la pelea (no persiste el rng gastado en la previsualizacion)', () => {
+    const { pelea } = avanzarPelea(armar());
+    const antes = JSON.stringify(pelea);
+    consejoRincon(pelea);
+    expect(JSON.stringify(pelea)).toBe(antes);
+  });
+
+  // El corazón del pedido: un cuerpo técnico legendario en una pelea clara
+  // (bien arriba en tarjetas, con gas) tiene que acertar sensiblemente más
+  // seguido que uno de gimnasio de barrio en una pelea pareja y ambigua.
+  it('un entrenador legendario en una situacion clara acierta mas seguido que uno flojo en una confusa', () => {
+    const claraFuerte = (() => {
+      const { pelea } = avanzarPelea(armar({ estiloJugador: 'contragolpeador' })); // Nicolino Lecho, legendario
+      return { ...pelea, tarjetas: { jugador: 5, rival: 0 }, fatiga: { ...pelea.fatiga, jugador: 15 } };
+    })();
+    const confusaFloja = (() => {
+      const { pelea } = avanzarPelea(armar({ estiloJugador: 'noqueador' })); // Tanque Ferro, normal
+      return { ...pelea, tarjetas: { jugador: 2, rival: 2 }, fatiga: { ...pelea.fatiga, jugador: 60 } };
+    })();
+
+    const correctaFuerte = instruccionRecomendada(claraFuerte);
+    const correctaFloja = instruccionRecomendada(confusaFloja);
+
+    const dichosFuerte = muchasTiradas(claraFuerte).filter((r) => r !== null);
+    const dichosFloja = muchasTiradas(confusaFloja).filter((r) => r !== null);
+
+    const aciertoFuerte = dichosFuerte.filter((r) => r.id === correctaFuerte).length / dichosFuerte.length;
+    const aciertoFloja = dichosFloja.filter((r) => r.id === correctaFloja).length / dichosFloja.length;
+
+    expect(aciertoFuerte).toBeGreaterThan(aciertoFloja);
+
+    // Y también habla más seguido: menos silencios con el rincón bueno en
+    // pelea clara que con el flojo en una confusa.
+    const cantidadFuerte = muchasTiradas(claraFuerte).filter((r) => r !== null).length;
+    const cantidadFloja = muchasTiradas(confusaFloja).filter((r) => r !== null).length;
+    expect(cantidadFuerte).toBeGreaterThan(cantidadFloja);
   });
 });
 

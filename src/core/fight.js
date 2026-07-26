@@ -39,6 +39,13 @@ function snapshotDe(peleador) {
     atributos: { ...peleador.atributos },
     especiales: { ...peleador.especiales },
     estado: { ...peleador.estado },
+    // Solo lo que necesita el consejo del rincón (fight-interactive.js): el
+    // nombre para firmarlo y el aporte para medir qué tan buena es su
+    // lectura. No se copian escuela/frase/iniciales acá — esto es un
+    // snapshot de PELEA, no el perfil completo del cuerpo técnico.
+    entrenador: peleador.entrenador
+      ? { nombre: peleador.entrenador.nombre, aporte: { ...peleador.entrenador.aporte } }
+      : null,
   };
 }
 
