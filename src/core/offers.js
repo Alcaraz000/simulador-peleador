@@ -16,11 +16,22 @@ export const NIVELES = {
 /**
  * Progresión de cinturones. Se pelea por el siguiente que no tenés,
  * en orden; cada uno exige más ranking y paga más.
+ *
+ * Pedido 1 (v6, roster de 12 -> 100, "el ranking tiene que ser una
+ * montaña"): estos `rankingMax` se calibraron para un roster de 12 (top 8 =
+ * 67% de la tabla, top 5 = 42%, top 3 = 25%). Escalarlos a la misma
+ * PROPORCIÓN sobre 100 rivales (66/42/25) los habría dejado casi sin filo —
+ * calificar para el título regional con solo estar en la mitad de la tabla
+ * no se siente como una montaña. En cambio, se ajustaron para que cada
+ * escalón siga siendo un salto real de exigencia sobre una categoría de 100:
+ * top 20 (un puesto que hay que ganarse con una racha de verdad), top 10, y
+ * top 5 para el mundial. Ver el informe de balance (scripts/balance-sim.mjs)
+ * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 8, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 5, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 3, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
 ];
 
 /** El próximo cinturón que el jugador puede disputar, o null si los tiene todos. */
@@ -186,11 +197,26 @@ let contadorOferta = 0;
 export function generarOferta(rng, { jugador, mundo, etapa, rivalidades = [], forzarTitulo = false }) {
   const { nivel, cinturon } = decidirNivel({ jugador, etapa, forzarTitulo, rng });
 
+  // Pedido 3 (v6, "nada de revancha inmediata después de una pelea. Que pase
+  // tiempo"): el último rival que de verdad peleó (jugador.historial, el
+  // registro que arma aplicarResultado) queda excluido de ESTA oferta — la
+  // primera que se arma después de esa pelea. Una vez que el jugador firma y
+  // resuelve OTRA pelea, el historial avanza y este mismo rival vuelve a
+  // quedar disponible (incluida la revancha que rivalidades.js narra más
+  // adelante): el cierre es "no inmediata", no "nunca más".
+  const ultimoRivalId = jugador.historial?.length > 0
+    ? jugador.historial[jugador.historial.length - 1].rivalId
+    : null;
+
   const archirrival = rivalidades.find((r) => r.esArchirrival);
+  const archirrivalEsElUltimo = archirrival?.rivalId === ultimoRivalId;
   const rankingObjetivo = clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12);
-  const rival = (archirrival && rng.chance(0.3)
+  const rival = (archirrival && !archirrivalEsElUltimo && rng.chance(0.3)
     ? mundo.roster.find((p) => p.id === archirrival.rivalId && !p.retirado)
-    : null) ?? buscarRival(mundo, { excluirIds: [jugador.id], rankingCerca: rankingObjetivo });
+    : null) ?? buscarRival(mundo, {
+    excluirIds: [jugador.id, ultimoRivalId].filter(Boolean),
+    rankingCerca: rankingObjetivo,
+  });
 
   if (!rival) return null;
 

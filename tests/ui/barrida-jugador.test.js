@@ -19,7 +19,7 @@ import {
 import { iniciar } from '../../src/main.js';
 import { CLAVE_ACCESO } from '../../src/ui/screens/login.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPartida } from '../../src/core/career.js';
+import { crearPartida, CANTIDAD_MUNDO } from '../../src/core/career.js';
 import { guardar } from '../../src/core/save.js';
 
 function crearStorageFalso() {
@@ -67,7 +67,12 @@ function revisarRanking(cont, etiqueta) {
   const match = alrededor.match(/#(\d+)/);
   if (match) {
     const ranking = Number(match[1]);
-    if (ranking < 1 || ranking > 30) anomalias.push(`[${etiqueta}] ranking implausible: #${ranking}`);
+    // Pedido 1 (v6, "el ranking tiene que ser una montaña", roster de 100):
+    // antes el techo plausible era 30 (roster de 12 no llegaba ni cerca).
+    // Con CANTIDAD_MUNDO=100, estar #40, #60 o #90 a mitad de carrera es
+    // normal, no un bug — el techo real es el tamaño del roster + 1 (el
+    // jugador puede ir último).
+    if (ranking < 1 || ranking > CANTIDAD_MUNDO + 1) anomalias.push(`[${etiqueta}] ranking implausible: #${ranking}`);
   }
 }
 

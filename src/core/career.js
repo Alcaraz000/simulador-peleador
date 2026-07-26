@@ -1,5 +1,6 @@
 import { createRng } from './rng.js';
 import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './world.js';
+import { EDAD_INICIAL } from './fighter.js';
 import { repartirMejoras } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { generarOferta, CINTURONES } from './offers.js';
@@ -12,6 +13,10 @@ import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
+
+// Pedido 1 (v6, "el ranking está muy pobre... debe de haber al menos 100
+// peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
+export const CANTIDAD_MUNDO = 100;
 
 // El jugador también sufre el declive de "las piernas" por la edad, igual que
 // los NPC en world.js (ahí es un roll de rng; acá es determinístico para no
@@ -32,6 +37,17 @@ import { armarBeatsCampamento } from './campamento.js';
 // es el mismo. `faseFisicaJugador` (exportada, más abajo) es la versión
 // "para mostrar en el tablero" de estos mismos umbrales — el jugador puede
 // ver venir la caída antes de que llegue.
+//
+// Pedido 4 (v6, TERCERA vez que reporta que la media sube lento: "quiero que
+// por año los atributos también vayan subiendo, sin acciones de por medio,
+// hasta llegar al prime y después vayan bajando gradualmente"): el arco de
+// acá abajo ahora es COMPLETO, no solo declive. Antes del prime (ver
+// EDAD_FIN_CRECIMIENTO más abajo) los atributos crecen solos, cada bloque,
+// determinísticamente — igual criterio que el declive: no puede tirar del
+// rng compartido (correría la racha de tiradas que calibra el ritmo de toda
+// la carrera). Es el PISO de la progresión, no el motor: las cartas de
+// mejora (con su rareza y su suerte legendaria) siguen siendo lo que separa
+// una carrera con suerte de una sin ella — ver CRECIMIENTO_MAX_POR_BLOQUE.
 export const EDAD_DECLIVE_JUGADOR = 32;
 const EDAD_DECLIVE_DURO_JUGADOR = 36;
 const DEMORA_DECLIVE_PREPARADOR = 3;
@@ -41,11 +57,22 @@ const PERDIDA_VELOCIDAD_DECLIVE_DURO = 3;
 const PERDIDA_CARDIO_DECLIVE_DURO = 2;
 const PERDIDA_POTENCIA_DECLIVE_DURO = 1;
 
+// Edad en la que se frena el crecimiento pasivo (ver crecimientoPorEdadJugador,
+// más abajo): a partir de acá empieza la meseta ("tu prime"). El usuario lo
+// puso en palabras — "a los 27-30 estás en tu mejor momento" — así que
+// MARGEN_PRIME (de acá abajo) se redefine para que el prime mostrado en el
+// tablero arranque EXACTAMENTE acá: no tendría sentido que el juego siguiera
+// narrando "todavía hay margen para crecer" (fase 'ascenso') más allá del
+// punto en el que, mecánicamente, ya se dejó de crecer.
+const EDAD_FIN_CRECIMIENTO = 27;
+
 // Años de margen antes del umbral suave que todavía se consideran "el prime"
 // (meseta): ni en ascenso ni declinando todavía, el mejor momento de la
 // carrera — lo bastante cerca del declive como para que el jugador sepa que
-// se viene, pero sin que haya empezado.
-const MARGEN_PRIME = 2;
+// se viene, pero sin que haya empezado. Se deriva de EDAD_FIN_CRECIMIENTO
+// (arriba) para que la fase mostrada en el tablero y el crecimiento pasivo de
+// verdad coincidan siempre: sin preparador, el prime dura de los 27 a los 31.
+const MARGEN_PRIME = EDAD_DECLIVE_JUGADOR - EDAD_FIN_CRECIMIENTO;
 
 function umbralesDeclive(jugador) {
   const demora = tieneStaff(jugador, 'preparador') ? DEMORA_DECLIVE_PREPARADOR : 0;
@@ -89,6 +116,48 @@ const CUERPOS_SPONSOR = [
   'Nada como un buen cheque para bajar la presión antes de la próxima pelea.',
   'El mánager ya está pidiendo que le manden el logo para el pantalón.',
 ];
+
+// Puntos por atributo que suma el crecimiento pasivo en el PRIMER bloque de
+// la carrera (15 años) — decae lineal hasta 0 en EDAD_FIN_CRECIMIENTO. Un
+// chico de 15 tiene que crecer rápido: acá es donde más rinde. El número se
+// calibró con scripts/_tune.mjs para que la MEDIA a mitad de carrera y al
+// final suban de forma sentida sin volver irrelevantes las cartas de mejora
+// (que siguen siendo lo que separa una carrera con suerte de una sin ella).
+const CRECIMIENTO_MAX_POR_BLOQUE = 3;
+
+// Los mismos seis atributos "core" que pesan en la MEDIA de boxeo (ver
+// pesosDe en disciplines.js) — no toca grappling (en boxeo vale 1 fijo) ni
+// los "especiales" (menton/disciplinaPersonal, que no forman parte de la
+// media). Crecen todos parejo: una versión más simple que separar "físico"
+// de "técnico" por edad, y ya alcanza para que la MEDIA suba sola de forma
+// sentida.
+const ATRIBUTOS_CON_CRECIMIENTO = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
+
+// Pedido 4 (v6, TERCERA vez: "quiero que por año los atributos también vayan
+// subiendo, sin acciones de por medio, hasta llegar al prime"): crecimiento
+// pasivo, determinístico (no tira del rng compartido, mismo criterio que
+// declivePorEdadJugador — ver el comentario grande más arriba). Se frena del
+// todo en EDAD_FIN_CRECIMIENTO (la meseta del prime): antes de eso, decae
+// lineal desde CRECIMIENTO_MAX_POR_BLOQUE (a los 15) hasta 0. Es el PISO de
+// la progresión: las cartas de mejora (con su rareza y su suerte legendaria)
+// siguen siendo lo que de verdad separa una carrera con suerte de una sin
+// ella — esto solo garantiza que ALGO suba incluso si nunca tocás una carta
+// buena.
+function crecimientoPorEdadJugador(jugador) {
+  if (jugador.edad >= EDAD_FIN_CRECIMIENTO) return jugador.atributos;
+  const progreso = clamp(
+    (EDAD_FIN_CRECIMIENTO - jugador.edad) / (EDAD_FIN_CRECIMIENTO - EDAD_INICIAL),
+    0,
+    1,
+  );
+  const delta = Math.round(CRECIMIENTO_MAX_POR_BLOQUE * progreso);
+  if (delta <= 0) return jugador.atributos;
+  const atributos = { ...jugador.atributos };
+  for (const clave of ATRIBUTOS_CON_CRECIMIENTO) {
+    atributos[clave] = clamp(atributos[clave] + delta, 1, 99);
+  }
+  return atributos;
+}
 
 function declivePorEdadJugador(jugador) {
   const { suave, duro } = umbralesDeclive(jugador);
@@ -172,6 +241,52 @@ function declivePorEdadJugador(jugador) {
 // Los otros dos objetivos de ritmo NO cambiaron: 12-22 peleas/carrera y
 // ≥85% de carreras bien jugadas con los tres cinturones (ver el test
 // 'progresión de cinturones' en career.test.js).
+//
+// ===== RONDA v6 (Pedido 1-4): roster de 100 + ritmo de peleas + crecimiento =====
+// Cuarta vuelta de recalibración, y la más grande hasta ahora: tres pedidos
+// del usuario que empujan el presupuesto de ritmo en direcciones opuestas a
+// la vez, todos atendidos:
+//   - Pedido 1 ("el ranking tiene que ser una montaña"): el roster pasa de
+//     12 a 100 (CANTIDAD_MUNDO). Esto por sí solo NO toca el presupuesto de
+//     beats (sigue siendo 1 mejora + 1-N campamento por pelea), pero sí
+//     hunde el eje de cinturones si no se compensa (ver Pedido 4).
+//   - Pedido 3 ("hay muy poco margen entre pelea y pelea... debe darte
+//     varios turnos de preparación"): el campamento pasa de 2-3 beats a 3-5
+//     (campamento.js) y `probPelea` de profesional/veterano baja (0.85/0.6,
+//     antes 1/0.7) para que existan bloques de verdad sin oferta. Las dos
+//     cosas EMPUJAN EN CONTRA del eje de cinturones (menos peleas, más
+//     roster) y del rango de beats (más beats por pelea).
+//   - Pedido 4 ("los atributos crecen y decaen con la edad... quiero que la
+//     media suba más rápido"): crecimiento pasivo por edad (ver
+//     crecimientoPorEdadJugador, arriba) — es lo que TERMINA sosteniendo el
+//     eje de cinturones: sin él, medido con cantidad=100 y el ritmo de
+//     peleas ya recortado, el eje caía a ~68% (por debajo del piso). Con el
+//     crecimiento pasivo puesto, vuelve a superarlo con margen.
+//
+// Para sostener el eje de cinturones con MENOS peleas y un roster 8x más
+// grande, `CINTURONES.rankingMax` (offers.js) también se recalibró: de
+// 8/5/3 (proporciones de un roster de 12) a 20/13/6 sobre 100 — mucho más
+// exigente en TÉRMINOS ABSOLUTOS (top 20%, no top 67%) pero alcanzable en el
+// número de peleas que quedan. Esto es exactamente lo que pide el brief:
+// "si para sostener el eje de cinturones hay que ajustar cómo se gana una
+// oportunidad titular, hacelo."
+//
+// Medido con scripts/_tune.mjs (3000 semillas, jugador fijo sin lotería de
+// creación, mismo método que el test 'progresión de cinturones'):
+//   3 cinturones: 86.6% (antes de esta ronda: ~87%; el piso de 0.85 sigue
+//   con el mismo margen que tenía antes — no se debilitó a pesar de la
+//   montaña más alta y menos peleas, gracias al crecimiento pasivo).
+//   beats/carrera: avg=82.0 | p10=70 | p50=82 | p90=93 | min=49 | max=110
+//   (antes: avg=66.4). Sube por el campamento más largo — costo medido y
+//   aceptado, no escondido (ver el test de ritmo, actualizado).
+//   ofertas/carrera: avg=12.9 | p10=11 | p90=15 | min=6 | max=19 (antes:
+//   avg=14.7, típico 12-22). Baja — es lo que pidió el usuario
+//   explícitamente ("el número de peleas por carrera puede bajar"). El piso
+//   duro de 8 se mantiene para las semillas fijas del test (nunca lo cruzan).
+// El objetivo declarado de beats/carrera pasa de "avg≈66" a "avg≈82" (ver el
+// test de ritmo, actualizado con el mismo criterio de honestidad que las
+// rondas anteriores: medir, declarar, y que el test marque una regresión
+// real, no un número inventado).
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,
@@ -184,13 +299,25 @@ export const ETAPAS = [
     frase: 'El ascenso no consagra ídolos. Ganate el salto.',
   },
   {
+    // Pedido 3 (v6, "en profesional hay 1 o 2 peleas al año máximo... por lo
+    // tanto ¿pueden surgir peleas nuevas? sí, pero debe darte varios turnos
+    // de preparación"): antes probPelea=1 (garantizado TODOS los bloques, sin
+    // excepción — nunca había un bloque "de descanso"). Con bloques de 1.3
+    // años, un 0.8 deja ~1 de cada 5 bloques sin oferta (un año y monedas sin
+    // que suene el teléfono) y el resto sigue rindiendo cerca de 1 pelea por
+    // bloque — 1.3 años, adentro del "1-2 por año" que pidió el usuario. El
+    // cooldown de revancha inmediata (generarOferta, offers.js) y el
+    // campamento más largo (campamento.js) hacen el resto del trabajo de
+    // "que no se sienta acelerado".
     id: 'profesional', nombre: 'Profesional', bloques: 11, aniosPorBloque: 1.3, edadDesde: 21,
-    probPelea: 1, probEvento: 0.02, probRedes: 0.02, probSparring: 0,
+    probPelea: 0.85, probEvento: 0.02, probRedes: 0.02, probSparring: 0,
     frase: 'Acá se cobra y se sangra. Bienvenido.',
   },
   {
+    // Mismo criterio que profesional, un escalón más abajo: un veterano
+    // pelea menos seguido (cuerpo castigado, carrera sobre el final).
     id: 'veterano', nombre: 'Veterano', bloques: 3, aniosPorBloque: 1.3, edadDesde: 36,
-    probPelea: 0.7, probEvento: 0.02, probRedes: 0.01, probSparring: 0,
+    probPelea: 0.6, probEvento: 0.02, probRedes: 0.01, probSparring: 0,
     frase: 'Cada pelea puede ser la última. Elegí bien.',
   },
 ];
@@ -204,7 +331,9 @@ export function crearPartida({ jugador, semilla }) {
   const mundo = crearMundo(rng, {
     disciplina: jugador.disciplina,
     categoria: jugador.categoria,
-    cantidad: 12,
+    // Pedido 1 (v6, "el ranking está muy pobre, debe de haber al menos 100
+    // peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
+    cantidad: CANTIDAD_MUNDO,
     // El pool "normal" de apodos del jugador (nicknames.js) se superpone con
     // el pool de apodos de los rivales (names.js): sin reservar el propio,
     // un rival al azar podía terminar con el MISMO apodo que el jugador
@@ -288,6 +417,11 @@ export function avanzarBloque(partida) {
   if (!nueva.jugador.estado.lesion) {
     nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
   }
+  // Crecimiento pasivo primero (Pedido 4): nunca se solapan (uno termina en
+  // EDAD_FIN_CRECIMIENTO, el otro arranca recién en EDAD_DECLIVE_JUGADOR,
+  // más tarde), pero el orden importa igual para que la edad ya incrementada
+  // arriba sea la que ambos lean.
+  nueva.jugador.atributos = crecimientoPorEdadJugador(nueva.jugador);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
   const recuperacion = recuperar(nueva.jugador, { bloques: 1 });

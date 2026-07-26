@@ -90,6 +90,56 @@ describe('generarOferta', () => {
     expect(generarOferta(createRng(8), { jugador: jugador(), mundo: m, etapa: 'profesional' })).toBeNull();
   });
 
+  // Pedido 3 (v6, "nada de revancha inmediata después de una pelea. Que pase
+  // tiempo"): el rival de la última pelea del historial no puede ser la
+  // MISMA oferta que le sigue — tiene que pasar por, al menos, otra pelea
+  // antes de que ese mismo rival vuelva a estar disponible.
+  describe('cooldown: no revancha inmediata', () => {
+    it('nunca ofrece de nuevo al rival de la última pelea del historial', () => {
+      const m = mundo();
+      const ultimoRival = m.roster[3];
+      const yo = jugador({
+        historial: [{
+          rivalId: ultimoRival.id, rivalNombre: ultimoRival.nombre, rivalApodo: ultimoRival.apodo, resultado: 'v',
+        }],
+      });
+      for (let s = 1; s <= 100; s += 1) {
+        const oferta = generarOferta(createRng(s), { jugador: yo, mundo: m, etapa: 'profesional' });
+        if (oferta) expect(oferta.rivalId).not.toBe(ultimoRival.id);
+      }
+    });
+
+    it('sin historial (primera pelea de la carrera), no excluye a nadie por este motivo', () => {
+      const m = mundo();
+      const yo = jugador({ historial: [] });
+      let vioAlgunRival = false;
+      for (let s = 1; s <= 30; s += 1) {
+        const oferta = generarOferta(createRng(s), { jugador: yo, mundo: m, etapa: 'profesional' });
+        if (oferta) vioAlgunRival = true;
+      }
+      expect(vioAlgunRival).toBe(true);
+    });
+
+    it('el archirrival tampoco puede colarse si es el rival de la última pelea', () => {
+      const m = mundo();
+      const rival = m.roster[3];
+      const yo = jugador({
+        historial: [{ rivalId: rival.id, rivalNombre: rival.nombre, rivalApodo: rival.apodo, resultado: 'v' }],
+      });
+      for (let s = 1; s <= 100; s += 1) {
+        const oferta = generarOferta(createRng(s), {
+          jugador: yo,
+          mundo: m,
+          etapa: 'profesional',
+          rivalidades: [{
+            rivalId: rival.id, heat: 100, h2h: { v: 1, d: 0, e: 0 }, esArchirrival: true, hitos: [],
+          }],
+        });
+        if (oferta) expect(oferta.rivalId).not.toBe(rival.id);
+      }
+    });
+  });
+
   // Pedido 1 (v6, roster de 100): con el pool de apodos (16) muy por debajo
   // de 100 rivales, la mayoría de los rivales de relleno quedan sin apodo
   // (null) — antes esto no podía pasar en producción (todo NPC generado
@@ -145,7 +195,8 @@ describe('cinturones', () => {
   it('puedeDisputar depende del ranking', () => {
     const regional = CINTURONES[0];
     expect(puedeDisputar(jugador({ ranking: 3 }), regional)).toBe(true);
-    expect(puedeDisputar(jugador({ ranking: 20 }), regional)).toBe(false);
+    // Pedido 1 (v6, roster de 100): regional.rankingMax pasó de 8 a 20.
+    expect(puedeDisputar(jugador({ ranking: 45 }), regional)).toBe(false);
     expect(puedeDisputar(jugador({ ranking: 1 }), null)).toBe(false);
   });
 
@@ -166,12 +217,14 @@ describe('cinturones', () => {
   });
 
   it('un campeon que todavia no califica para el siguiente cinturon recibe defensas obligatorias', () => {
-    // ranking 6 con solo el regional puesto: nacional pide ranking <= 5, asi que
-    // todavia no califica para escalar y le tiene que caer la defensa.
+    // ranking 25 con solo el regional puesto: nacional pide ranking <= 15
+    // (Pedido 1, v6: antes 5, después 10, ver el comentario de CINTURONES en
+    // offers.js), asi que todavia no califica para escalar y le tiene que
+    // caer la defensa.
     let defensas = 0;
     for (let s = 1; s <= 30; s++) {
       const oferta = generarOferta(createRng(s), {
-        jugador: jugador({ ranking: 6, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+        jugador: jugador({ ranking: 25, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
       });
       if (oferta.esObligatoria) defensas++;
     }
@@ -182,7 +235,7 @@ describe('cinturones', () => {
     let vista = false;
     for (let s = 1; s <= 30; s++) {
       const oferta = generarOferta(createRng(s), {
-        jugador: jugador({ ranking: 6, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+        jugador: jugador({ ranking: 25, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
       });
       if (oferta.esObligatoria) {
         vista = true;
@@ -198,8 +251,9 @@ describe('cinturones', () => {
   });
 
   it('un campeon que ya califica para el siguiente cinturon prioriza escalar por sobre defender', () => {
-    // ranking 2 con solo el regional puesto: nacional pide ranking <= 5, asi que
-    // ya califica. Escalar tiene que ganarle a estancarse defendiendo el chico.
+    // ranking 2 con solo el regional puesto: nacional pide ranking <= 10
+    // (Pedido 1, v6: antes 5), asi que ya califica. Escalar tiene que
+    // ganarle a estancarse defendiendo el chico.
     let ascensos = 0;
     let defensas = 0;
     for (let s = 1; s <= 40; s++) {
@@ -213,7 +267,10 @@ describe('cinturones', () => {
   });
 
   it('la pelea de titulo paga mucho mas que una comun', () => {
-    const comun = generarOferta(createRng(3), { jugador: jugador({ ranking: 15 }), mundo: mundo(), etapa: 'profesional' });
+    // ranking 45: por debajo de cualquier rankingMax de CINTURONES (Pedido 1,
+    // v6: el mayor, regional, pide <= 20), asi que esta oferta no puede ser
+    // de titulo aunque no se fuerce.
+    const comun = generarOferta(createRng(3), { jugador: jugador({ ranking: 45 }), mundo: mundo(), etapa: 'profesional' });
     const titulo = generarOferta(createRng(3), { jugador: jugador({ ranking: 1 }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true });
     expect(titulo.bolsa).toBeGreaterThan(comun.bolsa * 2);
   });

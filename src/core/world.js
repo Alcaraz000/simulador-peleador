@@ -7,6 +7,13 @@ import { clamp } from './stats.js';
 export const EDAD_RETIRO = 40;
 export const ANIO_INICIAL = 2026;
 
+// Cuántos de los activos son "la parte alta de la tabla" (ver avanzarMundo):
+// sus peleas entre sí SÍ generan noticia; el resto de la categoría igual
+// pelea y su récord igual se actualiza, pero sin ensuciar el feed. Coincide
+// a propósito con el rankingMax más generoso de CINTURONES (offers.js,
+// "Cinturón regional"): es la misma "parte alta" que le importa al jugador.
+export const TAMANO_ELITE = 20;
+
 export function crearMundo(rng, { disciplina, categoria, cantidad = 10, apodosReservados = [] }) {
   const roster = crearRoster(rng, { disciplina, categoria, cantidad, apodosReservados });
   return {
@@ -109,6 +116,21 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
     }
 
     const activos = roster.filter((p) => !p.retirado && !p.esJugador);
+    // Pedido 1 (v6, "cuidá el rendimiento... simular en detalle solo la
+    // parte alta de la tabla y resolver el resto de forma más barata"): con
+    // 100 activos, cada año arma ~50 pares — generar una noticia por CADA
+    // uno inundaba el feed (cap de 30, ver agregarNoticias en news.js) en un
+    // solo bloque, algo que nunca pasaba con 12 rivales (~6 pares). El
+    // resultado (récord, KO/decisión, título si corresponde) se sigue
+    // resolviendo IGUAL para todos los pares — nadie deja de "vivir" ni de
+    // subir su récord —; lo que se recorta es la noticia de "fulano le ganó
+    // a mengano", que solo se emite si alguno de los dos está entre los
+    // TAMANO_ELITE mejores del momento (la parte alta de la tabla es la que
+    // de verdad le importa al jugador: rivales de título, futuros
+    // adversarios cercanos a su propio puesto).
+    const elite = new Set(
+      [...activos].sort((x, y) => mediaDe(y) - mediaDe(x)).slice(0, TAMANO_ELITE).map((p) => p.id),
+    );
     const mezclados = rng.shuffle(activos);
     for (let i = 0; i + 1 < mezclados.length; i += 2) {
       const a = mezclados[i];
@@ -121,14 +143,16 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
       ganador.record.v += 1;
       if (porKo) ganador.record.ko += 1; else ganador.record.dec += 1;
       perdedor.record.d += 1;
-      sucesos.push({
-        tipo: 'victoria',
-        peleadorId: ganador.id,
-        rivalId: perdedor.id,
-        texto: porKo
-          ? `${ganador.nombre} noqueó a ${perdedor.nombre}.`
-          : `${ganador.nombre} le ganó por puntos a ${perdedor.nombre}.`,
-      });
+      if (elite.has(a.id) || elite.has(b.id)) {
+        sucesos.push({
+          tipo: 'victoria',
+          peleadorId: ganador.id,
+          rivalId: perdedor.id,
+          texto: porKo
+            ? `${ganador.nombre} noqueó a ${perdedor.nombre}.`
+            : `${ganador.nombre} le ganó por puntos a ${perdedor.nombre}.`,
+        });
+      }
       // Mientras el jugador tiene puesto el cinturón mundial, el mundo no
       // corona a nadie más: campeonId sigue apuntando a lo que apuntaba antes
       // (no importa, no se muestra en ningún lado) y no se emite el suceso

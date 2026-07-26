@@ -163,24 +163,20 @@ describe('ritmo de la carrera', () => {
   // una) — jugarTodo (arriba) nunca acepta nada, así que nunca dispara ningún
   // campamento y mediría un piso irreal.
   //
-  // Objetivo declarado de beats/carrera — ACTUALIZADO (cierre de ronda v3;
-  // ver el comentario completo en career.js, arriba de ETAPAS, con el porqué
-  // y los números). El "30-60" original era una meta del PLAN, nunca un
-  // pedido del usuario, y quedó inalcanzable al devolver la mejora
-  // garantizada a TODOS los bloques y sumar el campamento (2-3 beats por
-  // pelea aceptada) — ambos, pedidos textuales del usuario. Insistir en
-  // 30-60 como objetivo habría significado "arreglar" este test bajándole el
-  // umbral hasta que un bug de documentación pasara desapercibido. En cambio,
-  // se midió el rango REAL sobre una muestra grande (3000 semillas, mismo
-  // método que este test) y ese es ahora el objetivo declarado: avg≈66,
-  // p10≈60, p90≈72, prácticamente ninguna carrera fuera de [45,85]. El
-  // promedio es muy estable entre muestras (¡nada que ver con el test
-  // flaky que hubo en este proyecto por muestra chica, donde n=150 variaba
-  // 12 puntos entre corridas! acá, con n=1500 y la mayor parte del conteo
-  // saliendo de estructura FIJA — no de azar — la variación entre ventanas
-  // de 200 semillas separadas fue de bien menos de 1 punto), así que el
-  // umbral de abajo tiene margen de sobra para no ser flaky sin dejar de
-  // detectar una regresión real.
+  // Objetivo declarado de beats/carrera — ACTUALIZADO OTRA VEZ (Pedido 3, v6:
+  // "más aire entre pelea y pelea, varios beats de preparación, no dos o
+  // tres"). El campamento pasó de 2-3 beats a 3-5 (campamento.js) — pedido
+  // textual del usuario, y suma beats de forma estructural igual que ya
+  // documentaba este mismo comentario para el campamento original. Medido de
+  // nuevo con scripts/_tune.mjs sobre 3000 semillas (mismo método que este
+  // test): avg≈82.0 | p10≈70 | p50≈82 | p90≈93 | min=49 | max=110,
+  // prácticamente todo dentro de [65,105] (97.1%). Subió respecto del rango
+  // anterior (avg≈66.4) — es el costo, medido y declarado, del "varios turnos
+  // de preparación" que pidió el usuario; no se escondió bajándole el
+  // umbral. Los otros dos objetivos de ritmo se actualizan igual (ver
+  // 'ofertas de pelea por carrera' más abajo: bajaron de forma deliberada) y
+  // el que NO se negocia sigue siendo ≥85% de tres cinturones (ver
+  // 'progresión de cinturones').
   it('sobre muchas semillas, el promedio de beats/carrera cae en el rango honesto medido (jugadas de punta a punta, con campamento incluido)', () => {
     const total = 1500;
     const todos = [];
@@ -189,16 +185,16 @@ describe('ritmo de la carrera', () => {
     }
     const promedio = todos.reduce((a, b) => a + b, 0) / total;
 
-    // Banda amplia (±6-7 sobre el ~66.4 medido) para no ser flaky, pero sigue
+    // Banda amplia (±7-8 sobre el ~82.0 medido) para no ser flaky, pero sigue
     // marcando una regresión real si alguien recorta o infla el ritmo.
-    expect(promedio).toBeGreaterThanOrEqual(60);
-    expect(promedio).toBeLessThanOrEqual(73);
+    expect(promedio).toBeGreaterThanOrEqual(75);
+    expect(promedio).toBeLessThanOrEqual(90);
 
     // Guardia de forma de la distribución: casi ninguna carrera bien jugada
-    // debería quedar bien afuera del rango observado (min 49 / max 83 sobre
+    // debería quedar bien afuera del rango observado (min 49 / max 110 sobre
     // 3000 semillas) — esto detectaría, por ejemplo, un campamento que a
     // veces se dispara mucho más largo de lo previsto.
-    const dentroDelRango = todos.filter((b) => b >= 45 && b <= 85).length;
+    const dentroDelRango = todos.filter((b) => b >= 65 && b <= 105).length;
     expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
@@ -399,10 +395,27 @@ describe('avanzarBloque', () => {
     expect(despues.jugador.atributos.cardio).toBeLessThan(cardioAntes);
   });
 
-  it('antes del umbral de declive no pierde velocidad ni cardio', () => {
+  // Pedido 4 (v6): antes de EDAD_FIN_CRECIMIENTO (27) los atributos SUBEN
+  // solos (crecimiento pasivo) — este test cambió de sentido a propósito: ya
+  // no espera "sin cambios" antes del declive, espera que efectivamente
+  // crezcan (todavía lejos de cualquier declive).
+  it('antes del umbral de declive, los atributos crecen solos (crecimiento pasivo)', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1;
     p.jugador.edad = 20;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.atributos.velocidad).toBeGreaterThan(velAntes);
+    expect(despues.jugador.atributos.cardio).toBeGreaterThan(cardioAntes);
+  });
+
+  // Pedido 4: pasado EDAD_FIN_CRECIMIENTO (27) pero antes del declive (32),
+  // la meseta del prime — ni sube solo ni baja.
+  it('en la meseta del prime (27 a 31), los atributos no cambian solos', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 29;
     const velAntes = p.jugador.atributos.velocidad;
     const cardioAntes = p.jugador.atributos.cardio;
     const despues = avanzarBloque(p);
@@ -586,6 +599,17 @@ describe('ofertas de pelea por carrera', () => {
   // Guarda de ritmo para el eje de cinturones: si alguien vuelve a bajar probPelea
   // sin medir el impacto, estos tests lo detectan. Ver el informe de la Task 17
   // para el porqué de estos números.
+  //
+  // Pedido 3 (v6, "en profesional hay 1 o 2 peleas al año máximo... el
+  // número de peleas por carrera puede bajar"): el usuario pidió textualmente
+  // menos frecuencia — profesional/veterano bajaron su `probPelea` (career.js,
+  // ver ETAPAS) para dejar bloques sin oferta de verdad. El total de la
+  // carrera baja en consecuencia: medido con scripts/_tune.mjs sobre 3000
+  // semillas, avg≈12.9 | p10≈11 | p50≈13 | p90≈15 | min=6 | max=19 (antes:
+  // avg≈14.7, piso duro de 8, típico 12-22). El piso duro se mantiene en 8
+  // para las semillas fijas de acá abajo (las 10 nunca bajan de eso, medido);
+  // el rango "típico" se actualiza de forma honesta al nuevo número, más
+  // bajo — es exactamente lo que pidió el usuario, no una regresión.
   const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   it('nunca caen por debajo de 8 ofertas en toda la carrera', () => {
@@ -596,12 +620,12 @@ describe('ofertas de pelea por carrera', () => {
     });
   });
 
-  it('tipicamente caen entre 12 y 22 ofertas por carrera', () => {
+  it('tipicamente caen entre 9 y 19 ofertas por carrera', () => {
     semillas.forEach((semilla) => {
       const { beats } = jugarTodo(nuevaPartida(semilla));
       const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
-      expect(ofertas).toBeGreaterThanOrEqual(12);
-      expect(ofertas).toBeLessThanOrEqual(22);
+      expect(ofertas).toBeGreaterThanOrEqual(9);
+      expect(ofertas).toBeLessThanOrEqual(19);
     });
   });
 });

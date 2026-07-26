@@ -129,7 +129,10 @@ export function renderPlan(contenedor, { oferta, onElegirPlan = () => {} }) {
     el('h1', { text: 'El plan de pelea' }),
     el('p', {
       class: 'medio',
-      text: `Tu entrenador te mira antes de que suene la campana: "¿cómo la encaramos contra ${oferta.rivalApodo}? Vos decidís, yo te digo qué ganás y qué te puede costar."`,
+      // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
+      // relleno no tienen apodo (null): sin este resguardo mostraba
+      // literalmente "null" en la pantalla del plan de pelea.
+      text: `Tu entrenador te mira antes de que suene la campana: "¿cómo la encaramos contra ${oferta.rivalApodo ?? oferta.rivalNombre}? Vos decidís, yo te digo qué ganás y qué te puede costar."`,
     }),
     el('div', { class: 'panel-decision-grilla' }, tarjetas),
   ]));

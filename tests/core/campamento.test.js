@@ -10,13 +10,21 @@ const jugador = () => crearPeleador({
   estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 55, esJugador: true,
 });
 
+// Pedido 3 (v6, "hay muy poco margen entre una pelea y otra... debe darte
+// varios turnos de preparación"): antes 2-3 beats (mayormente 2). Ahora 3-4
+// para una pelea común y 4-5 para una de título/defensa.
 describe('decidirLargoCampamento', () => {
-  it('siempre devuelve 2 o 3', () => {
-    const ofertaTitulo = { esTitulo: true };
+  it('una pelea comun devuelve 3 o 4', () => {
     const ofertaComun = { esTitulo: false };
     for (let s = 1; s <= 200; s++) {
-      expect([2, 3]).toContain(decidirLargoCampamento(createRng(s), ofertaTitulo));
-      expect([2, 3]).toContain(decidirLargoCampamento(createRng(s + 500000), ofertaComun));
+      expect([3, 4]).toContain(decidirLargoCampamento(createRng(s + 500000), ofertaComun));
+    }
+  });
+
+  it('una pelea de titulo devuelve 4 o 5', () => {
+    const ofertaTitulo = { esTitulo: true };
+    for (let s = 1; s <= 200; s++) {
+      expect([4, 5]).toContain(decidirLargoCampamento(createRng(s), ofertaTitulo));
     }
   });
 
@@ -25,8 +33,8 @@ describe('decidirLargoCampamento', () => {
     let largosComunes = 0;
     const N = 500;
     for (let s = 1; s <= N; s++) {
-      if (decidirLargoCampamento(createRng(s), { esTitulo: true }) === 3) largosTitulo += 1;
-      if (decidirLargoCampamento(createRng(s + 1000000), { esTitulo: false }) === 3) largosComunes += 1;
+      if (decidirLargoCampamento(createRng(s), { esTitulo: true }) === 5) largosTitulo += 1;
+      if (decidirLargoCampamento(createRng(s + 1000000), { esTitulo: false }) === 4) largosComunes += 1;
     }
     expect(largosTitulo / N).toBeGreaterThan(largosComunes / N);
   });
@@ -65,16 +73,26 @@ describe('elegirCartaCampamento', () => {
 });
 
 describe('armarBeatsCampamento', () => {
-  it('arma 2 o 3 beats, con exactamente un campSparring y el resto campCarta', () => {
+  it('arma 3 o 4 beats (comun), con exactamente un campSparring y el resto campCarta', () => {
     const rng = createRng(3);
     const oferta = { rivalApodo: 'El Zurdo', esTitulo: false };
     const { beats, semanaObjetivo } = armarBeatsCampamento(rng, {
       jugador: jugador(), etapa: 'profesional', oferta, semanaInicial: 10,
     });
-    expect([2, 3]).toContain(beats.length);
+    expect([3, 4]).toContain(beats.length);
     expect(beats.filter((b) => b.tipo === 'campSparring')).toHaveLength(1);
     expect(beats.filter((b) => b.tipo === 'campCarta')).toHaveLength(beats.length - 1);
     expect(semanaObjetivo).toBeGreaterThan(10);
+  });
+
+  it('arma 4 o 5 beats para una pelea de titulo', () => {
+    const rng = createRng(30);
+    const oferta = { rivalApodo: 'El Zurdo', esTitulo: true };
+    const { beats } = armarBeatsCampamento(rng, {
+      jugador: jugador(), etapa: 'profesional', oferta, semanaInicial: 10,
+    });
+    expect([4, 5]).toContain(beats.length);
+    expect(beats.filter((b) => b.tipo === 'campSparring')).toHaveLength(1);
   });
 
   it('el ultimo beat, y solo el ultimo, trae datos.ultimo = true', () => {

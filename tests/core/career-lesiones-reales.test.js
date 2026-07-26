@@ -84,13 +84,24 @@ function jugarGanandoTodoConLesiones(partida, limite = 400) {
 // origen/apodo optimizado — el peor caso, no el "jugando bien" de
 // balance-sim), después de recortar PROB_BASE.pelea (0.18→0.10) y la
 // duración/distribución de severidad de las lesiones (injuries.js):
-// ofertas/carrera avg≈14.15 (era 13.62 antes del recorte, con 3 cinturones
-// en 84.77% — ¡por debajo del piso!), ~5% de las carreras por debajo de 12
-// ofertas, prácticamente cero por debajo del piso duro de 8 (ese piso duro
-// nunca fue una garantía matemática de cero excepciones sobre miles de
-// carreras: antes de esta corrección ni siquiera se medía a esta escala —
-// solo sobre 10 semillas elegidas a mano), y 3 cinturones en ~86.4-86.7%. El
-// gate en sí (puedePelear) no se tocó — nunca fue la palanca.
+// ofertas/carrera avg≈14.15, ~5% de las carreras por debajo de 12 ofertas,
+// prácticamente cero por debajo del piso duro de 8, y 3 cinturones en
+// ~86.4-86.7%. El gate en sí (puedePelear) no se tocó — nunca fue la
+// palanca.
+//
+// RONDA v6 (Pedido 3, "el número de peleas por carrera puede bajar"): con
+// `probPelea` de profesional/veterano recortado a propósito (career.js,
+// ETAPAS) para dejar aire entre pelea y pelea, el promedio SIN lesiones ya
+// bajó de ~14.7 a ~12.9 — un número que, sumado a las lesiones reales, cae
+// muy cerca de 12. El "debajo de 12" de acá abajo dejó de ser un evento raro
+// (era ~5% con el promedio viejo de ~14.15): con el promedio nuevo (~12.7
+// con lesiones, medido sobre 1500 semillas) es matemáticamente esperable que
+// una fracción grande de carreras quede por debajo de un umbral tan cercano
+// al propio promedio. Se actualiza el umbral de "debajo de 12" a uno acorde
+// (30%, con margen sobre el ~25.7% medido) y se agrega el mismo piso "típico"
+// que career.test.js (9 a 19) como la guarda que de verdad importa: el piso
+// DURO de 8 (la garantía real de que ninguna carrera queda casi sin pelear)
+// se mantiene sin cambios.
 describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión bloquea)', () => {
   it('el promedio de ofertas por carrera se mantiene arriba de 12 incluso con lesiones reales aplicándose', () => {
     const total = 1500;
@@ -105,12 +116,15 @@ describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión blo
     }
     const promedio = sumaOfertas / total;
     expect(promedio).toBeGreaterThanOrEqual(12);
-    // Margen amplio (medido: ~5%) para no ser flaky, pero sigue marcando
-    // una regresión real si alguien alarga las lesiones o sube su
-    // frecuencia sin volver a medir.
-    expect(debajoDe12 / total).toBeLessThanOrEqual(0.12);
+    // Actualizado (Pedido 3, v6): con el promedio nuevo (~12.7, muy cerca de
+    // 12) caer por debajo de 12 dejó de ser un evento raro — medido en
+    // ~25.7%. Margen amplio (hasta 30%) para no ser flaky, pero sigue
+    // marcando una regresión real si las lesiones se vuelven más largas o
+    // frecuentes sin volver a medir.
+    expect(debajoDe12 / total).toBeLessThanOrEqual(0.3);
     // Se tolera una fracción mínima de mala suerte extrema, no un patrón
-    // sistemático (ver el comentario grande de arriba).
+    // sistemático (ver el comentario grande de arriba). Sin cambios: el
+    // piso duro de 8 es la guarda real, y no se movió con este pedido.
     expect(debajoDelPisoDuro / total).toBeLessThanOrEqual(0.02);
   });
 

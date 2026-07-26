@@ -155,14 +155,13 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
-    // semilla 6 -> carta "escuela_o_gimnasio", ninguna opcion tiene
-    // probabilidades (verificado aparte con el catalogo real): ejercita el
-    // camino sin roll. (Antes era la semilla 2: el reparto de mejoras a veces
-    // reduce a 2 cartas -- decidirCantidadMejoras, cards.js, pedido del
-    // coordinador v4 -- y esa tirada nueva corre la secuencia de rng de
-    // TODOS los bloques, mejora incluida, así que 2 dejó de llegar a esta
-    // carta puntual; 6 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // semilla 2 -> carta "amigos", ninguna opcion tiene probabilidades
+    // (verificado aparte con el catalogo real): ejercita el camino sin roll.
+    // (Antes era la semilla 6: la Ronda v6 -roster de 100, Pedido 1- corrió
+    // la secuencia de rng de TODA la carrera desde el arranque -crearRoster
+    // consume muchas más tiradas con 100 rivales que con 12-, así que 6 dejó
+    // de llegar a esta carta puntual; 2 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 2));
     continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
@@ -179,15 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 18 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 17: Cambio 1 -cards.js, "el tope de mejoras es 3, duro"- hizo
-    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
-    // de rng, así que corrió la secuencia entera; 17 dejó de llegar a esta
-    // carta puntual, 18 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 18));
+    // semilla 18: la Ronda v6 -roster de 100, Pedido 1- corrió la secuencia
+    // de rng de toda la carrera desde el arranque -crearRoster consume
+    // muchas más tiradas con 100 rivales que con 12-, así que 18 dejó de
+    // llegar a esta carta puntual; 6 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -242,12 +241,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 2: Cambio 1 (cards.js, "el tope de mejoras es 3, duro") hizo
-    // que cada reparto de mejoras consuma una cantidad distinta de tiradas
-    // de rng, corriendo la secuencia entera — la semilla 1 usada antes dejó
-    // de llegar a un beat "redes" dentro de las 500 iteraciones de
-    // avanzarHasta; 2 sí.
-    iniciar(cont, prepararPartidaGuardada('redes', 2));
+    // semilla 3: la Ronda v6 (roster de 100, Pedido 1) corrió la secuencia
+    // de rng de toda la carrera desde el arranque (crearRoster consume
+    // muchas más tiradas con 100 rivales que con 12) — la semilla 2 usada
+    // antes dejó de llegar a un beat "redes" dentro de las 500 iteraciones
+    // de avanzarHasta; 3 sí (carta "post_barrio", 3 opciones).
+    iniciar(cont, prepararPartidaGuardada('redes', 3));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -367,12 +366,15 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
       nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     });
-    // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
+    // Semilla 14, etapa profesional (forzada): el bloque trae un 'evento'
     // Y, más adelante en la misma cola, una 'oferta' — ofertaPendiente (dato
     // interno) ya queda seteado antes de llegar a ninguno de los dos
     // (verificado aparte); proximaPelea (lo que muestra el panel) sigue null
-    // porque todavía no se firmó nada.
-    const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
+    // porque todavía no se firmó nada. (Antes semilla 4 con probPelea:1 en
+    // profesional garantizaba esto siempre; la Ronda v6, Pedido 3, bajó
+    // probPelea a 0.85 -"1 o 2 peleas por año"-, así que ya no alcanza
+    // cualquier semilla: 14 sí trae los dos beats en la misma cola.)
+    const inicial = { ...crearPartida({ jugador, semilla: 14 }), etapaIndice: 2 };
     const partida = avanzarHasta(inicial, 'evento');
     expect(partida.ofertaPendiente).not.toBeNull();
     expect(partida.proximaPelea).toBeNull();
@@ -436,12 +438,13 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 50 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 6 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 45 antes de Cambio 1 -cards.js, "el tope de
-    // mejoras es 3, duro"-, que corrió la secuencia de rng de todos los
-    // bloques).
-    iniciar(cont, prepararPartidaGuardada('evento', 50));
+    // roll; era la semilla 50 antes de la Ronda v6 -roster de 100, Pedido
+    // 1-, que corrió la secuencia de rng de toda la carrera desde el
+    // arranque -crearRoster consume muchas más tiradas con 100 rivales que
+    // con 12-).
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -481,8 +484,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 50: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 50));
+    // semilla 6: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');

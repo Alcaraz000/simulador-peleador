@@ -507,9 +507,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       expect(tipo).toBe('oferta');
 
       // La oferta todavía no está firmada, así que el panel de la derecha no
-      // muestra al rival (ver el describe de arriba): el apodo se lee de la
-      // propia pantalla de la oferta, en el centro.
-      const apodoRival = cont.querySelector('.shell-centro').textContent.match(/"([^"]+)"/)[1];
+      // muestra al rival (ver el describe de arriba): el nombre se lee de la
+      // propia pantalla de la oferta, en el centro — del PRIMER div de la
+      // fila de nombre DENTRO de `[data-bloque="contenido"]` (el sub-nodo que
+      // cambia con cada beat; excluye el bloque persistente de "Atributos"
+      // que también vive en shell-centro, ver centroContenido en main.js).
+      // No se usa un regex sobre TODO el texto del centro: con el roster de
+      // 100 (Pedido 1), la mayoría de los rivales de relleno no tienen
+      // apodo, y sin él la primera comilla del centro pasa a ser la frase
+      // del entrenador, no el rival (ver renderOferta, fight.js).
+      const apodoRival = cont.querySelector('.shell-centro [data-bloque="contenido"] .panel .fila > div').textContent;
 
       cont.querySelector('.shell-izquierda [data-accion="ver-ranking"]').click();
 
