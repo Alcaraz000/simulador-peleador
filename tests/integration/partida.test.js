@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPartida, siguienteBeat } from '../../src/core/career.js';
+import { crearPartida, siguienteBeat, firmarPelea } from '../../src/core/career.js';
 import { crearPelea } from '../../src/core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia } from '../../src/core/fight-interactive.js';
 import { aplicarCarta } from '../../src/core/cards.js';
@@ -10,6 +10,43 @@ import { aplicarResultado } from '../../src/core/offers.js';
 import { registrarCruce, elegirArchirrival } from '../../src/core/rivalry.js';
 import { calcularLegado } from '../../src/core/legacy.js';
 import { serializar, deserializar } from '../../src/core/save.js';
+
+// Corre la pelea de verdad (fight.js/fight-interactive.js, el mismo motor
+// que usa el jugador real) para la oferta que quedó firmada, y aplica sus
+// consecuencias (récord, dinero, fama, rivalidades) — mismo camino que
+// beatOferta -> ... -> cerrarPelea en main.js, solo que acá el "plan" y las
+// instrucciones de rincón se deciden con el rng de la simulación, no con
+// clicks.
+function jugarPeleaDeVerdad(partida, oferta, rng, contarPelea) {
+  const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
+  let pelea = crearPelea({
+    jugador: partida.jugador, rival, disciplina: partida.jugador.disciplina,
+    nivel: oferta.nivelPelea, plan: 'afuera', rng,
+  });
+
+  let vueltas = 0;
+  while (!pelea.terminada && vueltas < 40) {
+    vueltas += 1;
+    const avance = avanzarPelea(pelea);
+    pelea = avance.pelea;
+    if (pelea.pendiente === 'rincon') pelea = aplicarInstruccionRincon(pelea, 'cuerpo');
+    else if (pelea.pendiente === 'golpe') {
+      const info = abrirGolpeDeGracia(pelea);
+      pelea = resolverGolpeDeGracia(pelea, {
+        zonaElegida: info.zonaAbierta, precision: 0.8, aTiempo: true,
+      }).pelea;
+    }
+  }
+
+  expect(pelea.terminada).toBe(true);
+  contarPelea();
+
+  const resultado = aplicarResultado(partida.jugador, { oferta, resultado: pelea.resultado });
+  const signo = pelea.resultado.ganador === 'jugador' ? 'v' : pelea.resultado.ganador === 'rival' ? 'd' : 'e';
+  const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
+  elegirArchirrival(rivalidades);
+  return { ...partida, jugador: resultado.jugador, rivalidades };
+}
 
 function jugarCarrera(semilla) {
   const jugador = crearPeleador({
@@ -44,36 +81,36 @@ function jugarCarrera(semilla) {
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
     }
 
+    // Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya
+    // no dispara la pelea en el acto — firma el contrato (firmarPelea) y
+    // arranca el campamento (2-3 beats más, campCarta/campSparring). La
+    // pelea REAL (con el motor de fight.js/fight-interactive.js, no un
+    // resultado abstracto) se corre recién en el beat `ultimo` del
+    // campamento, con la oferta que quedó guardada en ese mismo beat.
     if (beat.tipo === 'oferta') {
-      const { oferta } = beat.datos;
-      const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
-      let pelea = crearPelea({
-        jugador: partida.jugador, rival, disciplina: partida.jugador.disciplina,
-        nivel: oferta.nivelPelea, plan: 'afuera', rng,
+      partida = firmarPelea(partida, { oferta: beat.datos.oferta });
+    }
+
+    if (beat.tipo === 'campCarta') {
+      const { carta, oferta, ultimo } = beat.datos;
+      const opcion = rng.pick(carta.opciones);
+      const resuelto = resolverOpcion(rng, {
+        jugador: partida.jugador, carta, opcionId: opcion.id, rivalidades: partida.rivalidades,
       });
+      partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+      if (ultimo) partida = jugarPeleaDeVerdad(partida, oferta, rng, () => { peleas += 1; });
+    }
 
-      let vueltas = 0;
-      while (!pelea.terminada && vueltas < 40) {
-        vueltas += 1;
-        const avance = avanzarPelea(pelea);
-        pelea = avance.pelea;
-        if (pelea.pendiente === 'rincon') pelea = aplicarInstruccionRincon(pelea, 'cuerpo');
-        else if (pelea.pendiente === 'golpe') {
-          const info = abrirGolpeDeGracia(pelea);
-          pelea = resolverGolpeDeGracia(pelea, {
-            zonaElegida: info.zonaAbierta, precision: 0.8, aTiempo: true,
-          }).pelea;
-        }
-      }
-
-      expect(pelea.terminada).toBe(true);
-      peleas += 1;
-
-      const resultado = aplicarResultado(partida.jugador, { oferta, resultado: pelea.resultado });
-      const signo = pelea.resultado.ganador === 'jugador' ? 'v' : pelea.resultado.ganador === 'rival' ? 'd' : 'e';
-      const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
-      elegirArchirrival(rivalidades);
-      partida = { ...partida, jugador: resultado.jugador, rivalidades };
+    if (beat.tipo === 'campSparring') {
+      const { oferta, ultimo } = beat.datos;
+      partida = {
+        ...partida,
+        jugador: {
+          ...partida.jugador,
+          atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 1) },
+        },
+      };
+      if (ultimo) partida = jugarPeleaDeVerdad(partida, oferta, rng, () => { peleas += 1; });
     }
   }
 

@@ -133,14 +133,16 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 31 -> carta "entrenador", la primera opcion ("cambiar") SI
-    // tiene probabilidades (verificado aparte): ejercita el camino con roll.
-    // (Antes era la semilla 10, pero el fix de apodos duplicados en el
-    // roster — crearRoster ahora evita colisiones de apodo entre rivales, y
-    // también con el apodo del propio jugador (crearMundo/crearPartida) —
-    // corre la secuencia de rng y esa semilla dejó de llegar a esta carta en
-    // concreto; se resembró dos veces buscando la misma combinación exacta.)
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    // semilla 52 -> el PRIMER beat 'evento' de esta carrera es justo la
+    // carta "entrenador", cuya primera opción ("cambiar") tiene
+    // probabilidades (verificado aparte): ejercita el camino con roll.
+    // (Antes era la semilla 31, pero el rebalance del campamento de
+    // preparación — Task v3: 'mejora' ahora se salta con
+    // partida.saltarProximaMejora en el bloque que sigue a una pelea
+    // firmada, ver el comentario en armarCola/career.js — corre la
+    // secuencia de rng de toda carrera que llega a firmar una pelea, y esa
+    // semilla dejó de llegar a esta carta en concreto.)
+    iniciar(cont, prepararPartidaGuardada('evento', 52));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -195,7 +197,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    iniciar(cont, prepararPartidaGuardada('redes'));
+    // semilla 2: con el rebalance del campamento (Task v3), la semilla 1 por
+    // defecto ya no llega a un beat "redes" dentro de su propia carrera
+    // (probRedes bajó bastante en varias etapas, ver ETAPAS en career.js).
+    iniciar(cont, prepararPartidaGuardada('redes', 2));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -241,7 +246,11 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
-    iniciar(cont, prepararPartidaGuardada('sparring'));
+    // semilla 3: con el rebalance del campamento (Task v3), probSparring
+    // bajó fuerte (0 en profesional/veterano — el campamento ya lo garantiza
+    // en cada pelea, ver campamento.js), así que la semilla 1 por defecto ya
+    // no llega a un beat "sparring" suelto dentro de su propia carrera.
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -298,9 +307,9 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 31 -> carta "entrenador", la opción "cambiar" SI tiene
+    // semilla 52 -> carta "entrenador", la opción "cambiar" SI tiene
     // probabilidades (mismo caso ya usado más arriba para probar el roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    iniciar(cont, prepararPartidaGuardada('evento', 52));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
@@ -338,7 +347,7 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    iniciar(cont, prepararPartidaGuardada('evento', 52));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');

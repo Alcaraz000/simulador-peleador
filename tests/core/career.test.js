@@ -32,27 +32,48 @@ function jugarTodo(partida, limite = 400) {
 // (sin correr el motor de pelea completo: aplica directamente un resultado ganador
 // vía aplicarResultado). Sirve para verificar que la progresión de cinturones
 // funciona de punta a punta cuando al jugador le va bien.
+//
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// resuelve la pelea en el acto — firma el contrato (firmarPelea) y el
+// campamento (2-3 beats más, campCarta/campSparring) se juega como cualquier
+// otro beat. La pelea en sí se resuelve recién cuando aparece el beat
+// `ultimo` del campamento, no en el beat 'oferta'. `beats` cuenta TODO lo que
+// pasó por acá (incluido el campamento): es la medida real del presupuesto
+// de ritmo de una carrera jugada de punta a punta, no solo de la cola "en
+// bruto" (ver jugarTodo, más arriba, que nunca acepta nada y por lo tanto
+// nunca dispara ningún campamento).
 function jugarGanandoTodo(partida, limite = 400) {
   let actual = partida;
   let guardia = 0;
   let defensas = 0;
   let ofertas = 0;
+  let beats = 0;
   while (!actual.terminada && guardia < limite) {
     guardia += 1;
     const paso = siguienteBeat(actual);
     actual = paso.partida;
-    if (paso.beat && paso.beat.tipo === 'oferta') {
-      ofertas += 1;
+    if (!paso.beat) continue;
+    beats += 1;
+
+    if (paso.beat.tipo === 'oferta') {
       const { oferta } = paso.beat.datos;
-      if (oferta.nivel === 'defensa') defensas += 1;
-      const resultado = aplicarResultado(actual.jugador, {
-        oferta,
-        resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
-      });
-      actual = { ...actual, jugador: resultado.jugador };
+      actual = firmarPelea(actual, { oferta });
+    } else if (paso.beat.tipo === 'campCarta' || paso.beat.tipo === 'campSparring') {
+      const { oferta, ultimo } = paso.beat.datos;
+      if (ultimo) {
+        ofertas += 1;
+        if (oferta.nivel === 'defensa') defensas += 1;
+        const resultado = aplicarResultado(actual.jugador, {
+          oferta,
+          resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+        });
+        actual = { ...actual, jugador: resultado.jugador };
+      }
     }
   }
-  return { partida: actual, defensas, ofertas };
+  return {
+    partida: actual, defensas, ofertas, beats,
+  };
 }
 
 describe('etapas', () => {
@@ -133,11 +154,15 @@ describe('siguienteBeat', () => {
 });
 
 describe('ritmo de la carrera', () => {
-  it('produce entre 30 y 60 beats', () => {
+  // Task v3: el presupuesto de ritmo (30-60 beats) tiene que medirse sobre
+  // una carrera REALMENTE jugada (aceptando ofertas, con su campamento de
+  // 2-3 beats cada una) — jugarTodo (arriba) nunca acepta nada, así que
+  // nunca dispara ningún campamento y mediría un piso irreal.
+  it('produce entre 30 y 60 beats, jugada de punta a punta (con campamento incluido)', () => {
     for (const semilla of [1, 2, 3, 4, 5]) {
-      const { beats } = jugarTodo(nuevaPartida(semilla));
-      expect(beats.length).toBeGreaterThanOrEqual(30);
-      expect(beats.length).toBeLessThanOrEqual(60);
+      const { beats } = jugarGanandoTodo(nuevaPartida(semilla));
+      expect(beats).toBeGreaterThanOrEqual(30);
+      expect(beats).toBeLessThanOrEqual(60);
     }
   });
 
@@ -555,6 +580,35 @@ describe('firmarPelea (campamento de preparación)', () => {
     }
     expect(ultimoBeat).not.toBeNull();
     expect(actual.semanaGlobal).toBe(objetivo);
+  });
+
+  // Pedido explícito del brief: "una partida guardada a mitad del
+  // campamento tiene que retomarse bien, con la cuenta regresiva correcta".
+  // save.js serializa con JSON.stringify/parse sin tocar nada — este test
+  // confirma que eso alcanza: la cola (con sus beats de campamento
+  // pendientes), proximaPelea, semanaGlobal y saltarProximaMejora
+  // sobreviven intactos, y la carrera puede seguir jugándose después de
+  // "recargar" como si nada.
+  it('una partida guardada a mitad del campamento se retoma con la cuenta regresiva correcta', () => {
+    const p = nuevaPartida(6);
+    const firmada = firmarPelea(p, { oferta: ofertaDePrueba() });
+    // Juega UN beat de campamento (deja el resto pendiente en la cola: "a
+    // mitad de camino", no al principio ni al final).
+    const paso = siguienteBeat(firmada);
+    const aMitadDeCamino = paso.partida;
+    expect(aMitadDeCamino.cola.length).toBeGreaterThan(0);
+
+    const recuperada = JSON.parse(JSON.stringify(aMitadDeCamino));
+
+    expect(recuperada.cola).toEqual(aMitadDeCamino.cola);
+    expect(recuperada.proximaPelea).toEqual(aMitadDeCamino.proximaPelea);
+    expect(recuperada.semanaGlobal).toBe(aMitadDeCamino.semanaGlobal);
+    expect(semanasHastaPelea(recuperada)).toBe(semanasHastaPelea(aMitadDeCamino));
+
+    // Y la carrera sigue jugándose con normalidad desde ahí: el próximo beat
+    // es el que quedó pendiente en la cola, no algo roto ni un salto de bloque.
+    const siguientePaso = siguienteBeat(recuperada);
+    expect(siguientePaso.beat.tipo).toBe(aMitadDeCamino.cola[0].tipo);
   });
 });
 

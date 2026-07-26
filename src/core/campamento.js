@@ -27,7 +27,7 @@ export const SEMANAS_POR_BEAT_CAMPAMENTO = 3;
 // informe de rebalance del plan). Una pelea de título o una defensa
 // obligatoria (oferta.esTitulo) merece más ceremonia que una de relleno, así
 // que su chance es mayor, pero sigue siendo la excepción, no la regla.
-const PROB_LARGO = { esTitulo: 0.35, normal: 0.1 };
+const PROB_LARGO = { esTitulo: 0.12, normal: 0.03 };
 
 export function decidirLargoCampamento(rng, oferta) {
   const prob = oferta.esTitulo ? PROB_LARGO.esTitulo : PROB_LARGO.normal;
