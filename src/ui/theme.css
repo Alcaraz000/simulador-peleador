@@ -74,12 +74,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .fila > * { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 8px; }
 
-.dorado { color: var(--dorado); }
-.verde { color: var(--verde); }
-.rojo { color: var(--rojo); }
-.sutil { color: var(--texto-sutil); }
-.medio { color: var(--texto-medio); }
-
 .boton {
   display: block;
   width: 100%;
@@ -996,6 +990,25 @@ input.creacion-control { cursor: text; }
 }
 
 .tienda-item-lujo .tienda-item-icono { width: 42px; height: 42px; }
+
+/* Utilitarios de color de texto — declarados AL FINAL a propósito (cierre de
+   ronda v3, bug preexistente): todos tienen especificidad (0,1,0), igual que
+   la mayoría de los componentes de acá arriba (.chip, .etiqueta, .tarjeta-desc,
+   etc.) que también fijan su propio `color`. Con igual especificidad gana el
+   que se declara último, así que si este bloque vive arriba (como estaba
+   antes), cualquier combinación "componente + color" pierde el duelo de
+   cascada y sale gris — eso le pasaba a TODOS los chips (cinturones del
+   tablero, noticias, revancha/nuevo campeón en la pelea). Poniéndolo al final
+   se resuelve de raíz para cualquier combinación futura, sin necesitar una
+   regla ".chip.dorado" puntual por cada caso (ni !important). Los combos que
+   sí necesitan ganarle A ESTO (p. ej. ".paso-titulo-bloqueado .dorado" o
+   ".tienda-precio.dorado") ya son más específicos que (0,1,0) y no dependen
+   del orden. */
+.dorado { color: var(--dorado); }
+.verde { color: var(--verde); }
+.rojo { color: var(--rojo); }
+.sutil { color: var(--texto-sutil); }
+.medio { color: var(--texto-medio); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

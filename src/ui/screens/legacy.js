@@ -22,21 +22,16 @@ function tile(nombre, valor, clase = '') {
   ]);
 }
 
-// Color del chip de fecha inline (no una segunda clase utilitaria como
-// "chip dorado"): `.chip` fija su propio `color` y, al declararse después
-// de `.dorado`/`.rojo` en theme.css, con igual especificidad esa combinación
-// termina siempre en el gris de `.chip` en TODA la app (mismo patrón ya
-// usado en fight.js/panel-peleador.js). Es un problema del CSS compartido,
-// fuera de tema para esta pantalla — acá alcanza con no heredarlo.
-const COLOR_CHIP = { dorado: 'var(--dorado)', rojo: 'var(--rojo)' };
-
 // Fila de una defensa/conquista dentro del panel de títulos: fecha en chip
 // + texto. Si la fecha no está disponible (historial viejo, guardado antes
-// de este cambio) se omite el chip en vez de mostrar algo inventado.
-function filaFecha(fecha, texto, color = null) {
-  const estiloChip = `margin-right:6px${color ? `;color:${color}` : ''}`;
+// de este cambio) se omite el chip en vez de mostrar algo inventado. El color
+// va como segunda clase ("chip dorado"/"chip rojo"), igual que en
+// fight.js/panel-peleador.js: ya no hace falta el color inline que tenía esta
+// pantalla, porque el bug de especificidad de .chip en theme.css (cierre de
+// ronda v3) se arregló de raíz para toda la app.
+function filaFecha(fecha, texto, clase = '') {
   return el('div', { class: 'etiqueta', style: 'margin-top:2px' }, [
-    fecha ? el('span', { class: 'chip', style: estiloChip, text: fecha }) : null,
+    fecha ? el('span', { class: `chip ${clase}`.trim(), style: 'margin-right:6px', text: fecha }) : null,
     texto,
   ]);
 }
@@ -44,9 +39,9 @@ function filaFecha(fecha, texto, color = null) {
 function bloqueTitulo(t) {
   return el('div', { style: 'margin-top:10px' }, [
     el('div', { style: 'font-weight:800', text: `🏆 ${t.nombre}` }),
-    filaFecha(t.fechaGanado, 'Conquistado', COLOR_CHIP.dorado),
+    filaFecha(t.fechaGanado, 'Conquistado', 'dorado'),
     ...t.defensas.map((d) => filaFecha(d.fecha, `Defendido ante ${d.rivalNombre}`)),
-    t.fechaPerdido ? filaFecha(t.fechaPerdido, 'Perdido', COLOR_CHIP.rojo) : null,
+    t.fechaPerdido ? filaFecha(t.fechaPerdido, 'Perdido', 'rojo') : null,
   ]);
 }
 
