@@ -203,6 +203,63 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
   });
 });
 
+// v6 (rediseño integral, pedido textual: "que al seleccionar una opción no
+// se 'refresque' la pantalla... que solo cambie el estado visual de lo que
+// tocaste, sin volver a dibujar toda la pantalla"). Antes CUALQUIER click
+// (un chip, una tarjeta) llamaba a un `pintar()` que tiraba TODO el árbol y
+// lo reconstruía de cero — estas pruebas verifican por IDENTIDAD DE NODO
+// (===, no solo que el contenido final se vea igual) que eso ya no pasa:
+// guardan una referencia ANTES del click y comprueban que la MISMA
+// instancia sigue en el DOM después (si hubiera un `mount()` de toda la
+// pantalla, la referencia vieja quedaría huérfana, desconectada del documento).
+describe('renderCreacion — nada se "refresca" al elegir una opción (identidad de nodo)', () => {
+  it('elegir un chip de mano hábil no reconstruye la pantalla (el input de apellido y el h1 son el MISMO nodo)', () => {
+    irAPaso1();
+    const inputAntes = cont.querySelector('[data-campo="apellido"]');
+    const h1Antes = cont.querySelector('h1');
+    const panelUnoAntes = cont.querySelector('[data-paso="1"]');
+
+    cont.querySelector('[data-campo="mano"] [data-opcion="zurda"]').click();
+
+    expect(cont.querySelector('[data-campo="apellido"]')).toBe(inputAntes);
+    expect(cont.querySelector('h1')).toBe(h1Antes);
+    expect(cont.querySelector('[data-paso="1"]')).toBe(panelUnoAntes);
+    // Y el cambio real sí se refleja: el chip clickeado queda marcado.
+    expect(cont.querySelector('[data-campo="mano"] [data-opcion="zurda"]').classList.contains('elegida')).toBe(true);
+  });
+
+  it('elegir una tarjeta de origen no reconstruye la pantalla (las OTRAS tarjetas de ese mismo paso son el mismo nodo)', () => {
+    irAPaso1();
+    ponerApellido('Ortiz');
+    cont.querySelector('[data-accion="siguiente"]').click();
+
+    const tarjetasOrigenAntes = [...cont.querySelectorAll('[data-paso="2"] [data-opcion]')];
+    const inputAntes = cont.querySelector('[data-campo="apellido"]');
+
+    tarjetasOrigenAntes[0].click();
+
+    // La tarjeta clickeada sigue siendo la MISMA instancia (no se recreó a
+    // sí misma para marcarse elegida) y su hermana en el paso también.
+    const tarjetasOrigenDespues = [...cont.querySelectorAll('[data-paso="2"] [data-opcion]')];
+    expect(tarjetasOrigenDespues[0]).toBe(tarjetasOrigenAntes[0]);
+    expect(tarjetasOrigenDespues[1]).toBe(tarjetasOrigenAntes[1]);
+    expect(cont.querySelector('[data-campo="apellido"]')).toBe(inputAntes);
+    expect(tarjetasOrigenDespues[0].classList.contains('tarjeta-elegida')).toBe(true);
+  });
+
+  it('elegir la nacionalidad no reconstruye la pantalla (el resto del paso 1 es el mismo nodo)', () => {
+    irAPaso1();
+    const inputAntes = cont.querySelector('[data-campo="apellido"]');
+    const grupoManoAntes = cont.querySelector('[data-campo="mano"]');
+
+    cont.querySelector('[data-campo="nacionalidad"]').click();
+    document.querySelector('[data-pais="MX"]').click();
+
+    expect(cont.querySelector('[data-campo="apellido"]')).toBe(inputAntes);
+    expect(cont.querySelector('[data-campo="mano"]')).toBe(grupoManoAntes);
+  });
+});
+
 describe('renderCreacion — el picker de nacionalidad (popup)', () => {
   it('el botón de nacionalidad abre un popup con las 6 banderas en grilla 3×2', () => {
     irAPaso1();
