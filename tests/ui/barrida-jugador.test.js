@@ -96,6 +96,11 @@ function jugarPeleaCompleta(cont) {
   const plan = cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]');
   if (plan) plan.click();
 
+  // Task v3, pedido textual: la pelea ya no arranca sola — hay que darle al
+  // botón de empezar antes de que se simule el primer round.
+  const empezarPelea = cont.querySelector('[data-accion="empezar-pelea"]');
+  if (empezarPelea) empezarPelea.click();
+
   guardia = 0;
   while (!cont.querySelector('[data-accion="fin"]') && guardia < 60) {
     guardia += 1;
@@ -104,6 +109,11 @@ function jugarPeleaCompleta(cont) {
 
     const seguirRound = accionNodo.querySelector('[data-accion="seguir"]');
     if (seguirRound) { seguirRound.click(); continue; }
+
+    // Task v3, pedido textual: el rincón aparece recién cuando el jugador
+    // lo pide — hay un click intermedio antes de que salgan las tarjetas.
+    const verRincon = accionNodo.querySelector('[data-accion="ver-rincon"]');
+    if (verRincon) { verRincon.click(); continue; }
 
     const instruccion = accionNodo.querySelector('.tarjeta[data-instruccion]');
     if (instruccion) { instruccion.click(); continue; }
