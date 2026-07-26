@@ -71,4 +71,54 @@ describe('renderRanking — se abre como popup', () => {
   it('con la tabla vacía no rompe', () => {
     expect(() => renderRanking({ filas: [] })).not.toThrow();
   });
+
+  // Bug reportado por el usuario: "no sé cómo, pero en el ranking ahora solo
+  // muestra 3 peleadores" (con el roster completo de 12 + el jugador). La
+  // tabla completa siempre está en el DOM (tablaRanking, world.js, ya lo
+  // garantiza) — acá se verifica que la LISTA tenga su propio contenedor con
+  // scroll interno acotado, en vez de depender de que el popup entero (con
+  // cabecera y todo) se desborde: mismo patrón que panel-noticias.js.
+  it('con muchas filas, todas quedan en el DOM dentro de un contenedor con scroll propio', () => {
+    const filas = Array.from({ length: 15 }, (_, i) => fila({ id: `f${i}`, ranking: i + 1 }));
+    renderRanking({ filas });
+
+    const lista = document.querySelector('.tabla-ranking-lista');
+    expect(lista).toBeTruthy();
+    expect(lista.querySelectorAll('[data-peleador]')).toHaveLength(15);
+  });
+
+  // Pedido explícito: "con el jugador destacado y visible al abrir (si está
+  // en el puesto 9, que se vea sin tener que buscarlo)".
+  it('al abrir, la fila del jugador se deja visible sola (scrollIntoView), sin animación', () => {
+    const filas = Array.from(
+      { length: 15 },
+      (_, i) => fila({ id: `f${i}`, ranking: i + 1, esJugador: i === 8 }),
+    );
+    const llamadas = [];
+    const original = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function scrollIntoViewStub(...args) {
+      llamadas.push({ nodo: this, args });
+    };
+    try {
+      renderRanking({ filas });
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+
+    expect(llamadas).toHaveLength(1);
+    expect(llamadas[0].nodo.classList.contains('tabla-ranking-fila-jugador')).toBe(true);
+    expect(llamadas[0].nodo.dataset.peleador).toBe('f8');
+  });
+
+  it('sin fila de jugador (no debería pasar, pero no tiene que romper), no llama a scrollIntoView', () => {
+    const original = Element.prototype.scrollIntoView;
+    let llamado = false;
+    Element.prototype.scrollIntoView = function scrollIntoViewStub() { llamado = true; };
+    try {
+      expect(() => renderRanking({ filas: [fila({ id: 'a', esJugador: false })] })).not.toThrow();
+    } finally {
+      Element.prototype.scrollIntoView = original;
+    }
+    expect(llamado).toBe(false);
+  });
 });

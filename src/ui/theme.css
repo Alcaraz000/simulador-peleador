@@ -790,7 +790,15 @@ h2 { font-size: 17px; font-weight: 800; }
 /* Tabla de posiciones como popup (Task v3, feedback del usuario: "no puedo
    ver quiénes están por encima o por debajo mío"). Reusa `.panel`/`.fila`
    como base; la fila del jugador se destaca con un borde dorado, mismo
-   criterio que `.tarjeta-elegida`. */
+   criterio que `.tarjeta-elegida`.
+   Bug reportado (v4): "solo muestra 3 peleadores" — la lista entera dependía
+   de que el POPUP completo (cabecera incluida) se desbordara para poder
+   scrollear, sin ningún indicio visual de que había más filas debajo. Ahora
+   la lista tiene su propio contenedor con scroll acotado (mismo patrón que
+   `.panel-noticias-lista`): la cabecera del popup queda siempre fija arriba,
+   y una fila cortada a la mitad en el borde inferior avisa que hay más para
+   scrollear. */
+.tabla-ranking-lista { max-height: 60vh; overflow-y: auto; padding-right: 2px; }
 .tabla-ranking-fila { padding: 9px 12px; }
 .tabla-ranking-puesto {
   flex: 0 0 auto;

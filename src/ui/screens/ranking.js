@@ -9,6 +9,18 @@ import { nombreConApodo } from '../../core/fighter.js';
 // roster activo con el jugador insertado en su puesto real, coherente con
 // los rivales que ofrece `buscarRival` — mismos nombres, misma media, mismo
 // récord.
+//
+// Bug reportado (v4): "no sé cómo, pero en el ranking ahora solo muestra 3
+// peleadores" (con el roster completo de 12 + el jugador). La lista SIEMPRE
+// tenía las filas completas en el DOM (tablaRanking nunca truncó nada) — lo
+// que faltaba era un contenedor de scroll propio para la lista, acotado y
+// separado de la cabecera del popup (mismo patrón que panel-noticias.js):
+// dejar que el popup entero (cabecera + lista) fuera el único scroll,
+// gigante y sin tope visible salvo el borde de la ventana, no daba ninguna
+// pista de que había más filas debajo. Ahora la lista tiene su propio
+// `max-height` con `overflow-y:auto` (`.tabla-ranking-lista`, theme.css), y
+// al abrir se hace scroll automático hasta la fila del jugador para que
+// quede visible sin que haya que buscarla.
 
 function filaRanking(fila) {
   return el('div', {
@@ -30,9 +42,20 @@ function filaRanking(fila) {
  * @returns el handle de abrirPopup (mismo contrato que renderTienda).
  */
 export function renderRanking({ filas = [], onCerrar = () => {} } = {}) {
-  const contenido = el('div', { class: 'stack tabla-ranking' }, filas.length > 0
+  const lista = el('div', { class: 'stack tabla-ranking-lista' }, filas.length > 0
     ? filas.map(filaRanking)
     : [el('p', { class: 'medio', text: 'Todavía no hay ranking para mostrar.' })]);
+  const contenido = el('div', { class: 'tabla-ranking' }, [lista]);
 
-  return abrirPopup({ titulo: 'Ranking', contenido, onCerrar });
+  const popup = abrirPopup({ titulo: 'Ranking', contenido, onCerrar });
+
+  // Deja al jugador visible de entrada, sin que tenga que scrollear para
+  // encontrarse (pedido textual: "si está en el puesto 9, que se vea sin
+  // tener que buscarlo"). Sin `behavior: 'smooth'` a propósito: es la
+  // posición inicial del popup recién abierto, no algo que se mueve solo
+  // después de que el jugador ya lo está mirando.
+  const filaJugador = lista.querySelector('.tabla-ranking-fila-jugador');
+  if (filaJugador) filaJugador.scrollIntoView({ block: 'center' });
+
+  return popup;
 }
