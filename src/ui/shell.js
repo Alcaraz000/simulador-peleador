@@ -3,10 +3,33 @@ import { el, mount } from './dom.js';
 // El shell persistente: la reforma central de la v2. En vez de que cada beat
 // reemplace `#app` entero (como en la v1), acá se monta un esqueleto de tres
 // regiones UNA sola vez, y de ahí en más solo se reemplaza el contenido de
-// la región central (`montarCentro`). Las columnas laterales (el tablero del
-// peleador y la próxima pelea/noticias) nunca se vuelven a dibujar: siguen
-// siendo el mismo nodo del DOM durante toda la partida, así el jugador nunca
-// las pierde de vista mientras decide.
+// la región central (`montarCentro`). Las columnas laterales (izquierda:
+// personaje/rincón/categoría; derecha: calendario/dinero/próxima
+// pelea/noticias) nunca se vuelven a dibujar como nodo: siguen siendo el
+// mismo `aside` durante toda la partida, así el jugador nunca las pierde de
+// vista mientras decide — ver montarTablero en main.js.
+//
+// Grilla 3×3 (v4, feedback del usuario: "en PC está muy en vertical y no se
+// aprovecha bien el ancho"): en vez de una sola grilla CSS con filas
+// compartidas entre las tres columnas, cada región sigue siendo su propia
+// columna independiente que apila sus 2-3 módulos (ver theme.css, `.shell`
+// en el media query de escritorio). Es la misma garantía que pedía el
+// usuario ("nada se mueve"), pero más estricta: si un módulo de la columna
+// central crece (una decisión con más opciones, por ejemplo), eso nunca
+// empuja ni reacomoda nada de las columnas izquierda o derecha — cosa que sí
+// pasaría con una grilla de filas compartidas, donde una fila más alta
+// estira a TODOS sus vecinos de esa fila, aunque su contenido no haya
+// cambiado.
+//
+// Antes, la región derecha se colapsaba entera detrás de un botón en
+// celular ("Próxima pelea y noticias"). Con calendario y dinero mudándose acá
+// (mockup: "Calendario + Botón tienda, ahí dentro se ve el dinero"), esconder
+// TODA la columna detrás de un botón dejaría esa información permanente
+// fuera de vista en celular — lo mismo que ya se evitaba a propósito con el
+// calendario en la v2/v3. Se sacó ese botón: en celular las tres columnas se
+// apilan igual que siempre, y las noticias (lo único realmente largo) siguen
+// "detrás de su botón" con el acordeón propio que ya tenía panel-noticias.js
+// (independiente del shell, no se tocó).
 
 /**
  * Monta el esqueleto de 3 regiones dentro de `contenedor` y devuelve los
@@ -27,16 +50,8 @@ export function crearShell(contenedor) {
 
   const raiz = el('div', { class: 'shell' });
 
-  const botonDerecha = el('button', {
-    class: 'shell-boton-derecha',
-    type: 'button',
-    text: 'Próxima pelea y noticias',
-    onClick: () => raiz.classList.toggle('shell-derecha-abierta'),
-  });
-
   raiz.appendChild(izquierda);
   raiz.appendChild(centro);
-  raiz.appendChild(botonDerecha);
   raiz.appendChild(derecha);
 
   // `mount` limpia el contenedor antes de montar: si `crearShell` se llama

@@ -5,6 +5,7 @@ import { CARTAS_MEJORA } from '../../src/content/cards-improve.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import {
   formatearMods, repartirMejoras, aplicarCarta, resolverProbabilidad, porcentajesDe,
+  decidirCantidadMejoras, sortearPorRareza, elegirPorRareza,
 } from '../../src/core/cards.js';
 
 const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
@@ -81,8 +82,29 @@ describe('formatearMods', () => {
 });
 
 describe('repartirMejoras', () => {
-  it('reparte tres cartas por defecto', () => {
-    expect(repartirMejoras(createRng(1), { jugador: jugador(), etapa: 'profesional' })).toHaveLength(3);
+  it('sin cantidad explícita, reparte 3 cartas la gran mayoría de las veces (y a veces 2)', () => {
+    let con2 = 0;
+    let con3 = 0;
+    for (let semilla = 1; semilla <= 500; semilla += 1) {
+      const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+      if (cartas.length === 2) con2 += 1;
+      else if (cartas.length === 3) con3 += 1;
+      else throw new Error(`cantidad inesperada: ${cartas.length}`);
+    }
+    expect(con2 + con3).toBe(500);
+    // "algo del orden de una de cada cuatro o cinco" (pedido del coordinador,
+    // v4): con PROB_CANTIDAD_REDUCIDA=0.2 debería rondar el 20%, con margen
+    // estadístico generoso para no ser flaky sobre 500 semillas.
+    const pctReducida = (100 * con2) / 500;
+    expect(pctReducida).toBeGreaterThan(10);
+    expect(pctReducida).toBeLessThan(32);
+  });
+
+  it('con cantidad explícita, el resultado es siempre exacto y determinístico (no consume la tirada nueva)', () => {
+    for (let semilla = 1; semilla <= 30; semilla += 1) {
+      expect(repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional', cantidad: 3 })).toHaveLength(3);
+      expect(repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional', cantidad: 2 })).toHaveLength(2);
+    }
   });
 
   it('no repite cartas', () => {
@@ -97,11 +119,38 @@ describe('repartirMejoras', () => {
     }
   });
 
-  it('el entrenador de elite da una opcion mas', () => {
+  it('el entrenador de elite da una opcion mas (sea cual sea la base, con cantidad fija para aislar el bonus)', () => {
     const conEntrenador = repartirMejoras(createRng(4), {
-      jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional',
+      jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional', cantidad: 3,
     });
     expect(conEntrenador).toHaveLength(4);
+    // El bonus se suma encima sea cual sea la base que salió (Pedido del
+    // coordinador, v4: "el bonus de bonusCartas tiene que seguir
+    // funcionando encima de la cantidad que salga").
+    const conEntrenadorBaseReducida = repartirMejoras(createRng(4), {
+      jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional', cantidad: 2,
+    });
+    expect(conEntrenadorBaseReducida).toHaveLength(3);
+  });
+
+  // Sistema 2, corrección del coordinador: en juvenil/amateur hay más
+  // opciones para elegir (además del bonus de mods) — "mejor de más
+  // cartas" empuja el promedio sin tocar ningún valor, así que nunca puede
+  // acercar una normal/rara a una legendaria. Cantidad fijada en 3 acá para
+  // aislar el bonus de etapa de la variación de cantidad de v4 (probada
+  // aparte, más arriba).
+  it('en juvenil hay mas opciones para elegir que en profesional', () => {
+    const juvenil = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'juvenil', cantidad: 3 });
+    const profesional = repartirMejoras(createRng(20), { jugador: jugador(), etapa: 'profesional', cantidad: 3 });
+    expect(juvenil.length).toBeGreaterThan(profesional.length);
+    expect(profesional).toHaveLength(3);
+  });
+
+  it('el bonus de etapa temprana (opciones extra) tambien se suma encima de la cantidad base que haya salido', () => {
+    const juvenilBase3 = repartirMejoras(createRng(1), { jugador: jugador(), etapa: 'juvenil', cantidad: 3 });
+    expect(juvenilBase3).toHaveLength(5);
+    const juvenilBase2 = repartirMejoras(createRng(1), { jugador: jugador(), etapa: 'juvenil', cantidad: 2 });
+    expect(juvenilBase2).toHaveLength(4);
   });
 
   it('el entrenador mejora los numeros positivos', () => {
@@ -117,6 +166,90 @@ describe('repartirMejoras', () => {
     const a = repartirMejoras(createRng(6), { jugador: jugador(), etapa: 'profesional' });
     const b = repartirMejoras(createRng(6), { jugador: jugador(), etapa: 'profesional' });
     expect(a.map((c) => c.id)).toEqual(b.map((c) => c.id));
+  });
+
+  // Sistema 2, corrección del coordinador (segunda ronda): "el problema está
+  // en la mitad de la carrera, no en el final" — un jugador que recién
+  // arranca sube muy lento porque cada carta mueve poco sobre una base
+  // chica. Bonus extra en las etapas tempranas (decae a 0 en profesional):
+  // empuja fuerte la MEDIA al principio sin inflar más el techo final, ya
+  // que para cuando llega a profesional (la mayoría de los 20 bloques de la
+  // carrera) el bonus ya se apagó.
+  describe('bonus de etapa temprana (Sistema 2, corrección del coordinador)', () => {
+    const positivos = (cartas) => cartas.reduce(
+      (acc, c) => acc + Object.values(c.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0), 0,
+    );
+
+    // Catálogo de UNA sola carta (disponible en las cuatro etapas): con un
+    // solo elemento elegible, sortearPorRareza siempre devuelve esa misma
+    // carta sin importar la tirada de rng — así la comparación entre etapas
+    // aísla el bonus de verdad, sin el ruido de que el POOL elegible cambie
+    // de una etapa a otra (varias cartas reales son solo de ciertas etapas).
+    const catalogoUnaCarta = [
+      { id: 'unica', titulo: 'Única', texto: 't', mods: { potencia: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+    ];
+
+    it('en juvenil, la MISMA carta sale con un mod mayor que en profesional', () => {
+      const juvenil = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const profesional = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
+      expect(juvenil[0].mods.potencia).toBeGreaterThan(profesional[0].mods.potencia);
+      expect(profesional[0].mods.potencia).toBe(4); // profesional: sin bonus, el valor de la carta tal cual
+    });
+
+    it('en amateur tambien hay bonus, pero menor que en juvenil', () => {
+      const juvenil = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const amateur = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'amateur', catalogo: catalogoUnaCarta });
+      expect(amateur[0].mods.potencia).toBeGreaterThan(4);
+      expect(juvenil[0].mods.potencia).toBeGreaterThan(amateur[0].mods.potencia);
+    });
+
+    it('en profesional y veterano no hay bonus de etapa (el comportamiento de siempre)', () => {
+      const profesional = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
+      const veterano = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'veterano', catalogo: catalogoUnaCarta });
+      expect(profesional[0].mods.potencia).toBe(4);
+      expect(veterano[0].mods.potencia).toBe(4);
+    });
+
+    it('el bonus de etapa se suma al del entrenador, no lo reemplaza', () => {
+      const soloEtapa = repartirMejoras(createRng(13), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
+      const etapaYEntrenador = repartirMejoras(createRng(13), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoUnaCarta,
+      });
+      expect(etapaYEntrenador[0].mods.potencia).toBeGreaterThan(soloEtapa[0].mods.potencia);
+    });
+
+    it('los mods negativos nunca se tocan con el bonus de etapa', () => {
+      const catalogoNegativo = [
+        { id: 'mixta', titulo: 'Mixta', texto: 't', mods: { potencia: 4, velocidad: -2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      ];
+      const juvenil = repartirMejoras(createRng(14), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoNegativo });
+      expect(juvenil[0].mods.velocidad).toBe(-2);
+    });
+
+    // Pedido explícito y repetido del usuario: "no aplanes la varianza de
+    // las legendarias". Un bonus parejo para TODAS las cartas (normal, rara
+    // Y legendaria) diluye la ventaja relativa de sacar una legendaria —
+    // medido con balance-sim.mjs, la brecha CON/SIN legendaria se achicaba
+    // de ~4.24 a ~3.03 puntos de MEDIA. Las legendarias quedan afuera del
+    // bonus de etapa: siguen valiendo exactamente lo que su autor escribió,
+    // nunca más, nunca menos.
+    it('las cartas legendarias NO reciben el bonus de etapa temprana (no aplanar su varianza)', () => {
+      const catalogoLegendaria = [
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+      ];
+      const juvenil = repartirMejoras(createRng(15), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoLegendaria });
+      expect(juvenil[0].mods.potencia).toBe(8);
+    });
+
+    it('el entrenador SÍ sigue mejorando las legendarias (solo el bonus de etapa las excluye)', () => {
+      const catalogoLegendaria = [
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+      ];
+      const conEntrenador = repartirMejoras(createRng(16), {
+        jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoLegendaria,
+      });
+      expect(conEntrenador[0].mods.potencia).toBeGreaterThan(8);
+    });
   });
 
   it('respeta el filtro de etapa', () => {
@@ -141,6 +274,73 @@ describe('repartirMejoras', () => {
     expect(pct('legendaria')).toBeLessThan(15);
   });
 
+  // Sistema 1 (feedback del usuario: "las tarjetas que aparecen están
+  // condicionadas al estado del jugador"): un jugador lesionado tiene que ver
+  // cartas de recuperación (kinesiología, reposo), nunca de machaque de
+  // gimnasio — y viceversa, un jugador sano nunca ve las de recuperación.
+  describe('condicionado por el estado del jugador (lesionado)', () => {
+    const catalogoMixto = [
+      { id: 'gym1', titulo: 'Gym1', texto: 't', mods: { potencia: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'gym2', titulo: 'Gym2', texto: 't', mods: { velocidad: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'gym3', titulo: 'Gym3', texto: 't', mods: { tecnica: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      {
+        id: 'rec1', titulo: 'Rec1', texto: 't', mods: { forma: 5 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+      {
+        id: 'rec2', titulo: 'Rec2', texto: 't', mods: { forma: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+      {
+        id: 'rec3', titulo: 'Rec3', texto: 't', mods: { moral: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', estados: ['lesionado'],
+      },
+    ];
+
+    function jugadorLesionado() {
+      const j = jugador();
+      return { ...j, estado: { ...j.estado, lesion: { id: 'x', nombre: 'x', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' } } };
+    }
+
+    it('un jugador lesionado solo ve cartas marcadas para ese estado, nunca las de gimnasio', () => {
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugadorLesionado(), etapa: 'profesional', catalogo: catalogoMixto,
+        });
+        for (const carta of cartas) expect(carta.id.startsWith('rec')).toBe(true);
+      }
+    });
+
+    it('un jugador sano nunca ve las cartas exclusivas de lesionado', () => {
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugador(), etapa: 'profesional', catalogo: catalogoMixto,
+        });
+        for (const carta of cartas) expect(carta.id.startsWith('gym')).toBe(true);
+      }
+    });
+
+    it('el catalogo real trae varias cartas de recuperación para cuando el jugador está lesionado', () => {
+      const deRecuperacion = CARTAS_MEJORA.filter((c) => (c.estados ?? []).includes('lesionado'));
+      expect(deRecuperacion.length).toBeGreaterThanOrEqual(5);
+      for (const carta of deRecuperacion) {
+        expect(carta.titulo.length).toBeGreaterThan(0);
+        expect(carta.texto.length).toBeGreaterThan(0);
+      }
+    });
+
+    it('las cartas de recuperación del catálogo real nunca aparecen para un jugador sano', () => {
+      for (let semilla = 1; semilla <= 150; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional' });
+        for (const carta of cartas) expect(carta.estados ?? ['sano']).toContain('sano');
+      }
+    });
+
+    it('un jugador lesionado, sobre muchas semillas, solo recibe cartas de recuperación del catálogo real', () => {
+      for (let semilla = 1; semilla <= 150; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugadorLesionado(), etapa: 'profesional' });
+        for (const carta of cartas) expect(carta.estados ?? []).toContain('lesionado');
+      }
+    });
+  });
+
   it('si una rareza no tiene cartas elegibles para la etapa/disciplina, igual completa la cantidad pedida con lo que haya', () => {
     const catalogoChico = [
       { id: 'n1', titulo: 'N1', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
@@ -150,10 +350,73 @@ describe('repartirMejoras', () => {
     ];
     for (let semilla = 1; semilla <= 20; semilla += 1) {
       const cartas = repartirMejoras(createRng(semilla), {
-        jugador: jugador(), etapa: 'profesional', catalogo: catalogoChico,
+        jugador: jugador(), etapa: 'profesional', catalogo: catalogoChico, cantidad: 3,
       });
       expect(cartas).toHaveLength(3);
     }
+  });
+
+  // Pedido del coordinador (v4, "no dejes que eso aplane la varianza
+  // legendaria"): repartir 2 cartas en vez de 3 reduce, sin compensar, la
+  // chance de ver una legendaria en ESE reparto puntual (menos tiradas). Se
+  // compensa subiendo el peso de legendaria solo quando la base salió
+  // reducida (ver pesosCompensadosPorMenosCartas, cards.js) para que la tasa
+  // de "al menos una legendaria" quede pareja entre reparto normal y
+  // reducido — no exacta al dígito (hay ruido estadístico), pero MUY lejos
+  // de la caída sin compensar (~14.3% con 3 tiradas al 5% -> ~9.75% con 2
+  // tiradas al 5% SIN compensación).
+  it('no aplana la varianza legendaria: con cantidad reducida (2), la tasa de "al menos una legendaria" se mantiene cerca de la de cantidad 3', () => {
+    const catalogoAmplio = [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `n${i}`, titulo: `N${i}`, texto: 't', mods: { potencia: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal',
+      })),
+      ...Array.from({ length: 4 }, (_, i) => ({
+        id: `r${i}`, titulo: `R${i}`, texto: 't', mods: { potencia: 2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'rara',
+      })),
+      ...Array.from({ length: 2 }, (_, i) => ({
+        id: `l${i}`, titulo: `L${i}`, texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria',
+      })),
+    ];
+    const N = 3000;
+    let conLegendCantidad3 = 0;
+    let conLegendCantidad2 = 0;
+    for (let semilla = 1; semilla <= N; semilla += 1) {
+      const con3 = repartirMejoras(createRng(semilla), {
+        jugador: jugador(), etapa: 'profesional', cantidad: 3, catalogo: catalogoAmplio,
+      });
+      if (con3.some((c) => c.rareza === 'legendaria')) conLegendCantidad3 += 1;
+      const con2 = repartirMejoras(createRng(semilla + 10000000), {
+        jugador: jugador(), etapa: 'profesional', cantidad: 2, catalogo: catalogoAmplio,
+      });
+      if (con2.some((c) => c.rareza === 'legendaria')) conLegendCantidad2 += 1;
+    }
+    const pct3 = (100 * conLegendCantidad3) / N;
+    const pct2 = (100 * conLegendCantidad2) / N;
+    expect(Math.abs(pct3 - pct2)).toBeLessThan(5);
+  });
+
+  it('decidirCantidadMejoras devuelve 2 o 3, y ronda ~20% de veces reducida', () => {
+    let con2 = 0;
+    for (let semilla = 1; semilla <= 1000; semilla += 1) {
+      const n = decidirCantidadMejoras(createRng(semilla));
+      expect([2, 3]).toContain(n);
+      if (n === 2) con2 += 1;
+    }
+    const pct = (100 * con2) / 1000;
+    expect(pct).toBeGreaterThan(12);
+    expect(pct).toBeLessThan(28);
+  });
+
+  it('sortearPorRareza/elegirPorRareza aceptan pesos custom (usado para la compensación legendaria)', () => {
+    const catalogo = [
+      { id: 'n', rareza: 'normal' },
+      { id: 'l', rareza: 'legendaria' },
+    ];
+    // peso 0 para normal fuerza a elegir SIEMPRE la legendaria primero.
+    const elegida = elegirPorRareza(createRng(1), catalogo, { normal: 0, rara: 0, legendaria: 100 });
+    expect(elegida.id).toBe('l');
+    const elegidas = sortearPorRareza(createRng(1), catalogo, 1, { normal: 0, rara: 0, legendaria: 100 });
+    expect(elegidas.map((c) => c.id)).toEqual(['l']);
   });
 });
 

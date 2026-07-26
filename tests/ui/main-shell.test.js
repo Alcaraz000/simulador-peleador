@@ -34,17 +34,21 @@ function nuevaPartida(semilla) {
 }
 
 // Devuelve la partida en el estado JUSTO ANTES de que `siguienteBeat` sirva
-// un beat de tipo `tipoObjetivo` (con ese beat todavía a la cabeza de la
+// un beat que cumpla `predicado` (con ese beat todavía a la cabeza de la
 // cola), para que al cargarla y jugar "Continuar" aparezca ese mismo beat.
-function avanzarHasta(partidaInicial, tipoObjetivo, maxBloques = 500) {
+function avanzarHastaQue(partidaInicial, predicado, maxBloques = 500) {
   let partida = partidaInicial;
   for (let i = 0; i < maxBloques; i += 1) {
     if (partida.terminada) break;
     const paso = siguienteBeat(partida);
-    if (paso.beat && paso.beat.tipo === tipoObjetivo) return partida;
+    if (paso.beat && predicado(paso.beat)) return partida;
     partida = paso.partida;
   }
-  throw new Error(`no aparecio un beat "${tipoObjetivo}" en ${maxBloques} bloques (semilla de prueba a revisar)`);
+  throw new Error(`no aparecio un beat buscado en ${maxBloques} bloques (semilla de prueba a revisar)`);
+}
+
+function avanzarHasta(partidaInicial, tipoObjetivo, maxBloques = 500) {
+  return avanzarHastaQue(partidaInicial, (beat) => beat.tipo === tipoObjetivo, maxBloques);
 }
 
 function prepararPartidaGuardada(tipo, semilla = 1) {
@@ -54,6 +58,21 @@ function prepararPartidaGuardada(tipo, semilla = 1) {
   // que haría un jugador que ya inició sesión antes.
   storage.setItem(CLAVE_ACCESO, '1');
   const partida = avanzarHasta(nuevaPartida(semilla), tipo);
+  guardar(partida, storage);
+  return storage;
+}
+
+// Pedido del coordinador (v4, "el mazo de mejora también"): repartirMejoras
+// (cards.js) a veces reparte 2 cartas en vez de 3 (~1 de cada 5, ver
+// decidirCantidadMejoras). Busca el PRIMER 'mejora' que salió con 2, para
+// probar que el tablero lo renderiza bien (texto dinámico + grilla de 2).
+function prepararPartidaGuardadaMejoraReducida(semilla = 1) {
+  const storage = crearStorageFalso();
+  storage.setItem(CLAVE_ACCESO, '1');
+  const partida = avanzarHastaQue(
+    nuevaPartida(semilla),
+    (beat) => beat.tipo === 'mejora' && beat.datos.cartas.length === 2,
+  );
   guardar(partida, storage);
   return storage;
 }
@@ -91,16 +110,20 @@ function continuar() {
 }
 
 describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', () => {
-  it('mejora: el shell se monta con los 3 paneles y 3 tarjetas; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
+  it('mejora: el shell se monta con los 3 paneles y tarjetas de mejora; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
 
+    // No se fija un número exacto (Sistema 2, corrección del coordinador:
+    // juvenil/amateur ofrecen más opciones que profesional — la semilla 1
+    // por defecto arranca en juvenil, ver OPCIONES_EXTRA_ETAPA_TEMPRANA en
+    // cards.js).
     const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta');
-    expect(tarjetas).toHaveLength(3);
+    expect(tarjetas.length).toBeGreaterThanOrEqual(3);
 
     tarjetas[0].click();
     vi.runAllTimers();
@@ -113,13 +136,32 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
+  it('mejora con cantidad reducida (2 cartas): el texto dice "dos" y usa la grilla de 2 columnas (pedido del coordinador, v4)', () => {
+    iniciar(cont, prepararPartidaGuardadaMejoraReducida(1));
+    continuar();
+
+    expect(cont.textContent).toContain('El dado trajo dos mejoras. Elegí una.');
+    expect(cont.textContent).not.toContain('trajo tres mejoras');
+    const grilla = cont.querySelector('.panel-decision-grilla-2');
+    expect(grilla).toBeTruthy();
+    expect(grilla.querySelectorAll('.tarjeta')).toHaveLength(2);
+
+    grilla.querySelectorAll('.tarjeta')[0].click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+  });
+
   it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
-    // semilla 2 -> carta "escuela_o_gimnasio", ninguna opcion tiene
+    // semilla 6 -> carta "escuela_o_gimnasio", ninguna opcion tiene
     // probabilidades (verificado aparte con el catalogo real): ejercita el
-    // camino sin roll. (Antes era la semilla 1 con "cancelacion": las cartas
-    // de riesgo nuevas de Task v3 — ver cards-events.js — corren la secuencia
-    // de rng de 'evento' y esa semilla dejó de llegar a esa carta puntual.)
-    iniciar(cont, prepararPartidaGuardada('evento', 2));
+    // camino sin roll. (Antes era la semilla 2: el reparto de mejoras a veces
+    // reduce a 2 cartas -- decidirCantidadMejoras, cards.js, pedido del
+    // coordinador v4 -- y esa tirada nueva corre la secuencia de rng de
+    // TODOS los bloques, mejora incluida, así que 2 dejó de llegar a esta
+    // carta puntual; 6 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 6));
     continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
@@ -136,14 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 5 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 17 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 52 con "entrenador"/"cambiar": las cartas nuevas de riesgo
-    // corren la secuencia de rng de 'evento' y esa semilla dejó de llegar a
-    // esa carta puntual.)
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 3: el reparto de mejoras a veces reduce a 2 cartas
+    // -- decidirCantidadMejoras, cards.js, pedido del coordinador v4 -- y esa
+    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
+    // incluida, así que 3 dejó de llegar a esta carta puntual, 17 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 17));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -198,10 +241,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 2: con el rebalance del campamento (Task v3), la semilla 1 por
-    // defecto ya no llega a un beat "redes" dentro de su propia carrera
-    // (probRedes bajó bastante en varias etapas, ver ETAPAS en career.js).
-    iniciar(cont, prepararPartidaGuardada('redes', 2));
+    // semilla 1: el reparto de mejoras a veces reduce a 2 cartas
+    // (decidirCantidadMejoras, cards.js, pedido del coordinador v4) y esa
+    // tirada nueva corre la secuencia de rng de TODOS los bloques, mejora
+    // incluida — la semilla 2 usada antes dejó de llegar a un beat "redes"
+    // dentro de las 500 iteraciones de avanzarHasta; 1 sí.
+    iniciar(cont, prepararPartidaGuardada('redes', 1));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -227,8 +272,8 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
-    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Semana');
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
     expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeTruthy();
 
@@ -247,11 +292,16 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
-    // semilla 3: con el rebalance del campamento (Task v3), probSparring
-    // bajó fuerte (0 en profesional/veterano — el campamento ya lo garantiza
-    // en cada pelea, ver campamento.js), así que la semilla 1 por defecto ya
-    // no llega a un beat "sparring" suelto dentro de su propia carrera.
-    iniciar(cont, prepararPartidaGuardada('sparring', 3));
+    // semilla 2: con el rebalance del campamento (Task v3), probSparring bajó
+    // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
+    // cada pelea, ver campamento.js), así que un "sparring" suelto solo
+    // puede salir en los 6 bloques de juvenil/amateur. Sistema 2 (segunda
+    // ronda, corrección del coordinador): las opciones extra de
+    // repartirMejoras en esas mismas etapas (cards.js) consumen más tiradas
+    // de rng por bloque, así que corrieron la secuencia y la semilla 3 (que
+    // antes sí llegaba) dejó de encontrar un "sparring" dentro del límite de
+    // búsqueda — 2 sí lo encuentra.
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -281,7 +331,11 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta')).toHaveLength(3);
+    // No se fija un número exacto de tarjetas (Sistema 2, corrección del
+    // coordinador: juvenil/amateur ofrecen más opciones que profesional,
+    // ver OPCIONES_EXTRA_ETAPA_TEMPRANA en cards.js) — lo que este test
+    // verifica es la navegación a la Ficha y de vuelta, no la cantidad.
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
 
     cont.querySelector('[data-accion="ficha"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
@@ -289,7 +343,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     cont.querySelector('[data-accion="cerrar"]').click();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta')).toHaveLength(3);
+    expect(cont.querySelectorAll('.panel-decision-grilla .tarjeta').length).toBeGreaterThan(0);
   });
 });
 
@@ -311,11 +365,14 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     });
     // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
-    // Y, más adelante en la misma cola, una 'oferta' — proximaPelea ya queda
-    // seteado antes de llegar a ninguno de los dos (verificado aparte).
+    // Y, más adelante en la misma cola, una 'oferta' — ofertaPendiente (dato
+    // interno) ya queda seteado antes de llegar a ninguno de los dos
+    // (verificado aparte); proximaPelea (lo que muestra el panel) sigue null
+    // porque todavía no se firmó nada.
     const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
     const partida = avanzarHasta(inicial, 'evento');
-    expect(partida.proximaPelea).not.toBeNull();
+    expect(partida.ofertaPendiente).not.toBeNull();
+    expect(partida.proximaPelea).toBeNull();
     expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
 
     const cartaSintetica = {
@@ -337,22 +394,24 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
     return storage;
   }
 
-  it('elegir la rama que cae la pelea saca la oferta de la cola y limpia proximaPelea: el panel de la derecha deja de mostrar al rival', () => {
+  it('elegir la rama que cae la pelea saca la oferta de la cola de verdad (no solo del texto); el panel de la derecha nunca mostró al rival sin firmar', () => {
     iniciar(cont, partidaConOfertaYCartaDeRiesgo());
     continuar();
 
-    // Antes de elegir: el panel de "próxima pelea" (columna derecha) todavía
-    // muestra al rival — la oferta sigue en danza.
-    expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+    // Antes de elegir: la oferta todavía no se firmó (sigue sin decidir), así
+    // que el panel de "próxima pelea" (columna derecha) sigue en el estado
+    // vacío — bug reportado: antes mostraba al rival apenas aparecía la
+    // oferta, sin que el jugador la hubiera aceptado.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
 
     const tarjetaRiesgo = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaRiesgo).toBeTruthy();
     tarjetaRiesgo.click();
     vi.runAllTimers();
 
-    // Después: la pelea se cayó de verdad. El panel de la derecha ya no
-    // muestra al rival (volvió al estado vacío), y "Continuar" no lleva a
-    // ningún beat de tipo 'oferta' — se sacó de la cola, no solo del texto.
+    // Después: la pelea se cayó de verdad. El panel de la derecha sigue en
+    // el estado vacío, y "Continuar" no lleva a ningún beat de tipo 'oferta'
+    // — se sacó de la cola, no solo del texto.
     expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeNull();
     expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeNull();
@@ -374,9 +433,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 5 -> carta "desafio_de_la_vereda", la opción "aceptar" SI tiene
-    // probabilidades (mismo caso ya usado más arriba para probar el roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 45 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // tiene probabilidades (mismo caso ya usado más arriba para probar el
+    // roll; era la semilla 5 antes de que decidirCantidadMejoras -- pedido
+    // del coordinador v4 -- corriera la secuencia de rng de todos los
+    // bloques).
+    iniciar(cont, prepararPartidaGuardada('evento', 45));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -414,7 +476,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    iniciar(cont, prepararPartidaGuardada('evento', 5));
+    // semilla 45: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 45));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -435,14 +498,77 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   });
 });
 
+// Bug reportado por el usuario: "minijuego de sparring: falta el timer con
+// la barra decreciendo". Al agregarlo (ui/screens/sparring.js), cada pao
+// prendido programa un setTimeout que cuenta como error si no le pegás a
+// tiempo — mismo riesgo de timer colgado que ya se resolvió para el roll y
+// el dado (hallazgo 1, más arriba): si el jugador se va a la Ficha con un
+// pao prendido, ese timer no puede seguir corriendo en segundo plano contra
+// un `centroContenido()` que la Ficha ya reemplazó.
+describe('main.js: el timer del sparring no le puede robar la pantalla al jugador (bug reportado: falta el timer)', () => {
+  it('entrar a la Ficha con un pao prendido y dejar que el timer expire en segundo plano no borra la Ficha', () => {
+    // semilla 3: mismo caso ya usado más arriba para llegar a un beat
+    // "sparring" suelto (en profesional/veterano probSparring es 0 — el
+    // campamento ya lo garantiza en cada pelea).
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
+    continuar();
+
+    expect(cont.querySelector('.grilla-paos')).toBeTruthy();
+    cont.querySelector('[data-accion="empezar"]').click();
+    expect(cont.querySelector('.pao.activo')).toBeTruthy();
+
+    // El jugador se va a la Ficha con el pao todavía prendido, sin pegarle.
+    cont.querySelector('[data-accion="ficha"]').click();
+    expect(cont.querySelector('.shell')).toBeNull();
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+
+    // Se deja correr el timer del pao en segundo plano (bien por encima de
+    // su duración nominal, 1500ms): la Ficha tiene que seguir en pantalla,
+    // intacta, hasta que el jugador toque "Cerrar" — nunca antes.
+    vi.advanceTimersByTime(5000);
+
+    expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
+    expect(cont.querySelector('.shell')).toBeNull();
+  });
+
+  // Verificación más fuerte que la de arriba: sin cancelar el timer, un pao
+  // que vence mientras el jugador está en la Ficha vuelve a encender el
+  // siguiente automáticamente (mismo `empezar()` que dispara el propio
+  // renderSparring al reanudar un sparring "en curso") — y ESE timer, sin
+  // cancelar tampoco, sigue la cadena. Con 5000ms de sobra (más de 3 rondas
+  // de 1500ms) el drill avanzaría solo varios golpes en segundo plano, todos
+  // errados, sin que el jugador tocara nada. Al volver del tablero, el
+  // contador de "Golpes" tiene que seguir en 0: el timer pendiente se corta
+  // ANTES de que la Ficha reemplace la pantalla (abandonarSparringPendiente).
+  it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
+    iniciar(cont, prepararPartidaGuardada('sparring', 2));
+    continuar();
+
+    cont.querySelector('[data-accion="empezar"]').click();
+    cont.querySelector('[data-accion="ficha"]').click();
+    vi.advanceTimersByTime(5000);
+
+    cont.querySelector('[data-accion="cerrar"]').click();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.querySelector('.grilla-paos')).toBeTruthy();
+    // "Golpes" es el segundo `.tile .valor` del panel de sparring (el
+    // primero es "Aciertos") — ver renderSparring, ui/screens/sparring.js.
+    const golpes = [...cont.querySelectorAll('.tile .valor')][1];
+    expect(golpes.textContent).toBe('0/10');
+  });
+});
+
 // Regresión pedida en la revisión de las Tasks 5.3/5.4: con la tienda como
 // popup, el tablero queda VISIBLE detrás mientras se compra. Que la plata
-// del panel izquierdo quedara congelada ahí rompía las dos reglas de la v2
-// ("el tablero nunca desaparece" y "los cambios se ven ocurrir") — antes no
-// se notaba porque las pantallas se reemplazaban enteras, pero acá el
-// tablero sigue a la vista. `abrirTienda`/`propsPanelIzquierda` en main.js
-// ahora refrescan SOLO el panel izquierdo del shell en cada compra.
-describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo detrás del popup', () => {
+// quedara congelada ahí rompía las dos reglas de la v2 ("el tablero nunca
+// desaparece" y "los cambios se ven ocurrir") — antes no se notaba porque las
+// pantallas se reemplazaban enteras, pero acá el tablero sigue a la vista.
+// Dinero se mudó a la columna derecha con la reforma de grilla 3×3 (v4):
+// `abrirTienda`/`refrescarDinero` en main.js ahora refrescan quirúrgicamente
+// SOLO ese sub-nodo (`[data-bloque="dinero"]`), no toda la columna derecha —
+// calendario/recursos/próxima/noticias, que viven al lado, no se tocan.
+describe('main.js: la tienda abierta durante un beat refresca el panel de dinero (derecha) detrás del popup', () => {
   function partidaConBeatYPlata(dinero) {
     const storage = crearStorageFalso();
     storage.setItem(CLAVE_ACCESO, '1');
@@ -458,17 +584,22 @@ describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo
     return storage;
   }
 
-  it('comprar dentro del popup actualiza la plata detrás, sin cerrar el popup ni tocar el centro/derecha del shell', () => {
+  it('comprar dentro del popup actualiza la plata detrás, sin cerrar el popup ni tocar el centro del shell ni el resto de la derecha', () => {
     iniciar(cont, partidaConBeatYPlata(200000));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     const refCentro = cont.querySelector('.shell-centro');
     const refDerecha = cont.querySelector('.shell-derecha');
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    // Referencia de un sub-nodo VECINO del dinero, dentro de la misma columna
+    // (calendario): tiene que sobrevivir intacto, prueba de que el refresco
+    // es quirúrgico y no repinta toda la columna derecha.
+    const refCalendario = cont.querySelector('.shell-derecha [data-bloque="calendario"]');
+    expect(refCalendario).toBeTruthy();
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroAntes).toBeTruthy();
 
-    cont.querySelector('.shell-izquierda [data-accion="tienda"]').click();
+    cont.querySelector('.shell-derecha [data-accion="tienda"]').click();
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
 
     document.querySelector('[data-item="kinesiologo"]').click();
@@ -476,31 +607,32 @@ describe('main.js: la tienda abierta durante un beat refresca el panel izquierdo
     // El popup sigue abierto (uno solo, no se cerró ni se duplicó)...
     expect(document.querySelectorAll('.popup-overlay')).toHaveLength(1);
     // ...el foco no se escapó hacia atrás, al panel que se acaba de repintar...
-    expect(cont.querySelector('.shell-izquierda').contains(document.activeElement)).toBe(false);
-    // ...y el panel izquierdo, DETRÁS del popup, ya muestra la plata nueva
-    // (200000 - 90000 del kinesiólogo = 110000).
-    const dineroDespues = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    expect(cont.querySelector('.shell-derecha').contains(document.activeElement)).toBe(false);
+    // ...y el panel de dinero, DETRÁS del popup, ya muestra la plata nueva
+    // (200000 - 16000 del kinesiólogo, precio recalibrado en Sistema 3 = 184000).
+    const dineroDespues = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroDespues).not.toBe(dineroAntes);
-    expect(dineroDespues).toBe('US$ 110K');
+    expect(dineroDespues).toBe('US$ 184K');
 
-    // El centro y la derecha del shell no se tocaron: la garantía del shell
-    // (montarCentro nunca toca las columnas laterales) sigue en pie aunque
-    // ahora también se repinte la izquierda por una compra.
+    // El centro no se tocó, la región derecha sigue siendo el mismo nodo, y
+    // su vecino (calendario) ni se repintó: solo el sub-nodo de dinero
+    // cambió.
     expect(cont.querySelector('.shell-centro')).toBe(refCentro);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
+    expect(cont.querySelector('.shell-derecha [data-bloque="calendario"]')).toBe(refCalendario);
   });
 
   it('un item impagable dentro del popup no rompe nada y el panel de atrás sigue mostrando la misma plata', () => {
     iniciar(cont, partidaConBeatYPlata(0));
     continuar();
 
-    cont.querySelector('.shell-izquierda [data-accion="tienda"]').click();
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    cont.querySelector('.shell-derecha [data-accion="tienda"]').click();
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
 
     document.querySelector('[data-item="manager"]').click();
 
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
-    const dineroDespues = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    const dineroDespues = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroDespues).toBe(dineroAntes);
   });
 });

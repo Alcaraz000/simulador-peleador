@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
-  LESIONES, tirarLesion, aplicarLesion, recuperar, curarConDinero, puedePelear,
+  LESIONES, tirarLesion, aplicarLesion, recuperar, curarConDinero, puedePelear, factorEfectividad,
 } from '../../src/core/injuries.js';
 
 function jugador(extra = {}) {
@@ -136,15 +136,52 @@ describe('curarConDinero', () => {
   });
 });
 
+// Corrección del coordinador (segunda ronda): el usuario fue textual —
+// "hasta no estar recuperado de una lesión, no puede aparecer una pelea
+// nueva" — sin matices de severidad. Antes solo bloqueaba grave (severidad
+// 3); ahora CUALQUIER lesión activa bloquea, sea leve, moderada o grave.
 describe('puedePelear', () => {
-  it('permite pelear sano o con lesion leve', () => {
+  it('permite pelear sano', () => {
     expect(puedePelear(jugador())).toBe(true);
-    const leve = aplicarLesion(jugador(), { id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' });
-    expect(puedePelear(leve)).toBe(true);
   });
 
-  it('bloquea solo con lesion grave', () => {
-    const grave = aplicarLesion(jugador(), { id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 3, costo: 1, texto: 'x' });
-    expect(puedePelear(grave)).toBe(false);
+  it('bloquea con cualquier lesion activa, sin importar la severidad', () => {
+    for (const severidad of [1, 2, 3]) {
+      const lesionado = aplicarLesion(jugador(), {
+        id: 'x', nombre: 'x', severidad, bloquesRestantes: 1, costo: 1, texto: 'x',
+      });
+      expect(puedePelear(lesionado)).toBe(false);
+    }
+  });
+
+  it('en cuanto se cura, vuelve a permitir pelear', () => {
+    const lesionado = aplicarLesion(jugador(), {
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+    });
+    const { peleador: curado } = recuperar(lesionado, { bloques: 1 });
+    expect(puedePelear(curado)).toBe(true);
+  });
+});
+
+// Sistema 1 (feedback del usuario): "¿Qué efecto tienen las lesiones?
+// Parecería que no afecta en nada". `factorEfectividad` es el multiplicador
+// real que castiga el rendimiento en pelea de un peleador lesionado (lo usa
+// `efectividad` en fight.js): antes era un 0.88 fijo que además solo pegaba
+// sobre la mitad de la fórmula (~6% total, invisible). Ahora escala con la
+// severidad y pesa sobre el total.
+describe('factorEfectividad', () => {
+  it('sin lesion, no penaliza nada', () => {
+    expect(factorEfectividad(null)).toBe(1);
+  });
+
+  it('cuanto mas grave la lesion, mayor la penalizacion', () => {
+    const leve = factorEfectividad({ severidad: 1 });
+    const moderada = factorEfectividad({ severidad: 2 });
+    expect(leve).toBeLessThan(1);
+    expect(moderada).toBeLessThan(leve);
+  });
+
+  it('la penalizacion es real, no cosmética (al menos un 10% para una lesion moderada)', () => {
+    expect(factorEfectividad({ severidad: 2 })).toBeLessThanOrEqual(0.9);
   });
 });

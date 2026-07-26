@@ -1,8 +1,9 @@
 import { createRng } from './core/rng.js';
 import {
-  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea,
+  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
 } from './core/career.js';
 import { tablaRanking } from './core/world.js';
+import { hitosDePelea, hitoDeEtapa } from './core/hitos.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -29,9 +30,12 @@ import { renderNegociacion } from './ui/screens/negotiation.js';
 import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
+import { mostrarHito } from './ui/screens/hitos.js';
 
 import { crearShell } from './ui/shell.js';
-import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
+import {
+  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero, renderPanelRecursos,
+} from './ui/screens/panel-peleador.js';
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
@@ -134,6 +138,18 @@ function cartaMejoraAOpcion(carta) {
   };
 }
 
+// Pedido del coordinador (v4): repartirMejoras (cards.js) a veces reparte 2
+// cartas en vez de 3 — el texto tiene que reflejar cuántas salieron de
+// verdad, nunca decir "tres" fijo cuando son dos (o cuatro/cinco, con el
+// bonus del entrenador o de etapa temprana encima).
+const NUMEROS_EN_TEXTO = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete'];
+
+function textoCantidadMejoras(cantidad) {
+  const palabra = NUMEROS_EN_TEXTO[cantidad] ?? String(cantidad);
+  const sustantivo = cantidad === 1 ? 'mejora' : 'mejoras';
+  return `El dado trajo ${palabra} ${sustantivo}. Elegí una.`;
+}
+
 function opcionCartaAOpcion(opcion, nombreIcono) {
   return {
     id: opcion.id, titulo: opcion.texto, efectos: efectosDeOpcion(opcion), icono: icono(nombreIcono),
@@ -221,25 +237,51 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (cancelarNoticiasPendiente) cancelarNoticiasPendiente();
   }
 
+  // Misma familia de problema, ahora para el timer del sparring (Task v4,
+  // bug reportado: "falta el timer con la barra decreciendo"): cada pao
+  // encendido programa un `setTimeout` (renderSparring, ui/screens/
+  // sparring.js) que cuenta como error automático si no le pegás a tiempo.
+  // Si el jugador se va a la Ficha con un pao prendido, ese timer sigue
+  // corriendo en segundo plano — sin cancelarlo, dispararía `onGolpe` (y de
+  // ahí `pintarSparring`, que pinta sobre `centroContenido()`) mientras la
+  // Ficha ya reemplazó `contenedor`, con el mismo riesgo que el roll/dado:
+  // `asegurarShell()` reconstruyendo el tablero debajo de la Ficha.
+  let cancelarSparringPendiente = null;
+
+  function abandonarSparringPendiente() {
+    if (cancelarSparringPendiente) cancelarSparringPendiente();
+  }
+
   function asegurarShell() {
     if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
     shellActual = crearShell(contenedor);
     return shellActual;
   }
 
-  // Arma los props de la columna izquierda del shell. La ficha/tienda que se
-  // abren desde acá siempre vuelven al MISMO tablero (volverAlTablero): ya no
-  // hace falta que cada llamador decida "adónde volver" a mano.
+  // Arma los props de la columna izquierda del shell. La ficha que se abre
+  // desde acá siempre vuelve al MISMO tablero (volverAlTablero): ya no hace
+  // falta que cada llamador decida "adónde volver" a mano.
   function propsPanelIzquierda() {
     return {
       partida,
       onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
-      onTienda: () => abrirTienda(() => {
-        renderPanelPeleador(shellActual.regiones.izquierda, propsPanelIzquierda());
-      }),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
       onVerRanking: () => abrirRanking(),
     };
+  }
+
+  // Dinero + tienda viven en la columna derecha (grilla 3×3, v4: mudados
+  // desde la izquierda — mockup "Calendario + Botón tienda, ahí adentro se ve
+  // el dinero"). `refrescarDinero` es el equivalente de lo que antes hacía
+  // `onTienda` repintando toda la izquierda: ahora es quirúrgico, solo el
+  // sub-nodo de dinero (no toca calendario/recursos/próxima/noticias, que
+  // viven al lado en la misma columna y no cambiaron).
+  function propsPanelDinero() {
+    return { jugador: partida.jugador, onTienda: () => abrirTienda(refrescarDinero) };
+  }
+
+  function refrescarDinero() {
+    renderPanelDinero(shellActual.regiones.derecha.querySelector('[data-bloque="dinero"]'), propsPanelDinero());
   }
 
   // Popup con la tabla de posiciones completa (Task v3, feedback del
@@ -251,41 +293,49 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderRanking({ filas: tablaRanking(partida.mundo, partida.jugador) });
   }
 
-  // Asegura el shell y REFRESCA los paneles laterales con la partida actual
-  // (izquierda: peleador; derecha: próxima pelea + noticias), más el
-  // calendario del centro. Se llama en cada transición del tablero (nuevo
-  // beat, o volver al estado ocioso) — nunca en cada micro-render dentro de
-  // un mismo beat (p. ej. cada golpe del sparring, o cada frame del roll de
-  // azar, repintan solo `centroContenido()` directo).
-  //
-  // La región central queda armada con DOS sub-nodos estables, igual que ya
-  // hace la derecha con próxima/noticias: `calendario` (siempre el mismo
-  // contenido mientras no cambie `semanaGlobal`, ver panel-calendario.js —
-  // pedido del coordinador: es información permanente del jugador, no puede
-  // vivir donde el celular la esconde) y `contenido`, donde va lo que sea que
-  // esté pasando ahora (el panel de avance, una decisión, el sparring). Quien
-  // pinta un beat nunca toca `shell.regiones.centro` directo: usa
-  // `centroContenido()`.
+  // Asegura el shell y REFRESCA los tres paneles del tablero con la partida
+  // actual, según la grilla 3×3 (v4, feedback del usuario: "en PC no se
+  // aprovecha bien el ancho"):
+  //   - izquierda: personaje, tu rincón, categoría/ranking.
+  //   - centro: atributos, estado, y lo que esté pasando ahora (contenido).
+  //   - derecha: calendario+dinero, fama+próxima pelea, noticias.
+  // Se llama en cada transición del tablero (nuevo beat, o volver al estado
+  // ocioso) — nunca en cada micro-render dentro de un mismo beat (p. ej. cada
+  // golpe del sparring, o cada frame del roll de azar, repintan solo
+  // `centroContenido()` directo). Quien pinta un beat nunca toca
+  // `shell.regiones.centro` directo: usa `centroContenido()`.
   function montarTablero() {
     const shell = asegurarShell();
     renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
 
+    // Atributos y estado (arriba, siempre los mismos mientras no cambien los
+    // datos del jugador) + contenido (lo que cambia: el panel de avance, una
+    // decisión, el sparring) — el jugador nunca los pierde de vista mientras
+    // decide, la garantía central del rediseño.
     shell.montarCentro(el('div', { class: 'stack' }, [
-      el('div', { dataset: { bloque: 'calendario' } }),
+      el('div', { dataset: { bloque: 'atributos' } }),
+      el('div', { dataset: { bloque: 'estado' } }),
       el('div', { dataset: { bloque: 'contenido' } }),
     ]));
-    renderCalendario(shell.regiones.centro.querySelector('[data-bloque="calendario"]'), { partida });
+    renderPanelAtributos(shell.regiones.centro.querySelector('[data-bloque="atributos"]'), { jugador: partida.jugador });
+    renderPanelEstado(shell.regiones.centro.querySelector('[data-bloque="estado"]'), { jugador: partida.jugador });
 
     // `class:'stack'` (v3, feedback del usuario: "está muy pegada al módulo
     // de arriba del próximo combate"): antes este wrapper no tenía clase, así
-    // que el gap:10px de `.shell-derecha` (pensado para sus hijos DIRECTOS)
-    // nunca llegaba a aplicarse entre próxima/noticias — los dos vivían
-    // pegados dentro de este único hijo. `.stack` es el mismo respiro que ya
-    // separa a todos los demás paneles del tablero.
+    // que el gap:10px de `.shell-region` (pensado para sus hijos DIRECTOS)
+    // nunca llegaba a aplicarse entre módulos — vivían pegados dentro de este
+    // único hijo. `.stack` es el mismo respiro que ya separa a todos los
+    // demás paneles del tablero.
     shell.montarDerecha(el('div', { class: 'stack' }, [
+      el('div', { dataset: { bloque: 'calendario' } }),
+      el('div', { dataset: { bloque: 'dinero' } }),
+      el('div', { dataset: { bloque: 'recursos' } }),
       el('div', { dataset: { bloque: 'proxima' } }),
       el('div', { dataset: { bloque: 'noticias' } }),
     ]));
+    renderCalendario(shell.regiones.derecha.querySelector('[data-bloque="calendario"]'), { partida });
+    renderPanelDinero(shell.regiones.derecha.querySelector('[data-bloque="dinero"]'), propsPanelDinero());
+    renderPanelRecursos(shell.regiones.derecha.querySelector('[data-bloque="recursos"]'), { partida });
     renderPanelProxima(shell.regiones.derecha.querySelector('[data-bloque="proxima"]'), {
       partida,
       onVerRival: (rivalId) => {
@@ -366,18 +416,20 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // animación de números + el resalte verde/rojo de SOLO las filas de
   // atributo que cambiaron (antes, `shell.destacar('izquierda')` hacía
   // brillar TODO el módulo izquierdo por cualquier cambio — queja textual).
+  // Desde la grilla 3×3 (v4) los atributos/estado viven en la columna
+  // CENTRAL, no en la izquierda — ver montarTablero.
   //
   // El ORDEN importa: animar tiene que pasar DESPUÉS de irADashboard() (que
-  // llama a montarTablero(), y esa SIEMPRE repinta la izquierda desde cero —
-  // ver montarTablero). Animar ANTES se pierde en el mismo tick: mount() no
-  // diffea, así que el segundo repintado deja huérfanos los nodos que
-  // `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
+  // llama a montarTablero(), y esa SIEMPRE repinta atributos/estado desde
+  // cero — ver montarTablero). Animar ANTES se pierde en el mismo tick:
+  // mount() no diffea, así que el segundo repintado deja huérfanos los nodos
+  // que `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
   // navegador llegue a pintar ese estado intermedio.
   function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
     partida = { ...partida, jugador, rivalidades };
     irADashboard();
-    animarAtributos(shellActual.regiones.izquierda, deltas);
-    destacarAtributos(shellActual.regiones.izquierda, deltas);
+    animarAtributos(shellActual.regiones.centro, deltas);
+    destacarAtributos(shellActual.regiones.centro, deltas);
   }
 
   // Al tocar "Continuar" se tira el dado (Task v3, pedido textual: "el juego
@@ -430,6 +482,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     abandonarRollPendiente();
     abandonarDadoPendiente();
     abandonarNoticiasPendientes();
+    abandonarSparringPendiente();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -457,12 +510,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     });
   }
 
+  // Sistema 4 (feedback del usuario: "faltan popups cuando pasen cosas
+  // importantes: [...] cuando se avanza de categoría"): `siguiente()` es el
+  // ÚNICO llamador de `siguienteBeat` en todo main.js, así que es el único
+  // lugar donde hace falta comparar la etapa antes/después — nunca puede
+  // haber un cambio de etapa que se escape sin pasar por acá. El popup se
+  // muestra COMO OVERLAY sobre lo que se acaba de pintar (mismo patrón que
+  // la tienda: el tablero sigue montado y visible detrás), nunca reemplaza
+  // el beat real.
   function siguiente() {
+    const etapaAntes = etapaActual(partida).id;
     const paso = siguienteBeat(partida);
     partida = paso.partida;
+    const hitoEtapa = hitoDeEtapa({ etapaAnteriorId: etapaAntes, etapaNueva: etapaActual(partida) });
     if (partida.terminada) return finDeCarrera();
-    if (!paso.beat) return irADashboard();
+    if (!paso.beat) { irADashboard(); if (hitoEtapa) mostrarHito(hitoEtapa); return; }
     jugarBeat(paso.beat);
+    if (hitoEtapa) mostrarHito(hitoEtapa);
   }
 
   function jugarBeat(beat) {
@@ -506,13 +570,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   function beatMejora(beat) {
+    const cartas = beat.datos.cartas;
     centro(() => renderPanelDecision(centroContenido(), {
       titulo: 'Campamento',
       bajada: 'El trabajo rindió',
-      texto: 'El dado trajo tres mejoras. Elegí una.',
-      opciones: beat.datos.cartas.map(cartaMejoraAOpcion),
+      texto: textoCantidadMejoras(cartas.length),
+      opciones: cartas.map(cartaMejoraAOpcion),
       onElegir: (id) => {
-        const carta = beat.datos.cartas.find((c) => c.id === id);
+        const carta = cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
         aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
       },
@@ -618,7 +683,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     let sparring = beat.datos.sparring;
 
     function pintarSparring() {
-      renderSparring(centroContenido(), {
+      const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
         onGolpe: (evento) => {
@@ -631,6 +696,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
+      // Se reasigna en CADA golpe (mismo patrón que cancelarNoticiasPendiente
+      // en montarTablero): el handle anterior ya venció apenas se re-pintó.
+      cancelarSparringPendiente = () => {
+        handle.detener();
+        cancelarSparringPendiente = null;
+      };
     }
 
     centro(pintarSparring);
@@ -675,7 +746,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
     function pintarSparring() {
       const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
-      renderSparring(centroContenido(), {
+      const handle = renderSparring(centroContenido(), {
         sparring,
         jugador: partida.jugador,
         titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
@@ -695,6 +766,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
+      cancelarSparringPendiente = () => {
+        handle.detener();
+        cancelarSparringPendiente = null;
+      };
     }
 
     centro(pintarSparring);
@@ -722,12 +797,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
-        // Pendiente conocido (bug reportado): `proximaPelea` se guarda al armar
-        // la cola del bloque (ver armarCola, career.js) pero antes no se
-        // limpiaba acá — el panel de la derecha seguía mostrando al rival
-        // rechazado durante el resto del bloque, como si la pelea siguiera en
-        // pie. Se limpia en el momento en que la oferta deja de estar vigente.
-        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        // `ofertaPendiente` (dato interno, career.js) deja de estar vigente
+        // en cuanto se rechaza: sin esto quedaba fantasma para
+        // cancelarProximaPelea el resto del bloque. `proximaPelea` (lo que
+        // muestra el panel) nunca llegó a setearse acá — solo la firma
+        // (firmarPelea) la crea — así que no hace falta tocarla.
+        partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
         irADashboard();
       },
     }));
@@ -762,7 +837,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       // fama y vuelve al tablero, sin firmar nada.
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
-        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
         irADashboard();
       },
     });
@@ -850,7 +925,18 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         // título) y vuelve a pintar la MISMA pantalla con `despues` puesto:
         // el resultado post-pelea vive acá adentro, no en una pantalla nueva
         // (Task v3, pedido textual).
-        onFin: () => pintar([], cerrarPelea(oferta, pelea)),
+        onFin: () => {
+          const resumen = cerrarPelea(oferta, pelea);
+          pintar([], resumen);
+          // Sistema 4 (feedback del usuario: "faltan popups cuando [...] se
+          // gana un cinturón, cuando se pierde un cinturón..."): el popup se
+          // muestra COMO OVERLAY sobre la pantalla de resultado que se acaba
+          // de pintar (mismo patrón que la tienda), nunca la reemplaza. Como
+          // mucho UNO por pelea (el más importante que haya salido: ver el
+          // orden de prioridad en hitosDePelea, core/hitos.js) — "que no
+          // moleste" es pedido explícito del usuario.
+          if (resumen.hitos.length > 0) mostrarHito(resumen.hitos[0]);
+        },
         onContinuar: irADashboard,
       });
     }
@@ -869,6 +955,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
   // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {
+    // Estado "antes" para detectar hitos (Sistema 4, core/hitos.js): tiene
+    // que leerse ACÁ, antes de que `partida` se reasigne más abajo — un
+    // historial vacío ahora mismo es "esta es la primera pelea", y el
+    // archirrival de ahora es el punto de comparación para "recién se
+    // consagra una rivalidad".
+    const jugadorAntes = partida.jugador;
+    const archirrivalAntesId = (partida.rivalidades ?? []).find((r) => r.esArchirrival)?.rivalId ?? null;
+
     // `semanaGlobal` (Task v3, "fechas de cuándo se ganaron/defendieron
     // títulos"): se estampa EN el momento del hito, no se reconstruye
     // después — ver el comentario en aplicarResultado (offers.js).
@@ -887,20 +981,37 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const signo = pelea.resultado.ganador === 'jugador' ? 'v' : pelea.resultado.ganador === 'rival' ? 'd' : 'e';
     const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
     elegirArchirrival(rivalidades);
+    const archirrivalDespuesId = rivalidades.find((r) => r.esArchirrival)?.rivalId ?? null;
 
-    // Mismo pendiente que en beatOferta/onRechazar: la pelea que se acaba de
-    // cerrar ya no está "en camino" — sin esto, el panel de próxima pelea
-    // seguía mostrando al rival ya peleado hasta que arrancaba el bloque
-    // siguiente (bug reportado: "seguía apareciendo un peleador aunque no
-    // haya elegido ni confirmado ninguno todavía").
+    // La pelea firmada que se acaba de cerrar ya no es la "próxima pelea" —
+    // sin esto, el panel de próxima pelea seguía mostrando al rival ya
+    // peleado hasta que arrancaba el bloque siguiente (bug reportado:
+    // "seguía apareciendo un peleador aunque no haya elegido ni confirmado
+    // ninguno todavía").
     partida = {
       ...partida, jugador, rivalidades, proximaPelea: null,
     };
 
+    const tituloGanado = paso.titulosGanados[0] ?? null;
+    const hitos = hitosDePelea({
+      oferta,
+      resultado: pelea.resultado,
+      tituloGanado,
+      jugadorAntes,
+      defensasActuales: oferta.cinturonId ? (jugador.defensasCinturon?.[oferta.cinturonId] ?? null) : null,
+      archirrivalAntesId,
+      archirrivalDespuesId,
+      // Entropía para la variante de texto (Sistema 4, hitos-lines.js): no
+      // es una decisión de juego, así que no hace falta el rng compartido —
+      // basta con un número que cambie pelea a pelea.
+      contexto: jugador.historial.length,
+    });
+
     return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,
       deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
-      tituloGanado: paso.titulosGanados[0] ?? null,
+      tituloGanado,
+      hitos,
     };
   }
 

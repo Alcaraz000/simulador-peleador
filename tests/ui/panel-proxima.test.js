@@ -39,6 +39,22 @@ describe('renderPanelProxima', () => {
     expect(cont.textContent).toContain('Todavía no hay nada firmado');
   });
 
+  // Bug reportado por el usuario: el panel mostraba al rival de una oferta
+  // recién aparecida, sin que el jugador la hubiera aceptado todavía. Una
+  // oferta "en camino" (dato interno de career.js, `ofertaPendiente`) no es
+  // una pelea firmada: el panel solo puede leer `proximaPelea`.
+  it('con una oferta en camino pero sin firmar (ofertaPendiente), sigue mostrando el estado vacío', () => {
+    const p = partidaBase();
+    const rivalId = p.mundo.roster[0].id;
+    p.proximaPelea = null;
+    p.ofertaPendiente = { oferta: ofertaDeMuestra(rivalId) };
+
+    renderPanelProxima(cont, { partida: p });
+
+    expect(cont.textContent).toContain('Todavía no hay nada firmado');
+    expect(cont.textContent).not.toContain('El Tanque');
+  });
+
   it('con pelea firmada, muestra que está en juego, cuánto falta y el rival', () => {
     const p = partidaBase();
     const rivalId = p.mundo.roster[0].id;

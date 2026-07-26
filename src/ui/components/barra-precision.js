@@ -68,7 +68,9 @@ export function crearBarraPrecision({ dificultad, onResultado = () => {}, onCuad
 
   const flecha = el('div', { class: 'barra-precision-flecha', style: `left:${posicion}%` });
 
-  const pista = el('div', { class: 'barra-precision-pista' }, [
+  // <button> (no <div>): antes no había forma de "frenar la flecha" con
+  // teclado, solo con click/touch sobre la pista.
+  const pista = el('button', { type: 'button', class: 'barra-precision-pista', 'aria-label': 'Frenar el golpe' }, [
     el('div', { class: 'franja al-aire', style: `left:0%;width:${inicioRoza}%` }),
     el('div', { class: 'franja roza', style: `left:${inicioRoza}%;width:${anchoRoza}%` }),
     el('div', { class: 'franja-verde', style: `left:${inicioVerde}%;width:${anchoVerde}%` }),

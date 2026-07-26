@@ -18,10 +18,62 @@ import { armarBeatsCampamento } from './campamento.js';
 // alterar la racha de tiradas que ya calibra el ritmo de la carrera). El
 // 'preparador físico' (money.js) cumple su promesa ("el declive de las
 // piernas llega más tarde") corriendo el umbral unos años.
+//
+// Sistema 2 (feedback del usuario, SEGUNDA vez: "se supone que hay una edad
+// donde [el prime] va bajando"): un único escalón fijo (32 años, -2
+// velocidad/-1 cardio por bloque hasta el final de la carrera) no se sentía
+// como un arco — era un interruptor, no una curva. Ahora hay DOS escalones:
+// uno suave a partir de EDAD_DECLIVE_JUGADOR (32, sin tocar) y uno duro a
+// partir de EDAD_DECLIVE_DURO_JUGADOR (36 — a propósito la MISMA edad en que
+// el juego narra el arranque de la etapa "veterano", ver ETAPAS más abajo:
+// "Cada pelea puede ser la última. Elegí bien." — la mecánica y la narrativa
+// caen juntas). El escalón duro pega más fuerte Y empieza a tocar también la
+// potencia, no solo piernas y pulmón: el jugador tiene que SENTIR que ya no
+// es el mismo. `faseFisicaJugador` (exportada, más abajo) es la versión
+// "para mostrar en el tablero" de estos mismos umbrales — el jugador puede
+// ver venir la caída antes de que llegue.
 export const EDAD_DECLIVE_JUGADOR = 32;
+const EDAD_DECLIVE_DURO_JUGADOR = 36;
 const DEMORA_DECLIVE_PREPARADOR = 3;
 const PERDIDA_VELOCIDAD_DECLIVE = 2;
 const PERDIDA_CARDIO_DECLIVE = 1;
+const PERDIDA_VELOCIDAD_DECLIVE_DURO = 3;
+const PERDIDA_CARDIO_DECLIVE_DURO = 2;
+const PERDIDA_POTENCIA_DECLIVE_DURO = 1;
+
+// Años de margen antes del umbral suave que todavía se consideran "el prime"
+// (meseta): ni en ascenso ni declinando todavía, el mejor momento de la
+// carrera — lo bastante cerca del declive como para que el jugador sepa que
+// se viene, pero sin que haya empezado.
+const MARGEN_PRIME = 2;
+
+function umbralesDeclive(jugador) {
+  const demora = tieneStaff(jugador, 'preparador') ? DEMORA_DECLIVE_PREPARADOR : 0;
+  return {
+    suave: EDAD_DECLIVE_JUGADOR + demora,
+    duro: EDAD_DECLIVE_DURO_JUGADOR + demora,
+  };
+}
+
+// Fase física del jugador para comunicar el arco en el tablero: 'ascenso'
+// (todavía hay margen para crecer), 'prime' (el mejor momento, a las
+// puertas del declive), 'declive' (ya se siente) y 'declive_duro' (pasado
+// el segundo escalón, se siente fuerte). Pura y determinista — los mismos
+// umbrales que usa `declivePorEdadJugador`, así el tablero nunca puede
+// mostrar una fase que no coincide con lo que en verdad está pasando.
+export function faseFisicaJugador(jugador) {
+  const { suave, duro } = umbralesDeclive(jugador);
+  if (jugador.edad >= duro) {
+    return { id: 'declive_duro', etiqueta: 'En declive', detalle: 'Ya no es lo que era: el cuerpo pasa factura en serio.' };
+  }
+  if (jugador.edad >= suave) {
+    return { id: 'declive', etiqueta: 'En declive', detalle: 'Empezaste a sentir el paso de los años.' };
+  }
+  if (suave - jugador.edad <= MARGEN_PRIME) {
+    return { id: 'prime', etiqueta: 'En tu prime', detalle: 'Tu mejor momento. Que rinda.' };
+  }
+  return { id: 'ascenso', etiqueta: 'En ascenso', detalle: 'Todavía hay margen para crecer.' };
+}
 
 // Nombre del cinturón que el mundo narra como "el campeonato" (mundo.campeonId
 // en world.js): mientras el jugador lo tiene puesto, el mundo no debe coronar
@@ -39,14 +91,20 @@ const CUERPOS_SPONSOR = [
 ];
 
 function declivePorEdadJugador(jugador) {
-  const umbral = tieneStaff(jugador, 'preparador')
-    ? EDAD_DECLIVE_JUGADOR + DEMORA_DECLIVE_PREPARADOR
-    : EDAD_DECLIVE_JUGADOR;
-  if (jugador.edad < umbral) return jugador.atributos;
+  const { suave, duro } = umbralesDeclive(jugador);
+  if (jugador.edad < suave) return jugador.atributos;
+  if (jugador.edad < duro) {
+    return {
+      ...jugador.atributos,
+      velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
+      cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
+    };
+  }
   return {
     ...jugador.atributos,
-    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
-    cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
+    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE_DURO, 1, 99),
+    cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE_DURO, 1, 99),
+    potencia: clamp(jugador.atributos.potencia - PERDIDA_POTENCIA_DECLIVE_DURO, 1, 99),
   };
 }
 
@@ -165,11 +223,17 @@ export function crearPartida({ jugador, semilla }) {
     bloque: 1,
     bloqueGlobal: 1,
     // Calendario del tablero (v2): semana 1-indexada desde el arranque de la
-    // carrera (ver calendario.js). proximaPelea guarda la oferta que ya está
-    // "en camino" este bloque (aunque el jugador todavía no llegó a ese beat
-    // en la cola), para que el panel de próxima pelea pueda mostrarla.
+    // carrera (ver calendario.js). `proximaPelea` es SOLO la pelea firmada
+    // (ver firmarPelea, más abajo): es lo único que lee el panel de próxima
+    // pelea (panel-proxima.js). `ofertaPendiente` es un dato interno aparte:
+    // guarda la oferta que este bloque ya armó en la cola pero que el
+    // jugador todavía no vio ni decidió — sirve para que cancelarProximaPelea
+    // (las cartas de riesgo) sepa que hay algo que sacar de la cola. El panel
+    // nunca lee `ofertaPendiente` (bug reportado: mostraba al rival antes de
+    // aceptar la oferta).
     semanaGlobal: 1,
     proximaPelea: null,
+    ofertaPendiente: null,
     cola: [],
     beatActual: null,
     historialBeats: 0,
@@ -212,7 +276,18 @@ export function avanzarBloque(partida) {
   nueva.jugador.edad += etapa.aniosPorBloque;
   nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque);
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
-  nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
+  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+  // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
+  // los bloques, incluso mientras seguías lesionado — así que una lesión leve
+  // (1 bloque) quedaba borrada de la forma antes de que `recuperar()` (más
+  // abajo) te diera de alta. Mientras la lesión sigue activa AL ARRANCAR este
+  // bloque, el descanso pasivo se frena: la forma se queda baja de verdad. El
+  // bonus de curación de `recuperar()` (+10, en el bloque que te da de alta)
+  // no se toca: sigue siendo la recompensa de terminar la recuperación, no el
+  // descanso de rutina.
+  if (!nueva.jugador.estado.lesion) {
+    nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
+  }
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
   const recuperacion = recuperar(nueva.jugador, { bloques: 1 });
@@ -273,10 +348,13 @@ function armarCola(partida) {
   const rng = rngDe(partida);
   const etapa = etapaActual(partida);
   const cola = [];
-  // Si este bloque trae una oferta de pelea, se guarda acá para que el
-  // tablero (panel-proxima.js) pueda mostrarla incluso antes de que el
-  // jugador llegue a ese beat puntual dentro de la cola.
-  let proximaPelea = null;
+  // Si este bloque trae una oferta de pelea, se guarda acá (dato INTERNO,
+  // nunca leído por el panel de próxima pelea): sirve para que
+  // cancelarProximaPelea pueda sacarla de la cola si una carta de riesgo la
+  // hace caer antes de que el jugador llegue a decidir sobre ella. La oferta
+  // recién se vuelve "próxima pelea" de verdad (lo que muestra el tablero)
+  // cuando el jugador la acepta y firma — ver firmarPelea, más abajo.
+  let ofertaPendiente = null;
 
   // Mejora garantizada en TODOS los bloques (Task v3, "progresión"): un
   // intento anterior la salteaba en el bloque que seguía a una pelea firmada
@@ -315,10 +393,7 @@ function armarCola(partida) {
       });
       if (oferta) {
         cola.push({ tipo: 'oferta', datos: { oferta } });
-        proximaPelea = {
-          oferta,
-          semanaObjetivo: (partida.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque),
-        };
+        ofertaPendiente = { oferta };
       }
     } else {
       // Le tocaba pelea pero está lesionado grave (ver puedePelear en
@@ -328,16 +403,18 @@ function armarCola(partida) {
     }
   }
 
-  return { cola, rngEstado: rng.estado(), proximaPelea };
+  return { cola, rngEstado: rng.estado(), ofertaPendiente };
 }
 
 // Firma la pelea que el jugador acaba de aceptar (y, si hubo negociación, ya
 // tiene la bolsa final — ver main.js): en vez de ir directo al combate, arma
 // el campamento de preparación (campamento.js: 2 o 3 beats, siempre con
 // sparring) y lo mete AL FRENTE de lo que quede en la cola de este bloque.
-// Deja `proximaPelea` con el semanaObjetivo real del campamento: el módulo de
-// "próxima pelea" del tablero (panel-proxima.js) ya sabe leer esto tal cual,
-// sin ningún cambio — usa el mismo `semanasHastaPelea` de siempre.
+// Deja `proximaPelea` con el semanaObjetivo real del campamento (unas pocas
+// semanas, nunca un bloque entero) — recién ACÁ nace `proximaPelea`: es la
+// única fuente que lee el panel de próxima pelea (panel-proxima.js). También
+// limpia `ofertaPendiente`: la oferta que estaba "en camino" ya se resolvió
+// (se firmó), así que deja de estar pendiente de decisión.
 export function firmarPelea(partida, { oferta }) {
   const nueva = clonarPartida(partida);
   const rng = rngDe(nueva);
@@ -347,25 +424,28 @@ export function firmarPelea(partida, { oferta }) {
   });
   nueva.cola = [...beats, ...nueva.cola];
   nueva.proximaPelea = { oferta, semanaObjetivo };
+  nueva.ofertaPendiente = null;
   nueva.rngEstado = rng.estado();
   return nueva;
 }
 
-// Cancela la pelea que estuviera en danza este bloque (si la hay): la usan
-// las cartas de riesgo (CARTAS_EVENTO/CARTAS_REDES, Task v3 "cartas nuevas")
-// cuyo desenlace malo es "se te cae la pelea" — ver `caePelea` en
-// resolverOpcion (events.js). armarCola siempre pone 'evento'/'redes' ANTES
-// que 'oferta' en la cola del mismo bloque, así que si hay una pelea en
-// danza cuando se resuelve una de estas cartas, es SIEMPRE la que este mismo
-// bloque acaba de generar (todavía no llegó el jugador a ese beat) — nunca
-// una de un campamento en curso (esos beats no son 'evento'/'redes'). Basta
-// con sacar el beat 'oferta' de la cola y limpiar `proximaPelea`; si no
-// había ninguna pelea en danza (proximaPelea ya null), no hace nada.
+// Cancela la oferta que estuviera en danza este bloque (si la hay, todavía
+// SIN firmar): la usan las cartas de riesgo (CARTAS_EVENTO/CARTAS_REDES,
+// Task v3 "cartas nuevas") cuyo desenlace malo es "se te cae la pelea" — ver
+// `caePelea` en resolverOpcion (events.js). armarCola siempre pone
+// 'evento'/'redes' ANTES que 'oferta' en la cola del mismo bloque, así que si
+// hay una oferta pendiente cuando se resuelve una de estas cartas, es SIEMPRE
+// la que este mismo bloque acaba de generar (todavía no llegó el jugador a
+// ese beat, mucho menos la firmó) — nunca una pelea ya firmada en curso de
+// campamento (esos beats no son 'evento'/'redes'). Basta con sacar el beat
+// 'oferta' de la cola y limpiar `ofertaPendiente`; si no había ninguna oferta
+// en danza (`ofertaPendiente` ya null), no hace nada. No toca `proximaPelea`:
+// a esta altura siempre es null (todavía no se firmó nada este bloque).
 export function cancelarProximaPelea(partida) {
-  if (!partida.proximaPelea) return partida;
+  if (!partida.ofertaPendiente) return partida;
   const nueva = clonarPartida(partida);
   nueva.cola = nueva.cola.filter((beat) => beat.tipo !== 'oferta');
-  nueva.proximaPelea = null;
+  nueva.ofertaPendiente = null;
   return nueva;
 }
 
@@ -389,7 +469,7 @@ export function siguienteBeat(partida) {
     const armado = armarCola(nueva);
     nueva.cola = armado.cola;
     nueva.rngEstado = armado.rngEstado;
-    nueva.proximaPelea = armado.proximaPelea;
+    nueva.ofertaPendiente = armado.ofertaPendiente;
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }

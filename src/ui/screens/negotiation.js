@@ -30,10 +30,26 @@ function barraPaciencia(negociacion) {
     el('div', { class: 'fila', style: 'align-items:center;justify-content:space-between' }, [
       el('div', { class: 'fila', style: 'align-items:center;gap:6px;flex:0 0 auto' }, [
         icono('balanza', { tamano: 14, color }),
-        el('b', { style: `color:${color}`, text: `Paciencia del promotor: ${negociacion.paciencia}/100` }),
+        // white-space:nowrap (hallazgo al verificar visualmente el fix de
+        // APRIETES, más abajo): esta fila anidada hereda `.fila > *
+        // {flex:1;min-width:0}` para SUS hijos (ícono + texto). Con el texto
+        // encogible, el "auto" que el navegador calcula para el ANCHO de
+        // esta fila (como ítem flex de la fila exterior, ella con flex:0 0
+        // auto) queda angosto, y el texto se partía en 3-4 líneas aunque
+        // sobrara ancho de sobra en el panel — un bug previo, ya estaba en
+        // el código, solo quedaba más disimulado antes de fijar el
+        // contador de aprietes (ver más abajo).
+        el('b', { style: `color:${color};white-space:nowrap`, text: `Paciencia del promotor: ${negociacion.paciencia}/100` }),
       ]),
+      // flex:0 0 auto (segunda vez reportado: "APRIETES 0/3 está
+      // desalineado"): sin esto, `.fila > * { flex:1 }` (theme.css) estira
+      // este span a la mitad de la fila igual que el bloque de paciencia de
+      // al lado (que sí fija flex:0 0 auto), y el texto queda flotando en el
+      // medio de esa mitad en vez de pegado al borde derecho contra
+      // justify-content:space-between.
       el('span', {
         class: 'etiqueta',
+        style: 'flex:0 0 auto',
         text: `Aprietes: ${negociacion.intentosApriete}/${LIMITE_APRIETES}`,
       }),
     ]),
@@ -90,7 +106,7 @@ export function renderNegociacion(contenedor, {
     ]),
     cerrada ? null : barraPaciencia(negociacion),
     cerrada ? null : bloqueEvento(negociacion),
-    cerrada ? null : el('div', { class: 'panel-decision-grilla-2' }, movidas),
+    cerrada ? null : el('div', { class: 'panel-decision-grilla-2 negociacion-movidas' }, movidas),
     // Rechazar la pelea entera (Task v3, pedido textual: "falta el botón de
     // rechazar, tiene que estar siempre disponible") — nunca se apaga, ni
     // siquiera con la negociación bloqueada por un apriete fallido.

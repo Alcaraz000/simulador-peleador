@@ -12,16 +12,21 @@
 
 const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
 
+// Sistema 2 (feedback del usuario: "la media avanza muy lento"): mismo
+// criterio que cards-improve.js — los mods de atributos de combate de las
+// opciones "serias" (la que cuesta fatiga/disciplina) suben +1 respecto de
+// la v3, así el campamento de cada pelea también empuja la MEDIA de forma
+// perceptible.
 export const CARTAS_CAMPAMENTO = [
   {
     id: 'estudiar_al_rival',
     categoria: 'campamento',
     titulo: 'Estudiar a {rival}',
-    texto: 'Don Pepe trajo videos de las últimas peleas de {rival}. Hay patrones para leer, si te tomás el trabajo.',
+    texto: 'Tu entrenador trajo videos de las últimas peleas de {rival}. Hay patrones para leer, si te tomás el trabajo.',
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
-      { id: 'estudiar', texto: 'Mirar cada pelea, cuaderno en mano.', mods: { iq: 4, tecnica: 2, fatiga: 4 } },
+      { id: 'estudiar', texto: 'Mirar cada pelea, cuaderno en mano.', mods: { iq: 5, tecnica: 3, fatiga: 4 } },
       { id: 'confiar', texto: 'Confiar en tu instinto, sin perder tiempo en pantallas.', mods: { moral: 4, iq: -2 } },
     ],
   },
@@ -33,8 +38,8 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
-      { id: 'plan', texto: 'Meterle horas al plan específico.', mods: { defensa: 3, tecnica: 3, fatiga: 5 } },
-      { id: 'general', texto: 'Seguir con el trabajo general de siempre.', mods: { potencia: 2, velocidad: 2 } },
+      { id: 'plan', texto: 'Meterle horas al plan específico.', mods: { defensa: 4, tecnica: 4, fatiga: 5 } },
+      { id: 'general', texto: 'Seguir con el trabajo general de siempre.', mods: { potencia: 3, velocidad: 3 } },
     ],
   },
   {
@@ -58,7 +63,7 @@ export const CARTAS_CAMPAMENTO = [
     rareza: 'normal',
     opciones: [
       { id: 'meditar', texto: 'Bajar un cambio: respirar, visualizar, dormir bien.', mods: { moral: 6, fatiga: -4 } },
-      { id: 'obsesionarte', texto: 'Darle manija a la obsesión: entrenar hasta reventar.', mods: { potencia: 3, moral: -5, fatiga: 6 } },
+      { id: 'obsesionarte', texto: 'Darle manija a la obsesión: entrenar hasta reventar.', mods: { potencia: 4, moral: -5, fatiga: 6 } },
     ],
   },
   {
@@ -70,14 +75,14 @@ export const CARTAS_CAMPAMENTO = [
     rareza: 'normal',
     opciones: [
       { id: 'dejarlo', texto: 'Dejarlo mirar un rato.', mods: { moral: 3, forma: -3 } },
-      { id: 'echarlo', texto: 'Pedirle a Don Pepe que lo saque.', mods: { disciplinaPersonal: 3 } },
+      { id: 'echarlo', texto: 'Pedirle al entrenador que lo saque.', mods: { disciplinaPersonal: 3 } },
     ],
   },
   {
     id: 'descanso_tactico',
     categoria: 'campamento',
     titulo: 'Un día sin gimnasio',
-    texto: 'Don Pepe insiste: falta poco para {rival}, y un cuerpo cansado no rinde. Toca elegir.',
+    texto: 'Tu entrenador insiste: falta poco para {rival}, y un cuerpo cansado no rinde. Toca elegir.',
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
@@ -93,7 +98,7 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'rara',
     opciones: [
-      { id: 'sumar', texto: 'Meter un round extra.', mods: { menton: 3, tecnica: 2, forma: -5, fatiga: 6 } },
+      { id: 'sumar', texto: 'Meter un round extra.', mods: { menton: 3, tecnica: 3, forma: -5, fatiga: 6 } },
       { id: 'cortarla', texto: 'Cortarla ahí, no arriesgar de más.', mods: { forma: 3 } },
     ],
   },
@@ -117,8 +122,62 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'rara',
     opciones: [
-      { id: 'afinar', texto: 'Afinar cada detalle con Don Pepe.', mods: { tecnica: 3, iq: 2, defensa: 2, fatiga: 3 } },
+      { id: 'afinar', texto: 'Afinar cada detalle con el entrenador.', mods: { tecnica: 4, iq: 3, defensa: 3, fatiga: 3 } },
       { id: 'relajarte', texto: 'Bajar la intensidad y llegar fresco.', mods: { forma: 4, fatiga: -6, tecnica: -1 } },
+    ],
+  },
+
+  // --- Decisiones de DOS opciones con dilema real (Pedido 1, v4): mismo
+  // patrón que las nuevas de cards-events.js — una opción cuesta algo, la
+  // otra directamente no cambia nada. El campamento YA es 100% de dos
+  // opciones (nunca tres, ver campamento.test.js), así que estas se mezclan
+  // sin más trámite con las de siempre.
+  {
+    id: 'dia_franco',
+    categoria: 'campamento',
+    titulo: 'El día franco',
+    texto: 'Tu entrenador te ofrece bajar la persiana un día entero antes de {rival}, sin cargo de conciencia.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'tomarlo', texto: 'Tomarlo: un día entero de nada.', mods: { forma: 6, fatiga: -14 } },
+      { id: 'no_tomarlo', texto: 'Seguir como si nada.', mods: {} },
+    ],
+  },
+  {
+    id: 'ropa_nueva_de_entrenar',
+    categoria: 'campamento',
+    titulo: 'Ropa nueva para entrenar',
+    texto: 'La marca que te viste manda un cargamento de ropa técnica último modelo justo para el campamento de {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'usarla', texto: 'Estrenarla en cada sesión.', mods: { moral: 3, forma: 2 } },
+      { id: 'no_usarla', texto: 'Quedarte con la de siempre, por superstición.', mods: {} },
+    ],
+  },
+  {
+    id: 'video_motivacional',
+    categoria: 'campamento',
+    titulo: 'El video antes de dormir',
+    texto: 'Tu entrenador te manda, todas las noches, un video viejo de una paliza histórica para "meterte en clima" contra {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'mirarlos', texto: 'Mirarlos todos, aunque te cueste dormir.', mods: { iq: 2, moral: -3 } },
+      { id: 'ignorarlos', texto: 'Borrar el chat y dormir tranquilo.', mods: {} },
+    ],
+  },
+  {
+    id: 'sesion_biomecanica',
+    categoria: 'campamento',
+    titulo: 'El biomecánico',
+    texto: 'Un especialista carísimo se ofrece a analizarte cuadro por cuadro para afinar cada golpe antes de {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'rara',
+    opciones: [
+      { id: 'hacerlo', texto: 'Hacer la sesión completa.', mods: { tecnica: 5, iq: 2, fatiga: 3 } },
+      { id: 'pasar', texto: 'Pasar: confiar en el ojo de siempre.', mods: {} },
     ],
   },
 ];

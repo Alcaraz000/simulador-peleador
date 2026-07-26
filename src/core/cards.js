@@ -1,4 +1,6 @@
-import { ETIQUETAS, aplicarModificadores, LIMITES_ESTADO } from './stats.js';
+import {
+  ATRIBUTOS, ETIQUETAS, aplicarModificadores, LIMITES_ESTADO,
+} from './stats.js';
 import { bonusCartas } from './money.js';
 import { CARTAS_MEJORA } from '../content/cards-improve.js';
 
@@ -10,10 +12,24 @@ export function formatearMods(mods) {
   });
 }
 
-function cartaAplica(carta, { etapa, disciplina }) {
+// Sistema 1 (feedback del usuario: "las tarjetas que aparecen están
+// condicionadas al estado del jugador"): `carta.estados` es opcional y, si
+// falta, se asume `['sano']` — así el catálogo viejo (todo pensado para un
+// jugador sano, "machaque de gimnasio") sigue funcionando tal cual sin tener
+// que taggear cada carta a mano. Una carta de recuperación declara
+// `estados: ['lesionado']` explícitamente (ver CARTAS_MEJORA,
+// content/cards-improve.js): mientras el jugador está lesionado, SOLO esas
+// aparecen — nunca las de gimnasio — y viceversa.
+function cartaAplicaPorEstado(carta, estado) {
+  const estadosCarta = carta.estados ?? ['sano'];
+  return estadosCarta.includes(estado);
+}
+
+function cartaAplica(carta, { etapa, disciplina, estado }) {
   const porEtapa = carta.etapas.includes(etapa);
   const porDisciplina = carta.disciplinas === 'todas' || carta.disciplinas.includes(disciplina);
-  return porEtapa && porDisciplina;
+  const porEstado = cartaAplicaPorEstado(carta, estado);
+  return porEtapa && porDisciplina && porEstado;
 }
 
 // Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.
@@ -31,10 +47,16 @@ function rarezaDe(carta) {
 // Si a `elegibles` (ya filtrado por etapa/disciplina/categoría) le falta
 // alguna rareza, esa rareza simplemente no aparece entre las entradas: el
 // peso se redistribuye solo entre las que sí están presentes.
+// `pesos` es opcional (default PESOS_RAREZA, el de siempre): lo usa
+// `repartirMejoras` para compensar la varianza legendaria cuando reparte
+// menos cartas de lo habitual (ver PESOS_RAREZA_REPARTO_REDUCIDO, más abajo)
+// — el resto de los callers (repartirOrigenes, repartirApodos,
+// repartirEstilos, elegirEvento, elegirCartaCampamento, elegirCartaRedes) no
+// lo pasan y siguen con el 70/25/5 de siempre.
 // Consume exactamente una tirada de rng (igual que rng.pick), así que se
 // puede usar como reemplazo directo de un `rng.pick` sin correr la secuencia
 // del resto del bloque.
-export function elegirPorRareza(rng, elegibles) {
+export function elegirPorRareza(rng, elegibles, pesos = PESOS_RAREZA) {
   const porRareza = {};
   for (const carta of elegibles) {
     const rareza = rarezaDe(carta);
@@ -42,45 +64,165 @@ export function elegirPorRareza(rng, elegibles) {
   }
   const entradas = elegibles.map((carta) => {
     const rareza = rarezaDe(carta);
-    const peso = (PESOS_RAREZA[rareza] ?? PESOS_RAREZA.normal) / porRareza[rareza];
+    const peso = (pesos[rareza] ?? pesos.normal) / porRareza[rareza];
     return { valor: carta, peso };
   });
   return rng.weighted(entradas);
 }
 
 // Sortea `total` elementos sin repetir de `elegibles`, respetando los pesos
-// de rareza (ver elegirPorRareza). Si una rareza se queda sin elementos a
-// mitad de camino, el peso restante se reparte entre las que sí tienen:
-// nunca se devuelven menos elementos de los pedidos por culpa de un hueco de
-// rareza (mientras el catálogo alcance en total). Genérico a propósito: lo
-// usa `repartirMejoras` acá abajo, y también `repartirOrigenes` (fighter.js)
-// y `repartirApodos` (nicknames.js) — un solo algoritmo de reparto por
-// rareza para todo el juego, no uno por catálogo.
-export function sortearPorRareza(rng, elegibles, total) {
+// de rareza (ver elegirPorRareza, incluido el `pesos` opcional). Si una
+// rareza se queda sin elementos a mitad de camino, el peso restante se
+// reparte entre las que sí tienen: nunca se devuelven menos elementos de los
+// pedidos por culpa de un hueco de rareza (mientras el catálogo alcance en
+// total). Genérico a propósito: lo usa `repartirMejoras` acá abajo, y
+// también `repartirOrigenes` (fighter.js), `repartirApodos` (nicknames.js) y
+// `repartirEstilos` (styles.js) — un solo algoritmo de reparto por rareza
+// para todo el juego, no uno por catálogo.
+export function sortearPorRareza(rng, elegibles, total, pesos = PESOS_RAREZA) {
   let restantes = [...elegibles];
   const elegidas = [];
   while (elegidas.length < total && restantes.length > 0) {
-    const elegida = elegirPorRareza(rng, restantes);
+    const elegida = elegirPorRareza(rng, restantes, pesos);
     elegidas.push(elegida);
     restantes = restantes.filter((c) => c !== elegida);
   }
   return elegidas;
 }
 
-export function repartirMejoras(rng, { jugador, etapa, cantidad = 3, catalogo = null }) {
+// Sistema 2, corrección del coordinador (segunda ronda): "el problema está
+// en la mitad de la carrera, no en el final" — a mitad de carrera (bloque
+// 10/20) la MEDIA seguía baja (~52) aunque el final ya hubiera subido
+// bastante: cada carta mueve poco sobre una base chica, así que arrancar se
+// sentía lento pase lo que pase con el techo. Dos palancas, las dos decaen a
+// 0 en profesional (donde pasa la mayoría de los 20 bloques de la carrera),
+// así que empujan fuerte el arranque sin inflar mucho más el techo final:
+//   - BONUS_ETAPA_TEMPRANA: suma puntos directo al atributo de combate más
+//     grande de la carta (ver conBonusEnElMasGrande, más abajo).
+//   - OPCIONES_EXTRA_ETAPA_TEMPRANA: una o dos cartas más para elegir en el
+//     reparto — sube el promedio por selección (mejor de más opciones) sin
+//     tocar ningún valor. Con esta sola palanca la brecha CON/SIN legendaria
+//     no se achica (a veces hasta se agranda un poco: más tiradas tempranas
+//     = más chances de que la legendaria temprana SÍ aparezca), pero por sí
+//     sola no alcanza para mover la MEDIA lo suficiente.
+//
+// Medido con scripts/balance-sim.mjs (n=1500, "creación real"): MEDIA a
+// mitad de carrera subió de ~52.5 a 56.5 (antes de esta corrección; el
+// objetivo pedido era "~60"). La brecha CON/SIN legendaria (medida como
+// "creación real" vs. "piso deliberado", mismas semillas) bajó de ~3.3 a
+// ~2.5 puntos — se probaron combinaciones que llegaban más cerca de 60
+// (hasta ~57-58), pero la brecha se achicaba proporcionalmente más (hasta
+// ~2.4 y bajando): se priorizó no perforar más ese piso, porque "no aplanes
+// las legendarias" es un pedido tan explícito y repetido como éste. La
+// brecha SIGUE siendo clara y medible, no desapareció — un jugador con
+// suerte legendaria sigue notándose por encima de uno sin ella.
+const BONUS_ETAPA_TEMPRANA = { juvenil: 6, amateur: 4, profesional: 0, veterano: 0 };
+const OPCIONES_EXTRA_ETAPA_TEMPRANA = { juvenil: 2, amateur: 2, profesional: 0, veterano: 0 };
+
+// Aplica `valor` a CADA mod positivo de la carta (comportamiento de siempre
+// del bonus del entrenador, sin tocar).
+function conBonusEnTodos(mods, valor) {
+  const nuevo = {};
+  for (const [clave, m] of Object.entries(mods)) {
+    nuevo[clave] = m > 0 ? m + valor : m;
+  }
+  return nuevo;
+}
+
+// Aplica `valor` UNA sola vez, al ATRIBUTO DE COMBATE positivo más grande de
+// la carta (potencia/velocidad/tecnica/defensa/cardio/iq/grappling — los
+// únicos que pesan en calcularMedia, stats.js) — lo usa el bonus de etapa
+// temprana. Dos motivos para esta doble restricción, medidos en
+// balance-sim.mjs:
+//   1. Solo el atributo más grande, no todos los positivos: si se sumara a
+//      cada mod positivo (como el del entrenador), una carta con dos o tres
+//      stats positivos terminaba recibiendo el doble o el triple de bonus
+//      que una de un solo stat, y podía acercar su total al de una
+//      legendaria — justo lo que "no aplanes la varianza" pide evitar.
+//   2. Solo atributos de combate, nunca forma/fatiga/moral/disciplina/
+//      mentón: esos no mueven la MEDIA para nada, así que un bonus ahí no
+//      ayudaba en lo más mínimo al problema real ("a mitad de carrera la
+//      MEDIA sigue baja") — y de paso, con el bonus en TODOS los mods
+//      positivos, terminaba premiando más a cartas de puro descanso/QoL
+//      (que rinden alto en una suma cruda mal pensada) que a las que sí
+//      suben MEDIA.
+function conBonusEnElMasGrande(mods, valor) {
+  const positivos = Object.entries(mods).filter(([clave, m]) => m > 0 && ATRIBUTOS.includes(clave));
+  if (positivos.length === 0) return mods;
+  const [claveMax] = positivos.reduce((mejor, actual) => (actual[1] > mejor[1] ? actual : mejor));
+  return { ...mods, [claveMax]: mods[claveMax] + valor };
+}
+
+// Pedido del coordinador (v4, "el mazo de mejora también"): la queja
+// original del usuario ("muchas decisiones de tres opciones") apuntaba
+// justo a este mazo — el panel de campamento diciendo "El dado trajo tres
+// mejoras. Elegí una." con tres tarjetas, el beat MÁS frecuente del juego
+// (corre garantizado en TODOS los bloques). `repartirMejoras` reparte 3
+// cartas la gran mayoría de las veces, pero ~1 de cada 5 reparte solo 2:
+// variedad de ritmo sin que se sienta un recorte. Solo se sortea cuando el
+// caller NO pide una `cantidad` puntual (el caso real de career.js, que
+// nunca la pasa): pasar `cantidad` explícita sigue siendo 100%
+// determinístico y no consume esta tirada — así ningún test/caller que fije
+// un número exacto se ve afectado por esta variación.
+export const CANTIDAD_MEJORAS_POR_DEFECTO = 3;
+export const CANTIDAD_MEJORAS_REDUCIDA = 2;
+const PROB_CANTIDAD_REDUCIDA = 0.2; // ~1 de cada 5
+
+export function decidirCantidadMejoras(rng) {
+  return rng.chance(PROB_CANTIDAD_REDUCIDA) ? CANTIDAD_MEJORAS_REDUCIDA : CANTIDAD_MEJORAS_POR_DEFECTO;
+}
+
+// Repartir una carta MENOS reduce, para ESE reparto puntual, la chance de
+// que aparezca una legendaria — pedido explícito: "no dejes que eso aplane
+// la varianza legendaria". Se compensa subiendo el peso de legendaria (bajando
+// el de normal en la misma medida; 'rara' no se toca) SOLO cuando la base
+// salió reducida, de forma que la chance de ver AL MENOS UNA legendaria en
+// `total` tiradas quede igual a la que había con `total + 1` tiradas al peso
+// de siempre (5%, la única carta menos que se hubiera repartido sin esta
+// corrección):
+//   1 - (1-w)^total = 1 - (1-0.05)^(total+1)  =>  w = 1 - (0.95^(total+1))^(1/total)
+// Con total=2 (el caso típico, sin bonus de entrenador/etapa): w ≈ 7.41%
+// (contra el 5% de siempre). Se recalcula sobre `total` (no un valor fijo)
+// porque el bonus del entrenador/etapa suma cartas ENCIMA de la base
+// reducida, y esas tiradas de más no necesitan compensación aparte: lo único
+// que hay que tapar es la UNA tirada que dejó de pasar por la base.
+// Medido en conjunto sobre carreras completas con scripts/balance-sim.mjs
+// (no solo el reparto individual) y con un test estadístico dedicado en
+// cards.test.js: la tasa de "al menos una legendaria" con cantidad reducida
+// queda cerca de la de cantidad normal, no varios puntos más abajo.
+function pesosCompensadosPorMenosCartas(total) {
+  const pLegendariaBase = PESOS_RAREZA.legendaria / 100;
+  const probObjetivoConTotalNormal = 1 - (1 - pLegendariaBase) ** (total + 1);
+  const wLegendaria = 1 - (1 - probObjetivoConTotalNormal) ** (1 / total);
+  const pctLegendaria = wLegendaria * 100;
+  const deltaDeNormal = pctLegendaria - PESOS_RAREZA.legendaria;
+  return {
+    normal: PESOS_RAREZA.normal - deltaDeNormal,
+    rara: PESOS_RAREZA.rara,
+    legendaria: pctLegendaria,
+  };
+}
+
+export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo = null }) {
   const fuente = catalogo ?? CARTAS_MEJORA;
   const bonus = bonusCartas(jugador);
-  const total = cantidad + bonus.opcionesExtra;
-  const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina }));
-  const elegidas = sortearPorRareza(rng, elegibles, total);
+  const opcionesExtraEtapa = OPCIONES_EXTRA_ETAPA_TEMPRANA[etapa] ?? 0;
+  const cantidadBase = cantidad ?? decidirCantidadMejoras(rng);
+  const total = cantidadBase + bonus.opcionesExtra + opcionesExtraEtapa;
+  const pesos = cantidadBase < CANTIDAD_MEJORAS_POR_DEFECTO ? pesosCompensadosPorMenosCartas(total) : PESOS_RAREZA;
+  const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
+  const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
+  const elegidas = sortearPorRareza(rng, elegibles, total, pesos);
 
-  if (bonus.bonusValor === 0) return elegidas;
+  const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;
+  if (bonus.bonusValor === 0 && bonusEtapa === 0) return elegidas;
   return elegidas.map((carta) => {
-    const mods = {};
-    for (const [clave, valor] of Object.entries(carta.mods)) {
-      mods[clave] = valor > 0 ? valor + bonus.bonusValor : valor;
-    }
-    return { ...carta, mods };
+    let mods = carta.mods;
+    if (bonus.bonusValor > 0) mods = conBonusEnTodos(mods, bonus.bonusValor);
+    // El bonus de etapa temprana NUNCA toca una legendaria (pedido explícito
+    // y repetido: "no aplanes la varianza de las legendarias").
+    if (bonusEtapa > 0 && carta.rareza !== 'legendaria') mods = conBonusEnElMasGrande(mods, bonusEtapa);
+    return mods === carta.mods ? carta : { ...carta, mods };
   });
 }
 

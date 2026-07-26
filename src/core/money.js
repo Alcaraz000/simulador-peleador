@@ -1,19 +1,37 @@
 import { clamp } from './stats.js';
 
+// Precios calibrados con números medidos (Sistema 3, feedback del usuario:
+// "la tienda es muy costosa, no da tiempo"). Medido con `node
+// scripts/money-sim.mjs 400` sobre una carrera "jugando bien" (acepta y gana
+// toda oferta): con los precios viejos (staff 80k-160k, lujos 60k-4M), el
+// dinero promedio a MITAD de carrera (bloque 10 de 20) era de apenas
+// US$13.628 — no alcanzaba ni para el ítem más barato — y la primera compra
+// recién se volvía típica cerca del bloque 14 (70% de la carrera ya jugada).
+// El jugador terminaba la carrera entera sin haber podido usar el sistema ni
+// una vez: la tienda era una vidriera, nunca una decisión.
+//
+// Los nuevos precios de STAFF (mantienen el mismo orden relativo de antes:
+// psicólogo el más barato, mánager el más caro) hacen que la primera compra
+// caiga justo alrededor del bloque 10 — la MITAD de la carrera — y que un
+// jugador que junta bien la plata pueda tener el equipo completo bastante
+// antes del cierre, con bloques de sobra para sentir su efecto. LUJOS bajan
+// menos (siguen siendo el gusto de fin de carrera, sin efecto de juego) y la
+// isla privada queda deliberadamente como estiramiento para las carreras más
+// ganadoras — no todas las carreras tienen que poder comprar TODO.
 export const STAFF = [
-  { id: 'entrenador', nombre: 'Entrenador de elite', descripcion: 'Mejores cartas de mejora: más opciones y números más altos.', precio: 120000, efecto: 'cartas' },
-  { id: 'kinesiologo', nombre: 'Kinesiólogo personal', descripcion: 'Cuerpo blindado: menos riesgo de lesión.', precio: 90000, efecto: 'lesiones' },
-  { id: 'psicologo', nombre: 'Psicólogo deportivo', descripcion: 'Cabeza fría: la mala racha te dura menos.', precio: 80000, efecto: 'moral' },
-  { id: 'preparador', nombre: 'Preparador físico', descripcion: 'El declive de las piernas llega más tarde.', precio: 140000, efecto: 'declive' },
-  { id: 'manager', nombre: 'Súper mánager', descripcion: 'El mejor agente: mejores ofertas y bolsas más gordas.', precio: 160000, efecto: 'ofertas' },
+  { id: 'psicologo', nombre: 'Psicólogo deportivo', descripcion: 'Cabeza fría: la mala racha te dura menos.', precio: 12000, efecto: 'moral' },
+  { id: 'kinesiologo', nombre: 'Kinesiólogo personal', descripcion: 'Cuerpo blindado: menos riesgo de lesión.', precio: 16000, efecto: 'lesiones' },
+  { id: 'entrenador', nombre: 'Entrenador de elite', descripcion: 'Mejores cartas de mejora: más opciones y números más altos.', precio: 22000, efecto: 'cartas' },
+  { id: 'preparador', nombre: 'Preparador físico', descripcion: 'El declive de las piernas llega más tarde.', precio: 28000, efecto: 'declive' },
+  { id: 'manager', nombre: 'Súper mánager', descripcion: 'El mejor agente: mejores ofertas y bolsas más gordas.', precio: 34000, efecto: 'ofertas' },
 ];
 
 export const LUJOS = [
-  { id: 'auto', nombre: 'Auto deportivo', precio: 60000, fama: 3, legado: 1 },
-  { id: 'casa', nombre: 'Casa propia', precio: 150000, fama: 4, legado: 2 },
-  { id: 'mansion', nombre: 'Mansión con ring', precio: 600000, fama: 8, legado: 4 },
-  { id: 'yate', nombre: 'Yate', precio: 1200000, fama: 10, legado: 6 },
-  { id: 'isla', nombre: 'Isla privada', precio: 4000000, fama: 15, legado: 10 },
+  { id: 'auto', nombre: 'Auto deportivo', precio: 14000, fama: 3, legado: 1 },
+  { id: 'casa', nombre: 'Casa propia', precio: 32000, fama: 4, legado: 2 },
+  { id: 'mansion', nombre: 'Mansión con ring', precio: 110000, fama: 8, legado: 4 },
+  { id: 'yate', nombre: 'Yate', precio: 260000, fama: 10, legado: 6 },
+  { id: 'isla', nombre: 'Isla privada', precio: 650000, fama: 15, legado: 10 },
 ];
 
 const TODOS = [...STAFF, ...LUJOS];

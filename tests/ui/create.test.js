@@ -53,6 +53,33 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     expect(cont.textContent).toContain('PASO 1');
   });
 
+  // Segunda vez que se reporta ("sigue sin parecerse al mockup"). El diseño
+  // pide dos filas: apellido | mano hábil arriba; disciplina | nacionalidad |
+  // categoría abajo — antes eran 4 filas verticales sueltas (apellido +
+  // nacionalidad juntos arriba, mano/disciplina/categoría cada uno solo en
+  // su propia fila de ancho completo debajo).
+  it('fila superior: apellido y mano hábil van juntos, sin disciplina/nacionalidad/categoría', () => {
+    irAPaso1();
+    const filaSuperior = cont.querySelector('[data-fila="datos-superior"]');
+    expect(filaSuperior).toBeTruthy();
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="apellido"]'))).toBe(true);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="mano"]'))).toBe(true);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="disciplina"]'))).toBe(false);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="nacionalidad"]'))).toBe(false);
+    expect(filaSuperior.contains(cont.querySelector('[data-campo="categoria"]'))).toBe(false);
+  });
+
+  it('fila inferior: disciplina, nacionalidad y categoría van juntas, sin apellido/mano', () => {
+    irAPaso1();
+    const filaInferior = cont.querySelector('[data-fila="datos-inferior"]');
+    expect(filaInferior).toBeTruthy();
+    expect(filaInferior.contains(cont.querySelector('[data-campo="disciplina"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="nacionalidad"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="categoria"]'))).toBe(true);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="apellido"]'))).toBe(false);
+    expect(filaInferior.contains(cont.querySelector('[data-campo="mano"]'))).toBe(false);
+  });
+
   it('la nacionalidad es un botón, no un <select> con emoji', () => {
     irAPaso1();
     const campo = cont.querySelector('[data-campo="nacionalidad"]');
@@ -93,6 +120,34 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     expect(cont.querySelector('[data-campo="categoria"] [data-opcion="mediano"]').classList.contains('elegida')).toBe(true);
   });
 
+  // Verificación visual (v4, grilla 3×3): con disciplina/nacionalidad/
+  // categoría compartiendo una sola fila de 3 columnas, "Peso pluma"/"Peso
+  // mediano" completos se truncaban a "Peso…" (el "Peso" repetido en las dos
+  // opciones no ayudaba a distinguirlas, y encima se cortaba). El chip usa
+  // el nombre corto ("Pluma"/"Mediano"); el peleador sigue guardando la
+  // categoría completa (CATEGORIAS[...].nombre se sigue mostrando entero en
+  // el resto del juego, p. ej. la cabecera del tablero).
+  it('los chips de categoría usan el nombre corto (sin repetir "Peso"), para que entren en la fila de 3 columnas', () => {
+    irAPaso1();
+    const grupo = cont.querySelector('[data-campo="categoria"]');
+    expect(grupo.querySelector('[data-opcion="pluma"]').textContent).toBe('Pluma');
+    expect(grupo.querySelector('[data-opcion="mediano"]').textContent).toBe('Mediano');
+  });
+
+  // Categoría es el campo más apretado de la fila inferior (2 chips en 1/3
+  // de la fila, contra un solo control en disciplina y nacionalidad): sin el
+  // ícono de balanza que llevaba antes (cuando tenía la fila entera para él
+  // solo), "Mediano" seguía truncándose a "Medi…" aun con el nombre corto.
+  // Se saca el ícono acá puntualmente para devolverle ese espacio a los
+  // chips — mano/disciplina siguen con el suyo, no hace falta un ícono en
+  // cada campo para que la fila se lea bien.
+  it('el campo de categoría no lleva ícono en la fila inferior (le da el espacio a los 2 chips)', () => {
+    irAPaso1();
+    const filaInferior = cont.querySelector('[data-fila="datos-inferior"]');
+    const grupoCategoria = cont.querySelector('[data-campo="categoria"]');
+    expect(grupoCategoria.parentElement).toBe(filaInferior);
+  });
+
   it('disciplina se elige con chips, no con un <select>', () => {
     irAPaso1();
     const grupo = cont.querySelector('[data-campo="disciplina"]');
@@ -113,6 +168,28 @@ describe('renderCreacion — Paso 1 (los datos)', () => {
     cont.querySelector('[data-accion="siguiente"]').click();
     expect(cont.querySelector('[data-paso="2"]')).toBeTruthy();
     expect(cont.textContent).toContain('PASO 2');
+  });
+
+  // Pedido general del usuario ("todo quieto"): los pasos 2 a 4 están
+  // siempre montados debajo del paso 1 — si "Siguiente" desaparece del DOM
+  // al usarlo, todo lo de abajo salta hacia arriba. El botón se apaga
+  // (invisible) pero sigue reservando su lugar en vez de desaparecer.
+  it('"Siguiente" sigue montado (oculto, no ausente) despues de avanzar', () => {
+    irAPaso1();
+    ponerApellido('Sosa');
+    cont.querySelector('[data-accion="siguiente"]').click();
+
+    const boton = cont.querySelector('[data-accion="siguiente"]');
+    expect(boton).toBeTruthy();
+    expect(boton.style.visibility).toBe('hidden');
+  });
+
+  it('la linea de error del paso 1 ya esta montada desde el arranque', () => {
+    irAPaso1();
+    const error = cont.querySelector('[data-error]');
+    expect(error).toBeTruthy();
+    expect(error.classList.contains('campo-error')).toBe(true);
+    expect(error.textContent).toBe('');
   });
 
   it('todos los controles del paso 1 miden lo mismo (46px), incluidas las opciones en chip', () => {
@@ -244,11 +321,11 @@ describe('renderCreacion — grillas: sin huecos, sin apilarse mal', () => {
     expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(3);
   });
 
-  it('el paso 4 (estilo) tiene exactamente 4 tarjetas en una grilla de 2 columnas (2×2), no 3+1', () => {
+  it('el paso 4 (estilo) ofrece exactamente 2 tarjetas al azar (de un catálogo de 8), en una grilla de 2 columnas', () => {
     irAPaso1();
     const grilla = cont.querySelector('[data-paso="4"] .panel-decision-grilla-2');
     expect(grilla).toBeTruthy();
-    expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(4);
+    expect(grilla.querySelectorAll('[data-opcion]')).toHaveLength(2);
   });
 });
 

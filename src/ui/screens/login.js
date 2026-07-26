@@ -60,7 +60,11 @@ export function renderLogin(contenedor, { onEntrar, storage = storagePorDefecto(
   const clave = el('input', {
     'data-campo': 'clave', class: 'carta', type: 'password', placeholder: 'Contraseña', autocomplete: 'current-password',
   });
-  const error = el('div', { 'data-error': '', class: 'rojo', text: '' });
+  // `.campo-error` reserva el alto de una línea desde el arranque (pedido
+  // general "todo quieto"): sin esto, el div vacío mide 0px hasta el primer
+  // intento fallido, y el botón "Entrar al ring" salta hacia abajo justo
+  // cuando el jugador reintenta con la contraseña.
+  const error = el('div', { 'data-error': '', class: 'rojo campo-error', text: '' });
 
   function intentarEntrar() {
     if (usuario.value.trim() === USUARIO_ESPERADO && clave.value === CLAVE_ESPERADA) {

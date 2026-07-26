@@ -24,10 +24,13 @@ beforeEach(() => {
 });
 
 describe('renderPanelAvance', () => {
-  it('muestra la etapa actual (nombre y frase)', () => {
+  // La etapa actual (nombre + frase) se mudó al bloque permanente de
+  // categoría/ranking del panel izquierdo (v4, grilla 3×3) — ver
+  // panel-peleador.test.js. Acá ya no se duplica: este panel es solo lo que
+  // cambia según haya o no una lesión, más el botón de avanzar.
+  it('no duplica la etapa (ya vive siempre visible en el panel izquierdo)', () => {
     renderPanelAvance(cont, { partida: partidaBase(), onSiguiente: () => {} });
-    expect(cont.textContent.toUpperCase()).toContain('JUVENIL');
-    expect(cont.textContent).toContain('Nadie sabe quién sos. Todavía.');
+    expect(cont.textContent).not.toContain('Nadie sabe quién sos. Todavía.');
   });
 
   it('el boton principal dispara onSiguiente', () => {

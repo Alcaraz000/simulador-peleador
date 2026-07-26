@@ -82,7 +82,23 @@ function hayPantallaDePelea(cont) {
   );
 }
 
+// Sistema 4 (hitos de carrera, popups): pueden aparecer en CUALQUIER
+// "Continuar" que cruce de etapa (ver hitoDeEtapa/siguiente(), main.js). En
+// el navegador real el overlay bloquea el click al tablero de atrás
+// (clickear el fondo cierra el popup en vez de pasarle el click a lo que
+// está debajo — ver popup.js), así que un usuario real SIEMPRE lo cierra
+// antes de poder seguir. happy-dom no simula ese bloqueo visual: sin este
+// guard, resolverUnPaso seguía clickeando el tablero de "atrás" con el
+// hito todavía abierto, y ese popup viejo quedaba de fantasma en
+// document.body — rompiendo cualquier aserción posterior que abriera OTRO
+// popup (p. ej. la tabla de ranking) buscando `.popup-overlay` a secas.
+function cerrarHitoSiHay() {
+  const cerrar = document.querySelector('.popup-overlay .popup-cerrar');
+  if (cerrar) cerrar.click();
+}
+
 function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
+  cerrarHitoSiHay();
   if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
 
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
@@ -263,12 +279,13 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-izquierda')).toBeTruthy();
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
-    // El botón de avanzar la carrera y la etapa actual viven en el CENTRO
-    // del shell, no en una pantalla aparte.
+    // El botón de avanzar la carrera vive en el CENTRO del shell, no en una
+    // pantalla aparte. La etapa actual (v4, grilla 3×3) es un bloque
+    // permanente de la columna izquierda, junto a categoría/ranking.
     const boton = cont.querySelector('.shell-centro [data-accion="siguiente"]');
     expect(boton).toBeTruthy();
     expect(boton.textContent).toContain('Continuar');
-    expect(cont.querySelector('.shell-centro').textContent.toUpperCase()).toContain('JUVENIL');
+    expect(cont.querySelector('.shell-izquierda').textContent.toUpperCase()).toContain('JUVENIL');
   });
 
   it('durante una racha de beats (incluidas ofertas rechazadas) el shell NUNCA se recrea, por identidad de nodo', () => {
@@ -309,10 +326,10 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeTruthy();
 
     // El caso de uso que motivó el rediseño: decidir sobre la oferta viendo
-    // el tablero completo alrededor — el calendario (arriba, en el centro) y
-    // el peleador (ranking/récord/dinero, a la izquierda).
-    expect(cont.querySelector('.shell-centro').textContent).toContain('Semana');
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('Dinero');
+    // el tablero completo alrededor — el calendario y el dinero (columna
+    // derecha, v4) y el peleador (ranking/récord, a la izquierda).
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Semana');
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
     expect(cont.querySelector('.shell-izquierda').textContent).toContain('Ranking');
   });
 
@@ -325,16 +342,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     iniciar(cont, prepararStorage(partida));
 
     expect(cont.querySelector('.shell-centro').textContent).toContain('Mano fracturada');
-    const dineroAntes = cont.querySelector('.shell-izquierda').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
+    const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];
     expect(dineroAntes).toBe('US$ 100K');
 
     cont.querySelector('.shell-centro [data-accion="curar"]').click();
 
     // El aviso de lesión desaparece del centro...
     expect(cont.querySelector('.shell-centro').textContent).not.toContain('Mano fracturada');
-    // ...y la plata del panel izquierdo ya refleja el costo pagado
-    // (100000 - 22000 = 78000), sin perder el tablero de vista.
-    expect(cont.querySelector('.shell-izquierda').textContent).toContain('US$ 78K');
+    // ...y la plata del panel de dinero (columna derecha, v4) ya refleja el
+    // costo pagado (100000 - 22000 = 78000), sin perder el tablero de vista.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('US$ 78K');
     expect(cont.querySelector('.shell')).toBeTruthy();
   });
 
@@ -378,7 +395,9 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     iniciar(cont, prepararStorage(partida));
 
     const textoEsperado = fechaDe(semanaGuardada, ANIO_INICIAL).texto;
-    expect(cont.querySelector('.shell-centro').textContent).toContain(textoEsperado);
+    // Calendario en la columna derecha (v4, grilla 3×3: "Calendario + Botón
+    // tienda"), no en el centro.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain(textoEsperado);
     // Y no quedó pegada en la semana 1 (el bug que rompería si la carga
     // ignorara semanaGlobal y el calendario mostrara siempre el arranque).
     expect(textoEsperado).not.toBe(fechaDe(1, ANIO_INICIAL).texto);
@@ -401,15 +420,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     }
   });
 
-  // Bug reportado por el usuario: "cuando terminé una pelea, en la pantalla
-  // principal seguía apareciendo un peleador aunque no haya elegido ni
-  // confirmado ninguno todavía". Causa: `partida.proximaPelea` se guarda al
-  // armar la cola del bloque (armarCola, career.js) pero nunca se limpiaba
-  // al pelear ni al rechazar la oferta — quedaba fantasma en el panel de la
-  // derecha hasta que el bloque siguiente lo pisaba con una oferta nueva (o
-  // con null si no había).
+  // Bug reportado por el usuario: "aparece en la esquina de PRÓXIMA PELEA el
+  // nombre del peleador que me acaba de aparecer como propuesta, no la
+  // acepté y ya aparece ahí, eso está mal". Causa real: `partida.proximaPelea`
+  // se guardaba al armar la cola del bloque (armarCola, career.js) — antes
+  // de que el jugador llegara siquiera a ver la oferta, no digamos
+  // aceptarla. El panel solo puede mostrar una pelea FIRMADA: se mantiene
+  // vacío mientras la oferta está en danza y sigue vacío después de
+  // resolverla (pelear o rechazar), hasta que el jugador firme la próxima.
   describe('el panel de próxima pelea no queda fantasma después de resolverla (bug reportado)', () => {
-    it('después de pelear (ganar o perder), el panel vuelve al estado "todavía no hay nada firmado"', () => {
+    it('con la oferta sobre la mesa (todavía sin aceptar), el panel sigue en el estado vacío', () => {
       iniciar(cont, prepararStorage(nuevaPartida(3)));
 
       let guardia = 0;
@@ -420,10 +440,22 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       }
       expect(tipo).toBe('oferta');
 
-      // El panel de la derecha ya muestra al rival ANTES de aceptar (se arma
-      // junto con la cola del bloque, ver proximaPelea en career.js).
+      // El panel de la derecha NO debe mostrar al rival todavía: la oferta
+      // está en pantalla, pero el jugador no la aceptó.
       const textoAntes = cont.querySelector('.shell-derecha').textContent;
-      expect(textoAntes).not.toContain('Todavía no hay nada firmado');
+      expect(textoAntes).toContain('Todavía no hay nada firmado');
+    });
+
+    it('después de pelear (ganar o perder) una oferta aceptada, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
 
       cont.querySelector('.shell-centro [data-accion="aceptar"]').click();
       jugarPeleaCompleta(cont);
@@ -435,7 +467,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       expect(textoDespues).toContain('Todavía no hay nada firmado');
     });
 
-    it('después de rechazar una oferta, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+    it('después de rechazar una oferta, el panel sigue en el estado "todavía no hay nada firmado"', () => {
       iniciar(cont, prepararStorage(nuevaPartida(3)));
 
       let guardia = 0;
@@ -445,7 +477,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }
       expect(tipo).toBe('oferta');
-      expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+      expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
 
       cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
 
@@ -471,7 +503,10 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       }
       expect(tipo).toBe('oferta');
 
-      const apodoRival = cont.querySelector('.shell-derecha').textContent.match(/"([^"]+)"/)[1];
+      // La oferta todavía no está firmada, así que el panel de la derecha no
+      // muestra al rival (ver el describe de arriba): el apodo se lee de la
+      // propia pantalla de la oferta, en el centro.
+      const apodoRival = cont.querySelector('.shell-centro').textContent.match(/"([^"]+)"/)[1];
 
       cont.querySelector('.shell-izquierda [data-accion="ver-ranking"]').click();
 

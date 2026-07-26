@@ -112,9 +112,13 @@ export function renderCareo(contenedor, { careo, onResponder, onTerminar }) {
       el('div', { class: 'medio', style: 'font-size:12px', text: careo.tell.texto }),
     ]),
     careo.terminado ? null : el('div', { class: 'etiqueta', text: `Ronda ${Math.min(careo.ronda, careo.rondas)} de ${careo.rondas}` }),
+    // `.careo-pregunta-texto` reserva el alto de 2 líneas (pedido general
+    // del usuario, "todo quieto"): cada ronda trae una pregunta distinta y
+    // de largo distinto — sin el mínimo reservado, la grilla de respuestas
+    // de abajo salta de posición ronda a ronda según cuánto texto tocó.
     careo.terminado ? null : el('div', { class: 'panel' }, [
       prefacioHablante(pregunta, careo.rivalApodo),
-      el('p', { style: 'font-style:italic', text: pregunta.texto }),
+      el('p', { class: 'careo-pregunta-texto', style: 'font-style:italic', text: pregunta.texto }),
     ]),
     careo.terminado ? null : el('div', { class: 'panel-decision-grilla-2' }, respuestas),
     careo.terminado ? bloqueResumen(careo) : null,

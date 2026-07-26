@@ -51,6 +51,17 @@ describe('renderCareo', () => {
     expect(cont.textContent.toLowerCase()).toContain('cronista');
   });
 
+  // Pedido general del usuario ("todo quieto"): la pregunta cambia de largo
+  // ronda a ronda; sin un alto reservado, la grilla de respuestas de abajo
+  // saltaría de posición cada vez.
+  it('el texto de la pregunta reserva su alto (no empuja la grilla de respuestas segun el largo)', () => {
+    const careo = crearCareo(createRng(1), { oferta });
+    renderCareo(cont, { careo, onResponder: noop, onTerminar: noop });
+    const texto = cont.querySelector('.careo-pregunta-texto');
+    expect(texto).toBeTruthy();
+    expect(texto.textContent).toBe(careo.preguntas[0].texto);
+  });
+
   it('elegir una respuesta dispara el callback con el tono', () => {
     let tonoElegido = null;
     const careo = crearCareo(createRng(1), { oferta });

@@ -176,6 +176,49 @@ describe('desenlace', () => {
   });
 });
 
+// Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+// Parecería que no afecta en nada"): `efectividad()` (interna) tiene que
+// pesar de verdad la lesión activa del peleador, no solo maquillarla. Se mide
+// estadísticamente (igual que "un peleador muy superior gana la mayoria de
+// las veces", más arriba): con todo lo demás igual, un jugador lesionado
+// tiene que ganar menos peleas parejas que uno sano.
+describe('penalización por lesión', () => {
+  function armarConLesion({ lesion = null, semilla = 1 } = {}) {
+    const jugador = crearPeleador({
+      nombre: 'Jugador', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 60, esJugador: true,
+    });
+    if (lesion) jugador.estado.lesion = lesion;
+    const rival = crearPeleador({
+      nombre: 'Rival', apodo: 'El Otro', nacionalidad: 'MX', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 60,
+    });
+    return crearPelea({
+      jugador, rival, disciplina: 'boxeo', nivel: 'profesional', plan: 'afuera', rng: createRng(semilla),
+    });
+  }
+
+  it('lesionado gana menos peleas parejas que sano', () => {
+    const contarVictorias = (lesion) => {
+      let ganadas = 0;
+      for (let semilla = 1; semilla <= 80; semilla++) {
+        const { pelea } = pelearHasta(armarConLesion({ lesion, semilla }));
+        if (resultadoDe(pelea).ganador === 'jugador') ganadas++;
+      }
+      return ganadas;
+    };
+    const sano = contarVictorias(null);
+    const lesionLeve = contarVictorias({
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+    });
+    const lesionModerada = contarVictorias({
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 1, texto: 'x',
+    });
+    expect(lesionLeve).toBeLessThan(sano);
+    expect(lesionModerada).toBeLessThan(lesionLeve);
+  });
+});
+
 describe('estadisticas de golpes', () => {
   it('arranca en cero', () => {
     const pelea = armar();

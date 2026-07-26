@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
   ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea, cancelarProximaPelea,
+  faseFisicaJugador,
 } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
@@ -137,7 +138,10 @@ describe('siguienteBeat', () => {
   it('el primer beat de cada bloque es una mejora', () => {
     const { beat } = siguienteBeat(nuevaPartida());
     expect(beat.tipo).toBe('mejora');
-    expect(beat.datos.cartas.length).toBeGreaterThanOrEqual(3);
+    // Pedido del coordinador (v4): repartirMejoras a veces reparte 2 cartas
+    // en vez de 3 (~1 de cada 5, ver decidirCantidadMejoras en cards.js), así
+    // que ya no se puede fijar un piso de 3 para una semilla cualquiera.
+    expect(beat.datos.cartas.length).toBeGreaterThanOrEqual(2);
   });
 
   it('no muta la partida original', () => {
@@ -232,6 +236,49 @@ describe('etapaActual', () => {
   });
 });
 
+// Sistema 2 (feedback del usuario: "hay una edad donde el prime va bajando,
+// [el tablero] debería poder comunicarlo"): fase física del jugador, un arco
+// de verdad — ascenso, meseta ("tu prime") y declive, en vez de un
+// interruptor mudo. Usa los mismos umbrales (y la misma demora con
+// preparador) que `declivePorEdadJugador` — es literalmente la versión
+// "para mostrar en el tablero" del mismo cálculo.
+describe('faseFisicaJugador', () => {
+  function conEdad(edad, extra = {}) {
+    const p = nuevaPartida();
+    p.jugador.edad = edad;
+    Object.assign(p.jugador, extra);
+    return p.jugador;
+  }
+
+  it('lejos del umbral de declive, esta en ascenso', () => {
+    expect(faseFisicaJugador(conEdad(20)).id).toBe('ascenso');
+  });
+
+  it('cerca del umbral pero sin haberlo cruzado, esta en su prime', () => {
+    expect(faseFisicaJugador(conEdad(30)).id).toBe('prime');
+    expect(faseFisicaJugador(conEdad(31)).id).toBe('prime');
+  });
+
+  it('pasado el umbral suave (32), esta en declive', () => {
+    expect(faseFisicaJugador(conEdad(33)).id).toBe('declive');
+  });
+
+  it('pasado el umbral duro (36), el declive es mas marcado', () => {
+    expect(faseFisicaJugador(conEdad(37)).id).toBe('declive_duro');
+  });
+
+  it('el preparador corre los umbrales de fase, igual que los del declive real', () => {
+    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).not.toBe('declive');
+    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).toBe('prime');
+  });
+
+  it('toda fase trae una etiqueta legible', () => {
+    for (const edad of [18, 30, 33, 37]) {
+      expect(faseFisicaJugador(conEdad(edad)).etiqueta.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('avanzarBloque', () => {
   it('envejece al jugador y avanza el anio del mundo', () => {
     const p = nuevaPartida();
@@ -295,6 +342,44 @@ describe('avanzarBloque', () => {
     expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
   });
 
+  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
+  // Parecería que no afecta en nada"): antes, la forma se recuperaba +5 TODOS
+  // los bloques sin importar si seguías lesionado, así que una lesión leve
+  // (1 bloque de duración) quedaba borrada de la forma antes incluso de que
+  // `recuperar()` te diera de alta. Ahora, mientras sigue activa la lesión,
+  // ese descanso pasivo se frena: la forma se queda baja de verdad hasta
+  // curarte.
+  it('mientras sigue lesionado, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.lesion = {
+      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 3, costo: 1, texto: 'x',
+    };
+    p.jugador.estado.forma = 30;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion.bloquesRestantes).toBe(2);
+    expect(despues.jugador.estado.forma).toBe(30);
+  });
+
+  it('en el bloque en que termina de curarse, la forma sube por el bonus de curación (no por el descanso normal)', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.lesion = {
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+    };
+    p.jugador.estado.forma = 30;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion).toBeNull();
+    // +10 del bonus de curación (recuperar, injuries.js), SIN el +5 pasivo de
+    // un bloque sano (ese solo corre cuando no hay lesión activa al arrancar
+    // el bloque).
+    expect(despues.jugador.estado.forma).toBe(40);
+  });
+
+  it('sin lesion, la forma sigue subiendo de a poco cada bloque como siempre', () => {
+    const p = nuevaPartida();
+    p.jugador.estado.forma = 30;
+    expect(avanzarBloque(p).jugador.estado.forma).toBe(35);
+  });
+
   it('no muta la partida original', () => {
     const p = nuevaPartida();
     const antes = JSON.stringify(p);
@@ -346,6 +431,43 @@ describe('avanzarBloque', () => {
     expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
   });
 
+  // Sistema 2 (feedback del usuario, segunda vez: "se supone que hay una
+  // edad donde va bajando el prime"): el declive de un único escalón fijo
+  // (-2 velocidad/-1 cardio desde los 32 hasta el final) no se sentía como un
+  // arco real. Ahora hay un segundo escalón, más duro, que arranca a los 36
+  // — la misma edad en la que el propio juego narra el arranque de la etapa
+  // "veterano" (ver ETAPAS, edadDesde: 36 — "Cada pelea puede ser la
+  // última"): ahí el declive se agrava Y empieza a tocar también la potencia,
+  // no solo piernas y pulmón.
+  it('a partir de los 36 (arranca la etapa "veterano") el declive se agrava y empieza a pegarle tambien a la potencia', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1; // amateur: 1 año por bloque, numero redondo
+    p.jugador.edad = 35;
+    const potAntes = p.jugador.atributos.potencia;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(36);
+    expect(potAntes - despues.jugador.atributos.potencia).toBe(1);
+    // Más marcado que el escalón suave (-2 velocidad/-1 cardio, ver el test
+    // "a partir de los 32...", arriba): acá se siente más.
+    expect(velAntes - despues.jugador.atributos.velocidad).toBe(3);
+    expect(cardioAntes - despues.jugador.atributos.cardio).toBe(2);
+  });
+
+  it('el escalon duro del declive tambien se demora con el preparador contratado', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 35;
+    p.jugador.staff = ['preparador'];
+    const potAntes = p.jugador.atributos.potencia;
+    const despues = avanzarBloque(p);
+    // Con preparador el umbral duro se corre a los 39: a los 36 recién
+    // arranca el escalón SUAVE (si es que llegó), la potencia todavía no se
+    // toca.
+    expect(despues.jugador.atributos.potencia).toBe(potAntes);
+  });
+
   it('mientras el jugador tiene el cinturon mundial puesto, el mundo no le anuncia un nuevo campeon', () => {
     const p = nuevaPartida();
     p.jugador.titulos = ['Cinturón mundial'];
@@ -366,7 +488,7 @@ describe('avanzarBloque', () => {
 });
 
 describe('ofertas de pelea bloqueadas por lesion', () => {
-  it('si esta lesionado grave y le tocaba pelea, avisa en vez de quedarse callado', () => {
+  it('si esta lesionado y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2; // profesional: probPelea = 1, siempre "le toca"
     // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
@@ -392,7 +514,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     expect(tipos).toContain('lesionSinOferta');
   });
 
-  it('sin lesion grave, esa misma situacion ofrece pelea con normalidad', () => {
+  it('sin lesion, esa misma situacion ofrece pelea con normalidad', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     let actual = p;
@@ -404,6 +526,59 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     }
     expect(tipos).toContain('oferta');
     expect(tipos).not.toContain('lesionSinOferta');
+  });
+
+  // Corrección del coordinador (segunda ronda): el usuario fue textual —
+  // "hasta no estar recuperado de una lesión, no puede aparecer una pelea
+  // nueva" — sin matices. Antes solo bloqueaba severidad 3; ahora CUALQUIER
+  // lesión activa (leve o moderada incluida) corta la oferta igual que la
+  // grave. Único punto de generación de ofertas en todo el juego es
+  // armarCola (acá abajo, vía siguienteBeat) — no hay otro camino que pueda
+  // saltarse el gate.
+  it('con lesion leve o moderada, TAMBIÉN bloquea la oferta (sin matices de severidad)', () => {
+    // bloquesRestantes en 8 con 12 iteraciones, mismo margen de seguridad que
+    // el test de la lesión grave (arriba): el mínimo de beats por bloque en
+    // profesional mientras sigue lesionado es 2 (mejora + lesionSinOferta),
+    // así que 12 iteraciones nunca alcanzan a agotar las 8 que hacen falta
+    // para curarse — sin este margen, una duración corta podía curarse a
+    // mitad del loop y hacer aparecer una oferta legítima (ya sano),
+    // arruinando el test.
+    for (const severidad of [1, 2]) {
+      const p = nuevaPartida();
+      p.etapaIndice = 2;
+      p.jugador.estado.lesion = {
+        id: 'x', nombre: 'x', severidad, bloquesRestantes: 8, costo: 1, texto: 'x',
+      };
+      let actual = p;
+      const tipos = [];
+      for (let i = 0; i < 12; i++) {
+        const paso = siguienteBeat(actual);
+        actual = paso.partida;
+        if (paso.beat) tipos.push(paso.beat.tipo);
+      }
+      expect(tipos).not.toContain('oferta');
+      expect(tipos).toContain('lesionSinOferta');
+    }
+  });
+
+  // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
+  // 0 vía recuperar(), avanzarBloque), las ofertas vuelven solas en el
+  // próximo bloque, sin que el jugador tenga que hacer nada especial.
+  it('en cuanto se cura, las ofertas vuelven sin trabas', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2;
+    p.jugador.estado.lesion = {
+      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+    };
+    let actual = p;
+    let vioOferta = false;
+    for (let i = 0; i < 8 && !vioOferta; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat?.tipo === 'oferta') vioOferta = true;
+    }
+    expect(actual.jugador.estado.lesion).toBeNull();
+    expect(vioOferta).toBe(true);
   });
 });
 
@@ -430,6 +605,18 @@ describe('ofertas de pelea por carrera', () => {
     });
   });
 });
+
+// Sistema 1, corrección del coordinador ("cualquier lesión bloquea las
+// ofertas — medí el efecto colateral, y si las ofertas caen por debajo de
+// 12 o los tres cinturones bajan del 85%, la palanca correcta es que las
+// lesiones duren menos o sean menos frecuentes, nunca aflojar el gate"): los
+// tests de esa medición (con lesiones reales aplicándose pelea a pelea, no
+// solo las 10 semillas de arriba) viven en su propio archivo —
+// tests/core/career-lesiones-reales.test.js — para que Vitest los aísle en
+// su propio worker: sumar sus dos tests de 3000 semillas a los que ya corren
+// acá (ritmo de la carrera, progresión de cinturones, también 3000 cada uno)
+// hacía crecer el heap del mismo worker hasta quedarse sin memoria (medido
+// en esa corrección).
 
 describe('progresión de cinturones', () => {
   it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
@@ -513,7 +700,18 @@ describe('progresión de cinturones', () => {
   });
 });
 
-describe('proximaPelea (calendario del tablero)', () => {
+// Bug reportado por el usuario: "aparece en la esquina de PRÓXIMA PELEA el
+// nombre del peleador que me acaba de aparecer como propuesta, no la acepté
+// y ya aparece ahí, eso está mal" (con "faltan 68 semanas", casi año y
+// medio, aunque el campamento son solo unas pocas semanas). Causa real:
+// armarCola dejaba `proximaPelea` seteada apenas armaba la cola del bloque
+// -antes de que el jugador viera siquiera el beat 'oferta'- con un
+// semanaObjetivo calculado sobre la duración de TODO el bloque (~68 semanas
+// en profesional), no sobre el campamento real. La corrección separa el dato
+// interno de bookkeeping (`ofertaPendiente`, que ni siquiera guarda
+// semanaObjetivo) de lo que el panel puede mostrar (`proximaPelea`, que solo
+// nace en `firmarPelea`, con el semanaObjetivo real del campamento).
+describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   // Etapa "profesional": probPelea = 1, asi que el bloque siempre trae una
   // oferta y podemos verificar que quedó guardada de forma confiable.
   function partidaProfesional(semilla) {
@@ -522,14 +720,18 @@ describe('proximaPelea (calendario del tablero)', () => {
     return p;
   }
 
-  it('en cuanto se arma la cola con una oferta, la partida ya sabe cuál es la próxima pelea antes de llegar a ese beat', () => {
+  it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
     const p = partidaProfesional(2);
     const primerPaso = siguienteBeat(p);
 
     // El primer beat de un bloque siempre es "mejora": si el bloque trae una
-    // oferta más adelante en la cola, proximaPelea ya tiene que reflejarla.
+    // oferta más adelante en la cola, ofertaPendiente ya tiene que
+    // reflejarla (para que cancelarProximaPelea pueda actuar), pero
+    // proximaPelea -lo único que lee el panel- tiene que seguir null: el
+    // jugador todavía no vio la oferta, mucho menos la aceptó.
     expect(primerPaso.beat.tipo).toBe('mejora');
-    expect(primerPaso.partida.proximaPelea).not.toBeNull();
+    expect(primerPaso.partida.ofertaPendiente).not.toBeNull();
+    expect(primerPaso.partida.proximaPelea).toBeNull();
 
     let actual = primerPaso.partida;
     let beatOferta = null;
@@ -540,23 +742,37 @@ describe('proximaPelea (calendario del tablero)', () => {
     }
 
     expect(beatOferta).not.toBeNull();
-    expect(primerPaso.partida.proximaPelea.oferta.id).toBe(beatOferta.datos.oferta.id);
+    expect(primerPaso.partida.ofertaPendiente.oferta.id).toBe(beatOferta.datos.oferta.id);
+    // Incluso llegando al beat 'oferta' (todavía sin decidir), proximaPelea
+    // sigue sin mostrar nada.
+    expect(actual.proximaPelea).toBeNull();
   });
 
-  it('semanasHastaPelea da un numero de semanas coherente cuando hay oferta guardada', () => {
+  it('sin firmar, semanasHastaPelea da null: no hay nada que contar todavía', () => {
     const p = partidaProfesional(2);
     const paso = siguienteBeat(p);
-    expect(paso.partida.proximaPelea).not.toBeNull();
-    const faltan = semanasHastaPelea(paso.partida);
-    expect(faltan).toBeGreaterThanOrEqual(0);
-    expect(Number.isFinite(faltan)).toBe(true);
+    expect(paso.partida.ofertaPendiente).not.toBeNull();
+    expect(semanasHastaPelea(paso.partida)).toBeNull();
   });
 
-  it('no muta partida.proximaPelea de la partida original', () => {
+  it('recién firmada, semanasHastaPelea da una cuenta regresiva creíble (el campamento son 2-3 beats, nunca ~68 semanas)', () => {
     const p = partidaProfesional(2);
-    const antes = JSON.stringify(p.proximaPelea);
+    const paso = siguienteBeat(p);
+    const { oferta } = paso.partida.ofertaPendiente;
+    const firmada = firmarPelea(paso.partida, { oferta });
+    const faltan = semanasHastaPelea(firmada);
+    expect(faltan).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(faltan)).toBe(true);
+    // SEMANAS_POR_BEAT_CAMPAMENTO=3 x hasta 3 beats (campamento.js): 9 como
+    // mucho, muy lejos de las ~68 semanas de un bloque entero.
+    expect(faltan).toBeLessThanOrEqual(9);
+  });
+
+  it('no muta partida.ofertaPendiente de la partida original', () => {
+    const p = partidaProfesional(2);
+    const antes = JSON.stringify(p.ofertaPendiente);
     siguienteBeat(p);
-    expect(JSON.stringify(p.proximaPelea)).toBe(antes);
+    expect(JSON.stringify(p.ofertaPendiente)).toBe(antes);
   });
 });
 
@@ -654,30 +870,30 @@ describe('cancelarProximaPelea', () => {
     };
   }
 
-  it('sin ninguna pelea en danza, no hace nada', () => {
+  it('sin ninguna oferta en danza, no hace nada', () => {
     const p = nuevaPartida(1);
-    expect(p.proximaPelea).toBeNull();
+    expect(p.ofertaPendiente).toBeNull();
     const cancelada = cancelarProximaPelea(p);
-    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.ofertaPendiente).toBeNull();
     expect(cancelada.cola).toEqual(p.cola);
   });
 
-  it('con una oferta pendiente en la cola, la saca y limpia proximaPelea', () => {
+  it('con una oferta pendiente en la cola, la saca y limpia ofertaPendiente', () => {
     const oferta = ofertaDePrueba();
     const p = {
       ...nuevaPartida(2),
-      proximaPelea: { oferta, semanaObjetivo: 10 },
+      ofertaPendiente: { oferta },
       cola: [{ tipo: 'evento', datos: {} }, { tipo: 'oferta', datos: { oferta } }, { tipo: 'redes', datos: {} }],
     };
     const cancelada = cancelarProximaPelea(p);
-    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.ofertaPendiente).toBeNull();
     expect(cancelada.cola.map((b) => b.tipo)).toEqual(['evento', 'redes']);
   });
 
   it('no muta la partida original', () => {
     const p = {
       ...nuevaPartida(3),
-      proximaPelea: { oferta: ofertaDePrueba(), semanaObjetivo: 10 },
+      ofertaPendiente: { oferta: ofertaDePrueba() },
       cola: [{ tipo: 'oferta', datos: { oferta: ofertaDePrueba() } }],
     };
     const antes = JSON.stringify(p);

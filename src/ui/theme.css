@@ -9,13 +9,44 @@
   --verde: #8fd694;
   --texto: #f1e2e2;
   --texto-medio: #b08a8a;
-  --texto-sutil: #8a6a6a;
+  /* #957777 (antes #8a6a6a): mismo tono rosa-tierra apagado, apenas más
+     claro. El original medía 3.98-4.14:1 contra los fondos donde vive
+     (etiquetas, nombres de tile) — bajo el 4.5:1 que pide AA para texto
+     chico (las etiquetas van en 7.5-9px, muy lejos del piso de "texto
+     grande" que se conforma con 3:1). Este valor mide ≥4.5:1 contra las
+     CUATRO superficies reales donde aparece (fondo, superficie,
+     superficie-alta, y el chip más oscuro de "aporte del entrenador"),
+     verificado con la fórmula de contraste relativo de WCAG 2.1. */
+  --texto-sutil: #957777;
   --radio: 10px;
   --ancho: 430px;
   --fuente: 'Bahnschrift', 'Segoe UI', system-ui, sans-serif;
+  /* Curvas propias (auditoría UI/UX v4): las de fábrica (`ease`, `ease-out`)
+     son débiles y no transmiten "esto respondió al toque". Se usan en los
+     controles que entran/salen o dan feedback de toque (botón, carta,
+     tarjeta, popup) — el resto (roll con suspenso, dado, dados de
+     minijuego) queda con sus curvas propias ya afinadas, sin tocar. */
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 * { box-sizing: border-box; }
+
+/* Foco visible consistente (auditoría UI/UX v4): antes cada control dependía
+   del anillo azul por defecto del navegador (o de nada, en los que traían
+   `outline` sin querer). Una sola regla de base, con el dorado que ya usa el
+   resto del juego para "esto está elegido/activo" (.tarjeta-elegida,
+   .silueta-zona:focus-visible) — nunca se dispara con el mouse, solo con
+   teclado, así que no cambia nada del feedback por click/touch que ya
+   existía. Los selectores más específicos que ya fijaban su propio
+   :focus-visible (.carta, .silueta-zona) se suman a esto, no lo reemplazan. */
+button:focus-visible,
+input:focus-visible,
+a:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--dorado);
+  outline-offset: 2px;
+}
 
 body {
   margin: 0;
@@ -143,6 +174,13 @@ h2 { font-size: 17px; font-weight: 800; }
 .log > p { margin: 0 0 6px; }
 .log > p.destacado { color: var(--dorado); font-weight: 700; }
 
+/* Timer del sparring (Task v4, bug reportado: "falta el timer con la barra
+   decreciendo"): reusa `.barra` (misma altura/colores que aguante/fatiga en
+   la pantalla de pelea), un poco más alta para que se note el paso del
+   tiempo bajo la grilla de paos. El ancho lo anima sparring.js con un
+   `transition` inline (ver ese archivo) — acá solo el tamaño. */
+.barra-sparring { height: 10px; margin: 10px 0; }
+
 .grilla-paos {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -150,14 +188,26 @@ h2 { font-size: 17px; font-weight: 800; }
   justify-items: center;
 }
 
+/* <button> (antes <div>: no llegaba con teclado). padding:0 + font
+   heredada resetean el look de botón nativo; el círculo lo sigue dando
+   .pao, igual que siempre. */
 .pao {
   width: 72px;
   height: 72px;
+  padding: 0;
   border-radius: 50%;
   background: var(--superficie-alta);
   border: 2px solid var(--borde);
+  font-family: var(--fuente);
   cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.12s var(--ease-out);
 }
+
+@media (hover: hover) and (pointer: fine) {
+  .pao:hover { border-color: var(--borde-fuerte); }
+}
+
+.pao:active { transform: scale(0.94); }
 
 .pao.activo {
   background: radial-gradient(circle, var(--dorado), var(--rojo));
@@ -296,11 +346,11 @@ h2 { font-size: 17px; font-weight: 800; }
   animation: aparecer 0.25s ease both;
 }
 
-.tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.tarjeta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
 .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
 .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
 .tarjeta.legendaria:not(:disabled):hover { border-color: #ffd76b; }
-.tarjeta:not(:disabled):active { transform: translateY(0) scale(0.99); }
+.tarjeta:not(:disabled):active { transform: translateY(0) scale(0.97); }
 
 @media (min-width: 720px) {
   #app { max-width: 560px; }
@@ -327,42 +377,44 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .panel-decision-desenlace .boton { margin-top: 4px; }
 
-/* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
-   (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
-   pelea + noticias) queda colapsada detrás de un botón en celular. */
+/* Negociación (v4, feedback repetido: "las opciones se ven muy grandes"):
+   siempre son 4 movidas fijas (MOVIDAS, negotiation.js), en la grilla de 2
+   columnas de siempre -- pero esta pantalla vive FUERA del shell (pantalla
+   completa: #app vuelve a su max-width angosto de 430/560px), así que en
+   escritorio cada columna quedaba mucho más ancha que la tarjeta de
+   referencia del sistema (~206px, ver mockups-v2.html sección A). Un tope de
+   ancho + centrado en la propia celda de la grilla achica la tarjeta sin
+   tocar crearTarjeta (que sigue con su tamaño fijo de título/descripción en
+   todos los demás lugares del juego). En celular la columna ya mide menos
+   que el tope, así que no cambia nada ahí. */
+.negociacion-movidas .tarjeta { max-width: 210px; margin: 0 auto; }
+
+/* Shell persistente (v2), grilla 3×3 (v4): tres regiones montadas una sola
+   vez. Mobile-first (las tres apiladas, en el mismo orden que en escritorio)
+   con una grilla real desde 900px, aprovechando el ancho de PC (feedback del
+   usuario: "está muy en vertical y no se aprovecha bien"). Cada región es su
+   propia columna que apila sus 2-3 módulos de forma independiente (ver el
+   comentario largo al principio de shell.js): ninguna comparte fila con las
+   otras, así que un módulo que crece nunca reacomoda ni desplaza los de al
+   lado — la garantía "nada se mueve" que pidió el usuario. */
 #app:has(.shell) { max-width: none; padding: 0; }
 
 .shell {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-width: 1200px;
+  /* 1400px (subido desde 1200px al pasar a grilla): izquierda y derecha
+     ahora llevan más módulos que antes (dinero/calendario/fama se sumaron a
+     la derecha) y piden un poco más de ancho fijo cada una -- sin subir el
+     techo del shell, eso le hubiera comido ancho al centro, que es "el
+     corazón" del tablero (módulo de acciones/decisiones) y tiene que quedar
+     con MÁS lugar que antes, no menos. */
+  max-width: 1400px;
   margin: 0 auto;
   padding: 12px 14px 48px;
 }
 
-.shell-region { min-width: 0; }
-
-.shell-centro { display: flex; flex-direction: column; gap: 10px; }
-
-.shell-derecha { display: none; }
-.shell.shell-derecha-abierta .shell-derecha { display: flex; flex-direction: column; gap: 10px; }
-
-.shell-boton-derecha {
-  display: block;
-  width: 100%;
-  background: var(--superficie-alta);
-  color: var(--texto);
-  border: 1px solid var(--borde);
-  border-radius: 9px;
-  padding: 11px;
-  font-family: var(--fuente);
-  font-weight: 800;
-  font-size: 12px;
-  letter-spacing: 1.5px;
-  text-transform: uppercase;
-  cursor: pointer;
-}
+.shell-region { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 
 @keyframes destaque-shell {
   0%, 100% { box-shadow: none; }
@@ -417,16 +469,74 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
 
-@media (min-width: 900px) {
-  .shell { flex-direction: row; align-items: flex-start; }
-  .shell-izquierda { flex: 0 0 242px; }
-  .shell-centro { flex: 1 1 auto; min-width: 0; }
-  .shell-derecha { flex: 0 0 262px; display: flex !important; flex-direction: column; gap: 10px; }
-  .shell-boton-derecha { display: none; }
+/* Grilla real de 3 columnas (v4): izquierda (personaje/rincón/categoría) y
+   derecha (calendario+dinero/fama+próxima/noticias) con un ancho cómodo para
+   sus tarjetas; el centro (atributos/estado/decisión, "el corazón" del
+   tablero) se lleva el resto. El `minmax(380px, 1fr)` del centro no es
+   cosmético: en grillas CSS, las columnas de rango fijo (izquierda/derecha)
+   se "maximizan" ANTES que la columna `1fr` reciba espacio, así que sin un
+   piso el centro podía quedar angosto justo cerca del breakpoint (una grilla
+   de 3 tarjetas de decisión con su ícono de 42px fijo no entra en mucho
+   menos de 380px sin desbordar). El breakpoint sube a 960px (desde 900px)
+   para que ese piso + los de izquierda/derecha siempre entren sin
+   desbordar horizontalmente. */
+@media (min-width: 960px) {
+  .shell {
+    display: grid;
+    grid-template-columns: minmax(230px, 280px) minmax(380px, 1fr) minmax(250px, 300px);
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  /* Zócalo de cierre (v4, bug reportado: "queda espacio vacío al pie de las
+     columnas izquierda y centro cuando la de noticias es más alta", y a la
+     inversa apenas arranca la carrera, cuando todavía no hay noticias).
+     `align-items:stretch` (arriba, reemplaza a `start`) hace que las tres
+     columnas midan la altura de la más alta; sin nada más, eso solo dejaba
+     a las más cortas con un tramo de fondo liso de sobra al pie, que se leía
+     como "algo falta" en vez de "así se diseñó". Este pseudo-elemento
+     absorbe ese sobrante con un remate suave — nunca mueve ni reordena
+     ningún panel real (todos siguen anclados arriba, en el mismo lugar de
+     siempre: la garantía "nada se mueve" sigue intacta, esto es puro fondo
+     decorativo después del último panel). Si una columna YA es la más alta,
+     no le queda sobrante para repartir: el remate mide 0 y no se nota. */
+  .shell-izquierda::after,
+  .shell-centro::after,
+  .shell-derecha::after {
+    content: '';
+    flex: 1 1 auto;
+    min-height: 0;
+    border-radius: 12px;
+    /* Sin borde a propósito: un borde con box-sizing:border-box sigue
+       dibujándose aunque el alto resuelva 0 (columna ya más alta, sin
+       sobrante), y ahí SÍ tiene que desaparecer del todo. Solo el degradé,
+       que a 0px de alto no deja rastro. */
+    background: linear-gradient(180deg, transparent, rgba(36, 20, 22, 0.45));
+  }
 }
 
-/* Tablero: columna izquierda (v2) */
-.panel-peleador-cabecera { cursor: pointer; }
+/* Tablero: columna izquierda (v2). Cabecera (ficha) e historial (v4,
+   auditoría UI/UX): las dos son paneles enteros que actúan como una sola
+   tarjeta clickeable (hacerActivable, panel-peleador.js) — antes solo la
+   cabecera avisaba con el cursor que se podía tocar; el bloque de
+   historial se veía igual a un panel informativo cualquiera aunque también
+   abría la ficha. Mismo lenguaje de :hover/:active que .carta/.tarjeta: un
+   control no puede sentirse muerto. */
+.panel-peleador-cabecera,
+[data-accion="historial"] {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.16s var(--ease-out);
+}
+
+.panel-peleador-cabecera:hover,
+[data-accion="historial"]:hover {
+  border-color: var(--borde-fuerte);
+}
+
+.panel-peleador-cabecera:active,
+[data-accion="historial"]:active {
+  transform: scale(0.99);
+}
 
 /* Cabecera del peleador (v3): la MEDIA es un badge chico en la esquina
    superior derecha de su propia fila (junto a la etiqueta del rango); el
@@ -483,12 +593,6 @@ h2 { font-size: 17px; font-weight: 800; }
   padding: 3px 8px;
   opacity: 0.8;
 }
-
-/* Sección "Estado" (v3): mentón, disciplina personal, forma y moral, ya
-   modificados por las tarjetas pero sin ningún lugar en el tablero hasta
-   ahora. Visualmente separada de los 6 atributos de combate (los únicos con
-   aporte de entrenador) con un filete y su propia etiqueta chica. */
-.panel-peleador-estado-titulo { margin: 10px 0 8px; padding-top: 9px; border-top: 1px solid var(--borde); }
 
 .tu-rincon .rincon-iniciales {
   flex: 0 0 auto;
@@ -583,13 +687,13 @@ h2 { font-size: 17px; font-weight: 800; }
 #app > .stack > *:nth-child(3) { animation-delay: 0.06s; }
 #app > .stack > *:nth-child(4) { animation-delay: 0.09s; }
 
-.carta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
+.carta { transition: border-color 0.15s ease, transform 0.16s var(--ease-out), background 0.15s ease; }
 .carta:hover { transform: translateY(-2px); background: var(--superficie-alta); }
-.carta:active { transform: translateY(0) scale(0.99); }
+.carta:active { transform: translateY(0) scale(0.97); }
 
-.boton { transition: transform 0.1s ease, filter 0.15s ease; }
+.boton { transition: transform 0.14s var(--ease-out), filter 0.15s ease; }
 .boton:hover { filter: brightness(1.08); }
-.boton:active { transform: scale(0.98); }
+.boton:active { transform: scale(0.97); }
 
 .barra > i { transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1); }
 
@@ -620,7 +724,17 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .marcador-jurados, .marcador-golpes { margin-top: 10px; }
 
-.cronica-pelea .log { max-height: 220px; overflow-y: auto; }
+/* Alto FIJO, nunca max-height (pedido general del usuario: "el bloque que
+   muestra la narración va cambiando de alto... quiero que tenga un alto fijo
+   [...] porque si no el botón de Saltar se va moviendo hacia abajo"). Antes
+   crecía y encogía con cada round, empujando el panel de acción de abajo.
+   280px calculado para que entre el round más largo sin scroll en el caso
+   común: hasta 6 párrafos (jab, cuerpo/contragolpe, cansancio, resultado,
+   caída, cierre) a ~2 líneas cada uno (13px/1.6 ≈ 21px/línea + 6px de
+   separación) — mismo contenedor que usa el mensaje del rincón (estado +
+   consejo + tip). Si un caso extremo no entra, scroll interno: el
+   contenedor en sí nunca cambia de tamaño. */
+.cronica-pelea .log { height: 280px; overflow-y: auto; }
 
 /* Silueta del rival (golpe de gracia, Task 4.4): las zonas son botones SVG
    accesibles por teclado (tabindex+role=button ya vienen del propio <g>). */
@@ -630,10 +744,16 @@ h2 { font-size: 17px; font-weight: 800; }
 .silueta-zona:hover circle { filter: brightness(1.25); }
 
 /* Barra de precisión (golpe de gracia, paso 2): franja verde según la zona
-   elegida, flecha en movimiento que hay que frenar con un click. */
+   elegida, flecha en movimiento que hay que frenar con un click (o Enter/
+   Espacio: es un <button>, no un <div> — mismo motivo que .pao). width:100%
+   + padding:0 resetean el ancho encogido y el padding por defecto que
+   traería un <button> nativo; el resto del look ya lo daba esta clase. */
 .barra-precision-pista {
   position: relative;
+  display: block;
+  width: 100%;
   height: 28px;
+  padding: 0;
   background: #241012;
   border: 1px solid var(--borde-fuerte);
   border-radius: 14px;
@@ -738,7 +858,15 @@ h2 { font-size: 17px; font-weight: 800; }
   justify-content: center;
   padding: 16px;
   z-index: 1000;
-  animation: aparecer 0.15s ease both;
+  /* Solo el fondo se desvanece (no tiene "de dónde viene": es un velo de
+     pantalla completa, trasladarlo no significa nada) — el panel de adentro
+     trae su propia entrada, ver .popup-panel. */
+  animation: popup-fondo-aparece 0.15s ease both;
+}
+
+@keyframes popup-fondo-aparece {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .popup-panel {
@@ -750,6 +878,15 @@ h2 { font-size: 17px; font-weight: 800; }
   border: 1px solid var(--borde);
   border-radius: 14px;
   padding: 14px;
+  /* Modal (no anclado a un disparador puntual): transform-origin queda en el
+     centro por defecto a propósito. Arranca en 0.96 (nunca 0, nada aparece
+     de la nada) — no en cero. */
+  animation: popup-panel-aparece 0.2s var(--ease-out) both;
+}
+
+@keyframes popup-panel-aparece {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .popup-cabecera {
@@ -787,10 +924,40 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .popup-cuerpo { margin-top: 12px; }
 
+/* Popup de hitos de carrera (Sistema 4: título ganado/perdido, defensa,
+   avance de etapa...). Centrado y con el ícono en una placa redonda: un
+   momento grande merece más ceremonia que una tarjeta de decisión común. */
+.hito-popup { text-align: center; align-items: center; }
+
+.hito-popup-icono {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  margin: 4px auto 0;
+  border-radius: 50%;
+}
+
+.hito-popup-icono.dorado { background: rgba(242, 193, 78, 0.18); }
+.hito-popup-icono.rojo { background: rgba(239, 68, 68, 0.18); }
+.hito-popup-icono.medio { background: rgba(176, 138, 138, 0.18); }
+
+.hito-popup-titulo { margin: 4px 0 0; font-size: 20px; }
+.hito-popup-texto { margin: 0; }
+
 /* Tabla de posiciones como popup (Task v3, feedback del usuario: "no puedo
    ver quiénes están por encima o por debajo mío"). Reusa `.panel`/`.fila`
    como base; la fila del jugador se destaca con un borde dorado, mismo
-   criterio que `.tarjeta-elegida`. */
+   criterio que `.tarjeta-elegida`.
+   Bug reportado (v4): "solo muestra 3 peleadores" — la lista entera dependía
+   de que el POPUP completo (cabecera incluida) se desbordara para poder
+   scrollear, sin ningún indicio visual de que había más filas debajo. Ahora
+   la lista tiene su propio contenedor con scroll acotado (mismo patrón que
+   `.panel-noticias-lista`): la cabecera del popup queda siempre fija arriba,
+   y una fila cortada a la mitad en el borde inferior avisa que hay más para
+   scrollear. */
+.tabla-ranking-lista { max-height: 60vh; overflow-y: auto; padding-right: 2px; }
 .tabla-ranking-fila { padding: 9px 12px; }
 .tabla-ranking-puesto {
   flex: 0 0 auto;
@@ -804,24 +971,30 @@ h2 { font-size: 17px; font-weight: 800; }
 .tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
 
 /* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
-   (panel-peleador.js): mismo criterio de tamaño que .boton-tienda, a escala
-   más chica porque comparte fila con la etiqueta "Ranking". */
+   (panel-peleador.js): comparte fila con la etiqueta "Ranking", así que no
+   puede ser tan grande como .boton-tienda (42px) sin desproporcionar esa
+   fila -- pero 24px (auditoría UI/UX v4) era un blanco táctil real chico
+   para celular. 32px, mismo tamaño ya usado en .popup-cerrar: un segundo
+   punto de referencia para "botón de ícono chico" en vez de inventar un
+   tercer tamaño. */
 .tabla-ranking-boton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   flex: 0 0 auto;
   background: #241012;
   border: 1px solid var(--borde);
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--texto-medio);
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s var(--ease-out);
 }
 
 .tabla-ranking-boton:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+.tabla-ranking-boton:active { transform: scale(0.94); }
 
 /* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
 .popup-banderas-grilla {
@@ -861,11 +1034,41 @@ h2 { font-size: 17px; font-weight: 800; }
    decidir, no que vayan apareciendo de la nada. */
 .paso-titulo-bloqueado .dorado { color: var(--texto-sutil); }
 
+/* Línea de error reservada de antemano (login y creación del peleador,
+   pedido general del usuario "todo quieto"): un div vacío mide 0px, así que
+   sin este alto mínimo el botón de abajo (Entrar/Siguiente) salta apenas
+   aparece el primer mensaje de error. 22px ≈ una línea al tamaño de fuente
+   por defecto del body (15px / line-height 1.45). */
+.campo-error { min-height: 22px; }
+
+/* Pregunta del careo (presser.js, pedido general "todo quieto"): cada ronda
+   trae una pregunta de largo distinto — 2 líneas reservadas (15px / 1.45 ≈
+   22px cada una) para que la grilla de respuestas de abajo no salte de
+   posición ronda a ronda. Una pregunta de 3 líneas (caso raro) igual entra
+   completa, solo empuja un poco menos que antes. */
+.careo-pregunta-texto { min-height: 44px; margin: 0; }
+
 .creacion-campo { display: flex; align-items: center; gap: 8px; }
 .creacion-campo > svg { flex: 0 0 auto; }
-/* El control (input/botón único, o un grupo de chips .fila) ocupa el resto
-   del ancho de la fila junto al ícono. */
+/* El control (input/botón único, o un grupo segmentado .creacion-segmentado)
+   ocupa el resto del ancho de la fila junto al ícono. */
 .creacion-campo > *:not(svg) { flex: 1; min-width: 0; }
+
+/* Reparto desparejo de la fila inferior (disciplina | nacionalidad |
+   categoría), a propósito: con las 3 columnas parejas (1fr cada una) la de
+   categoría —la más apretada, 2 opciones contra 1 sola en disciplina— era la
+   que más sufría el espacio angosto de 390px. Grid (no flex) para fijar
+   proporciones exactas: disciplina hoy tiene un solo valor ("Boxeo", entra
+   sobrado en menos espacio), nacionalidad ya se cuida sola con su propio
+   "…" (.creacion-nacionalidad-nombre), y categoría recibe la porción más
+   grande de las tres. Sin @media: a cualquier ancho le viene bien, incluido
+   el desktop (#app tope 560px), no solo el celular donde se detectó el bug.
+   Si el catálogo de disciplinas crece algún día, este reparto es lo primero
+   a revisar. */
+.fila[data-fila="datos-inferior"] {
+  display: grid;
+  grid-template-columns: 0.7fr 1.1fr 1.2fr;
+}
 
 .creacion-control {
   width: 100%;
@@ -883,22 +1086,55 @@ h2 { font-size: 17px; font-weight: 800; }
 
 input.creacion-control { cursor: text; }
 
-/* Chips de opción directa (mano hábil, disciplina, categoría): mismo control
-   visual que .creacion-control, uno por opción, agrupados en un .fila. Nada
-   de <select> salvo nacionalidad (que sigue siendo el botón de arriba). */
-.creacion-chip {
-  text-align: center;
+/* Control segmentado (mano hábil, disciplina, categoría, Paso 1): reemplaza
+   a los chips sueltos de antes (Task v4 bug reportado, verificación visual:
+   "Mediano" se truncaba a "Media…" en la fila de 390px — y ya acortado a
+   "Mediano" seguía sin entrar). No era el texto ni el ancho de la fila: era
+   el borde+padding de CADA chip más el gap entre ellos, que le robaba lugar
+   al texto en una columna angosta. Acá hay un solo borde para todo el
+   grupo — mismo alto (46px) y mismo radio que .creacion-control, pero las
+   opciones adentro comparten una sola caja con un divisor fino en vez de
+   dos tarjetas independientes. Nada de <select> salvo nacionalidad (que
+   sigue siendo el botón de arriba). */
+.creacion-segmentado {
+  display: flex;
+  width: 100%;
+  height: 46px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 9px;
+  overflow: hidden;
+}
+
+.creacion-segmento {
+  flex: 1;
+  min-width: 0;
+  height: 46px;
+  border: none;
+  background: none;
+  color: var(--texto);
+  font-family: var(--fuente);
   font-weight: 700;
+  font-size: 12.5px;
+  text-align: center;
+  padding: 0 4px;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, color 0.15s ease, transform 0.12s var(--ease-out);
 }
 
-.creacion-chip:hover { border-color: var(--borde-fuerte); }
+.creacion-segmento + .creacion-segmento { border-left: 1px solid var(--borde); }
+.creacion-segmento:hover { background: var(--superficie-alta); }
+.creacion-segmento:active { transform: scale(0.97); }
 
-.creacion-chip.elegida {
-  border-color: var(--dorado);
-  color: var(--dorado);
+.creacion-segmento.elegida {
   background: #1a1408;
-  box-shadow: 0 0 0 1px var(--dorado);
+  color: var(--dorado);
 }
+
+.creacion-segmento.elegida:hover { background: #1a1408; }
 
 .creacion-nacionalidad {
   display: flex;

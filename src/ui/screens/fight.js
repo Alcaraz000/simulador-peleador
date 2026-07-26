@@ -382,14 +382,30 @@ function efectosDeInstruccion(mods) {
 // el texto del entrenador". Mismo nodo `.log` de la crónica, no uno nuevo:
 // se limpia y se le pone el estado + el consejo en vez de las líneas del
 // round que se acaban de narrar.
+//
+// Task v4, pedido textual: el tip puntual ("Tu rincón te tira: ...") vivía
+// antes debajo de las tarjetas de acción, donde de hecho leía como una
+// cuarta opción infalible ("hace que el jugador siempre gane"). Ahora vive
+// ACÁ, junto al resto de lo que dice el rincón — y puede no estar: `estado.tip`
+// viene `null` cuando el entrenador no tuvo (o no acertó a tener) una lectura
+// clara este round (ver consejoRincon en core/fight-interactive.js). Cuando sí
+// hay tip, el nombre del entrenador va arriba del texto, como quien firma lo
+// que dice.
 function pintarConsejoEnCronica(raiz, pelea, estado) {
   const logNodo = raiz.querySelector('[data-parte="log"]');
   if (!logNodo) return;
   clear(logNodo);
+
+  const instruccionTip = estado.tip ? INSTRUCCIONES_RINCON[estado.tip.id] : null;
+
   logNodo.appendChild(el('div', { class: 'rincon-mensaje' }, [
     el('div', { class: 'etiqueta', text: `Fin del round ${Math.max(pelea.roundActual - 1, 1)} · el rincón` }),
     el('div', { class: 'etiqueta dorado', style: 'margin-top:4px', text: estado.tarjetasTexto }),
     el('p', { class: 'medio', style: 'font-style:italic;margin-top:8px', text: `"${estado.consejo}"` }),
+    instruccionTip ? el('div', { class: 'rincon-tip', dataset: { tip: 'rincon' }, style: 'margin-top:10px' }, [
+      el('div', { class: 'etiqueta dorado', text: estado.tip.entrenadorNombre }),
+      el('p', { class: 'medio', style: 'font-style:italic;margin-top:4px', text: `"Tu rincón te tira: ${instruccionTip.nombre}"` }),
+    ]) : null,
   ]));
 }
 
@@ -412,22 +428,12 @@ function pintarRincon(raiz, accionNodo, { pelea, onInstruccion = () => {} }) {
       },
     });
     tarjeta.dataset.instruccion = instruccion.id;
-    if (instruccion.id === estado.recomendada) tarjeta.dataset.recomendada = 'true';
     return tarjeta;
   });
-
-  // Hint de qué elegir (Task v3, pedido textual: "agregar un hint de qué
-  // opción elegir abajo según el entrenador"): una línea debajo de las tres
-  // tarjetas, nombrando la recomendada — no un adorno en cada tarjeta, para
-  // no arriesgar el tamaño fijo de la grilla.
-  const recomendada = INSTRUCCIONES_RINCON[estado.recomendada];
 
   mount(accionNodo, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta', text: '¿Qué hacés este round?' }),
     el('div', { class: 'panel-decision-grilla' }, tarjetas),
-    recomendada
-      ? el('div', { class: 'etiqueta dorado', dataset: { hint: 'recomendada' }, text: `Tu rincón te tira: "${recomendada.nombre}"` })
-      : null,
   ]));
 }
 
