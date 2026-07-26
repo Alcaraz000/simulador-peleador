@@ -110,6 +110,41 @@ describe('avanzarMundo', () => {
     expect(sucesos.some((s) => s.texto.includes('cinturón vacante'))).toBe(true);
   });
 
+  // Pedido 2 (v6, "el ranking se achica solo... mi teoría es que los
+  // peleadores se retiran y por eso no aparecen, pero tienen que ir
+  // apareciendo nuevos"): cada retiro tiene que reponerse con un debutante
+  // nuevo, así la categoría no se vacía con los años.
+  it('cuando alguien se retira, aparece un debutante nuevo que lo reemplaza', () => {
+    const mundo = crearMundo(createRng(40), opciones);
+    mundo.roster[0].edad = 41; // se retira este mismo avance
+    const activosAntes = mundo.roster.filter((p) => !p.retirado).length;
+    const { mundo: nuevo, sucesos } = avanzarMundo(mundo, createRng(41), { aniosPasados: 1 });
+    const activosDespues = nuevo.roster.filter((p) => !p.retirado).length;
+    // Se retiró uno, pero un debutante lo repone: el conteo de activos no cae.
+    expect(activosDespues).toBeGreaterThanOrEqual(activosAntes);
+    expect(sucesos.some((s) => s.tipo === 'debut')).toBe(true);
+  });
+
+  it('el debutante nuevo no repite nombre ni apodo con nadie del roster (activo o retirado)', () => {
+    const mundo = crearMundo(createRng(42), { ...opciones, cantidad: 30 });
+    for (const p of mundo.roster) p.edad = 39; // todos se retiran este año
+    const { mundo: nuevo } = avanzarMundo(mundo, createRng(43), { aniosPasados: 1 });
+    const nombres = nuevo.roster.map((p) => p.nombre);
+    expect(new Set(nombres).size).toBe(nombres.length);
+    const apodos = nuevo.roster.map((p) => p.apodo).filter(Boolean);
+    expect(new Set(apodos).size).toBe(apodos.length);
+  });
+
+  it('sobre muchos años, el roster activo no se va vaciando (se mantiene poblado)', () => {
+    const mundo = crearMundo(createRng(44), { ...opciones, cantidad: 30 });
+    const { mundo: nuevo } = avanzarMundo(mundo, createRng(45), { aniosPasados: 15 });
+    const activos = nuevo.roster.filter((p) => !p.retirado).length;
+    // En 15 años, varios de los 30 originales (19-33 años al arrancar) llegan
+    // a los 40 y se retiran — sin reposición, esto caería mucho. Con
+    // reposición 1 a 1, se mantiene cerca del tamaño original.
+    expect(activos).toBeGreaterThanOrEqual(25);
+  });
+
   it('clona titulares: mutar el mundo devuelto no afecta al original y viceversa', () => {
     const mundo = crearMundo(createRng(21), opciones);
     const { mundo: nuevo } = avanzarMundo(mundo, createRng(22), { aniosPasados: 1 });

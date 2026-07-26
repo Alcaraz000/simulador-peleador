@@ -87,6 +87,19 @@ describe('noticiasDeSucesos', () => {
     expect(b.cuerpo).toBe(a.cuerpo);
   });
 
+  // Pedido 2 (v6, "que aparezcan peleadores nuevos"): avanzarMundo (world.js)
+  // emite un suceso de tipo 'debut' cuando un NPC nuevo reemplaza a un
+  // retirado. Tiene que traer su propio cuerpo atmosférico, no caer en el
+  // genérico de 'victoria' (MAPA_SUCESOS por defecto) — un debut no es un
+  // resultado de pelea.
+  it('un suceso de debut trae su propio tipo y cuerpo, no el genérico de victoria', () => {
+    const sucesos = [{ tipo: 'debut', peleadorId: 'nuevo1', texto: 'Debuta "El Pibe" Ramírez.' }];
+    const [noticia] = noticiasDeSucesos(createRng(1), sucesos, { anio: 2030 });
+    expect(noticia.tipo).toBe('debut');
+    expect(noticia.titular).toBe('Debuta "El Pibe" Ramírez.');
+    expect(noticia.cuerpo.length).toBeGreaterThan(0);
+  });
+
   it('sucesos distintos del mismo tipo reparten variantes de cuerpo, no repiten siempre la primera', () => {
     const sucesos = Array.from({ length: 12 }, (_, i) => ({
       tipo: 'victoria', peleadorId: `p${i}`, texto: `Peleador ${i} ganó por nocaut.`,
@@ -109,7 +122,7 @@ describe('noticiasDeSucesos', () => {
 
 describe('etiquetaTipo', () => {
   it('devuelve una etiqueta legible para cada tipo real que emite el juego', () => {
-    for (const tipo of ['victoria', 'titulo', 'retiro', 'lesion', 'ranking', 'sponsor']) {
+    for (const tipo of ['victoria', 'titulo', 'retiro', 'lesion', 'ranking', 'sponsor', 'debut']) {
       const etiqueta = etiquetaTipo(tipo);
       expect(etiqueta).not.toBe(tipo);
       expect(etiqueta.length).toBeGreaterThan(0);

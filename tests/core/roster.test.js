@@ -3,6 +3,7 @@ import { createRng } from '../../src/core/rng.js';
 import { PARODIAS } from '../../src/content/parodies.js';
 import {
   PERSONALIDADES, parodiasDe, crearDesdeParodia, crearRoster, leyendasDe, leyendasDeNacionalidad,
+  generarDebutantes,
 } from '../../src/core/roster.js';
 import { mediaDe } from '../../src/core/fighter.js';
 
@@ -132,6 +133,92 @@ describe('crearRoster', () => {
     const roster = crearRoster(createRng(12), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 12 });
     const nombres = roster.map((p) => p.nombre);
     expect(new Set(nombres).size).toBe(nombres.length);
+  });
+
+  // Pedido 1 (v6, "el ranking tiene que ser una montaña"): el roster pasa de
+  // 12 a 100. El pool de apodos (APODOS, names.js) tiene solo 16 entradas —
+  // muy por debajo de 100. Antes, un candidato con un apodo ya usado se
+  // RECHAZABA (continue) y se reintentaba: con un pool de 16 eso agotaba los
+  // `intentos` disponibles mucho antes de llegar a 100, dejando el roster
+  // corto. Ahora un candidato así se queda SIN apodo (apodo: null) en vez de
+  // rechazarse — realista (no todo boxeador en actividad tiene un mote que lo
+  // siga) y no le pone techo al tamaño del roster.
+  it('llega a 100 peleadores aunque el pool de apodos (16) se agote mucho antes', () => {
+    const roster = crearRoster(createRng(1), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    expect(roster).toHaveLength(100);
+  });
+
+  it('con 100 peleadores, ningún apodo se repite (los que agotan el pool quedan sin apodo)', () => {
+    const roster = crearRoster(createRng(2), { disciplina: 'boxeo', categoria: 'mediano', cantidad: 100 });
+    const apodos = roster.map((p) => p.apodo).filter(Boolean);
+    expect(new Set(apodos).size).toBe(apodos.length);
+    // El pool real es chico: no todos pueden tener apodo único, pero al menos
+    // una parte relevante del roster sí lo tiene (no todos terminan null).
+    expect(apodos.length).toBeGreaterThan(5);
+  });
+
+  it('con 100 peleadores, tampoco se repiten nombres', () => {
+    const roster = crearRoster(createRng(3), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    const nombres = roster.map((p) => p.nombre);
+    expect(new Set(nombres).size).toBe(nombres.length);
+  });
+});
+
+// Pedido 2 (v6, "el ranking se achica solo"): los NPC se retiran a los 40 y
+// nadie los reemplazaba, así que la categoría se vaciaba con el tiempo.
+// `generarDebutantes` es la contraparte de `crearRoster` para ALTAS a mitad
+// de carrera: promesas jóvenes (media floja, edad de debut) que reusan el
+// mismo criterio de dedup de nombre/apodo, ahora contra un roster EXISTENTE
+// en vez de arrancar de cero.
+describe('generarDebutantes', () => {
+  it('genera la cantidad pedida', () => {
+    const nuevos = generarDebutantes(createRng(1), {
+      disciplina: 'boxeo', categoria: 'pluma', cantidad: 5, existente: [],
+    });
+    expect(nuevos).toHaveLength(5);
+  });
+
+  it('son jóvenes y flojos: promesas, no cracks ya hechos', () => {
+    const nuevos = generarDebutantes(createRng(2), {
+      disciplina: 'boxeo', categoria: 'pluma', cantidad: 10, existente: [],
+    });
+    for (const p of nuevos) {
+      expect(p.edad).toBeLessThanOrEqual(20);
+      expect(mediaDe(p)).toBeLessThan(60);
+    }
+  });
+
+  it('no repite nombre ni apodo con el roster existente', () => {
+    const base = crearRoster(createRng(3), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 20 });
+    const nuevos = generarDebutantes(createRng(4), {
+      disciplina: 'boxeo', categoria: 'pluma', cantidad: 20, existente: base,
+    });
+    const nombresBase = new Set(base.map((p) => p.nombre));
+    const apodosBase = new Set(base.map((p) => p.apodo).filter(Boolean));
+    for (const p of nuevos) {
+      expect(nombresBase.has(p.nombre)).toBe(false);
+      if (p.apodo) expect(apodosBase.has(p.apodo)).toBe(false);
+    }
+    // tampoco se repiten entre sí
+    const nombresNuevos = nuevos.map((p) => p.nombre);
+    expect(new Set(nombresNuevos).size).toBe(nombresNuevos.length);
+    const apodosNuevos = nuevos.map((p) => p.apodo).filter(Boolean);
+    expect(new Set(apodosNuevos).size).toBe(apodosNuevos.length);
+  });
+
+  it('no vienen retirados ni con ranking asignado (eso lo decide el mundo)', () => {
+    const nuevos = generarDebutantes(createRng(5), {
+      disciplina: 'boxeo', categoria: 'pluma', cantidad: 3, existente: [],
+    });
+    for (const p of nuevos) {
+      expect(p.retirado).toBe(false);
+    }
+  });
+
+  it('es determinista con la misma semilla', () => {
+    const a = generarDebutantes(createRng(6), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 6, existente: [] });
+    const b = generarDebutantes(createRng(6), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 6, existente: [] });
+    expect(a.map((p) => p.nombre)).toEqual(b.map((p) => p.nombre));
   });
 });
 

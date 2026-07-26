@@ -1,4 +1,4 @@
-import { crearRoster } from './roster.js';
+import { crearRoster, generarDebutantes } from './roster.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 // `rankingDelJugador` (más abajo) es lo que habilita las peleas de título:
@@ -66,16 +66,44 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
   let campeonId = mundo.campeonId;
 
   for (let anio = 0; anio < Math.max(1, Math.round(aniosPasados)); anio++) {
+    let retirosEsteAnio = 0;
     for (const peleador of roster) {
       if (peleador.retirado || peleador.esJugador) continue;
       peleador.edad += 1;
       declive(peleador, rng);
       if (peleador.edad >= EDAD_RETIRO) {
         peleador.retirado = true;
+        retirosEsteAnio += 1;
         sucesos.push({
           tipo: 'retiro',
           peleadorId: peleador.id,
           texto: `${peleador.nombre} anuncia su retiro a los ${peleador.edad} años.`,
+        });
+      }
+    }
+
+    // Pedido 2 (v6, "el ranking se achica solo... tienen que ir apareciendo
+    // nuevos"): cada retiro se repone con un debutante (promesa joven y
+    // floja, ver generarDebutantes en roster.js) para que la categoría no se
+    // vaya vaciando con los años — el mundo tiene que sentirse vivo, no una
+    // cuenta regresiva. `existente` es el roster COMPLETO (activos y
+    // retirados): un nombre/apodo que ya se usó no vuelve a aparecer, ni
+    // siquiera si el original ya colgó los guantes.
+    if (retirosEsteAnio > 0) {
+      const debutantes = generarDebutantes(rng, {
+        disciplina: mundo.disciplina,
+        categoria: mundo.categoria,
+        cantidad: retirosEsteAnio,
+        existente: roster,
+      });
+      for (const debutante of debutantes) {
+        roster.push(debutante);
+        sucesos.push({
+          tipo: 'debut',
+          peleadorId: debutante.id,
+          texto: debutante.apodo
+            ? `Debuta "${debutante.apodo}" ${debutante.nombre}: una cara nueva en la categoría.`
+            : `Debuta ${debutante.nombre}: una cara nueva en la categoría.`,
         });
       }
     }

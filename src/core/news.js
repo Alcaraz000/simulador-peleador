@@ -31,6 +31,10 @@ const MAPA_SUCESOS = {
   retiro: 'retiro',
   lesion: 'lesion',
   ascenso: 'ranking',
+  // Pedido 2 (v6, "que aparezcan peleadores nuevos"): un debutante que
+  // reemplaza a un retirado (avanzarMundo, world.js) no es un resultado de
+  // pelea — necesita su propio tipo, si no caía en 'victoria' por defecto.
+  debut: 'debut',
 };
 
 // Los sucesos que vienen del mundo (avanzarMundo en world.js) ya traen el
@@ -63,6 +67,11 @@ const CUERPOS_SUCESO = {
     'La tabla se sigue moviendo semana a semana.',
     'Un movimiento así no pasa desapercibido para los promotores.',
     'Arriba se respira distinto, y ya se nota en las ofertas que empiezan a llegar.',
+  ],
+  debut: [
+    'Otra promesa que se suma a pelear por un lugar en la categoría.',
+    'Todavía no lo conoce nadie, pero en el gimnasio ya hablan de él.',
+    'La categoría nunca se queda quieta: siempre hay una cara nueva golpeando la puerta.',
   ],
 };
 
@@ -127,6 +136,7 @@ const ETIQUETAS_TIPO = {
   lesion: 'Lesión',
   ranking: 'Ranking',
   sponsor: 'Sponsor',
+  debut: 'Debut',
   escandalo: 'Escándalo',
   revancha: 'Rivalidad',
   record: 'Récord',
