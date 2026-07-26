@@ -48,3 +48,34 @@ describe('theme.css — especificidad dentro de .carta', () => {
     expect(Number(opacidad)).toBeLessThan(1);
   });
 });
+
+// Mismo bug de especificidad, pero en .chip (cierre de ronda v3): ".chip" fija
+// su propio `color` y, al estar declarado DESPUÉS de ".dorado"/".rojo"/".verde"
+// en el archivo con igual especificidad (0,1,0 cada uno), esa combinación
+// terminaba siempre en el gris de .chip — afecta cinturones del tablero, chips
+// de noticias, revancha/nuevo campeón en la pantalla de pelea, etc.
+describe('theme.css — especificidad en .chip', () => {
+  it('.chip sola (gris) y .dorado sola dan colores distintos', () => {
+    const gris = colorDe('<div class="chip" id="t">x</div>');
+    const dorado = colorDe('<div class="dorado" id="t">x</div>');
+    expect(gris).not.toBe(dorado);
+  });
+
+  it('"chip dorado" se pinta del mismo dorado que .dorado sola', () => {
+    const doradoReferencia = colorDe('<div class="dorado" id="t">x</div>');
+    const chipDorado = colorDe('<div class="chip dorado" id="t">x</div>');
+    expect(chipDorado).toBe(doradoReferencia);
+  });
+
+  it('"chip rojo" se pinta del mismo rojo que .rojo sola', () => {
+    const rojoReferencia = colorDe('<div class="rojo" id="t">x</div>');
+    const chipRojo = colorDe('<div class="chip rojo" id="t">x</div>');
+    expect(chipRojo).toBe(rojoReferencia);
+  });
+
+  it('"chip verde" se pinta del mismo verde que .verde sola (récord reciente en el panel)', () => {
+    const verdeReferencia = colorDe('<div class="verde" id="t">x</div>');
+    const chipVerde = colorDe('<div class="chip verde" id="t">x</div>');
+    expect(chipVerde).toBe(verdeReferencia);
+  });
+});

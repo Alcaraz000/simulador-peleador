@@ -4,7 +4,7 @@ import {
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPelea, simularRound, tarjetasJurados, PLANES } from '../../src/core/fight.js';
-import { abrirGolpeDeGracia, ZONAS_GOLPE } from '../../src/core/fight-interactive.js';
+import { abrirGolpeDeGracia, ZONAS_GOLPE, INSTRUCCIONES_RINCON } from '../../src/core/fight-interactive.js';
 import {
   renderOferta, renderPlan, renderPelea, actualizarMarcador,
 } from '../../src/ui/screens/fight.js';
@@ -20,9 +20,11 @@ const rival = crearPeleador({
 const oferta = {
   id: 'of_1', rivalId: rival.id, rivalNombre: rival.nombre, rivalApodo: rival.apodo,
   rivalMedia: 70, rivalRecord: '15-2', rivalEstilo: 'noqueador', rivalPersonalidad: 'agresivo',
+  rivalRanking: 4,
   nivel: 'titulo', nivelPelea: 'titulo', bolsa: 25000, riesgo: 'alto',
   enJuego: 'Título regional', esTitulo: true, esObligatoria: false, esRevancha: false,
   famaBase: 15, textoGancho: 'Dyke Tyzon te quiere cruzar.',
+  opinionEntrenador: 'desafio', fraseEntrenador: 'Contra Dyke Tyzon vas de underdog, pero por esta bolsa vale la pena.',
 };
 const peleaBase = () => crearPelea({ jugador, rival, disciplina: 'boxeo', nivel: 'profesional', plan: 'afuera', rng: createRng(1) });
 
@@ -54,6 +56,29 @@ describe('renderOferta', () => {
     cont.querySelector('[data-accion="rechazar"]').click();
     expect(aceptado).toBe(true);
     expect(rechazado).toBe(true);
+  });
+
+  it('muestra el puesto del rival en el ranking', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    expect(cont.textContent).toContain('#4');
+  });
+
+  it('muestra la frase del entrenador sobre esta pelea', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    expect(cont.textContent).toContain(oferta.fraseEntrenador);
+  });
+
+  it('la bolsa y el riesgo tienen icono', () => {
+    renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+    const tiles = cont.querySelectorAll('.tile');
+    expect(tiles).toHaveLength(2);
+    for (const tile of tiles) expect(tile.querySelector('svg')).toBeTruthy();
+  });
+
+  it('no rompe si la oferta no trae ranking ni frase de entrenador (compatibilidad)', () => {
+    const ofertaVieja = { ...oferta, rivalRanking: null, fraseEntrenador: null };
+    expect(() => renderOferta(cont, { oferta: ofertaVieja, jugador, onAceptar: noop, onRechazar: noop })).not.toThrow();
+    expect(cont.textContent).not.toContain('#4');
   });
 });
 
@@ -96,6 +121,36 @@ describe('renderPelea — marcador', () => {
     expect(marcador.querySelector('[data-stat="fatiga-jugador"] svg')).toBeTruthy();
     expect(marcador.querySelector('[data-juez="0"]')).toBeTruthy();
     expect(marcador.querySelector('[data-golpes="jugador"]')).toBeTruthy();
+  });
+
+  // Task v3, pedido textual: "¿no debería ir de un lado las del peleador y
+  // del otro las del contrincante? Para no marear." — el aguante y la fatiga
+  // de CADA peleador tienen que estar anidados junto a su nombre/bandera, no
+  // sueltos en un bloque aparte que mezcle a los dos.
+  it('el aguante y la fatiga de cada peleador estan agrupados bajo SU lado (no mezclados)', () => {
+    const pelea = peleaBase();
+    renderPelea(cont, { pelea, momentos: [] });
+    const marcador = cont.querySelector('[data-bloque="marcador"]');
+
+    const ladoJugador = marcador.querySelector('[data-lado="jugador"]');
+    const ladoRival = marcador.querySelector('[data-lado="rival"]');
+    expect(ladoJugador).toBeTruthy();
+    expect(ladoRival).toBeTruthy();
+
+    // El nombre y la bandera del jugador están en SU columna...
+    expect(ladoJugador.textContent).toContain('El Relámpago');
+    expect(ladoJugador.querySelector('.bandera-svg')).toBeTruthy();
+    // ...junto con SU aguante y SU fatiga (no las del rival).
+    expect(ladoJugador.querySelector('[data-stat="aguante-jugador"]')).toBeTruthy();
+    expect(ladoJugador.querySelector('[data-stat="fatiga-jugador"]')).toBeTruthy();
+    expect(ladoJugador.querySelector('[data-stat="aguante-rival"]')).toBeNull();
+    expect(ladoJugador.querySelector('[data-stat="fatiga-rival"]')).toBeNull();
+
+    // Y del otro lado, lo mismo pero con el rival.
+    expect(ladoRival.textContent).toContain('El Ciclón');
+    expect(ladoRival.querySelector('[data-stat="aguante-rival"]')).toBeTruthy();
+    expect(ladoRival.querySelector('[data-stat="fatiga-rival"]')).toBeTruthy();
+    expect(ladoRival.querySelector('[data-stat="aguante-jugador"]')).toBeNull();
   });
 
   it('el marcador no se vuelve a crear al cambiar de panel (misma identidad de nodo)', () => {
@@ -148,9 +203,14 @@ describe('renderPelea — narracion y avance de round', () => {
     expect(cont.querySelector('[data-accion="seguir"]')).toBeNull();
   });
 
+  // Estos tres casos narran un round SIN pasar por el rincón (pendiente:
+  // null es el estado real de "mitad de pelea, nada pendiente" — pasa, por
+  // ejemplo, justo después de errar un golpe de gracia): lo que se prueba
+  // acá es el mecanismo genérico SALTAR/SEGUIR del narrador, no el flujo del
+  // rincón (que tiene su propio describe más abajo).
   it('saltar completa la narracion y pasa a SEGUIR', () => {
     vi.useFakeTimers();
-    const pelea = peleaBase();
+    const pelea = { ...peleaBase(), pendiente: null };
     const momentos = [
       { round: 1, tipo: 'jab', texto: 'Primer momento.' },
       { round: 1, tipo: 'campana', texto: 'Segundo momento.' },
@@ -166,7 +226,7 @@ describe('renderPelea — narracion y avance de round', () => {
   it('no se puede avanzar antes de que termine: click en saltar no dispara onSeguir directamente', () => {
     vi.useFakeTimers();
     let avances = 0;
-    const pelea = peleaBase();
+    const pelea = { ...peleaBase(), pendiente: null };
     const momentos = [{ round: 1, tipo: 'jab', texto: 'Uno.' }, { round: 1, tipo: 'campana', texto: 'Dos.' }];
     renderPelea(cont, { pelea, momentos, onSeguir: () => { avances += 1; } });
     cont.querySelector('[data-accion="saltar"]').click();
@@ -175,8 +235,8 @@ describe('renderPelea — narracion y avance de round', () => {
     expect(avances).toBe(1);
   });
 
-  it('con momentos vacios (modo todo/instantaneo) se resuelve directo a SEGUIR', () => {
-    const pelea = peleaBase();
+  it('con momentos vacios a mitad de pelea (pendiente null) se resuelve directo a SEGUIR', () => {
+    const pelea = { ...peleaBase(), pendiente: null };
     renderPelea(cont, { pelea, momentos: [], onSeguir: noop });
     expect(cont.querySelector('[data-accion="seguir"]')).toBeTruthy();
   });
@@ -223,26 +283,102 @@ describe('renderPelea — narracion y avance de round', () => {
   });
 });
 
+describe('renderPelea — empezar la pelea', () => {
+  // Task v3, pedido textual: "Debe incluirse un botón que sea para empezar
+  // la pelea" — hoy arrancaba sola. La pelea recién creada (pendiente:
+  // 'inicio') no narra nada todavía: solo ofrece el botón.
+  it('una pelea recien creada no narra nada y muestra el boton de empezar, no SEGUIR', () => {
+    const pelea = peleaBase();
+    renderPelea(cont, { pelea, momentos: [], onEmpezar: noop });
+    expect(cont.querySelector('[data-accion="empezar-pelea"]')).toBeTruthy();
+    expect(cont.querySelector('[data-accion="seguir"]')).toBeNull();
+    expect(cont.querySelector('[data-accion="saltar"]')).toBeNull();
+  });
+
+  it('el marcador ya se ve completo (100/100, banderas, nombres) antes de arrancar', () => {
+    const pelea = peleaBase();
+    renderPelea(cont, { pelea, momentos: [], onEmpezar: noop });
+    const marcador = cont.querySelector('[data-bloque="marcador"]');
+    expect(marcador.querySelector('[data-stat="aguante-jugador"] .valor').textContent).toBe('100');
+    expect(marcador.querySelector('[data-stat="aguante-rival"] .valor').textContent).toBe('100');
+  });
+
+  it('click en empezar dispara onEmpezar', () => {
+    let empezada = false;
+    const pelea = peleaBase();
+    renderPelea(cont, { pelea, momentos: [], onEmpezar: () => { empezada = true; } });
+    cont.querySelector('[data-accion="empezar-pelea"]').click();
+    expect(empezada).toBe(true);
+  });
+
+  it('una vez que arranca la narracion del primer round, el modulo de la cronica se reusa (mismo nodo)', () => {
+    const pelea = peleaBase();
+    renderPelea(cont, { pelea, momentos: [], onEmpezar: noop });
+    const cronica1 = cont.querySelector('[data-bloque="cronica"]');
+    renderPelea(cont, { pelea: { ...pelea, pendiente: null }, momentos: [{ round: 1, tipo: 'jab', texto: 'Va el jab.' }], onSeguir: noop });
+    const cronica2 = cont.querySelector('[data-bloque="cronica"]');
+    expect(cronica2).toBe(cronica1);
+    expect(cont.textContent).toContain('Va el jab.');
+  });
+});
+
 describe('renderPelea — rincon', () => {
   function peleaEnRincon() {
     const { pelea } = simularRound(peleaBase());
     return { ...pelea, pendiente: 'rincon' };
   }
 
-  it('el rincon convive con el marcador (no lo desmonta)', () => {
+  // Task v3, pedido textual: "El rincón aparece recién cuando el jugador lo
+  // pide" / "recién ahí uno clickea y ve lo que te dice el entrenador" — al
+  // terminar de narrarse el round no aparecen ni las tarjetas ni el consejo
+  // todavía, solo un botón.
+  it('al terminar el round NO aparecen las tarjetas de instruccion todavia: primero hay un boton para ir al rincon', () => {
     const pelea = peleaEnRincon();
     renderPelea(cont, { pelea, momentos: [] });
     expect(cont.querySelector('[data-bloque="marcador"]')).toBeTruthy();
-    expect(cont.querySelectorAll('[data-instruccion]')).toHaveLength(3);
+    expect(cont.querySelector('[data-accion="ver-rincon"]')).toBeTruthy();
+    expect(cont.querySelectorAll('[data-instruccion]')).toHaveLength(0);
+  });
+
+  it('clickear "ir al rincon" reemplaza el contenido de la cronica por lo que dice el entrenador y recien ahi aparecen las tarjetas', () => {
+    const pelea = peleaEnRincon();
+    renderPelea(cont, { pelea, momentos: [] });
+    const cronicaNodo = cont.querySelector('[data-bloque="cronica"]');
+
+    cont.querySelector('[data-accion="ver-rincon"]').click();
+
+    // Mismo modulo de la cronica (no uno nuevo), con el contenido
+    // reemplazado por el estado + consejo del entrenador.
+    expect(cont.querySelector('[data-bloque="cronica"]')).toBe(cronicaNodo);
     expect(cont.textContent.toLowerCase()).toContain('rincón');
+    expect(cont.querySelectorAll('[data-instruccion]')).toHaveLength(3);
+    expect(cont.querySelector('[data-accion="ver-rincon"]')).toBeNull();
   });
 
   it('devuelve la instruccion elegida', () => {
     let instruccion = null;
     const pelea = peleaEnRincon();
     renderPelea(cont, { pelea, momentos: [], onInstruccion: (i) => { instruccion = i; } });
+    cont.querySelector('[data-accion="ver-rincon"]').click();
     cont.querySelector('[data-instruccion="cuerpo"]').click();
     expect(instruccion).toBe('cuerpo');
+  });
+
+  // Task v3, pedido textual: "una pista de cuál te recomienda el entrenador
+  // ... que tenga criterio real". El criterio en sí (los cuatro casos) ya se
+  // prueba en core/fight-interactive.test.js; acá solo se prueba que la UI
+  // lo pinta: una tarjeta marcada y un texto de hint que la nombra.
+  it('marca UNA tarjeta como recomendada y muestra un hint que la nombra', () => {
+    const pelea = peleaEnRincon();
+    renderPelea(cont, { pelea, momentos: [] });
+    cont.querySelector('[data-accion="ver-rincon"]').click();
+
+    const recomendadas = cont.querySelectorAll('[data-instruccion][data-recomendada="true"]');
+    expect(recomendadas).toHaveLength(1);
+    const idRecomendada = recomendadas[0].dataset.instruccion;
+    const hint = cont.querySelector('[data-hint="recomendada"]');
+    expect(hint).toBeTruthy();
+    expect(hint.textContent).toContain(INSTRUCCIONES_RINCON[idRecomendada].nombre);
   });
 });
 
@@ -399,5 +535,63 @@ describe('renderPelea — fin de la pelea', () => {
     };
     renderPelea(cont, { pelea, momentos: [], onFin: noop });
     expect(cont.querySelector('[data-bloque="cronica"].pelea-ko')).toBeNull();
+  });
+
+  // Task v3, pedido textual: "'Después de la pelea' también debe verse en la
+  // pantalla de peleas, NO en una pantalla nueva" — el resumen post-pelea
+  // (bolsa, título si se ganó) se pinta con `despues`, en el MISMO panel de
+  // acción, sin desmontar el marcador ni la crónica.
+  describe('despues de la pelea (en la misma pantalla)', () => {
+    it('sin "despues" todavia, el boton lleva a verlo (no desaparece el marcador ni la cronica)', () => {
+      const pelea = peleaTerminadaKo();
+      renderPelea(cont, { pelea, momentos: [], onFin: noop });
+      expect(cont.querySelector('[data-bloque="marcador"]')).toBeTruthy();
+      expect(cont.querySelector('[data-bloque="cronica"]')).toBeTruthy();
+      expect(cont.querySelector('[data-accion="continuar"]')).toBeNull();
+    });
+
+    it('con "despues" puesto, muestra el texto, la bolsa y NO pierde el marcador (misma pantalla)', () => {
+      const pelea = peleaTerminadaKo();
+      const marcadorAntes = (() => {
+        renderPelea(cont, { pelea, momentos: [], onFin: noop });
+        return cont.querySelector('[data-bloque="marcador"]');
+      })();
+
+      renderPelea(cont, {
+        pelea,
+        momentos: [],
+        despues: { texto: 'Le ganaste a El Ciclón por KO.', deltas: ['Bolsa: US$ 25K'] },
+        onContinuar: noop,
+      });
+
+      expect(cont.querySelector('[data-bloque="marcador"]')).toBe(marcadorAntes); // no se reconstruyó
+      expect(cont.textContent).toContain('Le ganaste a El Ciclón por KO.');
+      expect(cont.textContent).toContain('Bolsa: US$ 25K');
+      expect(cont.querySelector('[data-accion="continuar"]')).toBeTruthy();
+    });
+
+    it('si gano un titulo, lo muestra', () => {
+      const pelea = peleaTerminadaKo();
+      renderPelea(cont, {
+        pelea,
+        momentos: [],
+        despues: { texto: 'Le ganaste.', deltas: [], tituloGanado: 'Título regional' },
+        onContinuar: noop,
+      });
+      expect(cont.textContent).toContain('Título regional');
+    });
+
+    it('continuar dispara onContinuar', () => {
+      let continuo = false;
+      const pelea = peleaTerminadaKo();
+      renderPelea(cont, {
+        pelea,
+        momentos: [],
+        despues: { texto: 'Le ganaste.', deltas: [] },
+        onContinuar: () => { continuo = true; },
+      });
+      cont.querySelector('[data-accion="continuar"]').click();
+      expect(continuo).toBe(true);
+    });
   });
 });

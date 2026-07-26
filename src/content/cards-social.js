@@ -72,6 +72,24 @@ export const CARTAS_REDES = [
     ],
   },
 
+  // Carta de riesgo (Task v3, "cartas nuevas con azar"): mismo patrón que las
+  // nuevas de cards-events.js — la opción de riesgo tiene `probabilidades`,
+  // las otras dos quedan como siempre. `heatRival` va en `opcion.efectos`
+  // (aplica siempre, gane la rama que gane: provocaste igual, salga bien o
+  // mal) y la fama, que sí depende del resultado, va por rama.
+  {
+    id: 'polemica_calculada', titulo: 'La polémica calculada', rareza: 'rara',
+    texto: 'Te proponen tirar algo picante a propósito, calculado para explotar. Puede jugar a tu favor... o puede salir carísimo.',
+    opciones: [
+      { id: 'provocar', tono: 'provocador', texto: '"El campeón me tiene miedo. Todos lo saben."', efectos: { heatRival: 30 }, probabilidades: [
+        { peso: 55, mods: {}, efectos: { fama: 16 }, texto: 'Se hace tendencia en minutos. Todos hablan de vos.' },
+        { peso: 45, mods: {}, efectos: { fama: -8 }, texto: 'Se te fue la mano: te tratan de careta y hasta tu propio mánager te llama para bajarte los humos.' },
+      ] },
+      { id: 'humilde', tono: 'humilde', texto: '"Prefiero hablar arriba del ring."', efectos: { fama: 3 }, mods: { moral: 4 } },
+      { id: 'promocionar', tono: 'promocional', texto: 'Dejar que el mánager arme el rumor por vos.', efectos: { fama: 5, dinero: 3000 } },
+    ],
+  },
+
   // Legendaria: rara a propósito (~5% del sorteo) y potente de verdad — no se
   // nerfea. El clip se hizo viral solo; la fama que deja cualquiera de las
   // tres respuestas está muy por encima de un post cualquiera.

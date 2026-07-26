@@ -18,13 +18,34 @@ describe('icono("tienda")', () => {
 describe('set de íconos nuevo (creación + tienda)', () => {
   const nombres = [
     'persona', 'mano', 'etiqueta', 'blanco', 'balanza', 'origen',
-    'cerebro', 'maletin', 'auto', 'casa', 'estrella', 'ancla', 'globo',
+    'cerebro', 'maletin', 'auto', 'casa', 'estrella', 'ancla', 'globo', 'dado', 'lista',
   ];
 
   it.each(nombres)('%s se dibuja como un <svg> con al menos un <path>', (nombre) => {
     const svg = icono(nombre);
     expect(svg.tagName.toLowerCase()).toBe('svg');
     expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+});
+
+// Bolsa + niveles de riesgo (v3, oferta de pelea) y los cuatro tonos del
+// careo (reusan íconos ya existentes en el set de arriba: rayo/cerebro/
+// corazon/estrella — ver presser.js).
+describe('set de íconos nuevo (oferta de pelea)', () => {
+  const nombres = ['billete', 'escudo', 'medidor', 'peligro'];
+
+  it.each(nombres)('%s se dibuja como un <svg> con al menos un <path>', (nombre) => {
+    const svg = icono(nombre);
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+
+  it('billete, escudo, medidor y peligro son visualmente distintos entre si', () => {
+    const paths = nombres.map((n) => icono(n).querySelectorAll('path').length);
+    // No es una prueba de diseño, solo una red mínima: cada ícono nuevo tiene
+    // su propia data, no son copias unos de otros.
+    expect(new Set(nombres.map((n) => icono(n).outerHTML)).size).toBe(nombres.length);
+    expect(paths.every((n) => n > 0)).toBe(true);
   });
 });
 

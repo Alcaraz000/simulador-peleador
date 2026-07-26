@@ -1,4 +1,6 @@
-import { el, mount, fmtDinero } from '../dom.js';
+import {
+  el, mount, clear, fmtDinero,
+} from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
 import { crearTarjeta } from '../components/card.js';
@@ -12,23 +14,48 @@ import {
 
 const ETIQUETA_RIESGO = { bajo: 'Riesgo bajo', medio: 'Riesgo medio', alto: 'Riesgo alto' };
 
+// Un ícono por nivel de riesgo, con siluetas bien distintas entre sí (escudo
+// / medidor / octógono), y su color a tono con el resto del juego (verde =
+// bueno, dorado = ojo, rojo = peligro — mismo lenguaje que .tarjeta-efecto).
+const ICONO_RIESGO = { bajo: 'escudo', medio: 'medidor', alto: 'peligro' };
+const COLOR_RIESGO = { bajo: 'var(--verde)', medio: 'var(--dorado)', alto: 'var(--rojo)' };
+const CLASE_RIESGO = { bajo: 'verde', medio: 'dorado', alto: 'rojo' };
+
+function tileConIcono({ nombreIcono, color, valorTexto, valorClase = '', etiqueta }) {
+  return el('div', { class: 'tile' }, [
+    el('div', { style: 'display:flex;justify-content:center;margin-bottom:4px' }, [icono(nombreIcono, { tamano: 16, color })]),
+    el('div', { class: `valor ${valorClase}`.trim(), text: valorTexto }),
+    el('div', { class: 'nombre', text: etiqueta }),
+  ]);
+}
+
 export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechazar }) {
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: 'Oferta de pelea' }),
     el('h1', { text: oferta.esTitulo ? 'Pelea de título' : 'Te ofrecen una pelea' }),
     el('p', { class: 'medio', text: oferta.textoGancho }),
     el('div', { class: 'panel' }, [
-      el('div', { style: 'font-size:18px;font-weight:800', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+      el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
+        el('div', { style: 'font-size:18px;font-weight:800;flex:1;min-width:0', text: `"${oferta.rivalApodo}" ${oferta.rivalNombre}` }),
+        // Puesto en el ranking del rival (Task v3, pedido textual): junto al
+        // nombre, así el jugador ve de un vistazo contra quién se mide sin
+        // ir a buscarlo a la tabla de posiciones.
+        oferta.rivalRanking
+          ? el('div', { class: 'etiqueta dorado', style: 'flex:0 0 auto', text: `#${oferta.rivalRanking}` })
+          : null,
+      ]),
       el('div', { class: 'etiqueta', text: `Media ${oferta.rivalMedia} · récord ${oferta.rivalRecord} · ${oferta.rivalEstilo}` }),
       el('div', { class: 'fila', style: 'margin-top:10px' }, [
-        el('div', { class: 'tile' }, [
-          el('div', { class: 'valor verde', text: fmtDinero(oferta.bolsa) }),
-          el('div', { class: 'nombre', text: 'Bolsa' }),
-        ]),
-        el('div', { class: 'tile' }, [
-          el('div', { class: 'valor', text: ETIQUETA_RIESGO[oferta.riesgo] }),
-          el('div', { class: 'nombre', text: 'Riesgo' }),
-        ]),
+        tileConIcono({
+          nombreIcono: 'billete', color: 'var(--verde)', valorTexto: fmtDinero(oferta.bolsa), valorClase: 'verde', etiqueta: 'Bolsa',
+        }),
+        tileConIcono({
+          nombreIcono: ICONO_RIESGO[oferta.riesgo],
+          color: COLOR_RIESGO[oferta.riesgo],
+          valorTexto: ETIQUETA_RIESGO[oferta.riesgo],
+          valorClase: CLASE_RIESGO[oferta.riesgo],
+          etiqueta: 'Riesgo',
+        }),
       ]),
       el('div', { class: 'chip', style: 'margin-top:10px', text: `En juego: ${oferta.enJuego}` }),
       oferta.esRevancha ? el('div', { class: 'chip rojo', text: 'Revancha' }) : null,
@@ -39,6 +66,13 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
         })
         : null,
     ]),
+    // Opinión del entrenador sobre ESTA pelea (Task v3, pedido textual): con
+    // criterio real (media, estado físico, lo que está en juego), no una
+    // frase de relleno siempre igual — ver opinionEntrenador en core/offers.js.
+    oferta.fraseEntrenador ? el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta', text: 'Tu entrenador opina' }),
+      el('p', { class: 'medio', style: 'font-style:italic;margin-top:6px', text: `"${oferta.fraseEntrenador}"` }),
+    ]) : null,
     el('button', { class: 'boton', dataset: { accion: 'aceptar' }, text: 'Aceptar la pelea', onClick: onAceptar }),
     el('button', { class: 'boton secundario', dataset: { accion: 'rechazar' }, text: 'Rechazar', onClick: onRechazar }),
   ]));
@@ -128,32 +162,34 @@ function filaGolpes(apodo, quien) {
   ]);
 }
 
+// Cada peleador tiene SU lado (nombre, bandera, aguante y fatiga, todo
+// junto, en una sola columna) — Task v3, pedido textual: "¿no debería ir de
+// un lado las del peleador y del otro las del contrincante? Para no
+// marear." Antes el aguante/fatiga de ambos vivían en un bloque separado de
+// la cabecera con nombres; ahora es UNA sola columna por peleador, así lo
+// que se lee de arriba a abajo es siempre del mismo boxeador.
+function columnaPeleador(datos, { lado }) {
+  const cabecera = lado === 'jugador'
+    ? [bandera(datos.nacionalidad, { ancho: 22 }), el('span', { text: datos.apodo })]
+    : [el('span', { text: datos.apodo }), bandera(datos.nacionalidad, { ancho: 22 })];
+
+  return el('div', { class: `marcador-lado marcador-${lado === 'jugador' ? 'izq' : 'der'}`, dataset: { lado } }, [
+    el('div', { class: `marcador-peleador ${lado === 'rival' ? 'marcador-derecha' : ''}`.trim() }, cabecera),
+    filaStat('corazon', `aguante-${lado}`, lado === 'jugador' ? 'verde-barra' : ''),
+    filaStat('rayo', `fatiga-${lado}`, 'dorada'),
+  ]);
+}
+
 function construirEsqueleto(pelea) {
   const { jugador, rival } = pelea.snapshot;
 
   const marcador = el('div', { class: 'panel marcador-pelea', dataset: { bloque: 'marcador' } }, [
-    el('div', { class: 'fila marcador-cabecera' }, [
-      el('div', { class: 'marcador-peleador' }, [
-        bandera(jugador.nacionalidad, { ancho: 22 }),
-        el('span', { text: jugador.apodo }),
-      ]),
+    el('div', { class: 'fila marcador-cuerpo' }, [
+      columnaPeleador(jugador, { lado: 'jugador' }),
       el('div', { class: 'marcador-vs etiqueta', text: 'VS' }),
-      el('div', { class: 'marcador-peleador marcador-derecha' }, [
-        el('span', { text: rival.apodo }),
-        bandera(rival.nacionalidad, { ancho: 22 }),
-      ]),
+      columnaPeleador(rival, { lado: 'rival' }),
     ]),
     el('div', { class: 'etiqueta', dataset: { parte: 'round-etiqueta' } }),
-    el('div', { class: 'marcador-barras' }, [
-      el('div', { class: 'fila' }, [
-        filaStat('corazon', 'aguante-jugador', 'verde-barra'),
-        filaStat('rayo', 'fatiga-jugador', 'dorada'),
-      ]),
-      el('div', { class: 'fila' }, [
-        filaStat('corazon', 'aguante-rival', ''),
-        filaStat('rayo', 'fatiga-rival', 'dorada'),
-      ]),
-    ]),
     el('div', { class: 'marcador-jurados' }, [
       el('div', { class: 'etiqueta', text: 'Jurados' }),
       el('div', { class: 'fila', style: 'margin-top:6px' }, [0, 1, 2].map((i) => el('div', {
@@ -257,11 +293,67 @@ function pintarSeguir(accionNodo, { onSeguir = () => {} }) {
   }));
 }
 
-function pintarResultado(accionNodo, { pelea, onFin = () => {} }) {
+// El botón para arrancar la pelea (Task v3, pedido textual: "Debe incluirse
+// un botón que sea para empezar la pelea"): la crónica arranca con un
+// mensaje de espera (mismo módulo `.log` de siempre, sin narrar nada
+// todavía) y el panel de acción con un único botón. Recién al tocarlo el
+// llamador simula el primer round.
+function pintarEmpezar(raiz, accionNodo, { onEmpezar = () => {} }) {
+  const logNodo = raiz.querySelector('[data-parte="log"]');
+  if (logNodo && !logNodo.hasChildNodes()) {
+    logNodo.appendChild(el('p', {
+      class: 'sutil',
+      text: 'Los dos peleadores están en su rincón, esperando la campana.',
+    }));
+  }
+  mount(accionNodo, el('button', {
+    class: 'boton', type: 'button', dataset: { accion: 'empezar-pelea' }, text: 'Empezar pelea', onClick: onEmpezar,
+  }));
+}
+
+// El botón intermedio para ir al rincón (Task v3, pedido textual: "Cuando
+// termina un round, recién ahí uno clickea y ve lo que te dice el
+// entrenador"): apenas termina de narrarse el round, el panel de acción
+// ofrece SOLO este botón — ni las tarjetas de instrucción ni la palabra del
+// entrenador aparecen todavía. Es un paso puramente local (no dispara
+// ningún callback hacia afuera): no hay nada que simular todavía, solo
+// revelar lo que ya se calculó.
+function pintarIrAlRincon(accionNodo, onVerRincon) {
+  mount(accionNodo, el('button', {
+    class: 'boton', type: 'button', dataset: { accion: 'ver-rincon' }, text: 'Ir al rincón', onClick: onVerRincon,
+  }));
+}
+
+function pintarResultado(accionNodo, {
+  pelea, despues = null, onFin = () => {}, onContinuar = () => {},
+}) {
+  if (!despues) {
+    mount(accionNodo, el('div', { class: 'stack' }, [
+      el('div', { class: 'panel' }, [el('p', { class: 'dorado', text: pelea.resultado.texto })]),
+      el('button', {
+        class: 'boton', type: 'button', dataset: { accion: 'fin' }, text: 'Ver qué pasó después', onClick: onFin,
+      }),
+    ]));
+    return;
+  }
+
+  // "Después de la pelea" vive en la MISMA pantalla (Task v3, pedido
+  // textual: "'Después de la pelea' también debe verse en la pantalla de
+  // peleas, NO en una pantalla nueva"): reemplaza el contenido del panel de
+  // acción, nada más — el marcador (con las tarjetas finales de los
+  // jurados) y la crónica siguen montados tal cual quedaron.
   mount(accionNodo, el('div', { class: 'stack' }, [
-    el('div', { class: 'panel' }, [el('p', { class: 'dorado', text: pelea.resultado.texto })]),
+    el('div', { class: 'etiqueta', text: 'Después de la pelea' }),
+    el('div', { class: 'panel' }, [
+      el('p', { class: 'dorado', text: pelea.resultado.texto }),
+      el('p', { style: 'margin-top:6px', text: despues.texto }),
+      despues.deltas?.length ? el('div', { class: 'mods', text: despues.deltas.join(' · ') }) : null,
+      despues.tituloGanado
+        ? el('div', { class: 'chip dorado', style: 'margin-top:8px', text: `🏆 Nuevo campeón: ${despues.tituloGanado}` })
+        : null,
+    ]),
     el('button', {
-      class: 'boton', type: 'button', dataset: { accion: 'fin' }, text: 'Ver consecuencias', onClick: onFin,
+      class: 'boton', type: 'button', dataset: { accion: 'continuar' }, text: 'Continuar', onClick: onContinuar,
     }),
   ]));
 }
@@ -285,8 +377,26 @@ function efectosDeInstruccion(mods) {
   return efectos;
 }
 
-function pintarRincon(accionNodo, { pelea, onInstruccion = () => {} }) {
+// Pinta lo que dice el entrenador — Task v3, pedido textual: "se reemplaza
+// el contenido del módulo que tiene la narración de lo ocurrido y aparece
+// el texto del entrenador". Mismo nodo `.log` de la crónica, no uno nuevo:
+// se limpia y se le pone el estado + el consejo en vez de las líneas del
+// round que se acaban de narrar.
+function pintarConsejoEnCronica(raiz, pelea, estado) {
+  const logNodo = raiz.querySelector('[data-parte="log"]');
+  if (!logNodo) return;
+  clear(logNodo);
+  logNodo.appendChild(el('div', { class: 'rincon-mensaje' }, [
+    el('div', { class: 'etiqueta', text: `Fin del round ${Math.max(pelea.roundActual - 1, 1)} · el rincón` }),
+    el('div', { class: 'etiqueta dorado', style: 'margin-top:4px', text: estado.tarjetasTexto }),
+    el('p', { class: 'medio', style: 'font-style:italic;margin-top:8px', text: `"${estado.consejo}"` }),
+  ]));
+}
+
+function pintarRincon(raiz, accionNodo, { pelea, onInstruccion = () => {} }) {
   const estado = estadoRincon(pelea);
+  pintarConsejoEnCronica(raiz, pelea, estado);
+
   let elegido = false;
   const tarjetas = Object.values(INSTRUCCIONES_RINCON).map((instruccion) => {
     const tarjeta = crearTarjeta({
@@ -302,17 +412,22 @@ function pintarRincon(accionNodo, { pelea, onInstruccion = () => {} }) {
       },
     });
     tarjeta.dataset.instruccion = instruccion.id;
+    if (instruccion.id === estado.recomendada) tarjeta.dataset.recomendada = 'true';
     return tarjeta;
   });
 
+  // Hint de qué elegir (Task v3, pedido textual: "agregar un hint de qué
+  // opción elegir abajo según el entrenador"): una línea debajo de las tres
+  // tarjetas, nombrando la recomendada — no un adorno en cada tarjeta, para
+  // no arriesgar el tamaño fijo de la grilla.
+  const recomendada = INSTRUCCIONES_RINCON[estado.recomendada];
+
   mount(accionNodo, el('div', { class: 'stack' }, [
-    el('div', { class: 'panel' }, [
-      el('div', { class: 'etiqueta', text: `Fin del round ${Math.max(pelea.roundActual - 1, 1)} · el rincón` }),
-      el('div', { class: 'etiqueta', style: 'margin-top:4px', text: estado.tarjetasTexto }),
-      el('p', { class: 'medio', style: 'font-style:italic;margin-top:8px', text: `"${estado.consejo}"` }),
-    ]),
     el('div', { class: 'etiqueta', text: '¿Qué hacés este round?' }),
     el('div', { class: 'panel-decision-grilla' }, tarjetas),
+    recomendada
+      ? el('div', { class: 'etiqueta dorado', dataset: { hint: 'recomendada' }, text: `Tu rincón te tira: "${recomendada.nombre}"` })
+      : null,
   ]));
 }
 
@@ -401,12 +516,19 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
 function pintarAccionResuelta(raiz, accionNodo, props) {
   // El narrador ya terminó (por eso se llegó acá): su limpieza deja de ser
   // necesaria. `pintarGolpe` registra la suya propia si corresponde; los
-  // demás paneles (seguir/rincón/resultado) no manejan timers.
+  // demás paneles (empezar/ir al rincón/rincón/resultado/seguir) no manejan
+  // timers.
   raiz._limpiarAccion = null;
 
   const { pelea } = props;
   if (pelea.terminada) return pintarResultado(accionNodo, props);
-  if (pelea.pendiente === 'rincon') return pintarRincon(accionNodo, props);
+  if (pelea.pendiente === 'inicio') return pintarEmpezar(raiz, accionNodo, props);
+  if (pelea.pendiente === 'rincon') {
+    // El rincón aparece recién cuando el jugador lo pide (Task v3, pedido
+    // textual): un solo click intermedio, puramente local — no dispara
+    // ningún callback hacia `main.js`, solo revela lo que ya está calculado.
+    return pintarIrAlRincon(accionNodo, () => pintarRincon(raiz, accionNodo, props));
+  }
   if (pelea.pendiente === 'golpe') return pintarGolpe(raiz, accionNodo, props);
   return pintarSeguir(accionNodo, props);
 }
@@ -460,10 +582,13 @@ function pintarCronicaYAccion(raiz, props, miGeneracion) {
  * @param {HTMLElement} contenedor
  * @param {{
  *   pelea: object, momentos?: Array,
+ *   onEmpezar?: () => void,
  *   onSeguir?: () => void,
  *   onInstruccion?: (id:string) => void,
  *   onGolpe?: (datos:{zonaElegida:string|null, precision:number, aTiempo:boolean}) => void,
  *   onFin?: () => void,
+ *   despues?: {texto:string, deltas?:string[], tituloGanado?:string|null}|null,
+ *   onContinuar?: () => void,
  *   ventanaMs?: number,
  * }} props
  */

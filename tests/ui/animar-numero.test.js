@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { animarNumero, animarAtributos } from '../../src/ui/components/animar-numero.js';
+import { animarNumero, animarAtributos, destacarAtributos } from '../../src/ui/components/animar-numero.js';
 
 let matchMediaOriginal;
 
@@ -155,6 +155,61 @@ describe('animarAtributos', () => {
     expect(() => animarAtributos(contenedor, { potencia: 0, iq: 4, cardio: -3 })).not.toThrow();
 
     vi.runAllTimers();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+});
+
+// destacarAtributos (v3): reemplaza el flash de TODO el módulo izquierdo
+// (shell.destacar) — al aplicar una tarjeta, solo se resaltan un momento las
+// FILAS que de verdad cambiaron, verde si subieron y rojo si bajaron. No usa
+// timers (el CSS keyframe arranca y termina solo en "sin brillo"), así que
+// no hay nada que cancelar ni que deje temporizadores colgados.
+describe('destacarAtributos', () => {
+  function tile(clave, valorFinal) {
+    const contenedorTile = document.createElement('div');
+    contenedorTile.dataset.atributo = clave;
+    const valor = document.createElement('div');
+    valor.className = 'valor';
+    valor.textContent = String(valorFinal);
+    contenedorTile.appendChild(valor);
+    return contenedorTile;
+  }
+
+  function armarContenedor() {
+    const contenedor = document.createElement('div');
+    contenedor.appendChild(tile('potencia', 65));
+    contenedor.appendChild(tile('cardio', 58));
+    contenedor.appendChild(tile('forma', 72));
+    document.body.appendChild(contenedor);
+    return contenedor;
+  }
+
+  it('resalta en verde la fila que subio y en rojo la que bajo', () => {
+    const contenedor = armarContenedor();
+    destacarAtributos(contenedor, { potencia: 5, cardio: -3 });
+
+    expect(contenedor.querySelector('[data-atributo="potencia"]').classList.contains('destaque-positivo')).toBe(true);
+    expect(contenedor.querySelector('[data-atributo="cardio"]').classList.contains('destaque-negativo')).toBe(true);
+  });
+
+  it('no toca las filas que no cambiaron (delta 0 o ausente)', () => {
+    const contenedor = armarContenedor();
+    destacarAtributos(contenedor, { potencia: 5 });
+
+    const formaNode = contenedor.querySelector('[data-atributo="forma"]');
+    expect(formaNode.classList.contains('destaque-positivo')).toBe(false);
+    expect(formaNode.classList.contains('destaque-negativo')).toBe(false);
+  });
+
+  it('ignora deltas en cero o de atributos que no estan en el contenedor, sin romper', () => {
+    const contenedor = armarContenedor();
+    expect(() => destacarAtributos(contenedor, { potencia: 0, iq: 4, cardio: -3 })).not.toThrow();
+    expect(contenedor.querySelector('[data-atributo="potencia"]').classList.contains('destaque-positivo')).toBe(false);
+  });
+
+  it('no deja timers vivos (es puramente CSS, sin temporizadores)', () => {
+    const contenedor = armarContenedor();
+    destacarAtributos(contenedor, { potencia: 5, cardio: -3 });
     expect(vi.getTimerCount()).toBe(0);
   });
 });

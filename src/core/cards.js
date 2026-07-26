@@ -117,10 +117,24 @@ export function aplicarCarta(jugador, carta) {
 // `texto`, o no tenerlo, y siguen siendo distinguibles por índice). La UI lo
 // usa para el roll con suspenso (animarRoll) en vez de adivinar comparando
 // strings, que falla ~50% de las veces cuando el texto se repite.
+//
+// `efectos` y `caePelea` (Task v3, "cartas nuevas con azar") viven POR RAMA,
+// a diferencia de `opcion.efectos` (que aplica siempre, gane la rama que
+// gane): una carta de riesgo como "puede darte +2 a todo, o puede hacer que
+// se caiga tu pelea y perdés fama" necesita que la fama y la caída de la
+// pelea dependan de CUÁL rama salió, no de la opción entera. `resolverOpcion`
+// (events.js) es quien de verdad los usa; acá solo se los deja pasar tal
+// cual venían en la rama ganadora.
 export function resolverProbabilidad(rng, opcion) {
   const entradas = opcion.probabilidades.map((p) => ({ valor: p, peso: p.peso }));
   const elegida = rng.weighted(entradas);
-  return { resultado: elegida.mods, texto: elegida.texto, indice: opcion.probabilidades.indexOf(elegida) };
+  return {
+    resultado: elegida.mods,
+    texto: elegida.texto,
+    indice: opcion.probabilidades.indexOf(elegida),
+    efectos: elegida.efectos,
+    caePelea: elegida.caePelea ?? false,
+  };
 }
 
 // Convierte los pesos de `opcion.probabilidades` en enteros que suman

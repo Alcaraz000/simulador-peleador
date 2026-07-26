@@ -98,3 +98,26 @@ export function animarAtributos(contenedor, deltas = {}) {
   }
   return controladores;
 }
+
+/**
+ * Resalta un momento SOLO las filas de atributo que cambiaron — verde si
+ * subieron, rojo si bajaron — en vez de todo el módulo (pedido v3: antes
+ * `shell.destacar('izquierda')` hacía brillar TODA la columna izquierda por
+ * cualquier cambio, sin importar cuál atributo se tocó).
+ *
+ * A diferencia de `animarNumero`, esto no usa temporizadores: las clases
+ * `destaque-positivo`/`destaque-negativo` disparan un `@keyframes` (theme.css)
+ * que arranca y termina solo en "sin brillo" — no hace falta sacarlas a mano
+ * ni cancelar nada si el jugador navega a mitad de camino.
+ *
+ * @param {HTMLElement} contenedor - contiene `[data-atributo="clave"]`.
+ * @param {Record<string, number>} deltas - cuánto cambió cada atributo.
+ */
+export function destacarAtributos(contenedor, deltas = {}) {
+  for (const [clave, delta] of Object.entries(deltas)) {
+    if (!delta) continue;
+    const fila = contenedor.querySelector(`[data-atributo="${clave}"]`);
+    if (!fila) continue;
+    fila.classList.add(delta > 0 ? 'destaque-positivo' : 'destaque-negativo');
+  }
+}

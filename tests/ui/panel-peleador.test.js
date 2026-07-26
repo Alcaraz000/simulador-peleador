@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
+import { rankingDelJugador, tablaRanking } from '../../src/core/world.js';
 import { renderPanelPeleador } from '../../src/ui/screens/panel-peleador.js';
 
 function partidaBase({ media = 55 } = {}) {
@@ -85,13 +86,39 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain('Sin clasificar');
   });
 
-  it('despues de la primera pelea, muestra un numero de ranking', () => {
+  // El puesto se calcula EN VIVO (rankingDelJugador, world.js), no leyendo
+  // jugador.ranking: ese campo cacheado se deja deliberadamente "stale" acá
+  // (999, un valor que nunca daría el cálculo real) para probar que el panel
+  // no confía en él.
+  it('despues de la primera pelea, muestra un numero de ranking calculado en vivo', () => {
     const p = partidaBase();
     p.jugador.record = { v: 1, d: 0, e: 0, ko: 1, sub: 0, dec: 0 };
-    p.jugador.ranking = 7;
+    p.jugador.ranking = 999;
     renderPanelPeleador(cont, { partida: p });
     expect(cont.textContent).not.toContain('Sin clasificar');
-    expect(cont.textContent).toContain('#7');
+    expect(cont.textContent).not.toContain('#999');
+    const puestoReal = rankingDelJugador(p.mundo, p.jugador);
+    expect(cont.textContent).toContain(`#${puestoReal}`);
+  });
+
+  // Regresión Fix 2 (cierre de ronda v3, feedback del usuario: el ranking del
+  // panel y el de la tabla podían no coincidir). `jugador.ranking` se
+  // recalculaba una sola vez por bloque (avanzarBloque, career.js) mientras
+  // que el popup de tablaRanking recalculaba en vivo cada vez que se abría:
+  // si algo cambiaba la media del jugador a mitad de bloque (una carta, el
+  // campamento), el "#N" del panel quedaba viejo. Ahora ambos salen de la
+  // MISMA función (rankingDelJugador) con el mismo mundo/jugador, así que
+  // nunca pueden discrepar — se prueba forzando un jugador.ranking cacheado
+  // bien distinto del puesto real.
+  it('el ranking del panel coincide siempre con el puesto del jugador en tablaRanking', () => {
+    const p = partidaBase();
+    p.jugador.record = { v: 3, d: 1, e: 0, ko: 2, sub: 0, dec: 0 };
+    p.jugador.atributos.potencia = Math.min(99, p.jugador.atributos.potencia + 15);
+    p.jugador.ranking = 1; // deliberadamente stale, no el puesto real
+
+    renderPanelPeleador(cont, { partida: p });
+    const filaJugador = tablaRanking(p.mundo, p.jugador).find((f) => f.esJugador);
+    expect(cont.textContent).toContain(`#${filaJugador.ranking}`);
   });
 
   it('dice "Dinero", nunca "Plata"', () => {
@@ -156,6 +183,54 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain(p.jugador.gimnasio);
   });
 
+  // Diagnóstico del coordinador: las tarjetas modifican mentón/disciplina
+  // personal (jugador.especiales) y forma/moral (jugador.estado) igual que a
+  // los atributos de combate, pero ninguno de los cuatro aparecía en ningún
+  // lado del tablero — el jugador leía "+10 Forma" en una tarjeta sin poder
+  // verificarlo nunca. Fatiga y lesión quedan afuera a propósito (ya se
+  // muestran en panel-avance.js).
+  describe('seccion de estado (mentón, disciplina, forma, moral)', () => {
+    it('muestra mentón, disciplina personal, forma y moral con sus valores', () => {
+      const p = partidaBase();
+      p.jugador.especiales = { disciplinaPersonal: 47, menton: 63 };
+      p.jugador.estado = { ...p.jugador.estado, forma: 72, moral: 55 };
+      renderPanelPeleador(cont, { partida: p });
+
+      const filaMenton = cont.querySelector('[data-atributo="menton"]');
+      const filaDisciplina = cont.querySelector('[data-atributo="disciplinaPersonal"]');
+      const filaForma = cont.querySelector('[data-atributo="forma"]');
+      const filaMoral = cont.querySelector('[data-atributo="moral"]');
+
+      expect(filaMenton.querySelector('.valor').textContent).toBe('63');
+      expect(filaDisciplina.querySelector('.valor').textContent).toBe('47');
+      expect(filaForma.querySelector('.valor').textContent).toBe('72');
+      expect(filaMoral.querySelector('.valor').textContent).toBe('55');
+    });
+
+    it('no muestra fatiga ni lesion en la seccion de estado (ya viven en otro lado del tablero)', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.querySelector('[data-atributo="fatiga"]')).toBeNull();
+      expect(cont.querySelector('[data-atributo="lesion"]')).toBeNull();
+    });
+
+    it('las filas de estado no llevan el badge de aporte del entrenador (eso es solo de los 6 de combate)', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      const filaForma = cont.querySelector('[data-atributo="forma"]');
+      expect(filaForma.classList.contains('con-aporte')).toBe(false);
+      expect(filaForma.querySelector('.aporte-entrenador')).toBeNull();
+    });
+  });
+
+  it('"aporte del entrenador" se muestra como una etiqueta chica, no como un titulo', () => {
+    const p = partidaBase();
+    renderPanelPeleador(cont, { partida: p });
+    const tag = cont.querySelector('.panel-peleador-aporte-etiqueta');
+    expect(tag).toBeTruthy();
+    expect(tag.textContent).toContain('aporte del entrenador');
+  });
+
   it('dispara los callbacks de ficha, tienda e historial', () => {
     const p = partidaBase();
     let ficha = 0; let tienda = 0; let historial = 0;
@@ -171,5 +246,22 @@ describe('renderPanelPeleador', () => {
     expect(ficha).toBe(1);
     expect(tienda).toBe(1);
     expect(historial).toBe(1);
+  });
+
+  // Feedback del usuario: "ranking aparece, pero no puedo ver quiénes están
+  // por encima o por debajo de mí" — el botón vive DENTRO del bloque de
+  // récord/ranking (que ya es clickeable entero hacia el historial), así que
+  // tiene que disparar SU callback propio sin activar también onHistorial.
+  it('el botón "ver ranking" dispara onVerRanking, sin disparar también onHistorial', () => {
+    const p = partidaBase();
+    let ranking = 0; let historial = 0;
+    renderPanelPeleador(cont, {
+      partida: p,
+      onVerRanking: () => { ranking += 1; },
+      onHistorial: () => { historial += 1; },
+    });
+    cont.querySelector('[data-accion="ver-ranking"]').click();
+    expect(ranking).toBe(1);
+    expect(historial).toBe(0);
   });
 });

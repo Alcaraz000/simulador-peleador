@@ -79,12 +79,34 @@ function revisarTodo(cont, etiqueta) {
 
 // --- Autoplayer de la UI real (mismo patrón que tests/ui/tablero-persistente,
 // copiado acá porque ese helper no se exporta) ---------------------------
-function jugarPeleaCompleta(cont) {
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// dispara la pelea en el acto — arranca un campamento de 2-3 beats más
+// DENTRO del tablero (mismos selectores de sparring/decisión de acá abajo,
+// nada especial) y recién el ÚLTIMO beat del campamento dispara careo → plan
+// → pelea. `hayPantallaDePelea` detecta ese momento (con o sin careo, según
+// el nivel) y `jugarDesdeCareo` lo atraviesa hasta volver al tablero.
+function hayPantallaDePelea(cont) {
+  return Boolean(
+    cont.querySelector('[data-tono]')
+    || cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]')
+    || cont.querySelector('[data-accion="empezar-pelea"]')
+    || cont.querySelector('[data-bloque="accion"]'),
+  );
+}
+
+// La negociación arranca apenas se acepta la oferta (sin cambios: sigue
+// siendo pantalla completa, antes del campamento). 'cerrar' es SIEMPRE 0%
+// riesgo (negotiation.js) así que un solo click alcanza. Al cerrarla, ahora
+// main.js firma la pelea (campamento.js) y vuelve al tablero en vez de ir
+// directo a careo.
+function resolverNegociacion(cont) {
   const cerrar = cont.querySelector('[data-movida="cerrar"]');
   if (cerrar) cerrar.click();
   const seguirNegociacion = cont.querySelector('[data-accion="seguir"]');
   if (seguirNegociacion) seguirNegociacion.click();
+}
 
+function jugarDesdeCareo(cont) {
   let guardia = 0;
   while (cont.querySelector('[data-tono]') && guardia < 10) {
     guardia += 1;
@@ -96,6 +118,11 @@ function jugarPeleaCompleta(cont) {
   const plan = cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]');
   if (plan) plan.click();
 
+  // Task v3, pedido textual: la pelea ya no arranca sola — hay que darle al
+  // botón de empezar antes de que se simule el primer round.
+  const empezarPelea = cont.querySelector('[data-accion="empezar-pelea"]');
+  if (empezarPelea) empezarPelea.click();
+
   guardia = 0;
   while (!cont.querySelector('[data-accion="fin"]') && guardia < 60) {
     guardia += 1;
@@ -104,6 +131,11 @@ function jugarPeleaCompleta(cont) {
 
     const seguirRound = accionNodo.querySelector('[data-accion="seguir"]');
     if (seguirRound) { seguirRound.click(); continue; }
+
+    // Task v3, pedido textual: el rincón aparece recién cuando el jugador
+    // lo pide — hay un click intermedio antes de que salgan las tarjetas.
+    const verRincon = accionNodo.querySelector('[data-accion="ver-rincon"]');
+    if (verRincon) { verRincon.click(); continue; }
 
     const instruccion = accionNodo.querySelector('.tarjeta[data-instruccion]');
     if (instruccion) { instruccion.click(); continue; }
@@ -125,6 +157,8 @@ function jugarPeleaCompleta(cont) {
 }
 
 function resolverUnPaso(cont, { aceptarOfertas }) {
+  if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
+
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
   if (botonIdle) botonIdle.click();
 
@@ -147,7 +181,10 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
     return 'sparring';
   }
 
-  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta');
+  // Con exactamente 2 opciones, la decisión usa `.panel-decision-grilla-2`
+  // en vez de la de 3 columnas de siempre (fix v3: no dejar una tercera
+  // columna vacía) — hay que buscar en ambas.
+  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta');
   if (tarjetaDecision) {
     tarjetaDecision.click();
     vi.runAllTimers();
@@ -164,8 +201,8 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
   if (aceptar || rechazar) {
     if (aceptarOfertas) {
       aceptar.click();
-      jugarPeleaCompleta(cont);
-      return 'pelea';
+      resolverNegociacion(cont);
+      return 'oferta-firmada';
     }
     rechazar.click();
     const seguirDesenlace = cont.querySelector('.panel-decision-desenlace .boton');
@@ -279,7 +316,7 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
     expect(anomalias).toEqual([]);
   });
 
-  it('carrera con estilo mentón de hierro, visita la ficha y la tienda a mitad de camino, revisa estadísticas al final', () => {
+  it('carrera con estilo mentón de hierro, visita la ficha y la tienda a mitad de camino, revisa el legado con estadisticas al final', () => {
     document.body.innerHTML = '<div id="app"></div>';
     cont = document.getElementById('app');
     const dateNowOriginal = Date.now;
@@ -298,11 +335,15 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
 
       // Abre la tienda (popup) y la cierra sin comprar nada (fondos casi
       // siempre insuficientes al arranque; alcanza con que abra/cierre limpio).
+      // El popup (abrirPopup, popup.js) se appendea a document.body, NO
+      // adentro de `cont`: hay que buscar el botón de cerrar en `document`,
+      // si no, el popup queda abierto (con su listener global de Escape
+      // colgado) sin que nadie lo note en un test de una sola carrera.
       const botonTienda = cont.querySelector('[data-accion="tienda"]');
       if (botonTienda) {
         botonTienda.click();
         revisarTodo(cont, 'tienda');
-        const cerrarPopup = cont.querySelector('.popup-cerrar');
+        const cerrarPopup = document.querySelector('.popup-cerrar');
         if (cerrarPopup) cerrarPopup.click();
       }
 
@@ -318,14 +359,9 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
       }
       expect(cont.querySelector('[data-accion="nueva"]')).toBeTruthy();
 
-      // Fin de carrera: ver estadísticas y volver.
-      const botonEstadisticas = cont.querySelector('[data-accion="estadisticas"]');
-      if (botonEstadisticas) {
-        botonEstadisticas.click();
-        revisarTodo(cont, 'estadisticas');
-        const volver = cont.querySelector('[data-accion="cerrar"]');
-        if (volver) volver.click();
-      }
+      // Fin de carrera: las estadísticas ya están en la propia pantalla de
+      // legado (Task v3, pedido textual: no quedan detrás de un botón).
+      revisarTodo(cont, 'legado-1004');
     } finally {
       Date.now = dateNowOriginal;
     }

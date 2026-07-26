@@ -247,6 +247,33 @@ describe('resolverProbabilidad', () => {
     expect(vistoIndice0).toBe(true);
     expect(vistoIndice1).toBe(true);
   });
+
+  // Task v3 ("cartas nuevas con azar"): además de `mods`, una rama puede traer
+  // su propio `efectos` (dinero/fama, distinto por rama — "aceptar puede +2
+  // atributos, o - fama") y `caePelea` (la consecuencia "se te cae la pelea"
+  // tiene que ser real, no solo texto — ver cancelarProximaPelea en career.js
+  // y resolverOpcion en events.js, que son quienes de verdad usan esto).
+  it('propaga el efectos de la rama ganadora (undefined si esa rama no trae)', () => {
+    const conEfectos = {
+      probabilidades: [
+        { peso: 1, mods: {}, texto: 'bien', efectos: { fama: -6 } },
+        { peso: 0, mods: {}, texto: 'mal' },
+      ],
+    };
+    const paso = resolverProbabilidad(createRng(1), conEfectos);
+    expect(paso.efectos).toEqual({ fama: -6 });
+  });
+
+  it('propaga caePelea de la rama ganadora; por defecto es false si la rama no lo declara', () => {
+    const conCaePelea = {
+      probabilidades: [
+        { peso: 0, mods: {}, texto: 'bien' },
+        { peso: 1, mods: {}, texto: 'mal', caePelea: true },
+      ],
+    };
+    expect(resolverProbabilidad(createRng(1), conCaePelea).caePelea).toBe(true);
+    expect(resolverProbabilidad(createRng(1), opcion).caePelea).toBe(false);
+  });
 });
 
 describe('porcentajesDe', () => {

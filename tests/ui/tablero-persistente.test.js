@@ -65,7 +65,26 @@ function prepararStorage(partida) {
 // rechazo, que viven dentro del tablero). `detenerEnOferta` para en seco
 // apenas aparece la tarjeta de la oferta, SIN clickear aceptar/rechazar —
 // para que el test pueda inspeccionarla tal cual se le muestra al jugador.
+//
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// dispara la pelea en el acto. Ahora arranca el campamento (2-3 beats más,
+// DENTRO del tablero — mismos selectores genéricos de sparring/decisión de
+// acá abajo, así que no hace falta un caso especial) y recién el ÚLTIMO beat
+// del campamento dispara careo → plan → pelea. `hayPantallaDePelea` detecta
+// ese momento (llegue como llegue: con o sin careo, según el nivel) y
+// `jugarDesdeCareo` lo atraviesa hasta volver al tablero.
+function hayPantallaDePelea(cont) {
+  return Boolean(
+    cont.querySelector('[data-tono]')
+    || cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]')
+    || cont.querySelector('[data-accion="empezar-pelea"]')
+    || cont.querySelector('[data-bloque="accion"]'),
+  );
+}
+
 function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
+  if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
+
   const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
   if (botonIdle) botonIdle.click();
 
@@ -91,7 +110,10 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
     return 'sparring';
   }
 
-  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta');
+  // Con exactamente 2 opciones, la decisión usa `.panel-decision-grilla-2`
+  // en vez de la de 3 columnas de siempre (fix v3: no dejar una tercera
+  // columna vacía) — hay que buscar en ambas.
+  const tarjetaDecision = cont.querySelector('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta');
   if (tarjetaDecision) {
     tarjetaDecision.click();
     vi.runAllTimers();
@@ -115,8 +137,8 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
     if (detenerEnOferta) return 'oferta';
     if (aceptarOfertas) {
       aceptar.click();
-      jugarPeleaCompleta(cont);
-      return 'pelea';
+      resolverNegociacion(cont);
+      return 'oferta-firmada';
     }
     rechazar.click();
     const seguirDesenlace = cont.querySelector('.panel-decision-desenlace .boton');
@@ -131,17 +153,23 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
   return null;
 }
 
-// Juega la previa (negociación + careo opcional + plan) y la pelea entera
-// hasta volver al tablero. 'cerrar' en la negociación es SIEMPRE 0% riesgo
-// (negotiation.js) así que un solo click alcanza. El careo (3 rondas fijas)
-// solo aparece en pelea de título o con fama >= 20 — con el jugador recién
-// creado casi nunca, pero el loop lo maneja igual si aparece.
-function jugarPeleaCompleta(cont) {
+// La negociación arranca apenas se acepta la oferta (sin cambios: sigue
+// siendo pantalla completa, antes del campamento). 'cerrar' es SIEMPRE 0%
+// riesgo (negotiation.js) así que un solo click alcanza. Al cerrarla, ahora
+// `main.js` firma la pelea (campamento.js) y vuelve al tablero en vez de ir
+// directo a careo — por eso esta función YA NO sigue de largo hasta la
+// pelea: eso le toca al campamento, beat a beat, como cualquier otro.
+function resolverNegociacion(cont) {
   const cerrar = cont.querySelector('[data-movida="cerrar"]');
   if (cerrar) cerrar.click();
   const seguirNegociacion = cont.querySelector('[data-accion="seguir"]');
   if (seguirNegociacion) seguirNegociacion.click();
+}
 
+// Atraviesa careo (3 rondas fijas, si el nivel de la pelea lo trae — Task
+// v3: ya no depende de la fama, solo se lo salta en juvenil/amateur) → plan
+// → la pelea entera, hasta volver al tablero.
+function jugarDesdeCareo(cont) {
   let guardia = 0;
   while (cont.querySelector('[data-tono]') && guardia < 10) {
     guardia += 1;
@@ -153,6 +181,11 @@ function jugarPeleaCompleta(cont) {
   const plan = cont.querySelector('.panel-decision-grilla .tarjeta[data-plan]');
   if (plan) plan.click();
 
+  // Task v3, pedido textual: la pelea ya no arranca sola — hay que darle al
+  // botón de empezar antes de que se simule el primer round.
+  const empezarPelea = cont.querySelector('[data-accion="empezar-pelea"]');
+  if (empezarPelea) empezarPelea.click();
+
   guardia = 0;
   while (!cont.querySelector('[data-accion="fin"]') && guardia < 60) {
     guardia += 1;
@@ -161,6 +194,11 @@ function jugarPeleaCompleta(cont) {
 
     const seguirRound = accionNodo.querySelector('[data-accion="seguir"]');
     if (seguirRound) { seguirRound.click(); continue; }
+
+    // Task v3, pedido textual: el rincón aparece recién cuando el jugador
+    // lo pide — hay un click intermedio antes de que salgan las tarjetas.
+    const verRincon = accionNodo.querySelector('[data-accion="ver-rincon"]');
+    if (verRincon) { verRincon.click(); continue; }
 
     const instruccion = accionNodo.querySelector('.tarjeta[data-instruccion]');
     if (instruccion) { instruccion.click(); continue; }
@@ -179,6 +217,23 @@ function jugarPeleaCompleta(cont) {
 
   const continuarResultado = cont.querySelector('[data-accion="continuar"]');
   if (continuarResultado) continuarResultado.click();
+}
+
+// Camino directo (sin el loop de resolverUnPaso) para los tests que quieren
+// aceptar y llegar derecho al resultado de la pelea: negociación, TODO el
+// campamento (2-3 beats, aceptando la primera opción/terminando el sparring
+// en cada uno) y recién ahí careo/plan/pelea.
+function jugarPeleaCompleta(cont) {
+  resolverNegociacion(cont);
+
+  let guardia = 0;
+  while (!hayPantallaDePelea(cont) && guardia < 10) {
+    guardia += 1;
+    const tipo = resolverUnPaso(cont, { aceptarOfertas: true, detenerEnOferta: false });
+    if (tipo === null || tipo === 'pelea') break;
+  }
+
+  jugarDesdeCareo(cont);
 }
 
 let cont;
@@ -344,6 +399,88 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
       expect(cont.querySelector('[data-accion="nueva"]')).toBeTruthy();
     }
+  });
+
+  // Bug reportado por el usuario: "cuando terminé una pelea, en la pantalla
+  // principal seguía apareciendo un peleador aunque no haya elegido ni
+  // confirmado ninguno todavía". Causa: `partida.proximaPelea` se guarda al
+  // armar la cola del bloque (armarCola, career.js) pero nunca se limpiaba
+  // al pelear ni al rechazar la oferta — quedaba fantasma en el panel de la
+  // derecha hasta que el bloque siguiente lo pisaba con una oferta nueva (o
+  // con null si no había).
+  describe('el panel de próxima pelea no queda fantasma después de resolverla (bug reportado)', () => {
+    it('después de pelear (ganar o perder), el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+
+      // El panel de la derecha ya muestra al rival ANTES de aceptar (se arma
+      // junto con la cola del bloque, ver proximaPelea en career.js).
+      const textoAntes = cont.querySelector('.shell-derecha').textContent;
+      expect(textoAntes).not.toContain('Todavía no hay nada firmado');
+
+      cont.querySelector('.shell-centro [data-accion="aceptar"]').click();
+      jugarPeleaCompleta(cont);
+
+      // De vuelta en el tablero: la pelea ya se peleó, no hay ninguna otra
+      // firmada todavía (recién se decide en el próximo bloque).
+      expect(cont.querySelector('.shell')).toBeTruthy();
+      const textoDespues = cont.querySelector('.shell-derecha').textContent;
+      expect(textoDespues).toContain('Todavía no hay nada firmado');
+    });
+
+    it('después de rechazar una oferta, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+      expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+
+      cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
+
+      expect(cont.querySelector('.shell')).toBeTruthy();
+      expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
+    });
+  });
+
+  // Feedback textual del usuario: "Ranking aparece, pero no puedo ver
+  // quiénes están por encima o por debajo de mí (y debe coincidir con los
+  // peleadores a los que me enfrente)". Verifica de punta a punta, por la UI
+  // real: el botón del bloque de récord/ranking abre la tabla, y el rival
+  // que después ofrece el juego ya figuraba ahí con el mismo apodo.
+  describe('el bloque de récord/ranking abre la tabla de posiciones (bug reportado)', () => {
+    it('la tabla se abre como popup, con el jugador destacado, y es coherente con el rival que ofrece la próxima pelea', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
+
+      const apodoRival = cont.querySelector('.shell-derecha').textContent.match(/"([^"]+)"/)[1];
+
+      cont.querySelector('.shell-izquierda [data-accion="ver-ranking"]').click();
+
+      const popup = document.querySelector('.popup-overlay');
+      expect(popup).toBeTruthy();
+      expect(popup.textContent).toContain('Ranking');
+      expect(popup.textContent).toContain(apodoRival);
+      expect(document.querySelectorAll('.tabla-ranking-fila-jugador')).toHaveLength(1);
+    });
   });
 
   it('una partida v1 guardada (sin semanaGlobal/apellido/entrenador) no rompe: arranca una carrera nueva', () => {

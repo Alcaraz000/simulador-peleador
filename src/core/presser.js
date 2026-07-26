@@ -1,5 +1,5 @@
 import { clamp } from './stats.js';
-import { PREGUNTAS_CAREO } from '../content/cards-presser.js';
+import { PREGUNTAS_CAREO, NARRACION_CAREO } from '../content/cards-presser.js';
 
 export const TONOS = {
   provocador: { id: 'provocador', nombre: 'Provocador', pistaEfecto: '+ HYPE · riesgo: lo agranda' },
@@ -34,6 +34,10 @@ export function crearCareo(rng, { oferta, rondas = 3 }) {
     rondas,
     preguntas: rng.shuffle(PREGUNTAS_CAREO).slice(0, rondas),
     terminado: false,
+    // Qué se dijo en cada ronda y qué pasó (Task v3, pedido textual: "al
+    // terminar el careo, mostrar un resumen de las respuestas y qué
+    // consecuencias tuvo"). Se va completando en cada `responderCareo`.
+    historial: [],
   };
 }
 
@@ -44,9 +48,16 @@ const EFECTOS_TONO = {
   canchero: { hype: 7, ventaja: 2 },
 };
 
+function rellenar(plantilla, datos) {
+  return plantilla.replace(/\{(\w+)\}/g, (_, clave) => String(datos[clave] ?? ''));
+}
+
 export function responderCareo(careo, tonoId, rng) {
   if (!TONOS[tonoId]) throw new Error(`Tono desconocido: ${tonoId}`);
   if (careo.terminado) return { careo, evento: null };
+
+  const pregunta = careo.preguntas[careo.ronda - 1];
+  const respuesta = pregunta.respuestas.find((r) => r.tono === tonoId) ?? null;
 
   const base = EFECTOS_TONO[tonoId];
   let hypeDelta = base.hype + rng.int(-2, 2);
@@ -55,21 +66,30 @@ export function responderCareo(careo, tonoId, rng) {
   if (tonoId === careo.tell.incomoda) ventajaDelta += 14;
   if (tonoId === careo.tell.agranda) ventajaDelta -= 16;
 
+  const categoria = ventajaDelta > 8 ? 'incomoda' : ventajaDelta < 0 ? 'agranda' : 'neutral';
+  const texto = rellenar(rng.pick(NARRACION_CAREO[categoria]), { rival: careo.rivalApodo });
+  const evento = { texto, hypeDelta, ventajaDelta };
+
+  const entrada = {
+    ronda: careo.ronda,
+    preguntaId: pregunta.id,
+    hablante: pregunta.hablante,
+    preguntaTexto: pregunta.texto,
+    tono: tonoId,
+    respuestaTexto: respuesta ? respuesta.texto : '',
+    evento,
+  };
+
   const nuevo = {
     ...careo,
     hype: clamp(careo.hype + hypeDelta, 0, 100),
     ventajaMental: clamp(careo.ventajaMental + ventajaDelta, -100, 100),
     ronda: careo.ronda + 1,
+    historial: [...careo.historial, entrada],
   };
   nuevo.terminado = nuevo.ronda > careo.rondas;
 
-  const texto = ventajaDelta > 8
-    ? `${careo.rivalApodo} se queda sin respuesta. Le pegaste donde duele.`
-    : ventajaDelta < 0
-      ? `${careo.rivalApodo} se agranda con eso. La sala explota a su favor.`
-      : 'La sala murmura. Nadie se llevó la ronda.';
-
-  return { careo: nuevo, evento: { texto, hypeDelta, ventajaDelta } };
+  return { careo: nuevo, evento };
 }
 
 export function resultadoCareo(careo) {

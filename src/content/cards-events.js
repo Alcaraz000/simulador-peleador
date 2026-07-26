@@ -179,4 +179,113 @@ export const CARTAS_EVENTO = [
       { id: 'cauteloso', texto: 'Aceptar, pero cuidándote.', efectos: { dinero: 80000, fama: 10 }, mods: { moral: 6, forma: 4 } },
     ],
   },
+
+  // Cartas de riesgo (Task v3, "cartas nuevas con azar"): el pedido textual del
+  // usuario nombraba tres ejemplos ("sustancia sospechosa", "guantes pesados",
+  // "entrenamiento pesado") aclarando que son solo ejemplos para reescribir con
+  // la misma mugre — de ahí salen 'guantes_truchos', 'sustancia_de_ramon' y
+  // 'entrenamiento_pesado' de acá abajo, más el resto sumado con el mismo
+  // patrón: una opción seria/seca que NO HACE NADA (ni un solo mod: el pedido
+  // es explícito — "rechazar no hace nada", para que la otra rama sea de
+  // verdad tentadora) contra una de riesgo con `probabilidades`. Antes de esta
+  // task las únicas tres cartas con azar de todo el juego (dopaje/chantaje/
+  // entrenador, arriba) tenían `etapas: PRO`: un jugador podía terminar la
+  // carrera entera sin ver un solo roll con suspenso si nunca llegaba a
+  // profesional o se quedaba poco tiempo ahí. Estas aparecen desde juvenil.
+  //
+  // `caePelea: true` (guantes_truchos, sustancia_de_ramon, plata_facil_del_representante)
+  // es la única forma real de "se te cae la pelea": lo consume main.js
+  // (ver `caePelea` en events.js/cards.js) para de verdad sacar la oferta
+  // pendiente de la cola vía `cancelarProximaPelea` (career.js) — no es un
+  // efecto de humo que el texto promete y el juego ignora.
+  {
+    id: 'guantes_truchos', categoria: 'evento', titulo: 'Los guantes que te prestó "el Colorado"', etapas: SIEMPRE, rareza: 'rara',
+    texto: 'Un boxeador veterano del gimnasio te desliza un par de guantes "especiales" antes de la pesada: jura que el relleno está limado justo lo justo. Nadie está mirando.',
+    opciones: [
+      { id: 'aceptar', texto: 'Calzártelos y no preguntar nada.', probabilidades: [
+        { peso: 75, mods: { potencia: 5 }, texto: 'Pegás distinto. Nadie sospecha nada — todavía.' },
+        { peso: 25, mods: {}, efectos: { fama: -10 }, caePelea: true, texto: 'Un veedor de la comisión mete la mano en la bolsa antes de la pesada. Circo mediático: te bajan de la cartelera.' },
+      ] },
+      { id: 'rechazar', texto: 'Devolvérselos y calzarte los tuyos de siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'sustancia_de_ramon', categoria: 'vida', titulo: 'Lo que te ofreció Ramón en el vestuario', etapas: ['amateur', 'profesional', 'veterano'], rareza: 'rara',
+    texto: 'Ramón, tu amigo de toda la vida, te pasa un frasco sin etiqueta. "A mí me cambió la vida", te dice, y ya te lo está poniendo en la mano.',
+    opciones: [
+      { id: 'aceptar', texto: 'Confiar en Ramón y probarlo.', probabilidades: [
+        { peso: 50, mods: {
+          potencia: 2, velocidad: 2, tecnica: 2, defensa: 2, cardio: 2, iq: 2,
+        }, texto: 'El cuerpo responde distinto. Te sentís otro peleador — literal.' },
+        { peso: 50, mods: {}, efectos: { fama: -15 }, caePelea: true, texto: 'Control antidopaje sorpresa. La noticia explota antes de que puedas explicar nada: se cae la pelea y tu nombre queda flotando en el escándalo.' },
+      ] },
+      { id: 'rechazar', texto: 'Devolverle el frasco sin abrirlo.', mods: {} },
+    ],
+  },
+  {
+    id: 'entrenamiento_pesado', categoria: 'evento', titulo: 'Una hora más, todos los días', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'Don Pepe te mira los cuadernos de carga y niega con la cabeza: "esto necesita más". Te propone sumar una hora extra hasta la próxima pelea, sin faltar un solo día.',
+    opciones: [
+      { id: 'aceptar', texto: 'Sumar la hora extra.', probabilidades: [
+        { peso: 75, mods: { cardio: 5, velocidad: 5 }, texto: 'El cuerpo aguanta. Terminás cada sesión con más aire del que entraste.' },
+        { peso: 25, mods: { cardio: -5, potencia: -5 }, texto: 'Te pasaste de rosca: el cuerpo no llegó a asimilar nada y quedaste peor que antes.' },
+      ] },
+      { id: 'rechazar', texto: 'Seguir con la carga de siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'desafio_de_la_vereda', categoria: 'vida', titulo: 'Te desafían en la vereda', etapas: JOVEN, rareza: 'normal',
+    texto: 'Un pibe más grande te empuja frente a todos, sin guantes ni árbitro: "dale, a ver si sabés pelear de verdad".',
+    opciones: [
+      { id: 'aceptar', texto: 'Plantarte y no retroceder.', probabilidades: [
+        { peso: 60, mods: { menton: 3, disciplinaPersonal: 2 }, texto: 'Le plantás cara y no te movés un paso. El barrio entero se entera.' },
+        { peso: 40, mods: { forma: -12 }, texto: 'Te agarró de sorpresa y te dejó marcado. Volvés a tu casa con la cara hinchada y la lección aprendida.' },
+      ] },
+      { id: 'rechazar', texto: 'Dar media vuelta e irte.', mods: {} },
+    ],
+  },
+  {
+    id: 'apuesta_del_bar', categoria: 'vida', titulo: 'La apuesta en el bar de la esquina', etapas: ['amateur', 'profesional', 'veterano'], rareza: 'normal',
+    texto: 'Un cliente engolosinado te reta delante de todos: "poné plata a que ganás por nocaut, y yo la doblo".',
+    opciones: [
+      { id: 'aceptar', texto: 'Poner la plata sobre la mesa.', probabilidades: [
+        { peso: 55, mods: {}, efectos: { dinero: 18000, fama: 3 }, texto: 'El tipo paga sin chistar, medio verde, delante de todo el bar.' },
+        { peso: 45, mods: {}, efectos: { dinero: -9000 }, texto: '"Era en joda, loco", te dice cuando le pedís la plata. No hay forma de cobrar.' },
+      ] },
+      { id: 'rechazar', texto: 'Guardarte la apuesta para el ring, no para el bar.', mods: {} },
+    ],
+  },
+  {
+    id: 'terapia_alternativa', categoria: 'vida', titulo: 'El curandero de la esquina', etapas: ['profesional', 'veterano'], rareza: 'normal',
+    texto: 'Te recomiendan a un "especialista" que cura contracturas con manteca de culebra y rezos. Cobra caro y promete milagros justo antes de la pelea.',
+    opciones: [
+      { id: 'aceptar', texto: 'Pagar la consulta y confiar.', probabilidades: [
+        { peso: 50, mods: { forma: 12, fatiga: -10 }, efectos: { dinero: -6000 }, texto: 'Extrañamente, funciona: llegás liviano y sin un solo dolor.' },
+        { peso: 50, mods: { forma: -10 }, efectos: { dinero: -6000 }, texto: 'Te deja peor: dos días sin poder mover el cuello y la plata ya voló.' },
+      ] },
+      { id: 'rechazar', texto: 'Confiar en el kinesiólogo de siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'plata_facil_del_representante', categoria: 'evento', titulo: 'El representante que apareció de la nada', etapas: ['amateur', 'profesional', 'veterano'], rareza: 'rara',
+    texto: 'Un representante que nadie conoce te promete manejarte la carrera y te pone un adelanto en efectivo en la mano, ahí nomás, para que firmes ya.',
+    opciones: [
+      { id: 'aceptar', texto: 'Firmar y guardarte la plata.', probabilidades: [
+        { peso: 60, mods: {}, efectos: { dinero: 35000, fama: 3 }, texto: 'El tipo cumple. La plata está limpia y el contrato, decente.' },
+        { peso: 40, mods: {}, efectos: { dinero: -15000 }, caePelea: true, texto: 'Era un buscavidas: la comisión mete la lupa en un contrato trucho y la próxima pelea se cae mientras se aclara todo.' },
+      ] },
+      { id: 'rechazar', texto: 'Seguir manejándote solo, como hasta ahora.', mods: {} },
+    ],
+  },
+  {
+    id: 'dato_del_ex_sparring', categoria: 'evento', titulo: 'El dato que te vendieron sobre el rival', etapas: ['profesional', 'veterano'], rareza: 'normal',
+    texto: 'Un ex sparring de tu próximo rival se te acerca antes de la pelea: dice que sabe exactamente dónde tiene floja la guardia, y lo vende barato.',
+    opciones: [
+      { id: 'aceptar', texto: 'Pagar por el dato.', probabilidades: [
+        { peso: 65, mods: { iq: 5, tecnica: 3 }, efectos: { dinero: -4000 }, texto: 'El dato es real: estudiás el video mil veces y encontrás el hueco.' },
+        { peso: 35, mods: {}, efectos: { dinero: -4000 }, texto: 'Era humo. Perdiste la plata y el tiempo mirando un video que no sirve para nada.' },
+      ] },
+      { id: 'rechazar', texto: 'Confiar en el trabajo de siempre con Don Pepe.', mods: {} },
+    ],
+  },
 ];

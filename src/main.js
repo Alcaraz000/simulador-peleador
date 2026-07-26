@@ -1,5 +1,8 @@
 import { createRng } from './core/rng.js';
-import { crearPartida, siguienteBeat } from './core/career.js';
+import {
+  crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea,
+} from './core/career.js';
+import { tablaRanking } from './core/world.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
@@ -19,7 +22,6 @@ import { el, fmtDinero } from './ui/dom.js';
 
 import { renderLogin } from './ui/screens/login.js';
 import { renderCreacion } from './ui/screens/create.js';
-import { renderResultadoTarjeta } from './ui/screens/card.js';
 import { renderTienda } from './ui/screens/shop.js';
 import { renderCareo } from './ui/screens/presser.js';
 import { renderSparring } from './ui/screens/sparring.js';
@@ -27,7 +29,6 @@ import { renderNegociacion } from './ui/screens/negotiation.js';
 import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
-import { renderEstadisticas } from './ui/screens/stats.js';
 
 import { crearShell } from './ui/shell.js';
 import { renderPanelPeleador } from './ui/screens/panel-peleador.js';
@@ -36,8 +37,10 @@ import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
 import { renderPanelAvance } from './ui/screens/panel-avance.js';
 import { renderCalendario } from './ui/screens/panel-calendario.js';
+import { renderRanking } from './ui/screens/ranking.js';
 import { animarRoll } from './ui/components/roll.js';
-import { animarAtributos } from './ui/components/animar-numero.js';
+import { animarAtributos, destacarAtributos } from './ui/components/animar-numero.js';
+import { animarDado } from './ui/components/dado.js';
 import { icono } from './ui/icons.js';
 
 export const VERSION = '0.1.0';
@@ -60,8 +63,12 @@ function efectosDeMods(mods = {}) {
 
 // Para una rama de azar (varios mods juntos bajo un mismo porcentaje), el
 // signo de la píldora se decide por el balance neto, no atributo por
-// atributo (la fatiga cuenta invertida: menos fatiga suma).
-function signoDeRama(mods) {
+// atributo (la fatiga cuenta invertida: menos fatiga suma). `caePelea`
+// (Task v3, "cartas nuevas con azar") siempre pesa negativo, aunque la rama
+// también traiga algún mod positivo suelto: perder la pelea que tenías en
+// danza es la consecuencia grave, no un detalle menor.
+function signoDeRama(mods, { caePelea = false } = {}) {
+  if (caePelea) return 'negativo';
   const neto = Object.entries(mods).reduce(
     (acc, [clave, valor]) => acc + (clave === 'fatiga' ? -valor : valor), 0,
   );
@@ -74,6 +81,25 @@ function fmtDineroSigno(n) {
   return `${n > 0 ? '+' : '-'}US$ ${Math.abs(n).toLocaleString('es-AR')}`;
 }
 
+// Texto completo de una rama de `probabilidades`: los mods (como siempre) más,
+// si esa rama en particular los declara (Task v3, "cartas nuevas con azar"),
+// su propio dinero/fama y el aviso "Se cae la pelea" — todo en la MISMA
+// píldora (que ya lleva el % adelante, puesto por `labelEfecto` en card.js),
+// para que el jugador vea de un vistazo qué arriesga en esa rama puntual.
+function textoDeRama(opcion, rama) {
+  const partes = [];
+  const modsTexto = formatearMods({ ...(opcion.mods ?? {}), ...rama.mods }).join(' ');
+  if (modsTexto) partes.push(modsTexto);
+  if (typeof rama.efectos?.dinero === 'number' && rama.efectos.dinero !== 0) {
+    partes.push(fmtDineroSigno(rama.efectos.dinero));
+  }
+  if (typeof rama.efectos?.fama === 'number' && rama.efectos.fama !== 0) {
+    partes.push(`${rama.efectos.fama > 0 ? '+' : ''}${rama.efectos.fama} Fama`);
+  }
+  if (rama.caePelea) partes.push('Se cae la pelea');
+  return partes.join(' · ');
+}
+
 // Arma los `efectos` (píldoras) de una opción de evento/redes: si tiene
 // `probabilidades`, una píldora por rama con su porcentaje (via
 // porcentajesDe, Task 3.1); si no, una píldora por mod fijo más las de
@@ -82,8 +108,8 @@ function efectosDeOpcion(opcion) {
   const porcentajes = porcentajesDe(opcion);
   if (porcentajes.length > 0) {
     return opcion.probabilidades.map((rama, i) => ({
-      texto: formatearMods({ ...(opcion.mods ?? {}), ...rama.mods }).join(' '),
-      signo: signoDeRama({ ...(opcion.mods ?? {}), ...rama.mods }),
+      texto: textoDeRama(opcion, rama),
+      signo: signoDeRama({ ...(opcion.mods ?? {}), ...rama.mods }, { caePelea: rama.caePelea }),
       probabilidad: porcentajes[i],
     }));
   }
@@ -139,31 +165,60 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (Hallazgo 1 de la revisión final): dopaje/chantaje/entrenador disparan un
   // roll con suspenso (animarRoll, 1.2-1.8s) cuyo timer, sin esto, sigue
   // corriendo aunque el jugador se vaya a la Ficha — una pantalla completa
-  // que reemplaza `contenedor`. Si el timer termina ahí, `mostrarDesenlace`
+  // que reemplaza `contenedor`. Si el timer termina ahí, `aplicarEfectoYSeguir`
   // llama a `asegurarShell()`, que ve que el shell ya no está DENTRO de
   // `contenedor` y lo reconstruye con `mount()`: la Ficha desaparece sin que
   // el jugador tocara "Cerrar".
   //
-  // `cancelarRollPendiente` guarda, mientras un roll está en curso, la
-  // función que hay que llamar SI el jugador abandona el tablero antes de
-  // que termine (mismo patrón que `raiz._limpiarAccion` en
-  // ui/screens/fight.js: quien puede interrumpir el timer es quien lo
-  // conoce). La decisión de diseño de QUÉ pasa con la carta pendiente: el
-  // roll es puramente cosmético — `resolverOpcion` ya consumió el rng y
-  // decidió el resultado de forma síncrona ANTES de que `animarRoll` arranque
-  // a animar (ver beatCarta). O sea que "el roll ya se resolvió internamente"
-  // es SIEMPRE cierto en el momento en que esto se puede llegar a cancelar:
-  // no hay ningún caso real de "todavía no se resolvió, dejalo elegir de
-  // nuevo". Cancelar entonces significa parar el timer, aplicar YA el
-  // resultado a `partida` (sin pintar nada — el tablero no está a la vista) y
-  // dejar `pintarCentro` apuntando al desenlace, para que aparezca solo
-  // cuando el jugador vuelva del tablero completo: ni pierde la carta ni el
-  // resultado que ya le tocó, y no hay ninguna sorpresa (nada cambia en
-  // pantalla mientras está en la Ficha).
+  // `cancelarRollPendiente` guarda, mientras un roll (o su pausa de lectura
+  // posterior — ver `beatCarta`) está en curso, la función que hay que
+  // llamar SI el jugador abandona el tablero antes de que termine (mismo
+  // patrón que `raiz._limpiarAccion` en ui/screens/fight.js: quien puede
+  // interrumpir el timer es quien lo conoce). La decisión de diseño de QUÉ
+  // pasa con la carta pendiente: el roll es puramente cosmético —
+  // `resolverOpcion` ya consumió el rng y decidió el resultado de forma
+  // síncrona ANTES de que `animarRoll` arranque a animar (ver beatCarta). O
+  // sea que "el roll ya se resolvió internamente" es SIEMPRE cierto en el
+  // momento en que esto se puede llegar a cancelar: no hay ningún caso real
+  // de "todavía no se resolvió, dejalo elegir de nuevo". Cancelar entonces
+  // significa parar el timer que esté corriendo y aplicar YA el efecto
+  // (`aplicar()`, que deja el tablero en el estado ocioso) — se pinta en el
+  // MISMO tick, mientras `contenedor` todavía tiene puesto el tablero (recién
+  // después de esto `abrirFicha` lo reemplaza con la Ficha), así que no hay
+  // ninguna sorpresa: nada cambia en pantalla una vez que el jugador ya está
+  // mirando la Ficha.
   let cancelarRollPendiente = null;
 
   function abandonarRollPendiente() {
     if (cancelarRollPendiente) cancelarRollPendiente();
+  }
+
+  // Mismo problema, mismo remedio, para el dado que se tira al tocar
+  // "Continuar" (Task v3): es cosmético y corto (600-900ms), pero si el
+  // jugador se va a la Ficha en pleno giro, el timer sigue corriendo en
+  // segundo plano igual que el del roll — sin cancelarlo, `siguiente()`
+  // terminaría disparando DESPUÉS de que la Ficha reemplazó `contenedor`,
+  // con el mismo riesgo de `asegurarShell()` reconstruyendo el tablero
+  // debajo suyo.
+  let cancelarDadoPendiente = null;
+
+  function abandonarDadoPendiente() {
+    if (cancelarDadoPendiente) cancelarDadoPendiente();
+  }
+
+  // Misma familia de problema una vez más, ahora para la entrada escalonada
+  // de noticias nuevas (Task v3, feedback del usuario: "que se vayan
+  // sumando"): panel-noticias.js deja timers cortos (250-400ms entre una y
+  // la siguiente) corriendo mientras revela cada noticia. `noticiasVistas`
+  // vive ACÁ (no en el panel) porque tiene que sobrevivir a través de TODA la
+  // sesión de carrera, no solo un render: el tablero se remonta en cada beat
+  // (montarTablero), así que sin este Set persistente la misma tanda
+  // reanimaría su entrada en cada repintado mientras siga marcada "nueva".
+  let cancelarNoticiasPendiente = null;
+  const noticiasVistas = new Set();
+
+  function abandonarNoticiasPendientes() {
+    if (cancelarNoticiasPendiente) cancelarNoticiasPendiente();
   }
 
   function asegurarShell() {
@@ -183,7 +238,17 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         renderPanelPeleador(shellActual.regiones.izquierda, propsPanelIzquierda());
       }),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
+      onVerRanking: () => abrirRanking(),
     };
+  }
+
+  // Popup con la tabla de posiciones completa (Task v3, feedback del
+  // usuario: "no puedo ver quiénes están por encima o por debajo de mí").
+  // `tablaRanking` (world.js) ya arma el roster activo + el jugador en su
+  // puesto real, coherente con los rivales que ofrece buscarRival — mismo
+  // popup que la tienda: el tablero sigue montado y visible detrás.
+  function abrirRanking() {
+    renderRanking({ filas: tablaRanking(partida.mundo, partida.jugador) });
   }
 
   // Asegura el shell y REFRESCA los paneles laterales con la partida actual
@@ -211,7 +276,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     ]));
     renderCalendario(shell.regiones.centro.querySelector('[data-bloque="calendario"]'), { partida });
 
-    shell.montarDerecha(el('div', {}, [
+    // `class:'stack'` (v3, feedback del usuario: "está muy pegada al módulo
+    // de arriba del próximo combate"): antes este wrapper no tenía clase, así
+    // que el gap:10px de `.shell-derecha` (pensado para sus hijos DIRECTOS)
+    // nunca llegaba a aplicarse entre próxima/noticias — los dos vivían
+    // pegados dentro de este único hijo. `.stack` es el mismo respiro que ya
+    // separa a todos los demás paneles del tablero.
+    shell.montarDerecha(el('div', { class: 'stack' }, [
       el('div', { dataset: { bloque: 'proxima' } }),
       el('div', { dataset: { bloque: 'noticias' } }),
     ]));
@@ -222,10 +293,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         if (rival) abrirFicha(rival, 'atributos');
       },
     });
-    renderPanelNoticias(shell.regiones.derecha.querySelector('[data-bloque="noticias"]'), {
+
+    // Cancela cualquier entrada de noticias que haya quedado a mitad de
+    // camino de un montaje anterior (p. ej. el jugador encadena beats más
+    // rápido que el intervalo entre una noticia y la siguiente): este mismo
+    // montarTablero() ya va a reemplazar esos nodos, así que sus timers
+    // quedarían apuntando a un panel que ya no está — se cortan ANTES de
+    // pintar el nuevo, nunca quedan corriendo en segundo plano.
+    abandonarNoticiasPendientes();
+    const controladorNoticias = renderPanelNoticias(shell.regiones.derecha.querySelector('[data-bloque="noticias"]'), {
       noticias: partida.noticias,
       onLeidas: (nuevas) => { partida = { ...partida, noticias: nuevas }; },
+      noticiasAnimadas: noticiasVistas,
     });
+    cancelarNoticiasPendiente = () => {
+      controladorNoticias.detener();
+      cancelarNoticiasPendiente = null;
+    };
 
     return shell;
   }
@@ -257,29 +341,75 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     volverAlTablero();
   }
 
-  // No hay pantalla de resultado (Task 3.2): esto reemplaza a
-  // renderResultadoTarjeta para mejora/evento/redes/sparring. Aplica los
-  // deltas al panel izquierdo YA repintado con los valores finales, los
-  // anima, y deja el texto del desenlace con un botón para seguir, en la
-  // MISMA región central — nunca una pantalla nueva.
-  function mostrarDesenlace({ titulo, texto, deltas = {}, deltasTexto = null }) {
-    const shell = asegurarShell();
-    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
-    animarAtributos(shell.regiones.izquierda, deltas);
-    shell.destacar('izquierda');
-    centro(() => renderDesenlace(centroContenido(), {
-      titulo, texto, deltasTexto: deltasTexto ?? formatearMods(deltas), onContinuar: irADashboard,
-    }));
-  }
-
   // El estado "entre beats": lo que ANTES mostraba renderDashboard (v1,
   // pantalla completa) ahora es un panel más en el centro del MISMO tablero
-  // (Task 6.1 — el tablero es la pantalla principal, siempre).
+  // (Task 6.1 — el tablero es la pantalla principal, siempre). Extraída
+  // aparte de `irADashboard` (no un closure inline) para poder reusarla tal
+  // cual como `pintarCentro` cuando se cancela un roll o un dado pendientes
+  // (ver abandonarRollPendiente/abandonarDadoPendiente): asignar
+  // `pintarCentro = irADashboard` directo re-entraría en `centro()` (que ya
+  // estaría en medio de resolverse) — esto es la versión "solo pintar", sin
+  // el `persistir()` ni el `centro()` de alrededor.
+  function pintarPanelAvance() {
+    renderPanelAvance(centroContenido(), { partida, onSiguiente: siguienteConDado, onCurar: curar });
+  }
+
   function irADashboard() {
     persistir();
-    centro(() => renderPanelAvance(centroContenido(), {
-      partida, onSiguiente: siguiente, onCurar: curar,
-    }));
+    centro(pintarPanelAvance);
+  }
+
+  // Reemplaza a mostrarDesenlace/renderDesenlace para las decisiones (Task
+  // v3, feedback del usuario): ya no hay pantalla de resultado con botón
+  // "Seguir" — se aplica el efecto y la carrera sigue derecho al estado
+  // ocioso (Continuar). Lo único que le avisa al jugador qué cambió es la
+  // animación de números + el resalte verde/rojo de SOLO las filas de
+  // atributo que cambiaron (antes, `shell.destacar('izquierda')` hacía
+  // brillar TODO el módulo izquierdo por cualquier cambio — queja textual).
+  //
+  // El ORDEN importa: animar tiene que pasar DESPUÉS de irADashboard() (que
+  // llama a montarTablero(), y esa SIEMPRE repinta la izquierda desde cero —
+  // ver montarTablero). Animar ANTES se pierde en el mismo tick: mount() no
+  // diffea, así que el segundo repintado deja huérfanos los nodos que
+  // `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
+  // navegador llegue a pintar ese estado intermedio.
+  function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
+    partida = { ...partida, jugador, rivalidades };
+    irADashboard();
+    animarAtributos(shellActual.regiones.izquierda, deltas);
+    destacarAtributos(shellActual.regiones.izquierda, deltas);
+  }
+
+  // Al tocar "Continuar" se tira el dado (Task v3, pedido textual: "el juego
+  // se llama así por algo") antes de que aparezca la siguiente decisión.
+  // Mismo cuidado que con el roll de una carta: si el jugador se va a la
+  // Ficha en pleno giro, `cancelarDadoPendiente` resuelve YA la transición
+  // (nunca pinta nada — el tablero no está a la vista) en vez de dejar el
+  // timer terminar solo, en segundo plano, contra un `contenedor` que la
+  // Ficha ya reemplazó.
+  //
+  // El guard `dadoResuelto` evita un bug sutil: con prefers-reduced-motion
+  // (o si algún día `animarDado` resuelve síncrono por otro motivo),
+  // `onFin` corre DENTRO del propio `animarDado(...)`, antes de que esta
+  // función llegue a la línea de abajo — sin el guard, esa línea
+  // pisaría `cancelarDadoPendiente` con un cancelador VIEJO que dispararía
+  // `siguiente()` una segunda vez si el jugador entra a la Ficha más tarde
+  // (saltearía un beat entero de la carrera).
+  function siguienteConDado() {
+    const boton = centroContenido().querySelector('[data-accion="siguiente"]');
+    if (!boton) { siguiente(); return; }
+
+    let dadoResuelto = false;
+    const controladorDado = animarDado(boton, {
+      onFin: () => {
+        dadoResuelto = true;
+        cancelarDadoPendiente = null;
+        siguiente();
+      },
+    });
+    if (!dadoResuelto) {
+      cancelarDadoPendiente = () => { controladorDado.detener(); cancelarDadoPendiente = null; siguiente(); };
+    }
   }
 
   function curar() {
@@ -298,6 +428,8 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // detrás, así que un roll terminando ahí no tiene el mismo problema.
   function abrirFicha(jugador, seccion = 'atributos') {
     abandonarRollPendiente();
+    abandonarDadoPendiente();
+    abandonarNoticiasPendientes();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -338,23 +470,28 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'evento') return beatCarta(beat, 'Decisión', 'alerta');
     if (beat.tipo === 'redes') return beatCarta(beat, 'Redes sociales', 'microfono');
     if (beat.tipo === 'sparring') return beatSparring(beat);
+    if (beat.tipo === 'campCarta') return beatCampCarta(beat);
+    if (beat.tipo === 'campSparring') return beatCampSparring(beat);
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
-    if (beat.tipo === 'noticias') return beatNoticias();
     return irADashboard();
   }
 
-  // 'lesionSinOferta' y 'noticias' son beats simples (nada que jugar, solo un
-  // aviso) que en la v1/pre-6.1 abrían su PROPIA pantalla completa
-  // (renderResultadoTarjeta / renderNoticias). Con "los beats van al centro"
-  // (brief de la Task 6.1) pasan a vivir en la misma región central del
-  // tablero, reusando renderDesenlace (mismo layout: título + texto + botón
-  // Seguir, sin deltas). Esto deja huérfano a renderNoticias (screens/news.js
-  // — se borra junto con sus tests). `renderResultadoTarjeta` sigue en uso en
-  // el resultado post-pelea (cerrarPelea, pantalla completa junto con el
-  // resto de la pipeline de la pelea) — el rechazo de oferta se sumó a la
-  // lista de cosas que resuelven en el centro (ver beatOferta), así que ya no
-  // lo usa.
+  // 'lesionSinOferta' es un beat simple (nada que jugar, solo un aviso) que
+  // en la v1/pre-6.1 abría su PROPIA pantalla completa (renderResultadoTarjeta).
+  // Con "los beats van al centro" (brief de la Task 6.1) pasa a vivir en la
+  // misma región central del tablero, reusando renderDesenlace (mismo layout:
+  // título + texto + botón Seguir, sin deltas). El beat 'noticias' (mismo
+  // patrón, pero para "circuló algo, mirá a la derecha") se sacó del todo
+  // (Task v3, "cartas nuevas + progresión"): las noticias ya viven siempre
+  // visibles en la columna derecha (panel-noticias.js), así que interrumpir
+  // la carrera para avisar lo mismo que ya se ve al lado era presupuesto de
+  // ritmo gastado en nada — ver el comentario largo sobre ETAPAS en
+  // career.js. `renderResultadoTarjeta` (screens/card.js) quedó huérfano
+  // antes (Task v3): el resultado post-pelea pasó a vivir DENTRO de la propia
+  // pantalla de pelea (renderPelea con `despues`), así que se borró junto con
+  // su test — el rechazo de oferta ya resolvía en el centro (ver beatOferta)
+  // desde antes.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
     const bloques = lesion?.bloquesRestantes ?? null;
@@ -363,20 +500,6 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       texto: lesion
         ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
         : 'Nadie te ofrece pelear mientras estás lesionado.',
-      deltasTexto: [],
-      onContinuar: irADashboard,
-    }));
-  }
-
-  function beatNoticias() {
-    // El feed de noticias (panel-noticias.js, columna derecha) ya está
-    // siempre visible y siempre actualizado en el tablero persistente: este
-    // beat solo le pone ritmo a la carrera (consume su turno) y avisa que
-    // circuló algo, en vez de forzar una pantalla aparte para lo mismo que ya
-    // se ve al lado.
-    centro(() => renderDesenlace(centroContenido(), {
-      titulo: 'El mundo sigue girando',
-      texto: 'Circularon resultados y rumores de otros peleadores esta semana. Date una vuelta por las noticias, a la derecha.',
       deltasTexto: [],
       onContinuar: irADashboard,
     }));
@@ -391,11 +514,28 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onElegir: (id) => {
         const carta = beat.datos.cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
-        partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-        mostrarDesenlace({ titulo: 'Campamento', texto: carta.texto, deltas: aplicado.deltas });
+        aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
       },
     }));
   }
+
+  // Muestra la crónica de la rama de azar que le tocó al jugador SOBRE la
+  // propia tarjeta ganadora (Task v3: "el jugador SÍ tiene que poder ver qué
+  // desenlace le tocó" — eso no se podía perder al sacar la pantalla de
+  // "Seguir"). Se agrega DESPUÉS de que animarRoll ilumina el resultado, así
+  // conviven un momento la píldora del efecto ganador y la frase de esa
+  // rama, antes de volver al estado ocioso.
+  function mostrarResultadoEnTarjeta(nodoTarjeta, texto) {
+    if (!nodoTarjeta || !texto) return;
+    nodoTarjeta.appendChild(el('div', { class: 'tarjeta-resultado', text: texto }));
+  }
+
+  // Cuánto se deja el resultado de un roll fijo en la tarjeta antes de
+  // volver al estado ocioso: tiempo de sobra para leer una frase corta sin
+  // frenar el ritmo de la carrera al repetirse. No es una animación de
+  // movimiento (nada se mueve mientras tanto), así que no depende de
+  // prefers-reduced-motion como sí lo hacen animarRoll/animarDado.
+  const PAUSA_RESULTADO_MS = 1100;
 
   function beatCarta(beat, titulo, nombreIcono) {
     const carta = beat.datos.carta;
@@ -414,40 +554,62 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           rivalidades: partida.rivalidades, rivalObjetivoId,
         });
 
-        const aplicarYMostrar = () => {
-          partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-          mostrarDesenlace({
-            titulo, texto: resuelto.texto || carta.texto, deltas: resuelto.deltas, deltasTexto: resuelto.deltasTexto,
+        // `caePelea` (Task v3, "cartas nuevas con azar"): la rama que salió
+        // canceló de verdad la pelea que estuviera en danza este bloque, no
+        // solo en el texto de la tarjeta — ver cancelarProximaPelea en
+        // career.js. Se aplica ANTES de aplicarEfectoYSeguir (que pinta el
+        // tablero ocioso): así el panel de "próxima pelea" ya sale limpio en
+        // el mismo repintado, sin un instante intermedio con la oferta vieja
+        // todavía puesta.
+        const aplicar = () => {
+          if (resuelto.caePelea) partida = cancelarProximaPelea(partida);
+          aplicarEfectoYSeguir({
+            jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
           });
         };
 
-        if (opcion.probabilidades) {
-          const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
-          const controlador = animarRoll(nodoTarjeta, {
-            indiceGanador: resuelto.indiceGanador,
-            cantidad: opcion.probabilidades.length,
-            onFin: () => {
+        if (!opcion.probabilidades) { aplicar(); return; }
+
+        const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
+
+        // Ver el comentario largo junto a la declaración de
+        // `cancelarRollPendiente`: si el jugador se va del tablero (Ficha)
+        // antes de que el roll o la pausa de lectura terminen, esto resuelve
+        // YA el efecto (que `resolverOpcion` ya decidió más arriba, de forma
+        // síncrona) sin pintar nada — el tablero no está a la vista.
+        //
+        // `rollResuelto` evita pisar, con un cancelador viejo, el que recién
+        // dejó puesto `onFin` si `animarRoll` resolvió síncrono (motion
+        // reducido, o una sola rama posible): sin el guard, un roll ya
+        // terminado quedaría con `cancelarRollPendiente` apuntando igual a
+        // "cancelar el roll" en vez de a "cancelar la pausa de lectura", y
+        // aplicaría el efecto DOS VECES si el jugador entra a la Ficha
+        // después.
+        let rollResuelto = false;
+        const controladorRoll = animarRoll(nodoTarjeta, {
+          indiceGanador: resuelto.indiceGanador,
+          cantidad: opcion.probabilidades.length,
+          onFin: () => {
+            rollResuelto = true;
+            mostrarResultadoEnTarjeta(nodoTarjeta, resuelto.texto || carta.texto);
+            const timerId = setTimeout(() => {
               cancelarRollPendiente = null;
-              aplicarYMostrar();
-            },
-          });
-          // Ver el comentario largo junto a la declaración de
-          // `cancelarRollPendiente`: si el jugador se va del tablero antes de
-          // que el roll termine, esto para el timer y aplica YA el resultado
-          // (que `resolverOpcion` ya decidió más arriba) sin pintar nada —
-          // solo deja el desenlace listo para cuando `volverAlTablero` vuelva
-          // a llamar a `pintarCentro`.
+              aplicar();
+            }, PAUSA_RESULTADO_MS);
+            cancelarRollPendiente = () => {
+              clearTimeout(timerId);
+              cancelarRollPendiente = null;
+              aplicar();
+            };
+          },
+        });
+        if (!rollResuelto) {
           cancelarRollPendiente = () => {
-            controlador.detener();
+            controladorRoll.detener();
             cancelarRollPendiente = null;
-            partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-            pintarCentro = () => renderDesenlace(centroContenido(), {
-              titulo, texto: resuelto.texto || carta.texto, deltasTexto: resuelto.deltasTexto, onContinuar: irADashboard,
-            });
+            aplicar();
           };
-          return;
         }
-        aplicarYMostrar();
       },
     }));
   }
@@ -466,8 +628,71 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
-          partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-          mostrarDesenlace({ titulo: 'Sparring', texto: resultado.texto, deltas: aplicado.deltas });
+          aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
+        },
+      });
+    }
+
+    centro(pintarSparring);
+  }
+
+  // --- Campamento de preparación (Task v3, pedido textual: "al aceptar una
+  // pelea, va directo al combate, debería de haber unas semanas de
+  // preparación") -----------------------------------------------------------
+  // Estos dos beats viven DENTRO del tablero, con el mismo patrón que
+  // mejora/evento/sparring: `firmarPelea` (career.js) ya decidió cuántos son
+  // (2 o 3) y armó su contenido (campamento.js); acá solo hay que pintarlos y
+  // aplicar su efecto. La diferencia con los demás beats de decisión es el
+  // ÚLTIMO del campamento (`beat.datos.ultimo`): en vez de volver al estado
+  // ocioso, dispara la pipeline a pantalla completa de la pelea (careo → plan
+  // → pelea) — el mismo destino al que antes se llegaba apenas se aceptaba la
+  // oferta, ahora recién después de las semanas de preparación.
+  function beatCampCarta(beat) {
+    const { carta, oferta, ultimo } = beat.datos;
+    centro(() => renderPanelDecision(centroContenido(), {
+      titulo: 'Campamento',
+      bajada: carta.titulo,
+      texto: carta.texto,
+      rareza: carta.rareza,
+      opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, 'pesa')),
+      onElegir: (id) => {
+        const resuelto = resolverOpcion(rng, {
+          jugador: partida.jugador, carta, opcionId: id, rivalidades: partida.rivalidades,
+        });
+        if (ultimo) {
+          partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+          careo(oferta);
+          return;
+        }
+        aplicarEfectoYSeguir({ jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas });
+      },
+    }));
+  }
+
+  function beatCampSparring(beat) {
+    let sparring = beat.datos.sparring;
+    const { oferta, ultimo } = beat.datos;
+
+    function pintarSparring() {
+      const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
+      renderSparring(centroContenido(), {
+        sparring,
+        jugador: partida.jugador,
+        titulo: `Campamento · contra ${rival ? `"${rival.apodo}"` : oferta.rivalApodo}`,
+        bajada: 'Los rounds fuertes antes de la pelea',
+        onGolpe: (evento) => {
+          sparring = registrarGolpe(sparring, evento);
+          pintarSparring();
+        },
+        onTerminar: () => {
+          const resultado = resultadoSparring(sparring, partida.jugador);
+          const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
+          if (ultimo) {
+            partida = { ...partida, jugador: aplicado.jugador };
+            careo(oferta);
+            return;
+          }
+          aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
     }
@@ -482,11 +707,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // uso que motivó todo el rediseño. Por eso vive en el centro del tablero
   // como cualquier otro beat de decisión, reusando `renderOferta` tal cual
   // (no le importa si `contenedor` es la pantalla entera o una región: solo
-  // monta un `.stack`). Rechazar también se resuelve DENTRO del tablero
-  // (reusa renderDesenlace, misma familia que lesionSinOferta/noticias). Al
-  // ACEPTAR es cuando arranca la pipeline a pantalla completa
-  // (negociación → careo → plan → pelea): esa sí sigue siendo pantallas
-  // grandes con su propia puesta en escena, decisión ya tomada.
+  // monta un `.stack`). Rechazar (Task v3: sin pantalla de "Seguir", como
+  // cualquier otra decisión) resuelve derecho al estado ocioso; el único
+  // efecto de rechazar es en Fama, que no vive en el panel de atributos, así
+  // que no hay nada para animar/destacar acá. Al ACEPTAR es cuando arranca
+  // la pipeline a pantalla completa (negociación → careo → plan → pelea):
+  // esa sí sigue siendo pantallas grandes con su propia puesta en escena,
+  // decisión ya tomada.
   function beatOferta(beat) {
     const { oferta } = beat.datos;
     centro(() => renderOferta(centroContenido(), {
@@ -494,16 +721,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       jugador: partida.jugador,
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
-        const famaAntes = partida.jugador.fama;
         const paso = rechazarOferta(partida.jugador, oferta);
-        const deltaFama = paso.jugador.fama - famaAntes;
-        partida = { ...partida, jugador: paso.jugador };
-        centro(() => renderDesenlace(centroContenido(), {
-          titulo: 'Oferta rechazada',
-          texto: paso.texto,
-          deltasTexto: deltaFama !== 0 ? [`${deltaFama > 0 ? '+' : ''}${deltaFama} Fama`] : [],
-          onContinuar: irADashboard,
-        }));
+        // Pendiente conocido (bug reportado): `proximaPelea` se guarda al armar
+        // la cola del bloque (ver armarCola, career.js) pero antes no se
+        // limpiaba acá — el panel de la derecha seguía mostrando al rival
+        // rechazado durante el resto del bloque, como si la pelea siguiera en
+        // pie. Se limpia en el momento en que la oferta deja de estar vigente.
+        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        irADashboard();
       },
     }));
   }
@@ -519,16 +744,41 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         negociacion = jugarMovida(negociacion, movidaId, rng).negociacion;
         pintar();
       },
+      // Task v3, pedido textual ("debería de haber unas semanas de
+      // preparación"): cerrar la negociación ya no dispara la pipeline de
+      // pelea en el acto — firma el contrato (firmarPelea, career.js) y
+      // vuelve al tablero. El campamento de 2-3 beats (beatCampCarta/
+      // beatCampSparring, más arriba) es lo próximo que va a jugar el
+      // jugador; recién su último beat llama a `careo`.
       onCerrar: () => {
         const final = resultadoNegociacion(negociacion);
-        careo({ ...oferta, bolsa: final.bolsa });
+        partida = firmarPelea(partida, { oferta: { ...oferta, bolsa: final.bolsa } });
+        irADashboard();
+      },
+      // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
+      // botón "tiene que estar siempre disponible", incluso con la
+      // negociación bloqueada por un apriete fallido). Misma consecuencia
+      // que rechazar la oferta antes de negociar (ver beatOferta): pierde
+      // fama y vuelve al tablero, sin firmar nada.
+      onRechazar: () => {
+        const paso = rechazarOferta(partida.jugador, oferta);
+        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        irADashboard();
       },
     });
     pintar();
   }
 
+  // El careo va en todas las peleas profesionales (Task v3, pedido textual:
+  // "solo me ocurrió en algunas peleas, no en todas ¿no debería estar en
+  // todas?"). Antes se saltaba con fama < 20 fuera de una pelea de título —
+  // como la fama arranca en 0, esto lo dejaba prácticamente afuera de toda
+  // la primera mitad de la carrera. El único portón que queda es de nivel:
+  // en juvenil/amateur (`nivelPelea === 'amateur'`, ver NIVELES en
+  // core/offers.js) todavía no hay rueda de prensa — no tiene sentido narrar
+  // una para un pibe de 15 años en un torneo local.
   function careo(oferta) {
-    if (!oferta.esTitulo && (partida.jugador.fama ?? 0) < 20) return elegirPlan(oferta);
+    if (oferta.nivelPelea === 'amateur') return elegirPlan(oferta);
     let estado = crearCareo(rng, { oferta });
     const pintar = () => renderCareo(contenedor, {
       careo: estado,
@@ -565,6 +815,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // momentos; si ese round termina en rincón o golpe de gracia, el panel de
   // acción se encarga de mostrarlo (adentro de la misma pantalla) una vez
   // que la narración termina.
+  //
+  // Task v3, pedido textual ("Debe incluirse un botón que sea para empezar
+  // la pelea"): antes `avanzar()` se llamaba de una acá abajo y la
+  // narración arrancaba sola apenas se elegía el plan. Ahora el primer
+  // `pintar([])` solo arma el esqueleto (con `pelea.pendiente === 'inicio'`)
+  // y `renderPelea` se encarga de mostrar el botón; recién `onEmpezar` dispara
+  // el primer `avanzar()`.
   function pelear(oferta, plan) {
     const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
     let pelea = crearPelea({
@@ -572,11 +829,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       disciplina: partida.jugador.disciplina, nivel: oferta.nivelPelea, plan, rng,
     });
 
-    function pintar(momentos) {
+    function pintar(momentos, despues) {
       renderPelea(contenedor, {
         pelea,
         momentos,
+        despues,
         ventanaMs: VENTANA_MS,
+        onEmpezar: avanzar,
         onSeguir: avanzar,
         onInstruccion: (id) => {
           pelea = aplicarInstruccionRincon(pelea, id);
@@ -587,7 +846,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           pelea = paso.pelea;
           pintar(paso.eventos);
         },
-        onFin: () => cerrarPelea(oferta, pelea),
+        // "Ver qué pasó después" calcula las consecuencias (dinero, lesión,
+        // título) y vuelve a pintar la MISMA pantalla con `despues` puesto:
+        // el resultado post-pelea vive acá adentro, no en una pantalla nueva
+        // (Task v3, pedido textual).
+        onFin: () => pintar([], cerrarPelea(oferta, pelea)),
+        onContinuar: irADashboard,
       });
     }
 
@@ -597,11 +861,20 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       pintar(paso.eventos);
     }
 
-    avanzar();
+    pintar([]);
   }
 
+  // Calcula las consecuencias de la pelea ya terminada (récord, dinero,
+  // fama, lesión, título, rivalidades) y actualiza `partida` — pero NO
+  // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
+  // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {
-    const paso = aplicarResultado(partida.jugador, { oferta, resultado: pelea.resultado });
+    // `semanaGlobal` (Task v3, "fechas de cuándo se ganaron/defendieron
+    // títulos"): se estampa EN el momento del hito, no se reconstruye
+    // después — ver el comentario en aplicarResultado (offers.js).
+    const paso = aplicarResultado(partida.jugador, {
+      oferta, resultado: pelea.resultado, semanaGlobal: partida.semanaGlobal,
+    });
     let jugador = paso.jugador;
 
     const danoRecibido = 100 - pelea.aguante.jugador;
@@ -615,32 +888,38 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
     elegirArchirrival(rivalidades);
 
-    partida = { ...partida, jugador, rivalidades };
+    // Mismo pendiente que en beatOferta/onRechazar: la pelea que se acaba de
+    // cerrar ya no está "en camino" — sin esto, el panel de próxima pelea
+    // seguía mostrando al rival ya peleado hasta que arrancaba el bloque
+    // siguiente (bug reportado: "seguía apareciendo un peleador aunque no
+    // haya elegido ni confirmado ninguno todavía").
+    partida = {
+      ...partida, jugador, rivalidades, proximaPelea: null,
+    };
 
-    renderResultadoTarjeta(contenedor, {
-      titulo: 'Después de la pelea',
+    return {
       texto: `${paso.texto}${lesion ? ` ${lesion.texto}` : ''}`,
       deltas: [`Bolsa: ${fmtDinero(oferta.bolsa)}`],
-      onContinuar: irADashboard,
-    });
+      tituloGanado: paso.titulosGanados[0] ?? null,
+    };
   }
 
   function finDeCarrera() {
     const legado = calcularLegado(partida);
     partida = { ...partida, legado };
     persistir();
+    // Task v3, pedido textual: "las estadísticas también deben estar acá,
+    // no al clickear en el botón 'Ver estadísticas'" — la pantalla final
+    // muestra todo junto, sin una segunda pantalla detrás de un botón.
     renderLegado(contenedor, {
       legado,
+      estadisticas: estadisticasDeCarrera(partida),
       jugador: partida.jugador,
       onNuevaCarrera: () => {
         borrar(storage);
         partida = null;
         arrancar();
       },
-      onVerEstadisticas: () => renderEstadisticas(contenedor, {
-        estadisticas: estadisticasDeCarrera(partida),
-        onCerrar: finDeCarrera,
-      }),
     });
   }
 

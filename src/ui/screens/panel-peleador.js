@@ -1,11 +1,14 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
-import { mediaDe, recordTexto, CATEGORIAS } from '../../core/fighter.js';
+import {
+  mediaDe, recordTexto, CATEGORIAS, nombreConApodo,
+} from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
 import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
 import { h2hTexto } from '../../core/rivalry.js';
+import { rankingDelJugador } from '../../core/world.js';
 
 // Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
 // (renderDashboard, que mezclaba esto con el botón "Continuar" y se
@@ -38,11 +41,22 @@ function peleasTotales(jugador) {
   return v + d + e;
 }
 
+// Cabecera del peleador (revisión v3, feedback del usuario): antes, la MEDIA
+// (58×58) y el nombre/datos compartían una misma fila (`.fila` con la MEDIA
+// `flex:0 0 auto` y un `div flex:1` al lado) — en la columna angosta del
+// tablero (242px) el nombre le quedaban ~160px y se partía en tres líneas, y
+// la línea de datos (categoría·mano·edad / gimnasio·forma), aunque no
+// envolvía, se veía angosta con un espacio muerto a la derecha comparada con
+// el resto del panel. Ahora la MEDIA es un badge chico en la esquina
+// superior derecha (su propia fila, junto a la etiqueta del rango), y el
+// nombre + las dos líneas de datos usan el ANCHO COMPLETO del panel debajo,
+// sin compartir fila con nada.
 function cuadroMedia(jugador) {
   const media = mediaDe(jugador);
   const rango = rangoDeMedia(media);
   return el('div', { class: 'panel panel-peleador-cabecera', dataset: { accion: 'ficha' } }, [
-    el('div', { class: 'fila', style: 'align-items:center' }, [
+    el('div', { class: 'panel-peleador-cabecera-top' }, [
+      el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
       el('div', {
         class: 'rango-media',
         dataset: { rangoMedia: rango.id },
@@ -50,23 +64,21 @@ function cuadroMedia(jugador) {
       }, [
         el('div', { class: 'rango-media-num', text: String(media) }),
       ]),
-      el('div', { style: 'flex:1;min-width:0' }, [
-        el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
-        el('h1', { style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
-          bandera(jugador.nacionalidad, { ancho: 20 }),
-          `"${jugador.apodo}" ${jugador.nombre}`.toUpperCase(),
-        ]),
-        el('div', {
-          class: 'etiqueta',
-          text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
-        }),
-        el('div', {
-          class: 'etiqueta',
-          style: 'margin-top:2px',
-          text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
-        }),
-      ]),
     ]),
+    el('h1', { class: 'panel-peleador-nombre', style: 'display:flex;align-items:center;gap:7px;flex-wrap:wrap' }, [
+      bandera(jugador.nacionalidad, { ancho: 20 }),
+      nombreConApodo(jugador).toUpperCase(),
+    ]),
+    el('div', {
+      class: 'etiqueta',
+      style: 'margin-top:6px',
+      text: `${CATEGORIAS[jugador.categoria]?.nombre ?? jugador.categoria} · ${MANO_TEXTO[jugador.mano] ?? jugador.mano} · ${Math.floor(jugador.edad)} años`,
+    }),
+    el('div', {
+      class: 'etiqueta',
+      style: 'margin-top:2px',
+      text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
+    }),
   ]);
 }
 
@@ -96,6 +108,22 @@ function filaAtributo(clave, { base, aporte }) {
   ]);
 }
 
+// Especiales (`jugador.especiales`) y estado (`jugador.estado`) no vivían en
+// ningún lado del tablero: las tarjetas los modifican igual que a los
+// atributos de combate (aplicarCarta reparte por los tres grupos, ver
+// cards.js) y el jugador leía "+10 Forma" en una tarjeta sin que ese número
+// apareciera en ninguna parte (queja del usuario). Se muestran acá, en una
+// sección aparte y VISUALMENTE separada de los 6 de combate (que son los
+// únicos con aporte de entrenador) — nunca mezclados en la misma lista.
+// Fatiga y lesión quedan afuera: ya tienen su lugar en otra parte del
+// tablero (panel-avance.js) y no hace falta duplicarlas acá.
+const ESTADO_VISIBLE = ['menton', 'disciplinaPersonal', 'forma', 'moral'];
+
+function filaEstado(jugador, clave) {
+  const valor = clave in jugador.especiales ? jugador.especiales[clave] : jugador.estado[clave];
+  return filaAtributo(clave, { base: valor, aporte: 0 });
+}
+
 function bloqueAtributos(jugador) {
   const disciplina = getDisciplina(jugador.disciplina);
   const claves = disciplina.usaGrappling ? [...BASE, 'grappling'] : BASE;
@@ -103,10 +131,13 @@ function bloqueAtributos(jugador) {
   return el('div', { class: 'panel' }, [
     el('div', { class: 'fila', style: 'justify-content:space-between;align-items:center;margin-bottom:8px' }, [
       el('div', { class: 'etiqueta', text: 'Atributos' }),
-      el('div', { class: 'etiqueta dorado', style: 'letter-spacing:0.5px', text: '◐ aporte del entrenador' }),
+      el('span', { class: 'panel-peleador-aporte-etiqueta', text: 'aporte del entrenador' }),
     ]),
     el('div', { class: 'panel-peleador-atributos' },
       claves.map((c) => filaAtributo(c, desglose[c]))),
+    el('div', { class: 'etiqueta panel-peleador-estado-titulo', text: 'Estado' }),
+    el('div', { class: 'panel-peleador-atributos' },
+      ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
   ]);
 }
 
@@ -140,9 +171,38 @@ function rachita(jugador) {
   })));
 }
 
-function bloqueHistorial(jugador) {
+// El botón "ver tabla" (v3, feedback del usuario: "no puedo ver quiénes
+// están por encima o por debajo de mí") vive DENTRO del bloque de
+// récord/ranking, que ya es clickeable entero hacia el historial de la
+// Ficha (dataset accion="historial", ver renderPanelPeleador más abajo).
+// stopPropagation evita que ese click de afuera dispare onHistorial además
+// de onVerRanking — mismo patrón que el botón de la tienda en bloqueDinero.
+function botonVerRanking(onVerRanking) {
+  const boton = el('button', {
+    class: 'tabla-ranking-boton',
+    type: 'button',
+    dataset: { accion: 'ver-ranking' },
+    'aria-label': 'Ver tabla de posiciones',
+  }, [icono('lista', { tamano: 13 })]);
+  boton.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    onVerRanking();
+  });
+  return boton;
+}
+
+// El puesto se calcula EN VIVO con `rankingDelJugador` (world.js) — la misma
+// función que arma `tablaRanking` para el popup — en vez de leer el campo
+// cacheado `jugador.ranking`. Ese campo solo se refresca una vez por bloque
+// (avanzarBloque, career.js): si algo cambió la media o el récord del
+// jugador a mitad de bloque (una carta de mejora, una pelea, el campamento),
+// quedaba viejo hasta el próximo bloque y el "#N" de acá podía no coincidir
+// con el puesto real que mostraba el popup de la tabla. Al usar la misma
+// función pura con el mismo `mundo`/`jugador` del momento, panel y tabla
+// nunca pueden discrepar.
+function bloqueHistorial(jugador, mundo, onVerRanking) {
   const totalPeleas = peleasTotales(jugador);
-  const ranking = totalPeleas === 0 ? 'Sin clasificar' : (jugador.ranking ? `#${jugador.ranking}` : 'Sin clasificar');
+  const ranking = totalPeleas === 0 ? 'Sin clasificar' : `#${rankingDelJugador(mundo, jugador)}`;
 
   const ultimasTres = jugador.historial.slice(-3).reverse();
 
@@ -153,7 +213,10 @@ function bloqueHistorial(jugador) {
         el('div', { class: 'nombre etiqueta', text: 'Récord' }),
       ]),
       el('div', { style: 'flex:1;min-width:0' }, [
-        el('div', { class: 'etiqueta', text: 'Ranking' }),
+        el('div', { class: 'fila', style: 'align-items:center;justify-content:space-between;gap:6px' }, [
+          el('div', { class: 'etiqueta', text: 'Ranking' }),
+          botonVerRanking(onVerRanking),
+        ]),
         el('div', { style: 'font-weight:800', text: ranking }),
       ]),
     ]),
@@ -204,9 +267,9 @@ function bloqueDinero(jugador) {
 }
 
 export function renderPanelPeleador(region, {
-  partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {},
+  partida, onFicha = () => {}, onTienda = () => {}, onHistorial = () => {}, onVerRanking = () => {},
 }) {
-  const { jugador } = partida;
+  const { jugador, mundo } = partida;
 
   const cabecera = cuadroMedia(jugador);
   cabecera.addEventListener('click', () => onFicha(jugador));
@@ -217,7 +280,7 @@ export function renderPanelPeleador(region, {
     onTienda();
   });
 
-  const historial = bloqueHistorial(jugador);
+  const historial = bloqueHistorial(jugador, mundo, onVerRanking);
   historial.addEventListener('click', () => onHistorial(jugador));
 
   mount(region, el('div', { class: 'stack panel-peleador' }, [

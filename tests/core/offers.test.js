@@ -4,7 +4,7 @@ import { crearPeleador, mediaDe } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
 import {
   NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
-  proximoCinturon, puedeDisputar, cinturonActual,
+  proximoCinturon, puedeDisputar, cinturonActual, opinionEntrenador, fraseEntrenador,
 } from '../../src/core/offers.js';
 
 function jugador(extra = {}) {
@@ -205,6 +205,79 @@ describe('cinturones', () => {
   });
 });
 
+describe('generarOferta — ranking del rival y opinion del entrenador', () => {
+  it('trae el puesto en el ranking del rival', () => {
+    const oferta = generarOferta(createRng(2), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(typeof oferta.rivalRanking).toBe('number');
+    expect(oferta.rivalRanking).toBeGreaterThan(0);
+  });
+
+  it('trae una frase del entrenador no vacia', () => {
+    const oferta = generarOferta(createRng(2), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
+    expect(oferta.opinionEntrenador.length).toBeGreaterThan(0);
+  });
+
+  it('la frase del entrenador es determinista para la misma oferta', () => {
+    const a = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    const b = generarOferta(createRng(9), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(a.fraseEntrenador).toBe(b.fraseEntrenador);
+  });
+});
+
+describe('opinionEntrenador', () => {
+  const base = () => jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } });
+
+  it('un rival mucho mas flojo da la categoria mas confiada', () => {
+    const oferta = { rivalMedia: mediaDe(base()) - 30, esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('muy_confiado');
+  });
+
+  it('un rival mucho mejor da la categoria menos recomendada', () => {
+    const oferta = { rivalMedia: mediaDe(base()) + 40, esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('no_recomendado');
+  });
+
+  it('medias parecidas dan una categoria pareja', () => {
+    const oferta = { rivalMedia: mediaDe(base()), esTitulo: false };
+    expect(opinionEntrenador(base(), oferta)).toBe('parejo');
+  });
+
+  it('mala forma, fatiga o lesion empeoran la opinion a igual matchup', () => {
+    const oferta = { rivalMedia: mediaDe(base()) + 3, esTitulo: false };
+    const sano = opinionEntrenador(base(), oferta);
+    const lesionado = jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: { nombre: 'algo' } } });
+    const golpeado = opinionEntrenador(lesionado, oferta);
+    const orden = ['muy_confiado', 'confiado', 'parejo', 'cauteloso', 'desafio', 'no_recomendado'];
+    expect(orden.indexOf(golpeado)).toBeGreaterThan(orden.indexOf(sano));
+  });
+
+  it('es pura: no muta jugador ni oferta', () => {
+    const yo = base();
+    const oferta = { rivalMedia: mediaDe(yo) + 3, esTitulo: false };
+    const antesYo = JSON.stringify(yo);
+    const antesOferta = JSON.stringify(oferta);
+    opinionEntrenador(yo, oferta);
+    expect(JSON.stringify(yo)).toBe(antesYo);
+    expect(JSON.stringify(oferta)).toBe(antesOferta);
+  });
+});
+
+describe('fraseEntrenador', () => {
+  it('menciona al rival', () => {
+    const oferta = generarOferta(createRng(4), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
+    expect(oferta.fraseEntrenador).toContain(oferta.rivalApodo);
+  });
+
+  it('en una pelea de titulo puede nombrar lo que esta en juego', () => {
+    const oferta = generarOferta(createRng(6), {
+      jugador: jugador(), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
+    });
+    expect(oferta.esTitulo).toBe(true);
+    expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
+  });
+});
+
 describe('evaluarRiesgo', () => {
   it('un rival muy superior es riesgo alto', () => {
     const yo = jugador();
@@ -360,6 +433,41 @@ describe('aplicarResultado', () => {
     });
     expect(paso.jugador.historial).toHaveLength(1);
     expect(paso.jugador.historial[0].metodo).toBe('ko');
+  });
+
+  // Task v3 ("fechas de cuándo se ganaron/defendieron títulos", pedido
+  // textual del usuario): la fecha del hito hay que guardarla EN el momento
+  // en que se resuelve la pelea, no reconstruirla después — para eso
+  // `aplicarResultado` recibe `semanaGlobal` (el reloj de la partida,
+  // calendario.js) y lo estampa en cada entrada del historial.
+  it('guarda la semana global de la partida como fecha del hito', () => {
+    const paso = aplicarResultado(jugador(), {
+      oferta: oferta(), mundo: mundo(), semanaGlobal: 57,
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+    });
+    expect(paso.jugador.historial[0].fecha).toBe(57);
+  });
+
+  it('sin semanaGlobal, la fecha queda null (no revienta)', () => {
+    const paso = aplicarResultado(jugador(), {
+      oferta: oferta(), mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'ko', round: 2, texto: 'KO' },
+    });
+    expect(paso.jugador.historial[0].fecha).toBeNull();
+  });
+
+  // Causa real de "frases repetidas" en legacy.js: una defensa exitosa
+  // (nivel 'defensa') y una conquista de título (nivel 'titulo') comparten
+  // `esTitulo: true` y `resultado: 'v'`, pero son hitos distintos. Sin
+  // `esObligatoria` en el historial, legacy.js no podía distinguirlos y les
+  // ponía la MISMA frase ("se quedó con el X") a ambos.
+  it('guarda si el hito de titulo fue una defensa, no una conquista', () => {
+    const o = { ...oferta(), esTitulo: true, esObligatoria: true, enJuego: 'Cinturón regional' };
+    const paso = aplicarResultado(jugador({ titulos: ['Cinturón regional'] }), {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'jugador', metodo: 'decision', round: 12, texto: 'Ganó' },
+    });
+    expect(paso.jugador.historial[0].esObligatoria).toBe(true);
   });
 
   it('no muta el jugador original', () => {

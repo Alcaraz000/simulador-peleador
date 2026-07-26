@@ -184,3 +184,15 @@ export function recordTexto(peleador) {
   const { v, d, e } = peleador.record;
   return e > 0 ? `${v}-${d}-${e}` : `${v}-${d}`;
 }
+
+// "Apodo" Nombre — el formato que usan tablero, ficha, ranking y legado para
+// presentar a un peleador. `apodo` puede faltar (guardado de antes de que
+// existiera el sistema de apodos, o un rival generado sin uno): antes, media
+// docena de pantallas interpolaban `jugador.apodo` sin resguardo y, con
+// apodo null/undefined, mostraban literalmente `"null" Nombre` en pantalla
+// (barrida final, cierre de ronda v3). Centralizar el formato acá hace que
+// el resguardo valga para todos los lugares a la vez, no pantalla por
+// pantalla.
+export function nombreConApodo(peleador) {
+  return peleador.apodo ? `"${peleador.apodo}" ${peleador.nombre}` : peleador.nombre;
+}

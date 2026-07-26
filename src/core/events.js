@@ -27,18 +27,26 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
   let mods = { ...(opcion.mods ?? {}) };
   let texto = opcion.textoResultado ?? '';
   let indiceGanador = null;
+  let efectosRama = null;
+  let caePelea = false;
 
   if (opcion.probabilidades) {
     const tirada = resolverProbabilidad(rng, opcion);
     mods = { ...mods, ...tirada.resultado };
     texto = tirada.texto;
     indiceGanador = tirada.indice;
+    efectosRama = tirada.efectos ?? null;
+    caePelea = tirada.caePelea;
   }
 
   const paso = aplicarCarta(jugador, { ...carta, mods });
   let nuevo = paso.jugador;
 
-  const efectos = opcion.efectos ?? {};
+  // El efectos de la RAMA ganadora (Task v3, "cartas nuevas con azar") pisa
+  // el de la opción entera cuando ambos declaran la misma clave: una carta de
+  // riesgo puede querer "+ fama si sale bien, - fama si sale mal", algo que
+  // `opcion.efectos` (fijo, aplica siempre) no puede expresar por sí solo.
+  const efectos = { ...(opcion.efectos ?? {}), ...(efectosRama ?? {}) };
   if (typeof efectos.dinero === 'number') {
     nuevo = { ...nuevo, dinero: Math.max(0, nuevo.dinero + efectos.dinero) };
   }
@@ -63,5 +71,10 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
     deltas: paso.deltas,
     deltasTexto: [...deltasTexto, ...extras],
     indiceGanador,
+    // Task v3 ("cartas nuevas con azar"): true si la rama ganadora de esta
+    // opción declaró `caePelea: true` (ver CARTAS_EVENTO/CARTAS_REDES). Quien
+    // llama (main.js) es responsable de cancelar la pelea de verdad, vía
+    // `cancelarProximaPelea` (career.js) — acá solo se expone la señal.
+    caePelea,
   };
 }

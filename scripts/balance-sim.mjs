@@ -32,7 +32,7 @@
 // Uso: node scripts/balance-sim.mjs [n]   (n = semillas por variante, def 500)
 
 import { crearPeleador, mediaDe, repartirOrigenes } from '../src/core/fighter.js';
-import { crearPartida, siguienteBeat } from '../src/core/career.js';
+import { crearPartida, siguienteBeat, firmarPelea } from '../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../src/core/offers.js';
 import { aplicarCarta } from '../src/core/cards.js';
 import { resolverOpcion } from '../src/core/events.js';
@@ -90,6 +90,17 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
   return { jugador, legendariaEnCreacion, origenElegido, apodoElegido };
 }
 
+// Resuelve la pelea que estaba firmada (ganador siempre 'jugador', igual que
+// el resto de esta simulación "jugando bien"): se llama cuando aparece el
+// beat `ultimo` del campamento (firmarPelea, career.js), no apenas se ve la
+// oferta — la pelea en sí ya no ocurre en el acto de aceptar.
+function resolverPeleaDeCampamento(jugador, oferta) {
+  const resultado = aplicarResultado(jugador, {
+    oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+  });
+  return { jugador: resultado.jugador, defensa: oferta.nivel === 'defensa' };
+}
+
 function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias = false }) {
   const { jugador, legendariaEnCreacion } = crearJugador(semilla);
   let partida = crearPartida({ jugador, semilla });
@@ -125,19 +136,37 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
         rivalidades: partida.rivalidades, rivalObjetivoId,
       });
       partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-    } else if (beat.tipo === 'sparring') {
+    } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
       // No se puede simular el minijuego de reacción; se asume un desempeño
       // "bien" (velocidad +1), ni el piso ni el techo del minijuego. Sin
       // rareza propia, no afecta la medición de suerte legendaria.
       partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 1) } } };
-    } else if (beat.tipo === 'oferta') {
-      ofertas += 1;
-      const { oferta } = beat.datos;
-      if (oferta.nivel === 'defensa') defensas += 1;
-      const resultado = aplicarResultado(partida.jugador, {
-        oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+      if (beat.tipo === 'campSparring' && beat.datos.ultimo) {
+        const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta);
+        ofertas += 1;
+        if (r.defensa) defensas += 1;
+        partida = { ...partida, jugador: r.jugador };
+      }
+    } else if (beat.tipo === 'campCarta') {
+      const { carta, oferta, ultimo } = beat.datos;
+      const opcion = elegirMejorOpcion(carta);
+      const resuelto = resolverOpcion(rngCosmetico, {
+        jugador: partida.jugador, carta, opcionId: opcion.id, rivalidades: partida.rivalidades,
       });
-      partida = { ...partida, jugador: resultado.jugador };
+      partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+      if (ultimo) {
+        const r = resolverPeleaDeCampamento(partida.jugador, oferta);
+        ofertas += 1;
+        if (r.defensa) defensas += 1;
+        partida = { ...partida, jugador: r.jugador };
+      }
+    } else if (beat.tipo === 'oferta') {
+      // Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya
+      // no resuelve la pelea en el acto — firma el contrato y encola el
+      // campamento (firmarPelea, career.js). "Jugando bien" siempre acepta,
+      // igual que antes; la pelea en sí se resuelve recién cuando aparece el
+      // beat `ultimo` del campamento (campCarta/campSparring, más arriba).
+      partida = firmarPelea(partida, { oferta: beat.datos.oferta });
     }
     // 'lesionSinOferta' y 'noticias': sin estado que mutar para esta medición.
   }
@@ -161,6 +190,20 @@ function resumen(nombre, resultados) {
   const sinLegendaria = resultados.filter((r) => r.legendariasTotal === 0);
 
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
+  // Objetivo declarado de beats/carrera (ver el comentario grande en
+  // career.js, arriba de ETAPAS): dejó de ser [30,60] — esa era una meta del
+  // plan original, pre-campamento, nunca un pedido del usuario, e insistir en
+  // ella significaría "corregir" un test hasta esconder un bug de
+  // documentación. El rango honesto medido (3000 semillas) es avg≈66,
+  // p10≈60, p90≈72, prácticamente todo dentro de [45,85]. Se sigue imprimiendo
+  // [30,60] acá abajo solo como referencia histórica de cuánto se alejó el
+  // ritmo real de ese número viejo, no como objetivo vigente.
+  const percentil = (arr, p) => {
+    const s = [...arr].sort((a, b) => a - b);
+    const idx = (p / 100) * (s.length - 1);
+    const lo = Math.floor(idx); const hi = Math.ceil(idx);
+    return lo === hi ? s[lo] : s[lo] + (s[hi] - s[lo]) * (idx - lo);
+  };
   const fmtGrupo = (grupo, etiqueta) => {
     if (grupo.length === 0) return `  ${etiqueta}: (0 carreras)`;
     const m = grupo.map((r) => r.mediaFinal);
@@ -169,7 +212,8 @@ function resumen(nombre, resultados) {
   };
 
   console.log(`\n=== ${nombre} (n=${n}) ===`);
-  console.log(`beats/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | dentro de [30,60]=${beats.filter((b) => b >= 30 && b <= 60).length}/${n}`);
+  console.log(`beats/carrera: avg=${avg(beats).toFixed(2)} min=${Math.min(...beats)} max=${Math.max(...beats)} | p10=${percentil(beats, 10).toFixed(1)} p50=${percentil(beats, 50).toFixed(1)} p90=${percentil(beats, 90).toFixed(1)}`);
+  console.log(`  rango honesto vigente [45,85]=${beats.filter((b) => b >= 45 && b <= 85).length}/${n} | referencia histórica [30,60]=${beats.filter((b) => b >= 30 && b <= 60).length}/${n}`);
   const debajoDe12 = ofertas.filter((o) => o < 12).length;
   const arribaDe22 = ofertas.filter((o) => o > 22).length;
   const debajoDe8 = ofertas.filter((o) => o < 8).length;

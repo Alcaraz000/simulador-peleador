@@ -88,6 +88,26 @@ describe('renderPanelDecision', () => {
     expect(grilla.querySelectorAll('.tarjeta-etiqueta')).toHaveLength(2);
   });
 
+  // Con exactamente 2 opciones (varios eventos/redes reales lo hacen), la
+  // grilla de 3 columnas dejaba una tercera columna vacía y las dos tarjetas
+  // quedaban chicas y descolgadas a la izquierda (queja textual del
+  // usuario). Reusa `.panel-decision-grilla-2`, ya creada para la creación
+  // del peleador (create.js), en vez de otra clase nueva.
+  it('con exactamente 2 opciones, usa la grilla de 2 columnas (no la de 3)', () => {
+    const dosOpciones = opciones.slice(0, 2);
+    renderPanelDecision(cont, { titulo: 'T', opciones: dosOpciones, onElegir: () => {} });
+    const grilla = cont.querySelector('.panel-decision-grilla-2');
+    expect(grilla).toBeTruthy();
+    expect(grilla.querySelectorAll('.tarjeta')).toHaveLength(2);
+  });
+
+  it('con 3 opciones (o cualquier otra cantidad distinta de 2), sigue usando la grilla de 3 columnas de siempre', () => {
+    renderPanelDecision(cont, { titulo: 'T', opciones, onElegir: () => {} });
+    const grilla = cont.querySelector('.panel-decision-grilla');
+    expect(grilla).toBeTruthy();
+    expect(grilla.classList.contains('panel-decision-grilla-2')).toBe(false);
+  });
+
   it('un efecto con probabilidad se muestra como porcentaje en la tarjeta', () => {
     const conAzar = [
       { id: 'a', titulo: 'Aceptar', efectos: [{ texto: '+5 Cardio', signo: 'positivo', probabilidad: 70 }, { texto: '-15 Forma', signo: 'negativo', probabilidad: 30 }] },

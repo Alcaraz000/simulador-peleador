@@ -82,10 +82,16 @@ function continuar() {
   const boton = cont.querySelector('[data-accion="siguiente"]');
   expect(boton).toBeTruthy();
   boton.click();
+  // "Continuar" tira el dado (Task v3) antes de revelar la siguiente
+  // decisión: con prefers-reduced-motion resuelve en el momento (este avance
+  // es un no-op), pero los bloques que prueban temporizadores reales
+  // (motion sin reducir) necesitan pasar los 600-900ms de esa animación
+  // antes de que el próximo beat aparezca. 900ms cubre de sobra el máximo.
+  vi.advanceTimersByTime(900);
 }
 
 describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', () => {
-  it('mejora: el shell se monta con los 3 paneles y 3 tarjetas; elegir anima y muestra el desenlace en el centro', () => {
+  it('mejora: el shell se monta con los 3 paneles y 3 tarjetas; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
     iniciar(cont, prepararPartidaGuardada('mejora'));
     continuar();
 
@@ -99,23 +105,24 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     tarjetas[0].click();
     vi.runAllTimers();
 
-    // no hay pantalla de resultado: el desenlace vive en la MISMA región
-    // central del MISMO shell, no se navegó a otra pantalla.
+    // Sin pantalla de resultado ni botón "Seguir" (pedido v3): se vuelve
+    // DIRECTO al estado ocioso, en la MISMA región central del MISMO shell —
+    // nunca se navegó a otra pantalla.
     expect(cont.querySelector('.shell')).toBeTruthy();
-    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
-    expect(seguir).toBeTruthy();
-
-    seguir.click();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
-  it('evento sin azar: aplica directo y muestra el desenlace, sin navegar a otra pantalla', () => {
-    // semilla 1 -> carta "cancelacion", ninguna opcion tiene probabilidades
-    // (verificado aparte con el catalogo real): ejercita el camino sin roll.
-    iniciar(cont, prepararPartidaGuardada('evento', 1));
+  it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
+    // semilla 2 -> carta "escuela_o_gimnasio", ninguna opcion tiene
+    // probabilidades (verificado aparte con el catalogo real): ejercita el
+    // camino sin roll. (Antes era la semilla 1 con "cancelacion": las cartas
+    // de riesgo nuevas de Task v3 — ver cards-events.js — corren la secuencia
+    // de rng de 'evento' y esa semilla dejó de llegar a esa carta puntual.)
+    iniciar(cont, prepararPartidaGuardada('evento', 2));
     continuar();
 
-    const grilla = cont.querySelector('.panel-decision-grilla');
+    const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
     expect(grilla).toBeTruthy();
     const tarjetas = [...grilla.querySelectorAll('.tarjeta')];
     expect(tarjetas.length).toBeGreaterThanOrEqual(2);
@@ -124,21 +131,19 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
-    expect(seguir).toBeTruthy();
-    seguir.click();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
-  it('evento con azar: la opcion elegida corre el roll (queda iluminado el desenlace ganador) y despues aplica y anima', () => {
-    // semilla 31 -> carta "entrenador", la primera opcion ("cambiar") SI
-    // tiene probabilidades (verificado aparte): ejercita el camino con roll.
-    // (Antes era la semilla 10, pero el fix de apodos duplicados en el
-    // roster — crearRoster ahora evita colisiones de apodo entre rivales, y
-    // también con el apodo del propio jugador (crearMundo/crearPartida) —
-    // corre la secuencia de rng y esa semilla dejó de llegar a esta carta en
-    // concreto; se resembró dos veces buscando la misma combinación exacta.)
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+  it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
+    // semilla 5 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
+    // cards-events.js), cuya opción "aceptar" tiene probabilidades
+    // (verificado aparte): ejercita el camino con roll. (Antes era la
+    // semilla 52 con "entrenador"/"cambiar": las cartas nuevas de riesgo
+    // corren la secuencia de rng de 'evento' y esa semilla dejó de llegar a
+    // esa carta puntual.)
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -148,8 +153,9 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     const refIzquierda = cont.querySelector('.shell-izquierda');
     const refDerecha = cont.querySelector('.shell-derecha');
 
-    const grilla = cont.querySelector('.panel-decision-grilla');
-    const tarjetaAzar = grilla.querySelector('[data-opcion="cambiar"]');
+    // "desafio_de_la_vereda" tiene exactamente 2 opciones -> grilla de 2
+    // columnas (fix v3), no la de 3 de siempre.
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
     expect(tarjetaAzar.querySelectorAll('.tarjeta-efecto').length).toBe(2);
 
@@ -160,15 +166,25 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
 
-    vi.runAllTimers();
-
-    // con prefers-reduced-motion el roll resuelve directo, pero de todos
-    // modos deja fijo el resultado ganador iluminado en la propia tarjeta.
+    // con prefers-reduced-motion el roll resuelve directo (mismo tick), pero
+    // de todos modos deja fijo el resultado ganador iluminado Y la crónica
+    // de esa rama SOBRE la propia tarjeta — sin pantalla intermedia (pedido
+    // v3: "el jugador sí tiene que poder ver qué desenlace le tocó").
     const iluminados = tarjetaAzar.querySelectorAll('.tarjeta-efecto.iluminado');
     expect(iluminados).toHaveLength(1);
+    const resultado = tarjetaAzar.querySelector('.tarjeta-resultado');
+    expect(resultado).toBeTruthy();
+    expect(resultado.textContent).toMatch(/El barrio entero se entera|la lección aprendida/);
+
+    // Todavía no se aplicó el efecto ni se volvió al estado ocioso: la
+    // tarjeta con el resultado se deja un momento a la vista (pausa de
+    // lectura) antes de seguir.
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeNull();
+
+    vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    // Después del roll y de mostrar el desenlace (que repinta el panel
+    // Después del roll y de aplicar el efecto (que repinta el panel
     // izquierdo con los valores finales y lo anima), el nodo `aside` de cada
     // región lateral sigue siendo el mismo: solo cambió su CONTENIDO interno,
     // nunca la región en sí ni el `.shell` que la contiene.
@@ -176,18 +192,16 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
     expect(cont.querySelectorAll('.shell')).toHaveLength(1);
 
-    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
-    expect(seguir).toBeTruthy();
-    // el texto del desenlace tiene que ser una de las dos crónicas posibles
-    // de esa rama de azar, no el genérico "Listo."
-    expect(cont.querySelector('.panel-decision-desenlace').textContent).toMatch(/aprendés cosas nuevas|No enganchaste con el método/);
-
-    seguir.click();
+    // Sin pantalla de resultado: derecho al estado ocioso.
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    iniciar(cont, prepararPartidaGuardada('redes'));
+    // semilla 2: con el rebalance del campamento (Task v3), la semilla 1 por
+    // defecto ya no llega a un beat "redes" dentro de su propia carrera
+    // (probRedes bajó bastante en varias etapas, ver ETAPAS en career.js).
+    iniciar(cont, prepararPartidaGuardada('redes', 2));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -198,7 +212,8 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace .boton')).toBeTruthy();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
+    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
   // Revisión del coordinador tras la Task 6.1: aceptar o rechazar una oferta
@@ -223,17 +238,20 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
 
     // Rechazar resuelve DENTRO del mismo tablero (mismo nodo): nunca se
-    // desmonta, a diferencia de lo que pasaba antes de esta revisión.
+    // desmonta, a diferencia de lo que pasaba antes de esta revisión. Y
+    // (Task v3) sin pantalla de resultado: derecho al estado ocioso.
     expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
-    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
-    expect(seguir).toBeTruthy();
-    seguir.click();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
-  it('sparring: se monta en el shell (grilla de paos) y terminar el drill lleva al desenlace, sin pantalla aparte', () => {
-    iniciar(cont, prepararPartidaGuardada('sparring'));
+  it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
+    // semilla 3: con el rebalance del campamento (Task v3), probSparring
+    // bajó fuerte (0 en profesional/veterano — el campamento ya lo garantiza
+    // en cada pelea, ver campamento.js), así que la semilla 1 por defecto ya
+    // no llega a un beat "sparring" suelto dentro de su propia carrera.
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -255,9 +273,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    const seguir = cont.querySelector('.panel-decision-desenlace .boton');
-    expect(seguir).toBeTruthy();
-    seguir.click();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 
@@ -277,13 +293,80 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 });
 
+// Task v3 ("cartas nuevas con azar"): la consecuencia "se cae la pelea" tiene
+// que ser real de punta a punta, no solo un texto en la tarjeta — este
+// bloque verifica el camino completo por la UI (main.js), no solo la lógica
+// pura de career.js/events.js (ya cubierta en sus propios tests). Para que el
+// resultado sea determinístico sin depender de la suerte del roll interno
+// (que usa un rng aparte, sembrado en `iniciar()`), la carta real que salió
+// se reemplaza por una sintética con una sola rama posible (peso 0 en la
+// segura, peso 1 en la de `caePelea: true`) — el resto de la partida (la
+// oferta pendiente de verdad, generada por `armarCola`) queda intacto.
+describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no solo en el texto)', () => {
+  function partidaConOfertaYCartaDeRiesgo() {
+    const storage = crearStorageFalso();
+    storage.setItem(CLAVE_ACCESO, '1');
+    const jugador = crearPeleador({
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+    });
+    // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
+    // Y, más adelante en la misma cola, una 'oferta' — proximaPelea ya queda
+    // seteado antes de llegar a ninguno de los dos (verificado aparte).
+    const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
+    const partida = avanzarHasta(inicial, 'evento');
+    expect(partida.proximaPelea).not.toBeNull();
+    expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
+
+    const cartaSintetica = {
+      id: 'riesgo_de_prueba', categoria: 'evento', titulo: 'Riesgo de prueba', texto: 'x',
+      etapas: ['profesional'], rareza: 'normal',
+      opciones: [
+        { id: 'aceptar', texto: 'Arriesgarse', probabilidades: [
+          { peso: 0, mods: {}, texto: 'no sale nunca en este test' },
+          { peso: 1, mods: {}, efectos: { fama: -10 }, caePelea: true, texto: 'Se cayó la pelea, de verdad.' },
+        ] },
+        { id: 'rechazar', texto: 'No arriesgarse', mods: {} },
+      ],
+    };
+    const conCartaSintetica = {
+      ...partida,
+      cola: [{ tipo: 'evento', datos: { carta: cartaSintetica } }, partida.cola[1]],
+    };
+    guardar(conCartaSintetica, storage);
+    return storage;
+  }
+
+  it('elegir la rama que cae la pelea saca la oferta de la cola y limpia proximaPelea: el panel de la derecha deja de mostrar al rival', () => {
+    iniciar(cont, partidaConOfertaYCartaDeRiesgo());
+    continuar();
+
+    // Antes de elegir: el panel de "próxima pelea" (columna derecha) todavía
+    // muestra al rival — la oferta sigue en danza.
+    expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+
+    const tarjetaRiesgo = cont.querySelector('[data-opcion="aceptar"]');
+    expect(tarjetaRiesgo).toBeTruthy();
+    tarjetaRiesgo.click();
+    vi.runAllTimers();
+
+    // Después: la pelea se cayó de verdad. El panel de la derecha ya no
+    // muestra al rival (volvió al estado vacío), y "Continuar" no lleva a
+    // ningún beat de tipo 'oferta' — se sacó de la cola, no solo del texto.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
+    expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeNull();
+    expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeNull();
+  });
+});
+
 // Hallazgo 1 de la revisión final (antes de publicar la v2): el timer del
 // roll de una carta con azar (dopaje/chantaje/entrenador) nunca se cancela.
 // Si el jugador entra a la Ficha ANTES de que el roll termine, el timer
-// dispara igual en segundo plano: mostrarDesenlace() llama a asegurarShell(),
-// que detecta que el shell ya no está dentro de `contenedor` (la Ficha lo
-// reemplazó) y lo RECONSTRUYE con mount() — borrando la pantalla de Ficha sin
-// que el jugador haya tocado "Cerrar". Este bloque necesita el roll REAL (con
+// dispara igual en segundo plano: aplicarEfectoYSeguir() llama a
+// asegurarShell(), que detecta que el shell ya no está dentro de
+// `contenedor` (la Ficha lo reemplazó) y lo RECONSTRUYE con mount() —
+// borrando la pantalla de Ficha sin que el jugador haya tocado "Cerrar".
+// Este bloque necesita el roll REAL (con
 // temporizador), no el atajo de prefers-reduced-motion del resto del
 // archivo: con motion reducido el roll resuelve en el mismo tick del click y
 // nunca queda "en curso" para poder irse a la Ficha a mitad de camino.
@@ -291,12 +374,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 31 -> carta "entrenador", la opción "cambiar" SI tiene
+    // semilla 5 -> carta "desafio_de_la_vereda", la opción "aceptar" SI tiene
     // probabilidades (mismo caso ya usado más arriba para probar el roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
 
     tarjetaAzar.click();
@@ -322,35 +405,32 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
 
   // El comportamiento elegido para no sorprender al jugador (ver el
   // comentario en main.js junto a `cancelarRollPendiente`): el roll es
-  // cosmético, el resultado real ya se decidió de forma síncrona al elegir la
-  // carta. Si el jugador se va a la Ficha a mitad del roll, al volver tiene
-  // que encontrar el desenlace YA resuelto (nunca las 3 tarjetas de nuevo, ni
-  // una pantalla en blanco) — ni pierde la carta ni el resultado que le tocó.
-  it('volver de la Ficha después de interrumpir el roll muestra el desenlace ya resuelto, no la carta de nuevo', () => {
+  // cosmético, el resultado real ya se decidió de forma síncrona al elegir
+  // la carta. Si el jugador se va a la Ficha a mitad del roll (o durante la
+  // pausa de lectura posterior), al volver el efecto ya tiene que estar
+  // aplicado y el tablero en el estado ocioso (Task v3: nunca una pantalla
+  // de resultado) — ni pierde la carta ni el resultado que le tocó, y no
+  // vuelve a ver las 3 tarjetas de la carta.
+  it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    iniciar(cont, prepararPartidaGuardada('evento', 31));
+    iniciar(cont, prepararPartidaGuardada('evento', 5));
     continuar();
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="cambiar"]');
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
     vi.advanceTimersByTime(400);
 
     cont.querySelector('[data-accion="ficha"]').click();
-    vi.advanceTimersByTime(2000); // el roll termina en segundo plano, en la Ficha
+    vi.advanceTimersByTime(2000); // no queda nada pendiente en segundo plano, en la Ficha
 
     cont.querySelector('[data-accion="cerrar"]').click();
 
-    // De vuelta en el tablero: ya está el desenlace (no las 3 tarjetas de la
-    // carta de nuevo), con una de las dos crónicas posibles de esa rama.
+    // De vuelta en el tablero: directo al estado ocioso (no las 3 tarjetas
+    // de la carta de nuevo, ni ninguna pantalla de resultado).
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.panel-decision-grilla')).toBeNull();
-    const desenlace = cont.querySelector('.panel-decision-desenlace');
-    expect(desenlace).toBeTruthy();
-    expect(desenlace.textContent).toMatch(/aprendés cosas nuevas|No enganchaste con el método/);
-
-    // Y "Seguir" funciona con normalidad: lleva de vuelta al estado ocioso.
-    desenlace.querySelector('.boton').click();
+    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
     expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
   });
 });

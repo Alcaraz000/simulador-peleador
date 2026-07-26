@@ -74,12 +74,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .fila > * { flex: 1; min-width: 0; }
 .stack > * + * { margin-top: 8px; }
 
-.dorado { color: var(--dorado); }
-.verde { color: var(--verde); }
-.rojo { color: var(--rojo); }
-.sutil { color: var(--texto-sutil); }
-.medio { color: var(--texto-medio); }
-
 .boton {
   display: block;
   width: 100%;
@@ -238,10 +232,37 @@ h2 { font-size: 17px; font-weight: 800; }
 .tarjeta.rara .tarjeta-icono { background: #111a26; color: #7fa6e0; }
 .tarjeta.legendaria .tarjeta-icono { background: #2a2008; color: var(--dorado); }
 
-.tarjeta-titulo { font-size: 14px; font-weight: 800; margin-top: 9px; }
+/* Tamaño fijo (pedido general del usuario): título y descripción siempre
+   miden lo mismo, sin importar cuánto texto traiga cada opción, para que una
+   grilla de tarjetas no quede deforme por una descripción más larga que otra.
+   El texto de más se corta con "…" (line-clamp): el contenido completo sigue
+   en el DOM, solo se recorta lo visible. */
+.tarjeta-titulo {
+  font-size: 14px;
+  font-weight: 800;
+  margin-top: 9px;
+  height: 36px;
+  line-height: 18px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
 .tarjeta.legendaria .tarjeta-titulo { color: var(--dorado); }
 
-.tarjeta-desc { font-size: 11px; color: var(--texto-medio); margin-top: 5px; }
+.tarjeta-desc {
+  font-size: 11px;
+  color: var(--texto-medio);
+  margin-top: 5px;
+  height: 60px;
+  line-height: 15px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+}
 
 .tarjeta-efectos { margin-top: 11px; display: flex; flex-direction: column; gap: 5px; }
 
@@ -262,6 +283,19 @@ h2 { font-size: 17px; font-weight: 800; }
 .tarjeta-efecto.iluminado { box-shadow: 0 0 0 1px currentColor, 0 0 14px rgba(242, 193, 78, 0.35); transform: scale(1.04); }
 .tarjeta-efectos:has(.iluminado) .tarjeta-efecto:not(.iluminado) { opacity: 0.35; }
 
+/* Crónica de la rama de azar (v3): reemplaza a la pantalla de "Seguir" — se
+   agrega SOBRE la propia tarjeta ganadora, después de que el roll termina,
+   y se va con la tarjeta cuando la carrera sigue sola. */
+.tarjeta-resultado {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--texto-medio);
+  animation: aparecer 0.25s ease both;
+}
+
 .tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
 .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
 .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
@@ -278,6 +312,16 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-decision-grilla {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+/* Grilla de 2 columnas: para cuando hay exactamente 2 o 4 tarjetas (origen y
+   estilo en la creación del peleador). Con 2 tarjetas evita la tercera
+   columna vacía de .panel-decision-grilla (quedaban mal centradas); con 4
+   arma un 2×2 prolijo en vez de 3 arriba + 1 sola abajo con un hueco enorme. */
+.panel-decision-grilla-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
   gap: 10px;
 }
 
@@ -327,6 +371,52 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .shell-destacada { animation: destaque-shell 0.9s ease; border-radius: 12px; }
 
+/* Resalte por FILA de atributo (v3): reemplaza el flash de TODO el módulo
+   izquierdo (.shell-destacada, ya no se usa para esto) — al aplicar una
+   tarjeta, solo se destacan un momento las filas que de verdad cambiaron:
+   verde si subieron, rojo si bajaron. Mismo patrón que destaque-shell (0.9s,
+   arranca y termina en "sin brillo") para no necesitar sacarse la clase a
+   mano con un timer aparte. */
+@keyframes destaque-fila-positiva {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px var(--verde), 0 0 14px rgba(143, 214, 148, 0.45); }
+}
+
+@keyframes destaque-fila-negativa {
+  0%, 100% { box-shadow: none; }
+  50% { box-shadow: 0 0 0 1px var(--rojo), 0 0 14px rgba(239, 68, 68, 0.45); }
+}
+
+.panel-peleador-atributo.destaque-positivo { animation: destaque-fila-positiva 0.9s ease; }
+.panel-peleador-atributo.destaque-negativo { animation: destaque-fila-negativa 0.9s ease; }
+
+/* Dado al tocar Continuar (v3): el gesto de transición entre beats. Gira y
+   "rebota" una vez, corto (750ms), sobre el propio botón. */
+@keyframes tirar-dado {
+  0%   { transform: rotate(0deg) scale(1); }
+  30%  { transform: rotate(150deg) scale(1.18); }
+  65%  { transform: rotate(260deg) scale(0.92); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+
+.boton-tirando-dado {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* El botón queda disabled mientras dura (evita un segundo click a mitad de
+   camino), pero el dado no se ve apagado como un botón inactivo común: es el
+   gesto de la carrera, tiene que verse vivo mientras gira. Selector con la
+   misma especificidad que `.boton:disabled` (una clase + :disabled) para
+   pisarlo de verdad, no solo por orden de declaración. */
+.boton.boton-tirando-dado:disabled {
+  opacity: 1;
+  cursor: default;
+}
+
+.boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
+
 @media (min-width: 900px) {
   .shell { flex-direction: row; align-items: flex-start; }
   .shell-izquierda { flex: 0 0 242px; }
@@ -338,18 +428,31 @@ h2 { font-size: 17px; font-weight: 800; }
 /* Tablero: columna izquierda (v2) */
 .panel-peleador-cabecera { cursor: pointer; }
 
+/* Cabecera del peleador (v3): la MEDIA es un badge chico en la esquina
+   superior derecha de su propia fila (junto a la etiqueta del rango); el
+   nombre y los datos van DEBAJO, a todo el ancho del panel — nunca comparten
+   fila con el badge, así no se aprietan ni dejan espacio muerto. */
+.panel-peleador-cabecera-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.panel-peleador-nombre { margin-top: 6px; font-size: 18px; line-height: 1.2; }
+
 .rango-media {
   flex: 0 0 auto;
-  width: 58px;
-  height: 58px;
-  border-radius: 12px;
+  width: 46px;
+  height: 46px;
+  border-radius: 11px;
   border: 2px solid;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
-.rango-media-num { font-size: 24px; font-weight: 800; line-height: 1; }
+.rango-media-num { font-size: 19px; font-weight: 800; line-height: 1; }
 
 .panel-peleador-atributos { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
 
@@ -364,6 +467,28 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-peleador-atributo.con-aporte { background: #1a1408; }
 .panel-peleador-atributo .valor { font-size: 13px; }
 .aporte-entrenador { font-size: 9.5px; color: var(--dorado); font-weight: 800; }
+
+/* "aporte del entrenador" (v3): antes era un segundo título del mismo peso
+   visual que "Atributos" (queja del usuario); ahora es una etiqueta chica y
+   atenuada, como un chip informativo, no un encabezado más. */
+.panel-peleador-aporte-etiqueta {
+  flex: 0 0 auto;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--texto-sutil);
+  background: #1a1408;
+  border-radius: 20px;
+  padding: 3px 8px;
+  opacity: 0.8;
+}
+
+/* Sección "Estado" (v3): mentón, disciplina personal, forma y moral, ya
+   modificados por las tarjetas pero sin ningún lugar en el tablero hasta
+   ahora. Visualmente separada de los 6 atributos de combate (los únicos con
+   aporte de entrenador) con un filete y su propia etiqueta chica. */
+.panel-peleador-estado-titulo { margin: 10px 0 8px; padding-top: 9px; border-top: 1px solid var(--borde); }
 
 .tu-rincon .rincon-iniciales {
   flex: 0 0 auto;
@@ -411,6 +536,14 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .noticia-item { padding: 10px 11px; }
 .noticia-item.nueva { border-color: var(--rojo); }
+
+/* Entrada escalonada de noticias nuevas (v3, feedback del usuario: "que se
+   vayan sumando", no todas de golpe): arrancan invisibles/corridas y cada una
+   se revela un rato después de la anterior (panel-noticias.js). Con
+   prefers-reduced-motion nunca se les pone esta clase (entran todas juntas,
+   directo). */
+.noticia-item.noticia-oculta { opacity: 0; transform: translateY(6px); }
+.noticia-item.noticia-aparece { animation: aparecer 0.25s ease both; }
 
 /* Alto fijo con scroll interno: no crece indefinidamente con la carrera. */
 .panel-noticias-lista { padding-right: 2px; }
@@ -470,12 +603,17 @@ h2 { font-size: 17px; font-weight: 800; }
    acción viven en el mismo esqueleto, montado una sola vez. */
 .pantalla-pelea .panel + .panel { margin-top: 8px; }
 
-.marcador-cabecera { justify-content: space-between; align-items: center; }
-.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; flex: 0 1 auto; }
-.marcador-derecha { flex-direction: row-reverse; text-align: right; }
-.marcador-vs { flex: 0 0 auto; }
+/* Marcador agrupado por peleador (Task v3, pedido textual: "¿no debería ir
+   de un lado las del peleador y del otro las del contrincante?"): una sola
+   fila con dos columnas — cada una trae nombre+bandera y, debajo, SU
+   aguante y SU fatiga — y el VS centrado entre las dos. */
+.marcador-cuerpo { align-items: flex-start; }
+.marcador-lado { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.marcador-der { text-align: right; }
+.marcador-peleador { display: flex; align-items: center; gap: 6px; font-weight: 800; font-size: 13px; }
+.marcador-derecha { flex-direction: row-reverse; }
+.marcador-vs { flex: 0 0 auto; align-self: center; }
 
-.marcador-barras { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
 .marcador-stat-cab { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; color: var(--texto-medio); }
 .marcador-stat-cab .valor { font-size: 12px; color: var(--texto); margin-left: auto; }
 .marcador-stat .barra { height: 6px; }
@@ -518,6 +656,75 @@ h2 { font-size: 17px; font-weight: 800; }
   transform: translateX(-50%);
   transition: left 0.05s linear;
 }
+
+/* Barra de paciencia del promotor (negociación, v3): mismo tratamiento
+   grueso y con borde que la barra de precisión del golpe de gracia
+   (referencia visual del mockup, sección C: pista redondeada, con borde,
+   26-28px de alto) en vez de la barrita fina de 8px de `.barra` — el pedido
+   textual del usuario fue justamente "la barra no es igual [al mockup]".
+   Acá no hay zona que acertar (no es un minijuego de puntería): una sola
+   franja cuyo COLOR viaja de verde a rojo según cuánta paciencia queda, el
+   mismo semáforo que ya usa el resto del juego para "bueno/ojo/peligro". */
+.barra-paciencia-pista {
+  position: relative;
+  height: 22px;
+  background: #241012;
+  border: 1px solid var(--borde-fuerte);
+  border-radius: 11px;
+  overflow: hidden;
+}
+
+.barra-paciencia-pista > i {
+  display: block;
+  height: 100%;
+  transition: width 0.45s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.3s ease;
+}
+
+/* Campo "qué acaba de pasar" (Task v3, pedido textual: "falta un campo que
+   describa lo que acaba de ocurrir"): mismo tratamiento que la crónica de la
+   rama de azar en las tarjetas (.tarjeta-resultado), reusado acá para que la
+   negociación hable con la misma voz que el resto del juego. */
+.negociacion-evento {
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  font-size: 12px;
+  font-style: italic;
+  color: var(--texto-medio);
+  animation: aparecer 0.25s ease both;
+}
+
+/* Tonos del careo (v3): color FIJO por tono (Task v3, pedido textual:
+   "colores en la etiqueta según el tipo de respuesta, como en la
+   referencia"). Reutiliza exactamente la paleta que ya usan los efectos de
+   las tarjetas (verde/dorado/rojo) más el azul que ya identifica "RARA" en
+   .tarjeta-etiqueta — mismo lenguaje visual, ningún color nuevo. Aplicado
+   sobre el TÍTULO de la tarjeta de cada respuesta (ver presser.js). */
+.tarjeta[data-tono="provocador"] .tarjeta-titulo { color: var(--rojo); }
+.tarjeta[data-tono="frio"] .tarjeta-titulo { color: #7fa6e0; }
+.tarjeta[data-tono="humilde"] .tarjeta-titulo { color: var(--verde); }
+.tarjeta[data-tono="canchero"] .tarjeta-titulo { color: var(--dorado); }
+
+/* Resumen final del careo (Task v3, pedido textual: "mostrar un resumen de
+   las respuestas y qué consecuencias tuvo"): una fila compacta por ronda. */
+.careo-resumen-fila {
+  padding: 9px 12px;
+  gap: 8px;
+}
+
+.careo-resumen-tono {
+  flex: 0 0 auto;
+  font-size: 9px;
+  letter-spacing: 1px;
+  font-weight: 800;
+  padding: 3px 8px;
+  border-radius: 20px;
+  text-transform: uppercase;
+}
+
+.careo-resumen-tono.provocador { background: #241012; border: 1px solid #4a2c2c; color: var(--rojo); }
+.careo-resumen-tono.frio { background: #111a26; border: 1px solid #3a5a8a; color: #7fa6e0; }
+.careo-resumen-tono.humilde { background: #16240f; border: 1px solid #2c4a30; color: var(--verde); }
+.careo-resumen-tono.canchero { background: #2a2008; border: 1px solid var(--dorado); color: var(--dorado); }
 
 /* Popup genérico (Task 5.3/5.4): overlay centrado sobre TODO (tablero,
    creación), nunca una pantalla propia. Se usa para el picker de
@@ -580,6 +787,42 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .popup-cuerpo { margin-top: 12px; }
 
+/* Tabla de posiciones como popup (Task v3, feedback del usuario: "no puedo
+   ver quiénes están por encima o por debajo mío"). Reusa `.panel`/`.fila`
+   como base; la fila del jugador se destaca con un borde dorado, mismo
+   criterio que `.tarjeta-elegida`. */
+.tabla-ranking-fila { padding: 9px 12px; }
+.tabla-ranking-puesto {
+  flex: 0 0 auto;
+  width: 30px;
+  text-align: center;
+  font-weight: 800;
+  color: var(--texto-sutil);
+}
+
+.tabla-ranking-fila-jugador { border-color: var(--dorado); box-shadow: 0 0 0 1px var(--dorado); }
+.tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
+
+/* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
+   (panel-peleador.js): mismo criterio de tamaño que .boton-tienda, a escala
+   más chica porque comparte fila con la etiqueta "Ranking". */
+.tabla-ranking-boton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  flex: 0 0 auto;
+  background: #241012;
+  border: 1px solid var(--borde);
+  border-radius: 7px;
+  color: var(--texto-medio);
+  cursor: pointer;
+}
+
+.tabla-ranking-boton:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+
 /* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
 .popup-banderas-grilla {
   display: grid;
@@ -612,8 +855,17 @@ h2 { font-size: 17px; font-weight: 800; }
 .paso-titulo { margin-bottom: 10px; }
 .paso-titulo .etiqueta { display: inline; }
 
+/* Paso todavía no habilitado: el título se apaga a gris (las tarjetas de
+   adentro ya se apagan solas vía .tarjeta:disabled). El módulo entero nunca
+   se oculta — el jugador tiene que ver de entrada los 4 pasos que va a
+   decidir, no que vayan apareciendo de la nada. */
+.paso-titulo-bloqueado .dorado { color: var(--texto-sutil); }
+
 .creacion-campo { display: flex; align-items: center; gap: 8px; }
 .creacion-campo > svg { flex: 0 0 auto; }
+/* El control (input/botón único, o un grupo de chips .fila) ocupa el resto
+   del ancho de la fila junto al ícono. */
+.creacion-campo > *:not(svg) { flex: 1; min-width: 0; }
 
 .creacion-control {
   width: 100%;
@@ -630,6 +882,23 @@ h2 { font-size: 17px; font-weight: 800; }
 }
 
 input.creacion-control { cursor: text; }
+
+/* Chips de opción directa (mano hábil, disciplina, categoría): mismo control
+   visual que .creacion-control, uno por opción, agrupados en un .fila. Nada
+   de <select> salvo nacionalidad (que sigue siendo el botón de arriba). */
+.creacion-chip {
+  text-align: center;
+  font-weight: 700;
+}
+
+.creacion-chip:hover { border-color: var(--borde-fuerte); }
+
+.creacion-chip.elegida {
+  border-color: var(--dorado);
+  color: var(--dorado);
+  background: #1a1408;
+  box-shadow: 0 0 0 1px var(--dorado);
+}
 
 .creacion-nacionalidad {
   display: flex;
@@ -721,6 +990,25 @@ input.creacion-control { cursor: text; }
 }
 
 .tienda-item-lujo .tienda-item-icono { width: 42px; height: 42px; }
+
+/* Utilitarios de color de texto — declarados AL FINAL a propósito (cierre de
+   ronda v3, bug preexistente): todos tienen especificidad (0,1,0), igual que
+   la mayoría de los componentes de acá arriba (.chip, .etiqueta, .tarjeta-desc,
+   etc.) que también fijan su propio `color`. Con igual especificidad gana el
+   que se declara último, así que si este bloque vive arriba (como estaba
+   antes), cualquier combinación "componente + color" pierde el duelo de
+   cascada y sale gris — eso le pasaba a TODOS los chips (cinturones del
+   tablero, noticias, revancha/nuevo campeón en la pelea). Poniéndolo al final
+   se resuelve de raíz para cualquier combinación futura, sin necesitar una
+   regla ".chip.dorado" puntual por cada caso (ni !important). Los combos que
+   sí necesitan ganarle A ESTO (p. ej. ".paso-titulo-bloqueado .dorado" o
+   ".tienda-precio.dorado") ya son más específicos que (0,1,0) y no dependen
+   del orden. */
+.dorado { color: var(--dorado); }
+.verde { color: var(--verde); }
+.rojo { color: var(--rojo); }
+.sutil { color: var(--texto-sutil); }
+.medio { color: var(--texto-medio); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

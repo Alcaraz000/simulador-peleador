@@ -52,7 +52,12 @@ export function renderPanelDecision(region, {
     texto ? el('p', { class: 'medio', text: texto }) : null,
   ]);
 
-  const grilla = el('div', { class: 'panel-decision-grilla' }, botones);
+  // Con exactamente 2 opciones, la grilla de 3 columnas de siempre deja una
+  // tercera columna vacía y las tarjetas quedan chicas y descolgadas a la
+  // izquierda (queja del usuario): se reusa `.panel-decision-grilla-2`
+  // (creada en create.js) para que las 2 se centren y ocupen bien el ancho.
+  const claseGrilla = opciones.length === 2 ? 'panel-decision-grilla-2' : 'panel-decision-grilla';
+  const grilla = el('div', { class: claseGrilla }, botones);
 
   mount(region, el('div', { class: 'stack panel-decision' }, [cabecera, grilla]));
 }

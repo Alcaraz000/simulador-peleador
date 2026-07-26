@@ -115,4 +115,131 @@ describe('calcularLegado', () => {
     p.jugador.lesionesSufridas = [{ severidad: 3 }, { severidad: 1 }, { severidad: 3 }];
     expect(calcularLegado(p).lesionesGraves).toBe(2);
   });
+
+  // Reproduce el bug reportado por el usuario, textual: "Le ganó a Julio
+  // Barrera y se quedó con el Cinturón regional." aparecía DOS VECES en
+  // Momentos memorables. La causa real: ganar un título (nivel 'titulo') y
+  // defenderlo (nivel 'defensa') comparten esTitulo:true + resultado:'v', y
+  // antes del fix las dos ramas usaban la misma frase de "se quedó con".
+  describe('momentos memorables — causa real de las frases repetidas', () => {
+    it('defender un titulo NO repite la frase de haberlo ganado', () => {
+      const p = partida({
+        historial: [
+          {
+            rivalId: 'r1', rivalNombre: 'Julio Barrera', rivalApodo: 'El Zurdo',
+            resultado: 'v', metodo: 'decision', round: 12, bolsa: 100,
+            enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: false, fecha: 10,
+          },
+          {
+            rivalId: 'r1', rivalNombre: 'Julio Barrera', rivalApodo: 'El Zurdo',
+            resultado: 'v', metodo: 'decision', round: 12, bolsa: 100,
+            enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: true, fecha: 40,
+          },
+        ],
+        titulos: ['Cinturón regional'],
+      });
+      const legado = calcularLegado(p);
+      expect(legado.momentos).toHaveLength(2);
+      expect(legado.momentos[0]).not.toBe(legado.momentos[1]);
+      // La frase de "se quedó con"/"se colgó" es específica de CONQUISTAR el
+      // título — una defensa no puede sonar igual que ganarlo por primera vez.
+      expect(legado.momentos[1]).not.toMatch(/se qued(ó|o) con|se colg(ó|o)/i);
+    });
+
+    it('sin esObligatoria (historial viejo), sigue tratándolo como titulo ganado', () => {
+      const p = partida({
+        historial: [{
+          rivalId: 'r1', rivalNombre: 'Dyke Tyzon', rivalApodo: 'El Ciclón',
+          resultado: 'v', metodo: 'decision', round: 12, bolsa: 100,
+          enJuego: 'Cinturón regional', esTitulo: true,
+        }],
+      });
+      const legado = calcularLegado(p);
+      expect(legado.momentos[0]).toContain('Dyke Tyzon');
+    });
+  });
+
+  describe('linea de tiempo de titulos (fechas de conquista y defensa)', () => {
+    function historialTitulo() {
+      return [
+        {
+          rivalId: 'r1', rivalNombre: 'Julio Barrera', rivalApodo: 'El Zurdo',
+          resultado: 'v', metodo: 'decision', round: 12, bolsa: 100,
+          enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: false, fecha: 10,
+        },
+        {
+          rivalId: 'r2', rivalNombre: 'Nico Salas', rivalApodo: 'El Nico',
+          resultado: 'v', metodo: 'ko', round: 3, bolsa: 100,
+          enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: true, fecha: 62,
+        },
+      ];
+    }
+
+    it('trae fecha de conquista y de cada defensa del titulo', () => {
+      const p = partida({ historial: historialTitulo(), titulos: ['Cinturón regional'] });
+      const legado = calcularLegado(p);
+      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      expect(regional).toBeTruthy();
+      expect(regional.fechaGanado).toBeTruthy();
+      expect(regional.defensas).toHaveLength(1);
+      expect(regional.defensas[0].rivalNombre).toBe('Nico Salas');
+      expect(regional.defensas[0].fecha).toBeTruthy();
+    });
+
+    it('si despues lo pierde, queda la fecha en que lo perdio y sin defensas activas', () => {
+      const historial = [
+        ...historialTitulo(),
+        {
+          rivalId: 'r3', rivalNombre: 'Un Retador', rivalApodo: 'El Retador',
+          resultado: 'd', metodo: 'ko', round: 5, bolsa: 100,
+          enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: true, fecha: 90,
+        },
+      ];
+      const p = partida({ historial, titulos: [] });
+      const legado = calcularLegado(p);
+      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      expect(regional.fechaPerdido).toBeTruthy();
+    });
+
+    it('sin fecha guardada (hitos viejos), no revienta y no muestra fecha', () => {
+      const p = partida({
+        historial: [{
+          rivalId: 'r1', rivalNombre: 'Julio Barrera', rivalApodo: 'El Zurdo',
+          resultado: 'v', metodo: 'decision', round: 12, bolsa: 100,
+          enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: false,
+        }],
+        titulos: ['Cinturón regional'],
+      });
+      expect(() => calcularLegado(p)).not.toThrow();
+      const regional = calcularLegado(p).titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      expect(regional.fechaGanado).toBeNull();
+    });
+
+    it('sin titulos, la linea de tiempo queda vacia', () => {
+      expect(calcularLegado(partida()).titulosDetalle).toEqual([]);
+    });
+  });
+
+  // El usuario preguntó textualmente qué significa "¿Legado nacional?" — los
+  // cinco ejes necesitan nombre y bajada que se entiendan sin explicación.
+  describe('los cinco ejes del legado se entienden solos', () => {
+    it('el eje nacional ya no se llama "Legado nacional" a secas', () => {
+      const nacional = calcularLegado(partida()).legados.find((l) => l.id === 'nacional');
+      expect(nacional.nombre).not.toBe('Legado nacional');
+      expect(nacional.texto.toLowerCase()).toContain('país');
+    });
+
+    it('ningun eje repite el texto generico anterior', () => {
+      const viejos = [
+        'Lo que hiciste arriba del ring.',
+        'Lo que significaste para tu país.',
+        'Lo que construiste con la plata.',
+        'Cuánto se habló de vos.',
+        'Cómo hiciste las cosas.',
+      ];
+      for (const l of calcularLegado(partida()).legados) {
+        expect(viejos).not.toContain(l.texto);
+      }
+    });
+  });
 });

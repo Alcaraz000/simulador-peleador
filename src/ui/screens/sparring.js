@@ -1,6 +1,9 @@
 import { el, mount } from '../dom.js';
 
-export function renderSparring(contenedor, { sparring, jugador, onGolpe, onTerminar }) {
+export function renderSparring(contenedor, {
+  sparring, jugador, onGolpe, onTerminar,
+  titulo = `Entrenamiento · ${jugador.gimnasio}`, bajada = 'Sparring de reflejos',
+}) {
   let activo = null;
   let desde = 0;
 
@@ -32,8 +35,8 @@ export function renderSparring(contenedor, { sparring, jugador, onGolpe, onTermi
     : el('button', { class: 'boton', 'data-accion': 'empezar', text: 'Empezar', onClick: empezar });
 
   mount(contenedor, el('div', { class: 'stack' }, [
-    el('div', { class: 'etiqueta', text: `Entrenamiento · ${jugador.gimnasio}` }),
-    el('h1', { text: 'Sparring de reflejos' }),
+    el('div', { class: 'etiqueta', text: titulo }),
+    el('h1', { text: bajada }),
     el('p', { class: 'medio', text: '"Pegá el que se prende. Rápido, que en el ring no avisan."' }),
     el('div', { class: 'fila' }, [
       el('div', { class: 'tile' }, [

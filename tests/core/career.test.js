@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque } from '../../src/core/career.js';
+import {
+  ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea, cancelarProximaPelea,
+} from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
 import { ANIO_INICIAL } from '../../src/core/world.js';
@@ -30,27 +32,48 @@ function jugarTodo(partida, limite = 400) {
 // (sin correr el motor de pelea completo: aplica directamente un resultado ganador
 // vía aplicarResultado). Sirve para verificar que la progresión de cinturones
 // funciona de punta a punta cuando al jugador le va bien.
+//
+// Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
+// resuelve la pelea en el acto — firma el contrato (firmarPelea) y el
+// campamento (2-3 beats más, campCarta/campSparring) se juega como cualquier
+// otro beat. La pelea en sí se resuelve recién cuando aparece el beat
+// `ultimo` del campamento, no en el beat 'oferta'. `beats` cuenta TODO lo que
+// pasó por acá (incluido el campamento): es la medida real del presupuesto
+// de ritmo de una carrera jugada de punta a punta, no solo de la cola "en
+// bruto" (ver jugarTodo, más arriba, que nunca acepta nada y por lo tanto
+// nunca dispara ningún campamento).
 function jugarGanandoTodo(partida, limite = 400) {
   let actual = partida;
   let guardia = 0;
   let defensas = 0;
   let ofertas = 0;
+  let beats = 0;
   while (!actual.terminada && guardia < limite) {
     guardia += 1;
     const paso = siguienteBeat(actual);
     actual = paso.partida;
-    if (paso.beat && paso.beat.tipo === 'oferta') {
-      ofertas += 1;
+    if (!paso.beat) continue;
+    beats += 1;
+
+    if (paso.beat.tipo === 'oferta') {
       const { oferta } = paso.beat.datos;
-      if (oferta.nivel === 'defensa') defensas += 1;
-      const resultado = aplicarResultado(actual.jugador, {
-        oferta,
-        resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
-      });
-      actual = { ...actual, jugador: resultado.jugador };
+      actual = firmarPelea(actual, { oferta });
+    } else if (paso.beat.tipo === 'campCarta' || paso.beat.tipo === 'campSparring') {
+      const { oferta, ultimo } = paso.beat.datos;
+      if (ultimo) {
+        ofertas += 1;
+        if (oferta.nivel === 'defensa') defensas += 1;
+        const resultado = aplicarResultado(actual.jugador, {
+          oferta,
+          resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+        });
+        actual = { ...actual, jugador: resultado.jugador };
+      }
     }
   }
-  return { partida: actual, defensas, ofertas };
+  return {
+    partida: actual, defensas, ofertas, beats,
+  };
 }
 
 describe('etapas', () => {
@@ -131,12 +154,48 @@ describe('siguienteBeat', () => {
 });
 
 describe('ritmo de la carrera', () => {
-  it('produce entre 30 y 60 beats', () => {
-    for (const semilla of [1, 2, 3, 4, 5]) {
-      const { beats } = jugarTodo(nuevaPartida(semilla));
-      expect(beats.length).toBeGreaterThanOrEqual(30);
-      expect(beats.length).toBeLessThanOrEqual(60);
+  // Task v3: el presupuesto de ritmo tiene que medirse sobre una carrera
+  // REALMENTE jugada (aceptando ofertas, con su campamento de 2-3 beats cada
+  // una) — jugarTodo (arriba) nunca acepta nada, así que nunca dispara ningún
+  // campamento y mediría un piso irreal.
+  //
+  // Objetivo declarado de beats/carrera — ACTUALIZADO (cierre de ronda v3;
+  // ver el comentario completo en career.js, arriba de ETAPAS, con el porqué
+  // y los números). El "30-60" original era una meta del PLAN, nunca un
+  // pedido del usuario, y quedó inalcanzable al devolver la mejora
+  // garantizada a TODOS los bloques y sumar el campamento (2-3 beats por
+  // pelea aceptada) — ambos, pedidos textuales del usuario. Insistir en
+  // 30-60 como objetivo habría significado "arreglar" este test bajándole el
+  // umbral hasta que un bug de documentación pasara desapercibido. En cambio,
+  // se midió el rango REAL sobre una muestra grande (3000 semillas, mismo
+  // método que este test) y ese es ahora el objetivo declarado: avg≈66,
+  // p10≈60, p90≈72, prácticamente ninguna carrera fuera de [45,85]. El
+  // promedio es muy estable entre muestras (¡nada que ver con el test
+  // flaky que hubo en este proyecto por muestra chica, donde n=150 variaba
+  // 12 puntos entre corridas! acá, con n=1500 y la mayor parte del conteo
+  // saliendo de estructura FIJA — no de azar — la variación entre ventanas
+  // de 200 semillas separadas fue de bien menos de 1 punto), así que el
+  // umbral de abajo tiene margen de sobra para no ser flaky sin dejar de
+  // detectar una regresión real.
+  it('sobre muchas semillas, el promedio de beats/carrera cae en el rango honesto medido (jugadas de punta a punta, con campamento incluido)', () => {
+    const total = 1500;
+    const todos = [];
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      todos.push(jugarGanandoTodo(nuevaPartida(semilla)).beats);
     }
+    const promedio = todos.reduce((a, b) => a + b, 0) / total;
+
+    // Banda amplia (±6-7 sobre el ~66.4 medido) para no ser flaky, pero sigue
+    // marcando una regresión real si alguien recorta o infla el ritmo.
+    expect(promedio).toBeGreaterThanOrEqual(60);
+    expect(promedio).toBeLessThanOrEqual(73);
+
+    // Guardia de forma de la distribución: casi ninguna carrera bien jugada
+    // debería quedar bien afuera del rango observado (min 49 / max 83 sobre
+    // 3000 semillas) — esto detectaría, por ejemplo, un campamento que a
+    // veces se dispara mucho más largo de lo previsto.
+    const dentroDelRango = todos.filter((b) => b >= 45 && b <= 85).length;
+    expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
   it('incluye peleas, mejoras y eventos', () => {
@@ -191,6 +250,43 @@ describe('avanzarBloque', () => {
   it('genera noticias del mundo', () => {
     const despues = avanzarBloque(nuevaPartida());
     expect(despues.noticias.length).toBeGreaterThan(0);
+  });
+
+  // Causa real del bug reportado por el usuario ("todas las noticias dicen
+  // ÚLTIMO MOMENTO, aunque sean de antes"): antes de este fix, lo único que
+  // llamaba a `marcarLeidas` (news.js) era el click del acordeón en
+  // panel-noticias.js — un gesto que en PC no hace falta nunca (la lista ya
+  // está siempre visible debajo del botón) y que en la práctica casi nadie
+  // dispara antes de que llegue la siguiente tanda. `avanzarBloque` es el
+  // flujo real del juego que suma noticias nuevas (una vez por bloque): tiene
+  // que apagar la marca de la tanda anterior al sumar la propia.
+  it('una tanda anterior deja de estar marcada "nueva" al sumarse una tanda nueva (causa real del bug ÚLTIMO MOMENTO)', () => {
+    const p = nuevaPartida();
+    p.noticias = [{
+      id: 'noticia_vieja', tipo: 'victoria', titular: 'x', cuerpo: 'x', fecha: 2020, nueva: true,
+    }];
+    const despues = avanzarBloque(p);
+
+    const vieja = despues.noticias.find((n) => n.id === 'noticia_vieja');
+    expect(vieja).toBeTruthy();
+    expect(vieja.nueva).toBe(false);
+
+    // La tanda recién generada en ESTE bloque sí queda marcada como nueva.
+    const restantes = despues.noticias.filter((n) => n.id !== 'noticia_vieja');
+    expect(restantes.length).toBeGreaterThan(0);
+    expect(restantes.every((n) => n.nueva === true)).toBe(true);
+  });
+
+  it('avanzando varios bloques seguidos, nunca queda más de una tanda marcada "nueva" a la vez', () => {
+    let p = nuevaPartida();
+    for (let i = 0; i < 5; i += 1) p = avanzarBloque(p);
+
+    const idsDeLaUltimaTanda = p.noticias.filter((n) => n.nueva).map((n) => n.id);
+    expect(idsDeLaUltimaTanda.length).toBeGreaterThan(0);
+
+    const otraVuelta = avanzarBloque(p);
+    const siguenNuevas = otraVuelta.noticias.filter((n) => idsDeLaUltimaTanda.includes(n.id) && n.nueva);
+    expect(siguenNuevas).toHaveLength(0);
   });
 
   it('recupera lesiones con el paso de los bloques', () => {
@@ -313,8 +409,8 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
 
 describe('ofertas de pelea por carrera', () => {
   // Guarda de ritmo para el eje de cinturones: si alguien vuelve a bajar probPelea
-  // (o a hacer incondicional el beat de noticias) sin medir el impacto, estos tests
-  // lo detectan. Ver el informe de la Task 17 para el porqué de estos números.
+  // sin medir el impacto, estos tests lo detectan. Ver el informe de la Task 17
+  // para el porqué de estos números.
   const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   it('nunca caen por debajo de 8 ofertas en toda la carrera', () => {
@@ -461,6 +557,132 @@ describe('proximaPelea (calendario del tablero)', () => {
     const antes = JSON.stringify(p.proximaPelea);
     siguienteBeat(p);
     expect(JSON.stringify(p.proximaPelea)).toBe(antes);
+  });
+});
+
+describe('firmarPelea (campamento de preparación)', () => {
+  function ofertaDePrueba() {
+    return {
+      id: 'of_1', rivalId: 'r1', rivalApodo: 'El Zurdo', esTitulo: false,
+    };
+  }
+
+  it('mete los beats de campamento al frente de la cola', () => {
+    const p = nuevaPartida(1);
+    p.etapaIndice = 2; // profesional
+    const conCola = { ...p, cola: [{ tipo: 'noticias', datos: {} }] };
+    const firmada = firmarPelea(conCola, { oferta: ofertaDePrueba() });
+    expect(['campCarta', 'campSparring']).toContain(firmada.cola[0].tipo);
+    expect(firmada.cola[firmada.cola.length - 1].tipo).toBe('noticias');
+  });
+
+  it('deja proximaPelea con la oferta y un semanaObjetivo mayor a la semana actual', () => {
+    const p = nuevaPartida(2);
+    const oferta = ofertaDePrueba();
+    const firmada = firmarPelea(p, { oferta });
+    expect(firmada.proximaPelea.oferta).toBe(oferta);
+    expect(firmada.proximaPelea.semanaObjetivo).toBeGreaterThan(p.semanaGlobal);
+  });
+
+  it('no muta la partida original', () => {
+    const p = nuevaPartida(3);
+    const antes = JSON.stringify(p);
+    firmarPelea(p, { oferta: ofertaDePrueba() });
+    expect(JSON.stringify(p)).toBe(antes);
+  });
+
+  it('siguienteBeat avanza semanaGlobal al consumir un beat de campamento', () => {
+    const p = nuevaPartida(4);
+    const firmada = firmarPelea(p, { oferta: ofertaDePrueba() });
+    const semanaAntes = firmada.semanaGlobal;
+    const paso = siguienteBeat(firmada);
+    expect(['campCarta', 'campSparring']).toContain(paso.beat.tipo);
+    expect(paso.partida.semanaGlobal).toBe(semanaAntes + paso.beat.datos.semanas);
+  });
+
+  it('consumiendo todo el campamento, semanaGlobal llega exactamente a semanaObjetivo', () => {
+    const p = nuevaPartida(5);
+    let actual = firmarPelea(p, { oferta: ofertaDePrueba() });
+    const objetivo = actual.proximaPelea.semanaObjetivo;
+    let ultimoBeat = null;
+    for (let i = 0; i < 5 && !ultimoBeat; i++) {
+      const paso = siguienteBeat(actual);
+      actual = paso.partida;
+      if (paso.beat.datos.ultimo) ultimoBeat = paso.beat;
+    }
+    expect(ultimoBeat).not.toBeNull();
+    expect(actual.semanaGlobal).toBe(objetivo);
+  });
+
+  // Pedido explícito del brief: "una partida guardada a mitad del
+  // campamento tiene que retomarse bien, con la cuenta regresiva correcta".
+  // save.js serializa con JSON.stringify/parse sin tocar nada — este test
+  // confirma que eso alcanza: la cola (con sus beats de campamento
+  // pendientes), proximaPelea y semanaGlobal sobreviven intactos, y la
+  // carrera puede seguir jugándose después de "recargar" como si nada.
+  it('una partida guardada a mitad del campamento se retoma con la cuenta regresiva correcta', () => {
+    const p = nuevaPartida(6);
+    const firmada = firmarPelea(p, { oferta: ofertaDePrueba() });
+    // Juega UN beat de campamento (deja el resto pendiente en la cola: "a
+    // mitad de camino", no al principio ni al final).
+    const paso = siguienteBeat(firmada);
+    const aMitadDeCamino = paso.partida;
+    expect(aMitadDeCamino.cola.length).toBeGreaterThan(0);
+
+    const recuperada = JSON.parse(JSON.stringify(aMitadDeCamino));
+
+    expect(recuperada.cola).toEqual(aMitadDeCamino.cola);
+    expect(recuperada.proximaPelea).toEqual(aMitadDeCamino.proximaPelea);
+    expect(recuperada.semanaGlobal).toBe(aMitadDeCamino.semanaGlobal);
+    expect(semanasHastaPelea(recuperada)).toBe(semanasHastaPelea(aMitadDeCamino));
+
+    // Y la carrera sigue jugándose con normalidad desde ahí: el próximo beat
+    // es el que quedó pendiente en la cola, no algo roto ni un salto de bloque.
+    const siguientePaso = siguienteBeat(recuperada);
+    expect(siguientePaso.beat.tipo).toBe(aMitadDeCamino.cola[0].tipo);
+  });
+});
+
+// Task v3 ("cartas nuevas con azar"): la usan las cartas de riesgo cuyo
+// desenlace malo es "se te cae la pelea" (CARTAS_EVENTO/CARTAS_REDES, ver
+// `caePelea` en events.js) — la consecuencia tiene que ser REAL, no solo un
+// texto de sabor mientras la pelea sigue ocurriendo igual.
+describe('cancelarProximaPelea', () => {
+  function ofertaDePrueba() {
+    return {
+      id: 'of_1', rivalId: 'r1', rivalApodo: 'El Zurdo', esTitulo: false,
+    };
+  }
+
+  it('sin ninguna pelea en danza, no hace nada', () => {
+    const p = nuevaPartida(1);
+    expect(p.proximaPelea).toBeNull();
+    const cancelada = cancelarProximaPelea(p);
+    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.cola).toEqual(p.cola);
+  });
+
+  it('con una oferta pendiente en la cola, la saca y limpia proximaPelea', () => {
+    const oferta = ofertaDePrueba();
+    const p = {
+      ...nuevaPartida(2),
+      proximaPelea: { oferta, semanaObjetivo: 10 },
+      cola: [{ tipo: 'evento', datos: {} }, { tipo: 'oferta', datos: { oferta } }, { tipo: 'redes', datos: {} }],
+    };
+    const cancelada = cancelarProximaPelea(p);
+    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.cola.map((b) => b.tipo)).toEqual(['evento', 'redes']);
+  });
+
+  it('no muta la partida original', () => {
+    const p = {
+      ...nuevaPartida(3),
+      proximaPelea: { oferta: ofertaDePrueba(), semanaObjetivo: 10 },
+      cola: [{ tipo: 'oferta', datos: { oferta: ofertaDePrueba() } }],
+    };
+    const antes = JSON.stringify(p);
+    cancelarProximaPelea(p);
+    expect(JSON.stringify(p)).toBe(antes);
   });
 });
 
