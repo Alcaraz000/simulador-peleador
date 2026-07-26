@@ -138,6 +138,11 @@ const PATHS = {
     'M12 7v6',
     'M12 16h.01',
   ],
+
+  // Cabecera del peleador rearmada (Cambio 3): fila "EDAD | FORMA" — un
+  // pulso/latido (Feather/Lucide "activity"), distinto de "corazon" (ya
+  // usado en la tienda) para que la forma física se reconozca de un vistazo.
+  forma: ['M22 12h-4l-3 9L9 3l-3 9H2'],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

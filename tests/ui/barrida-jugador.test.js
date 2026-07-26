@@ -325,10 +325,12 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
       iniciar(cont, storageConAcceso());
       crearPersonajePorUI(cont, { estiloPreferido: 'menton' });
 
-      // Visita la ficha desde el estado ocioso y vuelve.
-      const botonFicha = cont.querySelector('[data-accion="ficha"]');
-      if (botonFicha) {
-        botonFicha.click();
+      // Visita la ficha desde el estado ocioso y vuelve (Cambio 4: el click
+      // que abre la Ficha ahora es el del bloque de historial, no el de la
+      // cabecera del peleador — esa interacción quedó obsoleta).
+      const botonHistorial = cont.querySelector('[data-accion="historial"]');
+      if (botonHistorial) {
+        botonHistorial.click();
         revisarTodo(cont, 'ficha');
         cont.querySelector('[data-accion="cerrar"]').click();
       }

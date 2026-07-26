@@ -515,68 +515,160 @@ h2 { font-size: 17px; font-weight: 800; }
   }
 }
 
-/* Tablero: columna izquierda (v2). Cabecera (ficha) e historial (v4,
-   auditoría UI/UX): las dos son paneles enteros que actúan como una sola
-   tarjeta clickeable (hacerActivable, panel-peleador.js) — antes solo la
-   cabecera avisaba con el cursor que se podía tocar; el bloque de
-   historial se veía igual a un panel informativo cualquiera aunque también
-   abría la ficha. Mismo lenguaje de :hover/:active que .carta/.tarjeta: un
-   control no puede sentirse muerto. */
-.panel-peleador-cabecera,
+/* Tablero: columna izquierda (v2). Historial (v4, auditoría UI/UX): panel
+   entero que actúa como una sola tarjeta clickeable (hacerActivable,
+   panel-peleador.js). Mismo lenguaje de :hover/:active que .carta/.tarjeta:
+   un control no puede sentirse muerto. La cabecera (.panel-peleador-cabecera)
+   YA NO comparte esta regla desde Cambio 4 ("clickear el personaje ya no
+   abre la ficha"): es un panel informativo más, sin cursor de mano ni estado
+   de :hover/:active de control. */
 [data-accion="historial"] {
   cursor: pointer;
   transition: border-color 0.15s ease, transform 0.16s var(--ease-out);
 }
 
-.panel-peleador-cabecera:hover,
 [data-accion="historial"]:hover {
   border-color: var(--borde-fuerte);
 }
 
-.panel-peleador-cabecera:active,
 [data-accion="historial"]:active {
   transform: scale(0.99);
 }
 
-/* Cabecera del peleador (v3): la MEDIA es un badge chico en la esquina
-   superior derecha de su propia fila (junto a la etiqueta del rango); el
-   nombre y los datos van DEBAJO, a todo el ancho del panel — nunca comparten
-   fila con el badge, así no se aprietan ni dejan espacio muerto. */
-.panel-peleador-cabecera-top {
+/* Cabecera del peleador rearmada (Cambio 3, mockup del usuario): cuadro
+   grande de MEDIA a la izquierda; a la derecha, apodo+bandera arriba y
+   apellido abajo (dos renglones propios — antes compartían una sola `h1`
+   con la bandera y se partían en tres líneas en la columna angosta del
+   tablero, queja del usuario). `align-items:center` para que la columna de
+   identidad quede centrada verticalmente contra el cuadro de MEDIA aunque
+   mida más o menos alto según tenga apodo o no. */
+.cabecera-top {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
 }
 
-.panel-peleador-nombre { margin-top: 6px; font-size: 18px; line-height: 1.2; }
-
-.rango-media {
+.cabecera-media {
   flex: 0 0 auto;
-  width: 46px;
-  height: 46px;
-  border-radius: 11px;
+  width: 68px;
+  height: 68px;
+  border-radius: 14px;
   border: 2px solid;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 2px;
 }
 
-.rango-media-num { font-size: 19px; font-weight: 800; line-height: 1; }
+.cabecera-media-num { font-size: 26px; font-weight: 800; line-height: 1; }
 
-.panel-peleador-atributos { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.cabecera-identidad {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+}
+
+/* Nunca "…": los nombres pueden envolver a una segunda línea en vez de
+   recortarse (pedido general del usuario, "texto cortado es inaceptable"). */
+.cabecera-apodo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  overflow-wrap: break-word;
+}
+
+.cabecera-apellido {
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  line-height: 1.2;
+  overflow-wrap: break-word;
+}
+
+.cabecera-fase { margin-top: 3px; }
+
+/* Debajo del cuadro de MEDIA: PESO | MANO HÁBIL, EDAD | FORMA, y FAMA (ya no
+   es un panel aparte, ver bloqueRecursos en panel-peleador.js). Mismo
+   lenguaje visual "etiqueta chica arriba, valor grande abajo" que los
+   cuadros de atributos/estado (ver .panel-peleador-atributo, más abajo). */
+.cabecera-datos-grilla {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 14px;
+  margin-top: 14px;
+}
+
+.cabecera-dato-valor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 3px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.panel-peleador-cabecera > .cabecera-dato { margin-top: 12px; }
+
+/* Cuadros iguales de atributos/estado (Cambio 2, feedback del usuario: "los
+   módulos de atributos y estados están bien posicionados pero mal
+   orientados... quiero que se vean en horizontal... cuadros con POT / 33,
+   VEL / 43"). Grilla real (no una lista de filas): CADA celda mide igual a
+   sus hermanas porque comparten el mismo padding/tipografía fija y ninguna
+   envuelve texto (ETIQUETAS[clave].corta son abreviaturas cortas, ver
+   filaAtributo en panel-peleador.js) — nota 1/2 del pedido: los cuadros de
+   Atributos miden igual ENTRE SÍ, los de Estado también entre sí (pueden
+   diferir de los de Atributos: acá comparten CSS y terminan iguales, pero
+   nada lo exige). 3 columnas para Atributos (6-7 claves de combate); Estado
+   son siempre 4 claves fijas, así que 2 columnas arma un 2×2 prolijo en vez
+   de dejar una tercera columna con un solo cuadro huérfano. */
+.panel-peleador-atributos {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.panel-peleador-atributos.panel-peleador-atributos-estado {
+  grid-template-columns: repeat(2, 1fr);
+}
 
 .panel-peleador-atributo {
+  position: relative;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  padding: 3px 6px;
-  border-radius: 5px;
+  justify-content: center;
+  gap: 3px;
+  min-height: 52px;
+  padding: 8px 4px;
+  border-radius: 8px;
+  background: var(--superficie);
+  text-align: center;
 }
 
+.panel-peleador-atributo .nombre { font-size: 9px; letter-spacing: 1px; }
+.panel-peleador-atributo .valor { font-size: 18px; font-weight: 800; line-height: 1; }
 .panel-peleador-atributo.con-aporte { background: #1a1408; }
-.panel-peleador-atributo .valor { font-size: 13px; }
-.aporte-entrenador { font-size: 9.5px; color: var(--dorado); font-weight: 800; }
+
+/* El aporte del entrenador (badge dorado "+N"): posición ABSOLUTA en la
+   esquina superior derecha del cuadro, a propósito — así nunca suma alto/
+   ancho al cuadro y un cuadro CON aporte mide exactamente lo mismo que uno
+   SIN aporte (la garantía de "todos los cuadros del mismo tamaño"). */
+.aporte-entrenador {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  font-size: 9px;
+  color: var(--dorado);
+  font-weight: 800;
+  line-height: 1;
+}
 
 /* "aporte del entrenador" (v3): antes era un segundo título del mismo peso
    visual que "Atributos" (queja del usuario); ahora es una etiqueta chica y

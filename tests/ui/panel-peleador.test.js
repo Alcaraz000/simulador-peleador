@@ -116,10 +116,59 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
     expect(cont.textContent).toContain('Pensá antes de tirar.');
   });
 
-  it('muestra el gimnasio y la forma actual', () => {
-    const p = partidaBase();
-    renderPanelPeleador(cont, { partida: p });
-    expect(cont.textContent).toContain(p.jugador.gimnasio);
+  // Cabecera rearmada (Cambio 3): PESO | MANO HÁBIL, EDAD | FORMA (con
+  // ícono nuevo), y FAMA. El gimnasio ya no vive en la cabecera (no está en
+  // el mockup del usuario; sigue mostrándose en la pantalla de sparring).
+  describe('cabecera rearmada (Cambio 3: media + identidad + datos + fama)', () => {
+    it('muestra peso (categoría) y mano hábil', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('Peso');
+      expect(cont.textContent).toContain('Pluma');
+      expect(cont.textContent).toContain('Mano hábil');
+      expect(cont.textContent).toContain('Derecha');
+    });
+
+    it('muestra edad y forma, la forma con su icono nuevo', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain(`${Math.floor(p.jugador.edad)} años`);
+      expect(cont.textContent).toContain('Forma');
+      expect(cont.textContent).toContain('NORMAL'); // forma=60 por defecto (crearEstado)
+      const filaForma = [...cont.querySelectorAll('.cabecera-dato')]
+        .find((n) => n.textContent.includes('Forma'));
+      expect(filaForma.querySelector('svg')).toBeTruthy();
+    });
+
+    // La fama ya NO es un panel independiente (renderPanelRecursos, más
+    // abajo): vive acá, junto al resto de los datos del peleador.
+    it('la fama vive en la cabecera, no en un panel aparte', () => {
+      const p = partidaBase();
+      p.jugador.fama = 42;
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('Fama');
+      expect(cont.textContent).toContain('42');
+    });
+
+    it('apodo y apellido van en renglones propios (el nombre respira, no se aprieta en una sola linea)', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      const apodo = cont.querySelector('.cabecera-apodo');
+      const apellido = cont.querySelector('.cabecera-apellido');
+      expect(apodo.textContent).toContain('RELÁMPAGO');
+      expect(apellido.textContent).toContain('ORTIZ');
+      // Bandera SVG junto al apodo (nunca un emoji de bandera).
+      expect(apodo.querySelector('svg.bandera-svg')).toBeTruthy();
+    });
+
+    it('sin apodo, el apellido sube a la linea de arriba (nunca deja un renglon vacio)', () => {
+      const p = partidaBase();
+      p.jugador.apodo = null;
+      renderPanelPeleador(cont, { partida: p });
+      const apodo = cont.querySelector('.cabecera-apodo');
+      expect(apodo.textContent).toContain('ORTIZ');
+      expect(cont.querySelector('.cabecera-apellido')).toBeNull();
+    });
   });
 
   // La etapa (v4, feedback del usuario: "en PC no se aprovecha bien el
@@ -161,18 +210,30 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
     });
   });
 
-  it('dispara los callbacks de ficha e historial', () => {
+  it('dispara el callback de historial', () => {
     const p = partidaBase();
-    let ficha = 0; let historial = 0;
+    let historial = 0;
     renderPanelPeleador(cont, {
       partida: p,
-      onFicha: () => { ficha += 1; },
       onHistorial: () => { historial += 1; },
     });
-    cont.querySelector('[data-accion="ficha"]').click();
     cont.querySelector('[data-accion="historial"]').click();
-    expect(ficha).toBe(1);
     expect(historial).toBe(1);
+  });
+
+  // Cambio 4 (pedido textual: "no quiero que al clickear en mi personaje se
+  // abra la ficha, eso está obsoleto"): la cabecera ya no es un control
+  // clickeable — ni el dataset viejo, ni los atributos de accesibilidad que
+  // lo acompañaban (role/tabindex/aria-label), ni el cursor de mano.
+  it('la cabecera del peleador ya NO es clickeable (Cambio 4: se saca la interaccion, no queda como control obsoleto)', () => {
+    const p = partidaBase();
+    renderPanelPeleador(cont, { partida: p });
+    const cabecera = cont.querySelector('.panel-peleador-cabecera');
+    expect(cabecera).toBeTruthy();
+    expect(cabecera.getAttribute('role')).toBeNull();
+    expect(cabecera.getAttribute('tabindex')).toBeNull();
+    expect(cabecera.getAttribute('aria-label')).toBeNull();
+    expect(cont.querySelector('[data-accion="ficha"]')).toBeNull();
   });
 
   // Feedback del usuario: "ranking aparece, pero no puedo ver quiénes están
@@ -314,22 +375,25 @@ describe('renderPanelDinero (columna derecha, junto al calendario)', () => {
   });
 });
 
-// Funciones que traía renderDashboard (v1) y que renderPanelPeleador no
-// cubría todavía: Fama y el cara a cara contra el archirrival. Se mudaron a
-// la columna derecha (v4, grilla 3×3), junto a la próxima pelea.
-describe('renderPanelRecursos (columna derecha: fama + archirrival)', () => {
-  it('muestra la fama del jugador', () => {
+// Función que traía renderDashboard (v1): el cara a cara contra el
+// archirrival. Se mudó a la columna derecha (v4, grilla 3×3), junto a la
+// próxima pelea. La Fama, que vivía acá también, se mudó a la cabecera del
+// peleador (Cambio 3, "el módulo de fama ya no estaría independiente") —
+// este panel quedó solo para el archirrival.
+describe('renderPanelRecursos (columna derecha: archirrival)', () => {
+  it('ya no muestra la fama del jugador (se mudó a la cabecera del peleador)', () => {
     const p = partidaBase();
     p.jugador.fama = 37;
     renderPanelRecursos(cont, { partida: p });
-    expect(cont.textContent).toContain('Fama');
-    expect(cont.textContent).toContain('37');
+    expect(cont.textContent).not.toContain('Fama');
   });
 
-  it('sin archirrival todavia, no muestra ningun "vs"', () => {
+  it('sin archirrival todavia, muestra un estado neutro (nunca un panel vacio)', () => {
     const p = partidaBase();
     renderPanelRecursos(cont, { partida: p });
     expect(cont.textContent).not.toContain('vs ');
+    expect(cont.textContent).toContain('Archirrival');
+    expect(cont.textContent.length).toBeGreaterThan('Archirrival'.length);
   });
 
   it('con archirrival, muestra su apodo y el cara a cara', () => {

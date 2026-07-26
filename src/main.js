@@ -260,11 +260,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
 
   // Arma los props de la columna izquierda del shell. La ficha que se abre
   // desde acá siempre vuelve al MISMO tablero (volverAlTablero): ya no hace
-  // falta que cada llamador decida "adónde volver" a mano.
+  // falta que cada llamador decida "adónde volver" a mano. Cambio 4: la
+  // cabecera del peleador ya no dispara `onFicha` (esa interacción quedó
+  // obsoleta) — `abrirFicha` sigue viva porque `onHistorial` (acá) y
+  // `onVerRival` (renderPanelProxima, más abajo) todavía la usan.
   function propsPanelIzquierda() {
     return {
       partida,
-      onFicha: (jugador, seccion = 'atributos') => abrirFicha(jugador, seccion),
       onHistorial: (jugador) => abrirFicha(jugador, 'historial'),
       onVerRanking: () => abrirRanking(),
     };

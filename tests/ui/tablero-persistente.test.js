@@ -360,7 +360,10 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
     expect(cont.querySelector('.shell-centro [data-accion="siguiente"]')).toBeTruthy();
 
-    cont.querySelector('[data-accion="ficha"]').click();
+    // Cambio 4 ("clickear el personaje ya no abre la ficha"): el click que
+    // navega a la Ficha ahora es el del bloque de historial, no el de la
+    // cabecera.
+    cont.querySelector('[data-accion="historial"]').click();
     expect(cont.querySelector('.shell')).toBeNull();
     expect(cont.querySelector('[data-accion="cerrar"]')).toBeTruthy();
 
