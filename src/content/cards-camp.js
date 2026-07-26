@@ -12,6 +12,11 @@
 
 const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
 
+// Sistema 2 (feedback del usuario: "la media avanza muy lento"): mismo
+// criterio que cards-improve.js — los mods de atributos de combate de las
+// opciones "serias" (la que cuesta fatiga/disciplina) suben +1 respecto de
+// la v3, así el campamento de cada pelea también empuja la MEDIA de forma
+// perceptible.
 export const CARTAS_CAMPAMENTO = [
   {
     id: 'estudiar_al_rival',
@@ -21,7 +26,7 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
-      { id: 'estudiar', texto: 'Mirar cada pelea, cuaderno en mano.', mods: { iq: 4, tecnica: 2, fatiga: 4 } },
+      { id: 'estudiar', texto: 'Mirar cada pelea, cuaderno en mano.', mods: { iq: 5, tecnica: 3, fatiga: 4 } },
       { id: 'confiar', texto: 'Confiar en tu instinto, sin perder tiempo en pantallas.', mods: { moral: 4, iq: -2 } },
     ],
   },
@@ -33,8 +38,8 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
-      { id: 'plan', texto: 'Meterle horas al plan específico.', mods: { defensa: 3, tecnica: 3, fatiga: 5 } },
-      { id: 'general', texto: 'Seguir con el trabajo general de siempre.', mods: { potencia: 2, velocidad: 2 } },
+      { id: 'plan', texto: 'Meterle horas al plan específico.', mods: { defensa: 4, tecnica: 4, fatiga: 5 } },
+      { id: 'general', texto: 'Seguir con el trabajo general de siempre.', mods: { potencia: 3, velocidad: 3 } },
     ],
   },
   {
@@ -58,7 +63,7 @@ export const CARTAS_CAMPAMENTO = [
     rareza: 'normal',
     opciones: [
       { id: 'meditar', texto: 'Bajar un cambio: respirar, visualizar, dormir bien.', mods: { moral: 6, fatiga: -4 } },
-      { id: 'obsesionarte', texto: 'Darle manija a la obsesión: entrenar hasta reventar.', mods: { potencia: 3, moral: -5, fatiga: 6 } },
+      { id: 'obsesionarte', texto: 'Darle manija a la obsesión: entrenar hasta reventar.', mods: { potencia: 4, moral: -5, fatiga: 6 } },
     ],
   },
   {
@@ -93,7 +98,7 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'rara',
     opciones: [
-      { id: 'sumar', texto: 'Meter un round extra.', mods: { menton: 3, tecnica: 2, forma: -5, fatiga: 6 } },
+      { id: 'sumar', texto: 'Meter un round extra.', mods: { menton: 3, tecnica: 3, forma: -5, fatiga: 6 } },
       { id: 'cortarla', texto: 'Cortarla ahí, no arriesgar de más.', mods: { forma: 3 } },
     ],
   },
@@ -117,7 +122,7 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'rara',
     opciones: [
-      { id: 'afinar', texto: 'Afinar cada detalle con el entrenador.', mods: { tecnica: 3, iq: 2, defensa: 2, fatiga: 3 } },
+      { id: 'afinar', texto: 'Afinar cada detalle con el entrenador.', mods: { tecnica: 4, iq: 3, defensa: 3, fatiga: 3 } },
       { id: 'relajarte', texto: 'Bajar la intensidad y llegar fresco.', mods: { forma: 4, fatiga: -6, tecnica: -1 } },
     ],
   },

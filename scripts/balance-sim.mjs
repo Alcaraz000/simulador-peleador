@@ -111,12 +111,21 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
   let defensas = 0;
   let legendariasEnCarrera = 0; // solo cartas/eventos DURANTE la carrera (no creación)
   let guardia = 0;
+  // MEDIA "a mitad de carrera" (Sistema 2, pedido textual del usuario: "que
+  // la progresión se sienta DURANTE la carrera, no solo al final"): se toma
+  // la primera vez que bloqueGlobal cruza la mitad de los 20 bloques
+  // declarados (ver ETAPAS, career.js) — bloque 10.
+  const MITAD_BLOQUE = 10;
+  let mediaAMitad = null;
 
   while (!partida.terminada && guardia < limite) {
     guardia += 1;
     const paso = siguienteBeat(partida);
     partida = paso.partida;
     const beat = paso.beat;
+    if (mediaAMitad === null && partida.bloqueGlobal >= MITAD_BLOQUE) {
+      mediaAMitad = mediaDe(partida.jugador);
+    }
     if (!beat) continue;
     beats += 1;
 
@@ -174,10 +183,13 @@ function jugarCarrera(semilla, { crearJugador, limite = 500, evitarLegendarias =
   }
 
   const mediaFinal = mediaDe(partida.jugador);
+  if (mediaAMitad === null) mediaAMitad = mediaFinal; // carreras rarísimas que nunca llegan al bloque 10
   const tresCinturones = partida.jugador.titulos.length === CINTURONES.length;
   const legendariasTotal = legendariasEnCarrera + (legendariaEnCreacion ? 1 : 0);
 
-  return { beats, ofertas, defensas, tresCinturones, mediaFinal, legendariasTotal, legendariaEnCreacion, legendariasEnCarrera };
+  return {
+    beats, ofertas, defensas, tresCinturones, mediaFinal, mediaAMitad, legendariasTotal, legendariaEnCreacion, legendariasEnCarrera,
+  };
 }
 
 function resumen(nombre, resultados) {
@@ -185,6 +197,7 @@ function resumen(nombre, resultados) {
   const beats = resultados.map((r) => r.beats);
   const ofertas = resultados.map((r) => r.ofertas);
   const medias = resultados.map((r) => r.mediaFinal);
+  const mediasAMitad = resultados.map((r) => r.mediaAMitad);
   const con3 = resultados.filter((r) => r.tresCinturones).length;
   const sinDefensas = resultados.filter((r) => r.defensas === 0).length;
 
@@ -222,6 +235,7 @@ function resumen(nombre, resultados) {
   console.log(`ofertas(peleas)/carrera: avg=${avg(ofertas).toFixed(2)} min=${Math.min(...ofertas)} max=${Math.max(...ofertas)} | dentro de [12,22]=${ofertas.filter((o) => o >= 12 && o <= 22).length}/${n} (por debajo de 12: ${debajoDe12}, por encima de 22: ${arribaDe22}, por debajo del piso duro de 8: ${debajoDe8})`);
   console.log(`3 cinturones: ${con3}/${n} = ${((con3 / n) * 100).toFixed(2)}%`);
   console.log(`carreras sin ninguna defensa obligatoria: ${sinDefensas}/${n} = ${((sinDefensas / n) * 100).toFixed(2)}%`);
+  console.log(`MEDIA a mitad de carrera (bloque ${10}/20, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
   console.log(`MEDIA final (todas): avg=${avg(medias).toFixed(2)} min=${Math.min(...medias)} max=${Math.max(...medias)}`);
   console.log(`Con al menos una legendaria (creación o carrera): ${conLegendaria.length}/${n} = ${((conLegendaria.length / n) * 100).toFixed(1)}%`);
   console.log(fmtGrupo(conLegendaria, 'CON legendaria'));

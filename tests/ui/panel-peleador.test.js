@@ -183,6 +183,34 @@ describe('renderPanelPeleador', () => {
     expect(cont.textContent).toContain(p.jugador.gimnasio);
   });
 
+  // Sistema 2 (feedback del usuario: "hay una edad donde el prime va
+  // bajando... el tablero debería poder comunicarlo"): la fase física
+  // (ascenso/prime/declive, faseFisicaJugador en career.js) vive en el
+  // panel siempre visible, no escondida en una pantalla aparte — así el
+  // jugador puede verla venir antes de que el declive real le pegue.
+  describe('fase física (Sistema 2, arco del prime)', () => {
+    it('un jugador joven, lejos del declive, se muestra "en ascenso"', () => {
+      const p = partidaBase();
+      p.jugador.edad = 20;
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('En ascenso');
+    });
+
+    it('cerca del umbral de declive (sin cruzarlo), se muestra "en tu prime"', () => {
+      const p = partidaBase();
+      p.jugador.edad = 31;
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('En tu prime');
+    });
+
+    it('pasado el umbral de declive, avisa "en declive"', () => {
+      const p = partidaBase();
+      p.jugador.edad = 34;
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('En declive');
+    });
+  });
+
   // Diagnóstico del coordinador: las tarjetas modifican mentón/disciplina
   // personal (jugador.especiales) y forma/moral (jugador.estado) igual que a
   // los atributos de combate, pero ninguno de los cuatro aparecía en ningún

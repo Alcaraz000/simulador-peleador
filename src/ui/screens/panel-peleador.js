@@ -9,6 +9,7 @@ import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
 import { h2hTexto } from '../../core/rivalry.js';
 import { rankingDelJugador } from '../../core/world.js';
+import { faseFisicaJugador } from '../../core/career.js';
 
 // Columna izquierda del tablero (v2): el peleador. A diferencia de la v1
 // (renderDashboard, que mezclaba esto con el botón "Continuar" y se
@@ -51,9 +52,18 @@ function peleasTotales(jugador) {
 // superior derecha (su propia fila, junto a la etiqueta del rango), y el
 // nombre + las dos líneas de datos usan el ANCHO COMPLETO del panel debajo,
 // sin compartir fila con nada.
+// Sistema 2 (feedback del usuario: "hay una edad donde el prime va bajando
+// [...] el tablero debería poder comunicarlo"): color por fase — dorado para
+// "el mejor momento" (una buena noticia, se destaca), rojo para el declive
+// (aviso), sutil para el ascenso (todavía no hay nada que anunciar).
+const CLASE_FASE = {
+  ascenso: 'sutil', prime: 'dorado', declive: 'rojo', declive_duro: 'rojo',
+};
+
 function cuadroMedia(jugador) {
   const media = mediaDe(jugador);
   const rango = rangoDeMedia(media);
+  const fase = faseFisicaJugador(jugador);
   return el('div', { class: 'panel panel-peleador-cabecera', dataset: { accion: 'ficha' } }, [
     el('div', { class: 'panel-peleador-cabecera-top' }, [
       el('div', { class: 'etiqueta', style: `color:${rango.color}`, text: rango.nombre }),
@@ -78,6 +88,12 @@ function cuadroMedia(jugador) {
       class: 'etiqueta',
       style: 'margin-top:2px',
       text: `${jugador.gimnasio} · forma: ${etiquetaEstado('forma', jugador.estado.forma)}`,
+    }),
+    el('div', {
+      class: `etiqueta ${CLASE_FASE[fase.id] ?? 'sutil'}`,
+      style: 'margin-top:2px',
+      title: fase.detalle,
+      text: fase.etiqueta,
     }),
   ]);
 }

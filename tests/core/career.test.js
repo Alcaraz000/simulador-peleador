@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
   ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea, cancelarProximaPelea,
+  faseFisicaJugador,
 } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 import { semanasDeBloque, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
@@ -232,6 +233,49 @@ describe('etapaActual', () => {
   });
 });
 
+// Sistema 2 (feedback del usuario: "hay una edad donde el prime va bajando,
+// [el tablero] debería poder comunicarlo"): fase física del jugador, un arco
+// de verdad — ascenso, meseta ("tu prime") y declive, en vez de un
+// interruptor mudo. Usa los mismos umbrales (y la misma demora con
+// preparador) que `declivePorEdadJugador` — es literalmente la versión
+// "para mostrar en el tablero" del mismo cálculo.
+describe('faseFisicaJugador', () => {
+  function conEdad(edad, extra = {}) {
+    const p = nuevaPartida();
+    p.jugador.edad = edad;
+    Object.assign(p.jugador, extra);
+    return p.jugador;
+  }
+
+  it('lejos del umbral de declive, esta en ascenso', () => {
+    expect(faseFisicaJugador(conEdad(20)).id).toBe('ascenso');
+  });
+
+  it('cerca del umbral pero sin haberlo cruzado, esta en su prime', () => {
+    expect(faseFisicaJugador(conEdad(30)).id).toBe('prime');
+    expect(faseFisicaJugador(conEdad(31)).id).toBe('prime');
+  });
+
+  it('pasado el umbral suave (32), esta en declive', () => {
+    expect(faseFisicaJugador(conEdad(33)).id).toBe('declive');
+  });
+
+  it('pasado el umbral duro (36), el declive es mas marcado', () => {
+    expect(faseFisicaJugador(conEdad(37)).id).toBe('declive_duro');
+  });
+
+  it('el preparador corre los umbrales de fase, igual que los del declive real', () => {
+    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).not.toBe('declive');
+    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).toBe('prime');
+  });
+
+  it('toda fase trae una etiqueta legible', () => {
+    for (const edad of [18, 30, 33, 37]) {
+      expect(faseFisicaJugador(conEdad(edad)).etiqueta.length).toBeGreaterThan(0);
+    }
+  });
+});
+
 describe('avanzarBloque', () => {
   it('envejece al jugador y avanza el anio del mundo', () => {
     const p = nuevaPartida();
@@ -382,6 +426,43 @@ describe('avanzarBloque', () => {
     const velAntes = p.jugador.atributos.velocidad;
     const despues = avanzarBloque(p);
     expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+  });
+
+  // Sistema 2 (feedback del usuario, segunda vez: "se supone que hay una
+  // edad donde va bajando el prime"): el declive de un único escalón fijo
+  // (-2 velocidad/-1 cardio desde los 32 hasta el final) no se sentía como un
+  // arco real. Ahora hay un segundo escalón, más duro, que arranca a los 36
+  // — la misma edad en la que el propio juego narra el arranque de la etapa
+  // "veterano" (ver ETAPAS, edadDesde: 36 — "Cada pelea puede ser la
+  // última"): ahí el declive se agrava Y empieza a tocar también la potencia,
+  // no solo piernas y pulmón.
+  it('a partir de los 36 (arranca la etapa "veterano") el declive se agrava y empieza a pegarle tambien a la potencia', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1; // amateur: 1 año por bloque, numero redondo
+    p.jugador.edad = 35;
+    const potAntes = p.jugador.atributos.potencia;
+    const velAntes = p.jugador.atributos.velocidad;
+    const cardioAntes = p.jugador.atributos.cardio;
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.edad).toBe(36);
+    expect(potAntes - despues.jugador.atributos.potencia).toBe(1);
+    // Más marcado que el escalón suave (-2 velocidad/-1 cardio, ver el test
+    // "a partir de los 32...", arriba): acá se siente más.
+    expect(velAntes - despues.jugador.atributos.velocidad).toBe(3);
+    expect(cardioAntes - despues.jugador.atributos.cardio).toBe(2);
+  });
+
+  it('el escalon duro del declive tambien se demora con el preparador contratado', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 1;
+    p.jugador.edad = 35;
+    p.jugador.staff = ['preparador'];
+    const potAntes = p.jugador.atributos.potencia;
+    const despues = avanzarBloque(p);
+    // Con preparador el umbral duro se corre a los 39: a los 36 recién
+    // arranca el escalón SUAVE (si es que llegó), la potencia todavía no se
+    // toca.
+    expect(despues.jugador.atributos.potencia).toBe(potAntes);
   });
 
   it('mientras el jugador tiene el cinturon mundial puesto, el mundo no le anuncia un nuevo campeon', () => {

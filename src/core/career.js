@@ -18,10 +18,62 @@ import { armarBeatsCampamento } from './campamento.js';
 // alterar la racha de tiradas que ya calibra el ritmo de la carrera). El
 // 'preparador físico' (money.js) cumple su promesa ("el declive de las
 // piernas llega más tarde") corriendo el umbral unos años.
+//
+// Sistema 2 (feedback del usuario, SEGUNDA vez: "se supone que hay una edad
+// donde [el prime] va bajando"): un único escalón fijo (32 años, -2
+// velocidad/-1 cardio por bloque hasta el final de la carrera) no se sentía
+// como un arco — era un interruptor, no una curva. Ahora hay DOS escalones:
+// uno suave a partir de EDAD_DECLIVE_JUGADOR (32, sin tocar) y uno duro a
+// partir de EDAD_DECLIVE_DURO_JUGADOR (36 — a propósito la MISMA edad en que
+// el juego narra el arranque de la etapa "veterano", ver ETAPAS más abajo:
+// "Cada pelea puede ser la última. Elegí bien." — la mecánica y la narrativa
+// caen juntas). El escalón duro pega más fuerte Y empieza a tocar también la
+// potencia, no solo piernas y pulmón: el jugador tiene que SENTIR que ya no
+// es el mismo. `faseFisicaJugador` (exportada, más abajo) es la versión
+// "para mostrar en el tablero" de estos mismos umbrales — el jugador puede
+// ver venir la caída antes de que llegue.
 export const EDAD_DECLIVE_JUGADOR = 32;
+const EDAD_DECLIVE_DURO_JUGADOR = 36;
 const DEMORA_DECLIVE_PREPARADOR = 3;
 const PERDIDA_VELOCIDAD_DECLIVE = 2;
 const PERDIDA_CARDIO_DECLIVE = 1;
+const PERDIDA_VELOCIDAD_DECLIVE_DURO = 3;
+const PERDIDA_CARDIO_DECLIVE_DURO = 2;
+const PERDIDA_POTENCIA_DECLIVE_DURO = 1;
+
+// Años de margen antes del umbral suave que todavía se consideran "el prime"
+// (meseta): ni en ascenso ni declinando todavía, el mejor momento de la
+// carrera — lo bastante cerca del declive como para que el jugador sepa que
+// se viene, pero sin que haya empezado.
+const MARGEN_PRIME = 2;
+
+function umbralesDeclive(jugador) {
+  const demora = tieneStaff(jugador, 'preparador') ? DEMORA_DECLIVE_PREPARADOR : 0;
+  return {
+    suave: EDAD_DECLIVE_JUGADOR + demora,
+    duro: EDAD_DECLIVE_DURO_JUGADOR + demora,
+  };
+}
+
+// Fase física del jugador para comunicar el arco en el tablero: 'ascenso'
+// (todavía hay margen para crecer), 'prime' (el mejor momento, a las
+// puertas del declive), 'declive' (ya se siente) y 'declive_duro' (pasado
+// el segundo escalón, se siente fuerte). Pura y determinista — los mismos
+// umbrales que usa `declivePorEdadJugador`, así el tablero nunca puede
+// mostrar una fase que no coincide con lo que en verdad está pasando.
+export function faseFisicaJugador(jugador) {
+  const { suave, duro } = umbralesDeclive(jugador);
+  if (jugador.edad >= duro) {
+    return { id: 'declive_duro', etiqueta: 'En declive', detalle: 'Ya no es lo que era: el cuerpo pasa factura en serio.' };
+  }
+  if (jugador.edad >= suave) {
+    return { id: 'declive', etiqueta: 'En declive', detalle: 'Empezaste a sentir el paso de los años.' };
+  }
+  if (suave - jugador.edad <= MARGEN_PRIME) {
+    return { id: 'prime', etiqueta: 'En tu prime', detalle: 'Tu mejor momento. Que rinda.' };
+  }
+  return { id: 'ascenso', etiqueta: 'En ascenso', detalle: 'Todavía hay margen para crecer.' };
+}
 
 // Nombre del cinturón que el mundo narra como "el campeonato" (mundo.campeonId
 // en world.js): mientras el jugador lo tiene puesto, el mundo no debe coronar
@@ -39,14 +91,20 @@ const CUERPOS_SPONSOR = [
 ];
 
 function declivePorEdadJugador(jugador) {
-  const umbral = tieneStaff(jugador, 'preparador')
-    ? EDAD_DECLIVE_JUGADOR + DEMORA_DECLIVE_PREPARADOR
-    : EDAD_DECLIVE_JUGADOR;
-  if (jugador.edad < umbral) return jugador.atributos;
+  const { suave, duro } = umbralesDeclive(jugador);
+  if (jugador.edad < suave) return jugador.atributos;
+  if (jugador.edad < duro) {
+    return {
+      ...jugador.atributos,
+      velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
+      cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
+    };
+  }
   return {
     ...jugador.atributos,
-    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
-    cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
+    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE_DURO, 1, 99),
+    cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE_DURO, 1, 99),
+    potencia: clamp(jugador.atributos.potencia - PERDIDA_POTENCIA_DECLIVE_DURO, 1, 99),
   };
 }
 
