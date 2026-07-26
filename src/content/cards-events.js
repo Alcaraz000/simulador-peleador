@@ -86,7 +86,7 @@ export const CARTAS_EVENTO = [
   },
   {
     id: 'entrenador', categoria: 'evento', titulo: 'Te ofrecen otro rincón', etapas: PRO, rareza: 'rara',
-    texto: 'Un entrenador famoso te quiere en su equipo. Don Pepe se hace el que no escuchó.',
+    texto: 'Un entrenador famoso te quiere en su equipo. El tuyo se hace el que no escuchó.',
     opciones: [
       { id: 'cambiar', texto: 'Cambiar de entrenador.', probabilidades: [
         { peso: 5, mods: { tecnica: 6, iq: 3 }, texto: 'El tipo sabe. Aprendés cosas nuevas.' },
@@ -224,7 +224,7 @@ export const CARTAS_EVENTO = [
   },
   {
     id: 'entrenamiento_pesado', categoria: 'evento', titulo: 'Una hora más, todos los días', etapas: SIEMPRE, rareza: 'normal',
-    texto: 'Don Pepe te mira los cuadernos de carga y niega con la cabeza: "esto necesita más". Te propone sumar una hora extra hasta la próxima pelea, sin faltar un solo día.',
+    texto: 'Tu entrenador te mira los cuadernos de carga y niega con la cabeza: "esto necesita más". Te propone sumar una hora extra hasta la próxima pelea, sin faltar un solo día.',
     opciones: [
       { id: 'aceptar', texto: 'Sumar la hora extra.', probabilidades: [
         { peso: 75, mods: { cardio: 5, velocidad: 5 }, texto: 'El cuerpo aguanta. Terminás cada sesión con más aire del que entraste.' },
@@ -285,7 +285,7 @@ export const CARTAS_EVENTO = [
         { peso: 65, mods: { iq: 5, tecnica: 3 }, efectos: { dinero: -4000 }, texto: 'El dato es real: estudiás el video mil veces y encontrás el hueco.' },
         { peso: 35, mods: {}, efectos: { dinero: -4000 }, texto: 'Era humo. Perdiste la plata y el tiempo mirando un video que no sirve para nada.' },
       ] },
-      { id: 'rechazar', texto: 'Confiar en el trabajo de siempre con Don Pepe.', mods: {} },
+      { id: 'rechazar', texto: 'Confiar en el trabajo de siempre con tu entrenador.', mods: {} },
     ],
   },
 ];

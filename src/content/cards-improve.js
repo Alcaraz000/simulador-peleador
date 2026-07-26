@@ -23,5 +23,5 @@ export const CARTAS_MEJORA = [
   // de leyenda.
   { id: 'racha_mistica', titulo: 'La racha que no se explica', texto: 'Todo lo que tirás entra. El cuerpo responde antes de que lo pienses.', mods: { potencia: 8, tecnica: 6 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
   { id: 'campamento_perfecto', titulo: 'El campamento perfecto', texto: 'Ni un día flojo, ni una excusa, ni una lesión. Todo salió como en los libros.', mods: { cardio: 8, velocidad: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
-  { id: 'secreto_don_pepe', titulo: 'El secreto que Don Pepe guardaba', texto: 'Treinta años de esquina resumidos en una tarde de gimnasio. Ahora es tuyo.', mods: { iq: 10, menton: 4 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
+  { id: 'secreto_del_entrenador', titulo: 'El secreto que el entrenador guardaba', texto: 'Treinta años de esquina resumidos en una tarde de gimnasio. Ahora es tuyo.', mods: { iq: 10, menton: 4 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'legendaria' },
 ];

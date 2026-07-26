@@ -17,7 +17,7 @@ export const CARTAS_CAMPAMENTO = [
     id: 'estudiar_al_rival',
     categoria: 'campamento',
     titulo: 'Estudiar a {rival}',
-    texto: 'Don Pepe trajo videos de las últimas peleas de {rival}. Hay patrones para leer, si te tomás el trabajo.',
+    texto: 'Tu entrenador trajo videos de las últimas peleas de {rival}. Hay patrones para leer, si te tomás el trabajo.',
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
@@ -70,14 +70,14 @@ export const CARTAS_CAMPAMENTO = [
     rareza: 'normal',
     opciones: [
       { id: 'dejarlo', texto: 'Dejarlo mirar un rato.', mods: { moral: 3, forma: -3 } },
-      { id: 'echarlo', texto: 'Pedirle a Don Pepe que lo saque.', mods: { disciplinaPersonal: 3 } },
+      { id: 'echarlo', texto: 'Pedirle al entrenador que lo saque.', mods: { disciplinaPersonal: 3 } },
     ],
   },
   {
     id: 'descanso_tactico',
     categoria: 'campamento',
     titulo: 'Un día sin gimnasio',
-    texto: 'Don Pepe insiste: falta poco para {rival}, y un cuerpo cansado no rinde. Toca elegir.',
+    texto: 'Tu entrenador insiste: falta poco para {rival}, y un cuerpo cansado no rinde. Toca elegir.',
     etapas: SIEMPRE,
     rareza: 'normal',
     opciones: [
@@ -117,7 +117,7 @@ export const CARTAS_CAMPAMENTO = [
     etapas: SIEMPRE,
     rareza: 'rara',
     opciones: [
-      { id: 'afinar', texto: 'Afinar cada detalle con Don Pepe.', mods: { tecnica: 3, iq: 2, defensa: 2, fatiga: 3 } },
+      { id: 'afinar', texto: 'Afinar cada detalle con el entrenador.', mods: { tecnica: 3, iq: 2, defensa: 2, fatiga: 3 } },
       { id: 'relajarte', texto: 'Bajar la intensidad y llegar fresco.', mods: { forma: 4, fatiga: -6, tecnica: -1 } },
     ],
   },

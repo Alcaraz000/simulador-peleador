@@ -42,7 +42,7 @@ export function resultadoSparring(sparring, jugador) {
     return {
       nivel: 'perfecto',
       mods: { velocidad: 2, forma: 3 },
-      texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. Don Pepe casi sonríe.`,
+      texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. El entrenador casi sonríe.`,
     };
   }
   if (ratio >= 0.5) {
