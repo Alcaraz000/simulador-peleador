@@ -543,6 +543,14 @@ h2 { font-size: 17px; font-weight: 800; }
 .noticia-item { padding: 10px 11px; }
 .noticia-item.nueva { border-color: var(--rojo); }
 
+/* Entrada escalonada de noticias nuevas (v3, feedback del usuario: "que se
+   vayan sumando", no todas de golpe): arrancan invisibles/corridas y cada una
+   se revela un rato después de la anterior (panel-noticias.js). Con
+   prefers-reduced-motion nunca se les pone esta clase (entran todas juntas,
+   directo). */
+.noticia-item.noticia-oculta { opacity: 0; transform: translateY(6px); }
+.noticia-item.noticia-aparece { animation: aparecer 0.25s ease both; }
+
 /* Alto fijo con scroll interno: no crece indefinidamente con la carrera. */
 .panel-noticias-lista { padding-right: 2px; }
 .panel-noticias-lista::-webkit-scrollbar { width: 6px; }
