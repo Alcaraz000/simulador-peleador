@@ -364,21 +364,64 @@ describe('renderPelea — rincon', () => {
     expect(instruccion).toBe('cuerpo');
   });
 
-  // Task v3, pedido textual: "una pista de cuál te recomienda el entrenador
-  // ... que tenga criterio real". El criterio en sí (los cuatro casos) ya se
-  // prueba en core/fight-interactive.test.js; acá solo se prueba que la UI
-  // lo pinta: una tarjeta marcada y un texto de hint que la nombra.
-  it('marca UNA tarjeta como recomendada y muestra un hint que la nombra', () => {
+  // Task v4, pedido textual: el tip del entrenador ("Tu rincón te tira: ...")
+  // se mudó al módulo del rincón (la crónica) y dejó de marcar una tarjeta
+  // como "la recomendada" — eso hacía que seguirlo ciegamente ganara siempre.
+  // Las tarjetas de acción ya no llevan ninguna marca de recomendación.
+  it('las tarjetas de accion ya no marcan ninguna como recomendada', () => {
     const pelea = peleaEnRincon();
     renderPelea(cont, { pelea, momentos: [] });
     cont.querySelector('[data-accion="ver-rincon"]').click();
 
-    const recomendadas = cont.querySelectorAll('[data-instruccion][data-recomendada="true"]');
-    expect(recomendadas).toHaveLength(1);
-    const idRecomendada = recomendadas[0].dataset.instruccion;
-    const hint = cont.querySelector('[data-hint="recomendada"]');
-    expect(hint).toBeTruthy();
-    expect(hint.textContent).toContain(INSTRUCCIONES_RINCON[idRecomendada].nombre);
+    expect(cont.querySelectorAll('[data-instruccion][data-recomendada]')).toHaveLength(0);
+    expect(cont.querySelector('[data-hint="recomendada"]')).toBeNull();
+  });
+
+  // El criterio de cuándo/qué dice el tip (probabilístico, según entrenador
+  // y claridad) ya se prueba a fondo en core/fight-interactive.test.js; acá
+  // solo se prueba que, CUANDO aparece, la UI lo pinta en el lugar correcto
+  // (la crónica, no debajo de las tarjetas) firmado con el nombre del
+  // entrenador — y que, cuando no aparece, esa firma tampoco está.
+  function peleaEnRinconConEstado(rngEstado) {
+    return { ...peleaEnRincon(), rngEstado };
+  }
+
+  it('cuando el rincon SI tiene tip, aparece en la cronica firmado con el nombre del entrenador', () => {
+    let vistoConTip = false;
+    for (let rngEstado = 1; rngEstado <= 300 && !vistoConTip; rngEstado++) {
+      document.body.innerHTML = '<div id="app"></div>';
+      const contLocal = document.getElementById('app');
+      const pelea = peleaEnRinconConEstado(rngEstado);
+      renderPelea(contLocal, { pelea, momentos: [] });
+      contLocal.querySelector('[data-accion="ver-rincon"]').click();
+
+      const cronica = contLocal.querySelector('[data-bloque="cronica"]');
+      const accion = contLocal.querySelector('[data-bloque="accion"]');
+      if (!cronica.textContent.includes('Tu rincón te tira')) continue;
+
+      vistoConTip = true;
+      const entrenadorNombre = pelea.snapshot.jugador.entrenador.nombre;
+      expect(cronica.textContent).toContain(entrenadorNombre);
+      // El nombre aparece ANTES del texto del tip dentro del mismo bloque
+      // (lo firma), y nunca en el panel de acción (se sacó de ahí).
+      expect(cronica.textContent.indexOf(entrenadorNombre)).toBeLessThan(cronica.textContent.indexOf('Tu rincón te tira'));
+      expect(accion.textContent).not.toContain('Tu rincón te tira');
+    }
+    expect(vistoConTip).toBe(true);
+  });
+
+  it('a veces el rincon no dice ningun tip (no aparece siempre)', () => {
+    let vistoSinTip = false;
+    for (let rngEstado = 1; rngEstado <= 300 && !vistoSinTip; rngEstado++) {
+      document.body.innerHTML = '<div id="app"></div>';
+      const contLocal = document.getElementById('app');
+      const pelea = peleaEnRinconConEstado(rngEstado);
+      renderPelea(contLocal, { pelea, momentos: [] });
+      contLocal.querySelector('[data-accion="ver-rincon"]').click();
+
+      if (!contLocal.textContent.includes('Tu rincón te tira')) vistoSinTip = true;
+    }
+    expect(vistoSinTip).toBe(true);
   });
 });
 

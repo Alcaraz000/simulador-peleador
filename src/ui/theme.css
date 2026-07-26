@@ -627,7 +627,17 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .marcador-jurados, .marcador-golpes { margin-top: 10px; }
 
-.cronica-pelea .log { max-height: 220px; overflow-y: auto; }
+/* Alto FIJO, nunca max-height (pedido general del usuario: "el bloque que
+   muestra la narración va cambiando de alto... quiero que tenga un alto fijo
+   [...] porque si no el botón de Saltar se va moviendo hacia abajo"). Antes
+   crecía y encogía con cada round, empujando el panel de acción de abajo.
+   280px calculado para que entre el round más largo sin scroll en el caso
+   común: hasta 6 párrafos (jab, cuerpo/contragolpe, cansancio, resultado,
+   caída, cierre) a ~2 líneas cada uno (13px/1.6 ≈ 21px/línea + 6px de
+   separación) — mismo contenedor que usa el mensaje del rincón (estado +
+   consejo + tip). Si un caso extremo no entra, scroll interno: el
+   contenedor en sí nunca cambia de tamaño. */
+.cronica-pelea .log { height: 280px; overflow-y: auto; }
 
 /* Silueta del rival (golpe de gracia, Task 4.4): las zonas son botones SVG
    accesibles por teclado (tabindex+role=button ya vienen del propio <g>). */
