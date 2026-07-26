@@ -722,12 +722,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
-        // Pendiente conocido (bug reportado): `proximaPelea` se guarda al armar
-        // la cola del bloque (ver armarCola, career.js) pero antes no se
-        // limpiaba acá — el panel de la derecha seguía mostrando al rival
-        // rechazado durante el resto del bloque, como si la pelea siguiera en
-        // pie. Se limpia en el momento en que la oferta deja de estar vigente.
-        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        // `ofertaPendiente` (dato interno, career.js) deja de estar vigente
+        // en cuanto se rechaza: sin esto quedaba fantasma para
+        // cancelarProximaPelea el resto del bloque. `proximaPelea` (lo que
+        // muestra el panel) nunca llegó a setearse acá — solo la firma
+        // (firmarPelea) la crea — así que no hace falta tocarla.
+        partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
         irADashboard();
       },
     }));
@@ -762,7 +762,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       // fama y vuelve al tablero, sin firmar nada.
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
-        partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+        partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
         irADashboard();
       },
     });
@@ -888,11 +888,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     const rivalidades = registrarCruce(partida.rivalidades, oferta.rivalId, signo);
     elegirArchirrival(rivalidades);
 
-    // Mismo pendiente que en beatOferta/onRechazar: la pelea que se acaba de
-    // cerrar ya no está "en camino" — sin esto, el panel de próxima pelea
-    // seguía mostrando al rival ya peleado hasta que arrancaba el bloque
-    // siguiente (bug reportado: "seguía apareciendo un peleador aunque no
-    // haya elegido ni confirmado ninguno todavía").
+    // La pelea firmada que se acaba de cerrar ya no es la "próxima pelea" —
+    // sin esto, el panel de próxima pelea seguía mostrando al rival ya
+    // peleado hasta que arrancaba el bloque siguiente (bug reportado:
+    // "seguía apareciendo un peleador aunque no haya elegido ni confirmado
+    // ninguno todavía").
     partida = {
       ...partida, jugador, rivalidades, proximaPelea: null,
     };

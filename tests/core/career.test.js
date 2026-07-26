@@ -513,7 +513,18 @@ describe('progresión de cinturones', () => {
   });
 });
 
-describe('proximaPelea (calendario del tablero)', () => {
+// Bug reportado por el usuario: "aparece en la esquina de PRÓXIMA PELEA el
+// nombre del peleador que me acaba de aparecer como propuesta, no la acepté
+// y ya aparece ahí, eso está mal" (con "faltan 68 semanas", casi año y
+// medio, aunque el campamento son solo unas pocas semanas). Causa real:
+// armarCola dejaba `proximaPelea` seteada apenas armaba la cola del bloque
+// -antes de que el jugador viera siquiera el beat 'oferta'- con un
+// semanaObjetivo calculado sobre la duración de TODO el bloque (~68 semanas
+// en profesional), no sobre el campamento real. La corrección separa el dato
+// interno de bookkeeping (`ofertaPendiente`, que ni siquiera guarda
+// semanaObjetivo) de lo que el panel puede mostrar (`proximaPelea`, que solo
+// nace en `firmarPelea`, con el semanaObjetivo real del campamento).
+describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   // Etapa "profesional": probPelea = 1, asi que el bloque siempre trae una
   // oferta y podemos verificar que quedó guardada de forma confiable.
   function partidaProfesional(semilla) {
@@ -522,14 +533,18 @@ describe('proximaPelea (calendario del tablero)', () => {
     return p;
   }
 
-  it('en cuanto se arma la cola con una oferta, la partida ya sabe cuál es la próxima pelea antes de llegar a ese beat', () => {
+  it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
     const p = partidaProfesional(2);
     const primerPaso = siguienteBeat(p);
 
     // El primer beat de un bloque siempre es "mejora": si el bloque trae una
-    // oferta más adelante en la cola, proximaPelea ya tiene que reflejarla.
+    // oferta más adelante en la cola, ofertaPendiente ya tiene que
+    // reflejarla (para que cancelarProximaPelea pueda actuar), pero
+    // proximaPelea -lo único que lee el panel- tiene que seguir null: el
+    // jugador todavía no vio la oferta, mucho menos la aceptó.
     expect(primerPaso.beat.tipo).toBe('mejora');
-    expect(primerPaso.partida.proximaPelea).not.toBeNull();
+    expect(primerPaso.partida.ofertaPendiente).not.toBeNull();
+    expect(primerPaso.partida.proximaPelea).toBeNull();
 
     let actual = primerPaso.partida;
     let beatOferta = null;
@@ -540,23 +555,37 @@ describe('proximaPelea (calendario del tablero)', () => {
     }
 
     expect(beatOferta).not.toBeNull();
-    expect(primerPaso.partida.proximaPelea.oferta.id).toBe(beatOferta.datos.oferta.id);
+    expect(primerPaso.partida.ofertaPendiente.oferta.id).toBe(beatOferta.datos.oferta.id);
+    // Incluso llegando al beat 'oferta' (todavía sin decidir), proximaPelea
+    // sigue sin mostrar nada.
+    expect(actual.proximaPelea).toBeNull();
   });
 
-  it('semanasHastaPelea da un numero de semanas coherente cuando hay oferta guardada', () => {
+  it('sin firmar, semanasHastaPelea da null: no hay nada que contar todavía', () => {
     const p = partidaProfesional(2);
     const paso = siguienteBeat(p);
-    expect(paso.partida.proximaPelea).not.toBeNull();
-    const faltan = semanasHastaPelea(paso.partida);
-    expect(faltan).toBeGreaterThanOrEqual(0);
-    expect(Number.isFinite(faltan)).toBe(true);
+    expect(paso.partida.ofertaPendiente).not.toBeNull();
+    expect(semanasHastaPelea(paso.partida)).toBeNull();
   });
 
-  it('no muta partida.proximaPelea de la partida original', () => {
+  it('recién firmada, semanasHastaPelea da una cuenta regresiva creíble (el campamento son 2-3 beats, nunca ~68 semanas)', () => {
     const p = partidaProfesional(2);
-    const antes = JSON.stringify(p.proximaPelea);
+    const paso = siguienteBeat(p);
+    const { oferta } = paso.partida.ofertaPendiente;
+    const firmada = firmarPelea(paso.partida, { oferta });
+    const faltan = semanasHastaPelea(firmada);
+    expect(faltan).toBeGreaterThanOrEqual(0);
+    expect(Number.isFinite(faltan)).toBe(true);
+    // SEMANAS_POR_BEAT_CAMPAMENTO=3 x hasta 3 beats (campamento.js): 9 como
+    // mucho, muy lejos de las ~68 semanas de un bloque entero.
+    expect(faltan).toBeLessThanOrEqual(9);
+  });
+
+  it('no muta partida.ofertaPendiente de la partida original', () => {
+    const p = partidaProfesional(2);
+    const antes = JSON.stringify(p.ofertaPendiente);
     siguienteBeat(p);
-    expect(JSON.stringify(p.proximaPelea)).toBe(antes);
+    expect(JSON.stringify(p.ofertaPendiente)).toBe(antes);
   });
 });
 
@@ -654,30 +683,30 @@ describe('cancelarProximaPelea', () => {
     };
   }
 
-  it('sin ninguna pelea en danza, no hace nada', () => {
+  it('sin ninguna oferta en danza, no hace nada', () => {
     const p = nuevaPartida(1);
-    expect(p.proximaPelea).toBeNull();
+    expect(p.ofertaPendiente).toBeNull();
     const cancelada = cancelarProximaPelea(p);
-    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.ofertaPendiente).toBeNull();
     expect(cancelada.cola).toEqual(p.cola);
   });
 
-  it('con una oferta pendiente en la cola, la saca y limpia proximaPelea', () => {
+  it('con una oferta pendiente en la cola, la saca y limpia ofertaPendiente', () => {
     const oferta = ofertaDePrueba();
     const p = {
       ...nuevaPartida(2),
-      proximaPelea: { oferta, semanaObjetivo: 10 },
+      ofertaPendiente: { oferta },
       cola: [{ tipo: 'evento', datos: {} }, { tipo: 'oferta', datos: { oferta } }, { tipo: 'redes', datos: {} }],
     };
     const cancelada = cancelarProximaPelea(p);
-    expect(cancelada.proximaPelea).toBeNull();
+    expect(cancelada.ofertaPendiente).toBeNull();
     expect(cancelada.cola.map((b) => b.tipo)).toEqual(['evento', 'redes']);
   });
 
   it('no muta la partida original', () => {
     const p = {
       ...nuevaPartida(3),
-      proximaPelea: { oferta: ofertaDePrueba(), semanaObjetivo: 10 },
+      ofertaPendiente: { oferta: ofertaDePrueba() },
       cola: [{ tipo: 'oferta', datos: { oferta: ofertaDePrueba() } }],
     };
     const antes = JSON.stringify(p);

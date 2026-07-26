@@ -311,11 +311,14 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     });
     // Semilla 4, etapa profesional (probPelea: 1): el bloque trae un 'evento'
-    // Y, más adelante en la misma cola, una 'oferta' — proximaPelea ya queda
-    // seteado antes de llegar a ninguno de los dos (verificado aparte).
+    // Y, más adelante en la misma cola, una 'oferta' — ofertaPendiente (dato
+    // interno) ya queda seteado antes de llegar a ninguno de los dos
+    // (verificado aparte); proximaPelea (lo que muestra el panel) sigue null
+    // porque todavía no se firmó nada.
     const inicial = { ...crearPartida({ jugador, semilla: 4 }), etapaIndice: 2 };
     const partida = avanzarHasta(inicial, 'evento');
-    expect(partida.proximaPelea).not.toBeNull();
+    expect(partida.ofertaPendiente).not.toBeNull();
+    expect(partida.proximaPelea).toBeNull();
     expect(partida.cola.map((b) => b.tipo)).toEqual(['evento', 'oferta']);
 
     const cartaSintetica = {
@@ -337,22 +340,24 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
     return storage;
   }
 
-  it('elegir la rama que cae la pelea saca la oferta de la cola y limpia proximaPelea: el panel de la derecha deja de mostrar al rival', () => {
+  it('elegir la rama que cae la pelea saca la oferta de la cola de verdad (no solo del texto); el panel de la derecha nunca mostró al rival sin firmar', () => {
     iniciar(cont, partidaConOfertaYCartaDeRiesgo());
     continuar();
 
-    // Antes de elegir: el panel de "próxima pelea" (columna derecha) todavía
-    // muestra al rival — la oferta sigue en danza.
-    expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+    // Antes de elegir: la oferta todavía no se firmó (sigue sin decidir), así
+    // que el panel de "próxima pelea" (columna derecha) sigue en el estado
+    // vacío — bug reportado: antes mostraba al rival apenas aparecía la
+    // oferta, sin que el jugador la hubiera aceptado.
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
 
     const tarjetaRiesgo = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaRiesgo).toBeTruthy();
     tarjetaRiesgo.click();
     vi.runAllTimers();
 
-    // Después: la pelea se cayó de verdad. El panel de la derecha ya no
-    // muestra al rival (volvió al estado vacío), y "Continuar" no lleva a
-    // ningún beat de tipo 'oferta' — se sacó de la cola, no solo del texto.
+    // Después: la pelea se cayó de verdad. El panel de la derecha sigue en
+    // el estado vacío, y "Continuar" no lleva a ningún beat de tipo 'oferta'
+    // — se sacó de la cola, no solo del texto.
     expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
     expect(cont.querySelector('.shell-centro [data-accion="aceptar"]')).toBeNull();
     expect(cont.querySelector('.shell-centro [data-accion="rechazar"]')).toBeNull();

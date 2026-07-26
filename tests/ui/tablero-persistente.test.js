@@ -401,15 +401,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     }
   });
 
-  // Bug reportado por el usuario: "cuando terminé una pelea, en la pantalla
-  // principal seguía apareciendo un peleador aunque no haya elegido ni
-  // confirmado ninguno todavía". Causa: `partida.proximaPelea` se guarda al
-  // armar la cola del bloque (armarCola, career.js) pero nunca se limpiaba
-  // al pelear ni al rechazar la oferta — quedaba fantasma en el panel de la
-  // derecha hasta que el bloque siguiente lo pisaba con una oferta nueva (o
-  // con null si no había).
+  // Bug reportado por el usuario: "aparece en la esquina de PRÓXIMA PELEA el
+  // nombre del peleador que me acaba de aparecer como propuesta, no la
+  // acepté y ya aparece ahí, eso está mal". Causa real: `partida.proximaPelea`
+  // se guardaba al armar la cola del bloque (armarCola, career.js) — antes
+  // de que el jugador llegara siquiera a ver la oferta, no digamos
+  // aceptarla. El panel solo puede mostrar una pelea FIRMADA: se mantiene
+  // vacío mientras la oferta está en danza y sigue vacío después de
+  // resolverla (pelear o rechazar), hasta que el jugador firme la próxima.
   describe('el panel de próxima pelea no queda fantasma después de resolverla (bug reportado)', () => {
-    it('después de pelear (ganar o perder), el panel vuelve al estado "todavía no hay nada firmado"', () => {
+    it('con la oferta sobre la mesa (todavía sin aceptar), el panel sigue en el estado vacío', () => {
       iniciar(cont, prepararStorage(nuevaPartida(3)));
 
       let guardia = 0;
@@ -420,10 +421,22 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       }
       expect(tipo).toBe('oferta');
 
-      // El panel de la derecha ya muestra al rival ANTES de aceptar (se arma
-      // junto con la cola del bloque, ver proximaPelea en career.js).
+      // El panel de la derecha NO debe mostrar al rival todavía: la oferta
+      // está en pantalla, pero el jugador no la aceptó.
       const textoAntes = cont.querySelector('.shell-derecha').textContent;
-      expect(textoAntes).not.toContain('Todavía no hay nada firmado');
+      expect(textoAntes).toContain('Todavía no hay nada firmado');
+    });
+
+    it('después de pelear (ganar o perder) una oferta aceptada, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+      iniciar(cont, prepararStorage(nuevaPartida(3)));
+
+      let guardia = 0;
+      let tipo = null;
+      while (tipo !== 'oferta' && guardia < 40) {
+        guardia += 1;
+        tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
+      }
+      expect(tipo).toBe('oferta');
 
       cont.querySelector('.shell-centro [data-accion="aceptar"]').click();
       jugarPeleaCompleta(cont);
@@ -435,7 +448,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       expect(textoDespues).toContain('Todavía no hay nada firmado');
     });
 
-    it('después de rechazar una oferta, el panel vuelve al estado "todavía no hay nada firmado"', () => {
+    it('después de rechazar una oferta, el panel sigue en el estado "todavía no hay nada firmado"', () => {
       iniciar(cont, prepararStorage(nuevaPartida(3)));
 
       let guardia = 0;
@@ -445,7 +458,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }
       expect(tipo).toBe('oferta');
-      expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+      expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
 
       cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
 
@@ -471,7 +484,10 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       }
       expect(tipo).toBe('oferta');
 
-      const apodoRival = cont.querySelector('.shell-derecha').textContent.match(/"([^"]+)"/)[1];
+      // La oferta todavía no está firmada, así que el panel de la derecha no
+      // muestra al rival (ver el describe de arriba): el apodo se lee de la
+      // propia pantalla de la oferta, en el centro.
+      const apodoRival = cont.querySelector('.shell-centro').textContent.match(/"([^"]+)"/)[1];
 
       cont.querySelector('.shell-izquierda [data-accion="ver-ranking"]').click();
 

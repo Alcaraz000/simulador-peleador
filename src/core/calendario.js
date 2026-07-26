@@ -54,8 +54,10 @@ export function semanasDeBloque(aniosPorBloque) {
 }
 
 /**
- * Cuántas semanas faltan para la próxima pelea firmada. `null` si no hay
- * ninguna oferta pendiente (partida.proximaPelea).
+ * Cuántas semanas faltan para la próxima pelea firmada. `null` si todavía no
+ * hay ninguna pelea firmada (partida.proximaPelea) — una oferta sin aceptar
+ * no cuenta, aunque ya esté armada internamente (ver ofertaPendiente en
+ * career.js).
  */
 export function semanasHastaPelea(partida) {
   if (!partida.proximaPelea) return null;
