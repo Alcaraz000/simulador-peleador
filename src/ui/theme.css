@@ -334,6 +334,18 @@ h2 { font-size: 17px; font-weight: 800; }
 
 .panel-decision-desenlace .boton { margin-top: 4px; }
 
+/* Negociación (v4, feedback repetido: "las opciones se ven muy grandes"):
+   siempre son 4 movidas fijas (MOVIDAS, negotiation.js), en la grilla de 2
+   columnas de siempre -- pero esta pantalla vive FUERA del shell (pantalla
+   completa: #app vuelve a su max-width angosto de 430/560px), así que en
+   escritorio cada columna quedaba mucho más ancha que la tarjeta de
+   referencia del sistema (~206px, ver mockups-v2.html sección A). Un tope de
+   ancho + centrado en la propia celda de la grilla achica la tarjeta sin
+   tocar crearTarjeta (que sigue con su tamaño fijo de título/descripción en
+   todos los demás lugares del juego). En celular la columna ya mide menos
+   que el tope, así que no cambia nada ahí. */
+.negociacion-movidas .tarjeta { max-width: 210px; margin: 0 auto; }
+
 /* Shell persistente (v2): tres regiones montadas una sola vez. Mobile-first
    (apiladas) con tres columnas reales desde 900px. La región derecha (próxima
    pelea + noticias) queda colapsada detrás de un botón en celular. */

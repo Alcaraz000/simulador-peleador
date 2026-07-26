@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { createRng } from '../../src/core/rng.js';
 import {
   crearNegociacion, jugarMovida, LIMITE_APRIETES,
@@ -14,6 +16,11 @@ beforeEach(() => {
 });
 
 function noop() {}
+
+function cargarCSS() {
+  const CSS = readFileSync(join(process.cwd(), 'src/ui/theme.css'), 'utf-8');
+  document.head.innerHTML = `<style>${CSS}</style>`;
+}
 
 describe('renderNegociacion', () => {
   it('muestra la bolsa, la barra de paciencia (pista gruesa, no la barrita fina) y las 4 movidas', () => {
@@ -34,6 +41,46 @@ describe('renderNegociacion', () => {
     for (const nodo of cont.querySelectorAll('[data-movida]')) {
       expect(nodo.classList.contains('tarjeta')).toBe(true);
     }
+  });
+
+  // Feedback repetido del usuario ("las opciones se ven muy grandes"): la
+  // negociación vive FUERA del shell (pantalla completa, #app vuelve a su
+  // max-width angosto), así que en escritorio la grilla de 2 columnas de
+  // siempre (.panel-decision-grilla-2) estiraba cada tarjeta mucho más ancha
+  // que la referencia del sistema de tarjetas (~206px, mockups-v2.html). Se
+  // acerca sin tocar crearTarjeta (tamaño fijo de título/desc en todos
+  // lados): un tope de ancho + centrado en la propia celda de la grilla.
+  it('las tarjetas de movida tienen un ancho tope (mas compactas que estirarse a toda la columna)', () => {
+    cargarCSS();
+    const negociacion = crearNegociacion(oferta);
+    renderNegociacion(cont, {
+      negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
+    });
+    const tarjetas = [...cont.querySelectorAll('[data-movida]')];
+    expect(tarjetas.length).toBe(4);
+    for (const t of tarjetas) {
+      const maxWidth = window.getComputedStyle(t).maxWidth;
+      expect(maxWidth).not.toBe('none');
+      expect(parseInt(maxWidth, 10)).toBeLessThanOrEqual(220);
+    }
+  });
+
+  // Segunda vez que se reporta: "APRIETES 0/3 está desalineado". Causa real:
+  // `.fila > * { flex:1 }` (theme.css) hace que el span de la derecha se
+  // estire a la mitad de la fila (como el bloque de paciencia de la
+  // izquierda, que sí fija flex:0 0 auto) y el texto quede flotando en el
+  // medio de esa mitad en vez de pegado al borde derecho, contra
+  // `justify-content:space-between`.
+  it('el contador de aprietes no se estira: queda pegado a la derecha, alineado con la paciencia', () => {
+    cargarCSS();
+    const negociacion = crearNegociacion(oferta);
+    renderNegociacion(cont, {
+      negociacion, oferta, onMovida: noop, onCerrar: noop, onRechazar: noop,
+    });
+    const contador = [...cont.querySelectorAll('.etiqueta')]
+      .find((n) => n.textContent.includes('Aprietes'));
+    expect(contador).toBeTruthy();
+    expect(window.getComputedStyle(contador).flexGrow).toBe('0');
   });
 
   it('el boton de rechazar siempre esta presente y dispara el callback', () => {

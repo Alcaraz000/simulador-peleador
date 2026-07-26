@@ -32,8 +32,15 @@ function barraPaciencia(negociacion) {
         icono('balanza', { tamano: 14, color }),
         el('b', { style: `color:${color}`, text: `Paciencia del promotor: ${negociacion.paciencia}/100` }),
       ]),
+      // flex:0 0 auto (segunda vez reportado: "APRIETES 0/3 está
+      // desalineado"): sin esto, `.fila > * { flex:1 }` (theme.css) estira
+      // este span a la mitad de la fila igual que el bloque de paciencia de
+      // al lado (que sí fija flex:0 0 auto), y el texto queda flotando en el
+      // medio de esa mitad en vez de pegado al borde derecho contra
+      // justify-content:space-between.
       el('span', {
         class: 'etiqueta',
+        style: 'flex:0 0 auto',
         text: `Aprietes: ${negociacion.intentosApriete}/${LIMITE_APRIETES}`,
       }),
     ]),
@@ -90,7 +97,7 @@ export function renderNegociacion(contenedor, {
     ]),
     cerrada ? null : barraPaciencia(negociacion),
     cerrada ? null : bloqueEvento(negociacion),
-    cerrada ? null : el('div', { class: 'panel-decision-grilla-2' }, movidas),
+    cerrada ? null : el('div', { class: 'panel-decision-grilla-2 negociacion-movidas' }, movidas),
     // Rechazar la pelea entera (Task v3, pedido textual: "falta el botón de
     // rechazar, tiene que estar siempre disponible") — nunca se apaga, ni
     // siquiera con la negociación bloqueada por un apriete fallido.
