@@ -37,7 +37,8 @@ import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decisio
 import { renderPanelAvance } from './ui/screens/panel-avance.js';
 import { renderCalendario } from './ui/screens/panel-calendario.js';
 import { animarRoll } from './ui/components/roll.js';
-import { animarAtributos } from './ui/components/animar-numero.js';
+import { animarAtributos, destacarAtributos } from './ui/components/animar-numero.js';
+import { animarDado } from './ui/components/dado.js';
 import { icono } from './ui/icons.js';
 
 export const VERSION = '0.1.0';
@@ -139,31 +140,45 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (Hallazgo 1 de la revisión final): dopaje/chantaje/entrenador disparan un
   // roll con suspenso (animarRoll, 1.2-1.8s) cuyo timer, sin esto, sigue
   // corriendo aunque el jugador se vaya a la Ficha — una pantalla completa
-  // que reemplaza `contenedor`. Si el timer termina ahí, `mostrarDesenlace`
+  // que reemplaza `contenedor`. Si el timer termina ahí, `aplicarEfectoYSeguir`
   // llama a `asegurarShell()`, que ve que el shell ya no está DENTRO de
   // `contenedor` y lo reconstruye con `mount()`: la Ficha desaparece sin que
   // el jugador tocara "Cerrar".
   //
-  // `cancelarRollPendiente` guarda, mientras un roll está en curso, la
-  // función que hay que llamar SI el jugador abandona el tablero antes de
-  // que termine (mismo patrón que `raiz._limpiarAccion` en
-  // ui/screens/fight.js: quien puede interrumpir el timer es quien lo
-  // conoce). La decisión de diseño de QUÉ pasa con la carta pendiente: el
-  // roll es puramente cosmético — `resolverOpcion` ya consumió el rng y
-  // decidió el resultado de forma síncrona ANTES de que `animarRoll` arranque
-  // a animar (ver beatCarta). O sea que "el roll ya se resolvió internamente"
-  // es SIEMPRE cierto en el momento en que esto se puede llegar a cancelar:
-  // no hay ningún caso real de "todavía no se resolvió, dejalo elegir de
-  // nuevo". Cancelar entonces significa parar el timer, aplicar YA el
-  // resultado a `partida` (sin pintar nada — el tablero no está a la vista) y
-  // dejar `pintarCentro` apuntando al desenlace, para que aparezca solo
-  // cuando el jugador vuelva del tablero completo: ni pierde la carta ni el
-  // resultado que ya le tocó, y no hay ninguna sorpresa (nada cambia en
-  // pantalla mientras está en la Ficha).
+  // `cancelarRollPendiente` guarda, mientras un roll (o su pausa de lectura
+  // posterior — ver `beatCarta`) está en curso, la función que hay que
+  // llamar SI el jugador abandona el tablero antes de que termine (mismo
+  // patrón que `raiz._limpiarAccion` en ui/screens/fight.js: quien puede
+  // interrumpir el timer es quien lo conoce). La decisión de diseño de QUÉ
+  // pasa con la carta pendiente: el roll es puramente cosmético —
+  // `resolverOpcion` ya consumió el rng y decidió el resultado de forma
+  // síncrona ANTES de que `animarRoll` arranque a animar (ver beatCarta). O
+  // sea que "el roll ya se resolvió internamente" es SIEMPRE cierto en el
+  // momento en que esto se puede llegar a cancelar: no hay ningún caso real
+  // de "todavía no se resolvió, dejalo elegir de nuevo". Cancelar entonces
+  // significa parar el timer que esté corriendo y aplicar YA el efecto
+  // (`aplicar()`, que deja el tablero en el estado ocioso) — se pinta en el
+  // MISMO tick, mientras `contenedor` todavía tiene puesto el tablero (recién
+  // después de esto `abrirFicha` lo reemplaza con la Ficha), así que no hay
+  // ninguna sorpresa: nada cambia en pantalla una vez que el jugador ya está
+  // mirando la Ficha.
   let cancelarRollPendiente = null;
 
   function abandonarRollPendiente() {
     if (cancelarRollPendiente) cancelarRollPendiente();
+  }
+
+  // Mismo problema, mismo remedio, para el dado que se tira al tocar
+  // "Continuar" (Task v3): es cosmético y corto (600-900ms), pero si el
+  // jugador se va a la Ficha en pleno giro, el timer sigue corriendo en
+  // segundo plano igual que el del roll — sin cancelarlo, `siguiente()`
+  // terminaría disparando DESPUÉS de que la Ficha reemplazó `contenedor`,
+  // con el mismo riesgo de `asegurarShell()` reconstruyendo el tablero
+  // debajo suyo.
+  let cancelarDadoPendiente = null;
+
+  function abandonarDadoPendiente() {
+    if (cancelarDadoPendiente) cancelarDadoPendiente();
   }
 
   function asegurarShell() {
@@ -257,29 +272,75 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     volverAlTablero();
   }
 
-  // No hay pantalla de resultado (Task 3.2): esto reemplaza a
-  // renderResultadoTarjeta para mejora/evento/redes/sparring. Aplica los
-  // deltas al panel izquierdo YA repintado con los valores finales, los
-  // anima, y deja el texto del desenlace con un botón para seguir, en la
-  // MISMA región central — nunca una pantalla nueva.
-  function mostrarDesenlace({ titulo, texto, deltas = {}, deltasTexto = null }) {
-    const shell = asegurarShell();
-    renderPanelPeleador(shell.regiones.izquierda, propsPanelIzquierda());
-    animarAtributos(shell.regiones.izquierda, deltas);
-    shell.destacar('izquierda');
-    centro(() => renderDesenlace(centroContenido(), {
-      titulo, texto, deltasTexto: deltasTexto ?? formatearMods(deltas), onContinuar: irADashboard,
-    }));
-  }
-
   // El estado "entre beats": lo que ANTES mostraba renderDashboard (v1,
   // pantalla completa) ahora es un panel más en el centro del MISMO tablero
-  // (Task 6.1 — el tablero es la pantalla principal, siempre).
+  // (Task 6.1 — el tablero es la pantalla principal, siempre). Extraída
+  // aparte de `irADashboard` (no un closure inline) para poder reusarla tal
+  // cual como `pintarCentro` cuando se cancela un roll o un dado pendientes
+  // (ver abandonarRollPendiente/abandonarDadoPendiente): asignar
+  // `pintarCentro = irADashboard` directo re-entraría en `centro()` (que ya
+  // estaría en medio de resolverse) — esto es la versión "solo pintar", sin
+  // el `persistir()` ni el `centro()` de alrededor.
+  function pintarPanelAvance() {
+    renderPanelAvance(centroContenido(), { partida, onSiguiente: siguienteConDado, onCurar: curar });
+  }
+
   function irADashboard() {
     persistir();
-    centro(() => renderPanelAvance(centroContenido(), {
-      partida, onSiguiente: siguiente, onCurar: curar,
-    }));
+    centro(pintarPanelAvance);
+  }
+
+  // Reemplaza a mostrarDesenlace/renderDesenlace para las decisiones (Task
+  // v3, feedback del usuario): ya no hay pantalla de resultado con botón
+  // "Seguir" — se aplica el efecto y la carrera sigue derecho al estado
+  // ocioso (Continuar). Lo único que le avisa al jugador qué cambió es la
+  // animación de números + el resalte verde/rojo de SOLO las filas de
+  // atributo que cambiaron (antes, `shell.destacar('izquierda')` hacía
+  // brillar TODO el módulo izquierdo por cualquier cambio — queja textual).
+  //
+  // El ORDEN importa: animar tiene que pasar DESPUÉS de irADashboard() (que
+  // llama a montarTablero(), y esa SIEMPRE repinta la izquierda desde cero —
+  // ver montarTablero). Animar ANTES se pierde en el mismo tick: mount() no
+  // diffea, así que el segundo repintado deja huérfanos los nodos que
+  // `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
+  // navegador llegue a pintar ese estado intermedio.
+  function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
+    partida = { ...partida, jugador, rivalidades };
+    irADashboard();
+    animarAtributos(shellActual.regiones.izquierda, deltas);
+    destacarAtributos(shellActual.regiones.izquierda, deltas);
+  }
+
+  // Al tocar "Continuar" se tira el dado (Task v3, pedido textual: "el juego
+  // se llama así por algo") antes de que aparezca la siguiente decisión.
+  // Mismo cuidado que con el roll de una carta: si el jugador se va a la
+  // Ficha en pleno giro, `cancelarDadoPendiente` resuelve YA la transición
+  // (nunca pinta nada — el tablero no está a la vista) en vez de dejar el
+  // timer terminar solo, en segundo plano, contra un `contenedor` que la
+  // Ficha ya reemplazó.
+  //
+  // El guard `dadoResuelto` evita un bug sutil: con prefers-reduced-motion
+  // (o si algún día `animarDado` resuelve síncrono por otro motivo),
+  // `onFin` corre DENTRO del propio `animarDado(...)`, antes de que esta
+  // función llegue a la línea de abajo — sin el guard, esa línea
+  // pisaría `cancelarDadoPendiente` con un cancelador VIEJO que dispararía
+  // `siguiente()` una segunda vez si el jugador entra a la Ficha más tarde
+  // (saltearía un beat entero de la carrera).
+  function siguienteConDado() {
+    const boton = centroContenido().querySelector('[data-accion="siguiente"]');
+    if (!boton) { siguiente(); return; }
+
+    let dadoResuelto = false;
+    const controladorDado = animarDado(boton, {
+      onFin: () => {
+        dadoResuelto = true;
+        cancelarDadoPendiente = null;
+        siguiente();
+      },
+    });
+    if (!dadoResuelto) {
+      cancelarDadoPendiente = () => { controladorDado.detener(); cancelarDadoPendiente = null; siguiente(); };
+    }
   }
 
   function curar() {
@@ -298,6 +359,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // detrás, así que un roll terminando ahí no tiene el mismo problema.
   function abrirFicha(jugador, seccion = 'atributos') {
     abandonarRollPendiente();
+    abandonarDadoPendiente();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
   }
 
@@ -391,11 +453,28 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onElegir: (id) => {
         const carta = beat.datos.cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
-        partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-        mostrarDesenlace({ titulo: 'Campamento', texto: carta.texto, deltas: aplicado.deltas });
+        aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
       },
     }));
   }
+
+  // Muestra la crónica de la rama de azar que le tocó al jugador SOBRE la
+  // propia tarjeta ganadora (Task v3: "el jugador SÍ tiene que poder ver qué
+  // desenlace le tocó" — eso no se podía perder al sacar la pantalla de
+  // "Seguir"). Se agrega DESPUÉS de que animarRoll ilumina el resultado, así
+  // conviven un momento la píldora del efecto ganador y la frase de esa
+  // rama, antes de volver al estado ocioso.
+  function mostrarResultadoEnTarjeta(nodoTarjeta, texto) {
+    if (!nodoTarjeta || !texto) return;
+    nodoTarjeta.appendChild(el('div', { class: 'tarjeta-resultado', text: texto }));
+  }
+
+  // Cuánto se deja el resultado de un roll fijo en la tarjeta antes de
+  // volver al estado ocioso: tiempo de sobra para leer una frase corta sin
+  // frenar el ritmo de la carrera al repetirse. No es una animación de
+  // movimiento (nada se mueve mientras tanto), así que no depende de
+  // prefers-reduced-motion como sí lo hacen animarRoll/animarDado.
+  const PAUSA_RESULTADO_MS = 1100;
 
   function beatCarta(beat, titulo, nombreIcono) {
     const carta = beat.datos.carta;
@@ -414,40 +493,52 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           rivalidades: partida.rivalidades, rivalObjetivoId,
         });
 
-        const aplicarYMostrar = () => {
-          partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-          mostrarDesenlace({
-            titulo, texto: resuelto.texto || carta.texto, deltas: resuelto.deltas, deltasTexto: resuelto.deltasTexto,
-          });
-        };
+        const aplicar = () => aplicarEfectoYSeguir({
+          jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
+        });
 
-        if (opcion.probabilidades) {
-          const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
-          const controlador = animarRoll(nodoTarjeta, {
-            indiceGanador: resuelto.indiceGanador,
-            cantidad: opcion.probabilidades.length,
-            onFin: () => {
+        if (!opcion.probabilidades) { aplicar(); return; }
+
+        const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
+
+        // Ver el comentario largo junto a la declaración de
+        // `cancelarRollPendiente`: si el jugador se va del tablero (Ficha)
+        // antes de que el roll o la pausa de lectura terminen, esto resuelve
+        // YA el efecto (que `resolverOpcion` ya decidió más arriba, de forma
+        // síncrona) sin pintar nada — el tablero no está a la vista.
+        //
+        // `rollResuelto` evita pisar, con un cancelador viejo, el que recién
+        // dejó puesto `onFin` si `animarRoll` resolvió síncrono (motion
+        // reducido, o una sola rama posible): sin el guard, un roll ya
+        // terminado quedaría con `cancelarRollPendiente` apuntando igual a
+        // "cancelar el roll" en vez de a "cancelar la pausa de lectura", y
+        // aplicaría el efecto DOS VECES si el jugador entra a la Ficha
+        // después.
+        let rollResuelto = false;
+        const controladorRoll = animarRoll(nodoTarjeta, {
+          indiceGanador: resuelto.indiceGanador,
+          cantidad: opcion.probabilidades.length,
+          onFin: () => {
+            rollResuelto = true;
+            mostrarResultadoEnTarjeta(nodoTarjeta, resuelto.texto || carta.texto);
+            const timerId = setTimeout(() => {
               cancelarRollPendiente = null;
-              aplicarYMostrar();
-            },
-          });
-          // Ver el comentario largo junto a la declaración de
-          // `cancelarRollPendiente`: si el jugador se va del tablero antes de
-          // que el roll termine, esto para el timer y aplica YA el resultado
-          // (que `resolverOpcion` ya decidió más arriba) sin pintar nada —
-          // solo deja el desenlace listo para cuando `volverAlTablero` vuelva
-          // a llamar a `pintarCentro`.
+              aplicar();
+            }, PAUSA_RESULTADO_MS);
+            cancelarRollPendiente = () => {
+              clearTimeout(timerId);
+              cancelarRollPendiente = null;
+              aplicar();
+            };
+          },
+        });
+        if (!rollResuelto) {
           cancelarRollPendiente = () => {
-            controlador.detener();
+            controladorRoll.detener();
             cancelarRollPendiente = null;
-            partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-            pintarCentro = () => renderDesenlace(centroContenido(), {
-              titulo, texto: resuelto.texto || carta.texto, deltasTexto: resuelto.deltasTexto, onContinuar: irADashboard,
-            });
+            aplicar();
           };
-          return;
         }
-        aplicarYMostrar();
       },
     }));
   }
@@ -466,8 +557,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
-          partida = { ...partida, jugador: aplicado.jugador, ultimosDeltas: aplicado.deltas };
-          mostrarDesenlace({ titulo: 'Sparring', texto: resultado.texto, deltas: aplicado.deltas });
+          aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
     }
@@ -482,11 +572,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // uso que motivó todo el rediseño. Por eso vive en el centro del tablero
   // como cualquier otro beat de decisión, reusando `renderOferta` tal cual
   // (no le importa si `contenedor` es la pantalla entera o una región: solo
-  // monta un `.stack`). Rechazar también se resuelve DENTRO del tablero
-  // (reusa renderDesenlace, misma familia que lesionSinOferta/noticias). Al
-  // ACEPTAR es cuando arranca la pipeline a pantalla completa
-  // (negociación → careo → plan → pelea): esa sí sigue siendo pantallas
-  // grandes con su propia puesta en escena, decisión ya tomada.
+  // monta un `.stack`). Rechazar (Task v3: sin pantalla de "Seguir", como
+  // cualquier otra decisión) resuelve derecho al estado ocioso; el único
+  // efecto de rechazar es en Fama, que no vive en el panel de atributos, así
+  // que no hay nada para animar/destacar acá. Al ACEPTAR es cuando arranca
+  // la pipeline a pantalla completa (negociación → careo → plan → pelea):
+  // esa sí sigue siendo pantallas grandes con su propia puesta en escena,
+  // decisión ya tomada.
   function beatOferta(beat) {
     const { oferta } = beat.datos;
     centro(() => renderOferta(centroContenido(), {
@@ -494,16 +586,9 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       jugador: partida.jugador,
       onAceptar: () => negociar(oferta),
       onRechazar: () => {
-        const famaAntes = partida.jugador.fama;
         const paso = rechazarOferta(partida.jugador, oferta);
-        const deltaFama = paso.jugador.fama - famaAntes;
         partida = { ...partida, jugador: paso.jugador };
-        centro(() => renderDesenlace(centroContenido(), {
-          titulo: 'Oferta rechazada',
-          texto: paso.texto,
-          deltasTexto: deltaFama !== 0 ? [`${deltaFama > 0 ? '+' : ''}${deltaFama} Fama`] : [],
-          onContinuar: irADashboard,
-        }));
+        irADashboard();
       },
     }));
   }

@@ -289,6 +289,19 @@ h2 { font-size: 17px; font-weight: 800; }
 .tarjeta-efecto.iluminado { box-shadow: 0 0 0 1px currentColor, 0 0 14px rgba(242, 193, 78, 0.35); transform: scale(1.04); }
 .tarjeta-efectos:has(.iluminado) .tarjeta-efecto:not(.iluminado) { opacity: 0.35; }
 
+/* Crónica de la rama de azar (v3): reemplaza a la pantalla de "Seguir" — se
+   agrega SOBRE la propia tarjeta ganadora, después de que el roll termina,
+   y se va con la tarjeta cuando la carrera sigue sola. */
+.tarjeta-resultado {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+  font-size: 11px;
+  font-style: italic;
+  color: var(--texto-medio);
+  animation: aparecer 0.25s ease both;
+}
+
 .tarjeta { transition: border-color 0.15s ease, transform 0.12s ease, background 0.15s ease; }
 .tarjeta:not(:disabled):hover { transform: translateY(-2px); border-color: var(--borde-fuerte); }
 .tarjeta.rara:not(:disabled):hover { border-color: #5a8ac0; }
