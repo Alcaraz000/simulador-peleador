@@ -971,24 +971,30 @@ h2 { font-size: 17px; font-weight: 800; }
 .tabla-ranking-fila-jugador .tabla-ranking-puesto { color: var(--dorado); }
 
 /* Botón "ver tabla" en el bloque de récord/ranking del tablero izquierdo
-   (panel-peleador.js): mismo criterio de tamaño que .boton-tienda, a escala
-   más chica porque comparte fila con la etiqueta "Ranking". */
+   (panel-peleador.js): comparte fila con la etiqueta "Ranking", así que no
+   puede ser tan grande como .boton-tienda (42px) sin desproporcionar esa
+   fila -- pero 24px (auditoría UI/UX v4) era un blanco táctil real chico
+   para celular. 32px, mismo tamaño ya usado en .popup-cerrar: un segundo
+   punto de referencia para "botón de ícono chico" en vez de inventar un
+   tercer tamaño. */
 .tabla-ranking-boton {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   flex: 0 0 auto;
   background: #241012;
   border: 1px solid var(--borde);
-  border-radius: 7px;
+  border-radius: 8px;
   color: var(--texto-medio);
   cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.12s var(--ease-out);
 }
 
 .tabla-ranking-boton:hover { color: var(--texto); border-color: var(--borde-fuerte); }
+.tabla-ranking-boton:active { transform: scale(0.94); }
 
 /* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
 .popup-banderas-grilla {
