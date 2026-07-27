@@ -174,11 +174,24 @@ describe('anioTieneAlgoQueContar', () => {
     expect(anioTieneAlgoQueContar(null, jugadorDePrueba())).toBe(false);
   });
 
-  it('un anio sin peleas (aunque haya elegido la mejora obligatoria) no amerita el resumen', () => {
+  // Pedido textual (v12, "quiero que aparezca en cada enero"): el filtro
+  // original exigía al menos una pelea — eso dejaba afuera años enteros
+  // (sobre todo en juvenil/amateur, donde `probPelea` es bajo) que sí
+  // tuvieron la carta de mejora garantizada de todos los bloques. Relajado a
+  // "peleas O decisiones": en la práctica, casi todos los años van a tener
+  // al menos la decisión de la mejora.
+  it('un anio sin peleas pero con al menos una decision (la mejora obligatoria) SI amerita el resumen', () => {
     const jugador = jugadorDePrueba();
     jugador.historial = [];
     let registro = iniciarRegistroAnio(1, jugador);
     registro = registrarDecision(registro, { tipo: 'mejora', titulo: 'Mejora', opcion: 'Más potencia', semana: 1 });
+    expect(anioTieneAlgoQueContar(registro, jugador)).toBe(true);
+  });
+
+  it('un anio sin peleas y sin ninguna decision (completamente vacio) no amerita el resumen', () => {
+    const jugador = jugadorDePrueba();
+    jugador.historial = [];
+    const registro = iniciarRegistroAnio(1, jugador);
     expect(anioTieneAlgoQueContar(registro, jugador)).toBe(false);
   });
 

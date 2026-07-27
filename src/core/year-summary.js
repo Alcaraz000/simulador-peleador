@@ -103,12 +103,24 @@ export function peleasDelAnio(jugador, anio) {
     .sort((a, b) => a.fecha - b.fecha);
 }
 
-/** Un año sin ninguna pelea (profesional o amateur) no amerita interrumpir
- * la partida con el resumen — pedido explícito: "un año sin peleas ni hitos
- * no necesita ceremonia". La mejora obligatoria de todos los bloques no
- * cuenta por sí sola: sin esto, TODOS los años (incluso los años quietos de
- * juvenil/amateur) dispararían el resumen. */
+/** Un año sin NADA que contar (ni peleas ni decisiones) no amerita
+ * interrumpir la partida con el resumen — pedido explícito: "un año sin
+ * peleas ni hitos no necesita ceremonia".
+ *
+ * v12 (pedido textual: "quiero que el resumen aparezca en cada enero"):
+ * antes exigía al menos una pelea — eso dejaba afuera años enteros (sobre
+ * todo en juvenil/amateur, donde `probPelea` es bajo y muchos años no traen
+ * ninguna oferta) que sí tuvieron actividad real del jugador. Relajado a
+ * "peleas O decisiones": con la mejora garantizada de todos los bloques
+ * (armarCola, career.js), en la práctica casi todos los años van a tener al
+ * menos esa decisión, así que el resumen deja de ser la excepción (antes
+ * 72% de los años) para ser casi la regla. Solo un año SIN NINGUNA decisión
+ * Y sin ninguna pelea (un año "fantasma" que nunca llegó a tener su propio
+ * registro abierto — ver `cerrarAniosCruzados`, career.js, para un salto de
+ * calendario que cruza más de un año de una sola vez) sigue sin ceremonia:
+ * la excepción rara, no la regla. */
 export function anioTieneAlgoQueContar(registro, jugador) {
   if (!registro) return false;
-  return peleasDelAnio(jugador, registro.anio).length > 0;
+  if (peleasDelAnio(jugador, registro.anio).length > 0) return true;
+  return registro.decisiones.length > 0;
 }
