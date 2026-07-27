@@ -231,6 +231,19 @@ describe('ritmo de la carrera', () => {
   //   peleas PROFESIONALES TOTALES (jugables+trámite): avg≈34.7 | p10≈32 p90≈37
   //     — dentro de [30,40] en 99.5% de las 3000 semillas.
   //   3 cinturones: 99.3% | sin ninguna defensa obligatoria: 3.1%
+  //
+  // v7, resumen de fin de año (pedido textual del usuario): `siguienteBeat`
+  // ahora puede intercalar un beat MÁS, 'resumenAnio', al cerrar cualquier
+  // año que haya tenido al menos una pelea (ver anioTieneAlgoQueContar,
+  // year-summary.js) — "jugando bien" (jugarGanandoTodo, este test) gana casi
+  // siempre, así que casi todos los años profesionales (18 de 24) y varios de
+  // juvenil/amateur disparan el resumen: es un aumento esperado, no una
+  // regresión. Remedido sobre las mismas 1500 semillas con el resumen ya
+  // activo: avg≈91.8 (subió ~14.7 respecto del ~77.1 de antes, coherente con
+  // que la enorme mayoría de las carreras "jugando bien" llega a los tres
+  // cinturones y pelea casi todos los años). El costo en MINUTOS real (no
+  // solo en beats) está medido aparte con scripts/balance-sim.mjs — cada
+  // resumen es UN solo click, sin pantalla intermedia.
   it('sobre muchas semillas, el promedio de beats estructurales/carrera cae en el rango medido (jugadas de punta a punta, con campamento incluido)', () => {
     const total = 1500;
     const todos = [];
@@ -239,12 +252,13 @@ describe('ritmo de la carrera', () => {
     }
     const promedio = todos.reduce((a, b) => a + b, 0) / total;
 
-    // Banda amplia sobre el ~77.1 medido, para no ser flaky pero seguir
-    // marcando una regresión real si alguien recorta o infla el ritmo.
-    expect(promedio).toBeGreaterThanOrEqual(68);
-    expect(promedio).toBeLessThanOrEqual(86);
+    // Banda amplia sobre el ~91.8 medido (post resumen de fin de año), para
+    // no ser flaky pero seguir marcando una regresión real si alguien recorta
+    // o infla el ritmo.
+    expect(promedio).toBeGreaterThanOrEqual(82);
+    expect(promedio).toBeLessThanOrEqual(102);
 
-    const dentroDelRango = todos.filter((b) => b >= 45 && b <= 130).length;
+    const dentroDelRango = todos.filter((b) => b >= 55 && b <= 150).length;
     expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
@@ -877,13 +891,21 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   // armarLotePeleas en tramite.js) — así que hay que avanzar bloque a bloque
   // hasta encontrar uno que sí traiga una oferta pendiente, en vez de asumir
   // que el primero la tiene. `primerPaso` es el `siguienteBeat` inmediato
-  // después de arrancar ESE bloque (su primer beat, siempre 'mejora') — el
-  // mismo punto que antes probaban los tests de acá abajo.
+  // después de arrancar ESE bloque (su primer beat de CONTENIDO real,
+  // siempre 'mejora') — el mismo punto que antes probaban los tests de acá
+  // abajo.
+  //
+  // v7, resumen de fin de año: si el año que ESE bloque cierra tuvo alguna
+  // pelea, el primer beat que devuelve siguienteBeat puede ser 'resumenAnio'
+  // (antes que la mejora) — ver anioTieneAlgoQueContar, year-summary.js. Acá
+  // se lo consume como un beat más (no aporta nada a lo que este helper
+  // busca) para seguir devolviendo, siempre, el primer beat de contenido.
   function primerPasoConOfertaPendiente(semilla, { maxBloques = 60 } = {}) {
     let actual = nuevaPartida(semilla);
     actual.etapaIndice = 2;
     for (let i = 0; i < maxBloques; i += 1) {
-      const primerPaso = siguienteBeat(actual);
+      let primerPaso = siguienteBeat(actual);
+      if (primerPaso.beat?.tipo === 'resumenAnio') primerPaso = siguienteBeat(primerPaso.partida);
       if (primerPaso.partida.ofertaPendiente) return primerPaso;
       // Este bloque no trajo ninguna oferta jugable (fue trámite, o nada):
       // se agota el resto de su cola para pasar limpio al próximo bloque.
@@ -899,10 +921,11 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
     const primerPaso = primerPasoConOfertaPendiente(2);
 
-    // El primer beat de un bloque siempre es "mejora": si el bloque trae una
-    // oferta más adelante en la cola, ofertaPendiente ya tiene que
-    // reflejarla (para que cancelarProximaPelea pueda actuar), pero
-    // proximaPelea -lo único que lee el panel- tiene que seguir null: el
+    // El primer beat de CONTENIDO de un bloque siempre es "mejora" (puede
+    // haber un 'resumenAnio' antes, ya consumido por el helper de arriba):
+    // si el bloque trae una oferta más adelante en la cola, ofertaPendiente
+    // ya tiene que reflejarla (para que cancelarProximaPelea pueda actuar),
+    // pero proximaPelea -lo único que lee el panel- tiene que seguir null: el
     // jugador todavía no vio la oferta, mucho menos la aceptó.
     expect(primerPaso.beat.tipo).toBe('mejora');
     expect(primerPaso.partida.ofertaPendiente).not.toBeNull();

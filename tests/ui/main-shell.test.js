@@ -365,9 +365,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     // tiene que quedar fechado en el historial, igual que cualquier otra
     // pelea — antes de este fix (main.js pasa `semanaGlobal` a
     // aplicarResultado), quedaba con `fecha: null`, invisible para el filtro
-    // por año (peleasDelAnio, year-summary.js).
+    // por año (peleasDelAnio, year-summary.js). Puede haber caído en
+    // `historial` (profesional) o `historialAmateur` (formación, si el
+    // destacado salió en juvenil/amateur — ambos casos son válidos, ver
+    // aplicarResultado en offers.js) — se busca en los dos.
     const guardado = cargar(storage);
-    const ultima = guardado.jugador.historial.at(-1);
+    const ultima = guardado.jugador.historial.at(-1) ?? guardado.jugador.historialAmateur.at(-1);
     expect(ultima).toBeTruthy();
     expect(typeof ultima.fecha).toBe('number');
   });

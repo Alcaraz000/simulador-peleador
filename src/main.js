@@ -1,6 +1,7 @@
 import { createRng } from './core/rng.js';
 import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
+  registrarDecision, registrarMuestraMedia,
 } from './core/career.js';
 import { tablaRanking, rankingDelJugador } from './core/world.js';
 import { hitosDePelea, hitoDeEtapa, noticiaDeHitoJugador } from './core/hitos.js';
@@ -24,6 +25,7 @@ import {
   resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
 } from './core/tramite.js';
 import { ANUNCIO_TRAMITE, RESULTADO_DESTACADO_TRAMITE } from './content/tramite-lines.js';
+import { textoResumenAnio } from './content/resumen-anio-lines.js';
 import { el, fmtDinero } from './ui/dom.js';
 
 import { renderLogin } from './ui/screens/login.js';
@@ -36,6 +38,7 @@ import { renderOferta, renderPlan, renderPelea } from './ui/screens/fight.js';
 import { renderFicha } from './ui/screens/profile.js';
 import { renderLegado } from './ui/screens/legacy.js';
 import { mostrarHito } from './ui/screens/hitos.js';
+import { renderResumenAnio } from './ui/screens/resumen-anio.js';
 
 import { crearShell } from './ui/shell.js';
 import {
@@ -428,6 +431,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // (y `shellActual` quedó apuntando a un nodo que ya no está montado).
   function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
     partida = { ...partida, jugador, rivalidades };
+    // Resumen de fin de año: este es el ÚNICO punto donde main.js aplica el
+    // efecto de una decisión sobre el jugador (mejora/evento/redes/sparring/
+    // campamento no-final) — mismo criterio que el comentario grande de
+    // arriba explica para `siguiente()`. Una sola muestra de media acá cubre
+    // TODOS esos beats sin tener que tocar cada uno por separado.
+    partida = registrarMuestraMedia(partida);
     siguiente();
     if (partida.terminada) return;
     animarAtributos(shellActual.regiones.centro, deltas);
@@ -513,7 +522,26 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
     if (beat.tipo === 'peleasResueltas') return beatPeleasResueltas(beat);
     if (beat.tipo === 'tramiteDestacado') return beatTramiteDestacado(beat);
+    if (beat.tipo === 'resumenAnio') return beatResumenAnio(beat);
     return volverAlTablero();
+  }
+
+  // Resumen de fin de año (pedido textual del usuario): vive en la región
+  // central del tablero como cualquier otro beat (career.js ya lo armó con
+  // todo lo que hace falta — media/decisiones/peleas del año que cerró, ver
+  // el comentario grande en siguienteBeat, career.js). La crónica se compone
+  // ACÁ, con el rng cosmético (nunca el de la carrera: es sabor, no una
+  // decisión de juego — mismo criterio que `textoResultadoDestacado`, más
+  // arriba). Un solo botón ("Seguir") pasa a lo que siga en la cola.
+  function beatResumenAnio(beat) {
+    const {
+      anio, muestrasMedia, decisiones, peleas,
+    } = beat.datos;
+    const narrativa = textoResumenAnio(rng, { peleas });
+    centro(() => renderResumenAnio(centroContenido(), {
+      anio, muestrasMedia, decisiones, peleas, narrativa,
+      onContinuar: () => siguiente(),
+    }));
   }
 
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas
@@ -723,6 +751,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onElegir: (id) => {
         const carta = cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);
+        // Resumen de fin de año: la mejora es la ÚNICA decisión garantizada
+        // en todos los bloques — se registra ANTES de aplicarEfectoYSeguir
+        // (que reasigna `partida` con el jugador ya actualizado; el registro
+        // viaja con ella, ver registrarDecision en career.js).
+        partida = registrarDecision(partida, { tipo: 'mejora', titulo: 'Mejora', opcion: carta.titulo });
         aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
       },
     }));
@@ -818,6 +851,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, nombreIcono)),
       onElegir: (id) => {
         const rivalObjetivoId = partida.mundo.roster[0]?.id ?? null;
+        // Resumen de fin de año: se registra la opción elegida ANTES de
+        // resolverConRoll — el roll (si la carta tiene azar) es puramente
+        // cosmético, la decisión que el jugador tomó fue justo esta.
+        const opcionElegida = carta.opciones.find((o) => o.id === id);
+        partida = registrarDecision(partida, { tipo: beat.tipo, titulo: carta.titulo, opcion: opcionElegida?.texto ?? '' });
         resolverConRoll({
           carta,
           opcionId: id,
@@ -895,6 +933,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       rareza: carta.rareza,
       opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, 'pesa')),
       onElegir: (id) => {
+        // Resumen de fin de año: mismo criterio que beatCarta (evento/redes)
+        // — se registra la opción elegida antes del roll cosmético.
+        const opcionElegida = carta.opciones.find((o) => o.id === id);
+        partida = registrarDecision(partida, { tipo: 'campamento', titulo: carta.titulo, opcion: opcionElegida?.texto ?? '' });
         // Pedido 2 (v7): el campamento ya puede traer cartas con azar (ver
         // cards-camp.js) — `resolverConRoll` les da el mismo roll con
         // suspenso que evento/redes, en vez de aplicar el efecto de una.
@@ -904,6 +946,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           alTerminar: (resuelto) => {
             if (ultimo) {
               partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+              // Resumen de fin de año: este es el ÚNICO camino de campamento
+              // que NO pasa por aplicarEfectoYSeguir (va directo al careo) —
+              // sin esto, la muestra de media del ÚLTIMO beat de campamento
+              // se perdía.
+              partida = registrarMuestraMedia(partida);
               careo(oferta);
               return;
             }
@@ -941,6 +988,9 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
           if (ultimo) {
             partida = { ...partida, jugador: aplicado.jugador };
+            // Resumen de fin de año: mismo motivo que en beatCampCarta — este
+            // camino no pasa por aplicarEfectoYSeguir.
+            partida = registrarMuestraMedia(partida);
             careo(oferta);
             return;
           }
