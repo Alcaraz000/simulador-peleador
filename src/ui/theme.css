@@ -1871,3 +1871,237 @@ input.creacion-control { cursor: text; }
   to   { opacity: 1; transform: scale(1); }
 }
 .marcador-pop { animation: marcador-pop 0.22s var(--ease-out) both; }
+
+/* ============================================================================
+   v9 — Reglas nuevas AL FINAL del archivo a propósito (aviso: hay otros
+   implementadores en paralelo tocando resumen-anio.js/grafico-media.js/
+   year-summary.js/world.js/roll.js — agregar acá en vez de editar en el
+   medio del archivo minimiza el choque). Todo lo de acá PISA selectores que
+   ya existen más arriba (mismo selector, gana por orden de cascada — mismo
+   truco que ya usa la sección "v8" más arriba, p. ej. `.panel-peleador-
+   atributo` redefinido ahí) o suma clases nuevas; ninguna línea de arriba se
+   tocó. Cubre:
+     1) EL FIX DE VERDAD de los huecos al pie de las columnas — ver el
+        bloque grande de acá abajo, "Pedido 1". No alcanza con el `height`
+        fijo de panel-noticias.js (necesario, pero eso solo hace que el
+        módulo no cambie de tamaño — el hueco real lo generaba el
+        `align-items:stretch` de `.shell`, forzando a las tres columnas a
+        la altura de la más alta).
+     2) Calendario: sin la etiqueta "Calendario", año como chip.
+     4) La cabecera pasa de 4 celdas (Peso/Mano/Edad/Forma) a 3 (Forma se
+        sacó, Pedido 4): la grilla de 2 columnas dejaría una celda vacía.
+     5) Cinturones: 3 cajas fijas, apagadas/encendidas + su popup.
+     7) Botón de la tienda: brillo cuando hay algo nuevo para comprar.
+   ============================================================================ */
+
+/* --- Pedido 1: el fix real de los huecos al pie de las columnas ----------
+   Verificación visual (capturas en las 2 puntas: feed vacío y feed lleno,
+   ANTES de este bloque): el `height` fijo de panel-noticias.js (arriba, ya
+   aplicado) deja de acoplar el tamaño del MÓDULO al contenido — pero el
+   hueco seguía apareciendo en las DOS capturas, idéntico: la causa real no
+   era que el módulo cambiara de tamaño, era `align-items: stretch` en
+   `.shell` (más arriba, dentro de `@media (min-width: 960px)`), que fuerza
+   a las TRES columnas a medir la altura de la más alta — con noticias en
+   ~650-700px (calendario + dinero + próxima + el módulo de 480px) casi
+   siempre más alta que izquierda/centro, esas dos quedaban estiradas de
+   más, con un tramo final sin ningún panel real: el "espacio
+   desaprovechado" que reportó el usuario, en la esquina inferior izquierda
+   y en el centro, debajo de las decisiones.
+   El `::after` que ya existía (ver el comentario largo ahí, "Zócalo de
+   cierre") rellenaba ese sobrante con un degradé — pero un degradé sobre
+   un fondo casi negro es indistinguible de fondo vacío: seguía
+   LEYÉNDOSE como hueco, aunque "técnicamente" tuviera algo pintado.
+   La solución de fondo: cada columna mide SU PROPIA altura natural,
+   siempre — nunca se estira a la de sus vecinas. Sin estiramiento no hay
+   sobrante que rellenar, así que el `::after` decorativo ya no hace falta
+   (se apaga acá, no se borra arriba, mismo criterio de "no tocar en el
+   medio" que rige esta sección entera). Esto NO reactiva "nada se mueve
+   solo": las columnas siguen ancladas arriba, en el mismo lugar de
+   siempre — lo único que cambia es que ya no se fuerza un piso de altura
+   compartido que ninguna las tres necesitaba pedir. */
+@media (min-width: 960px) {
+  .shell {
+    align-items: start;
+  }
+
+  .shell-izquierda::after,
+  .shell-centro::after,
+  .shell-derecha::after {
+    display: none;
+  }
+}
+
+/* --- Pedido 2: calendario sin etiqueta, año como chip ---------------------
+   `baseline` (no `center`): el chip y el texto no miden el mismo alto de
+   línea (uno lleva su propio padding vertical), así que `center` los dejaba
+   levemente desalineados verticalmente. `flex-wrap` para que 390px nunca
+   corte nada (se apila en dos líneas antes que recortar texto — regla
+   general del proyecto). El mes lleva un margen propio más grande que el
+   `gap` de la fila: es el espacio "proporcionado" que pidió el usuario entre
+   el mes y la semana, más chico entre el año y el mes. */
+.panel-calendario .calendario-fila {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.panel-calendario .calendario-anio {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+.panel-calendario .calendario-mes {
+  flex: 0 0 auto;
+  font-weight: 800;
+  font-size: 13px;
+  margin-right: 12px;
+}
+
+.panel-calendario .calendario-semana {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  color: var(--texto-sutil);
+  font-weight: 700;
+}
+
+/* --- Pedido 4: cabecera con 3 celdas (Peso/Mano hábil/Edad), no 4 ---------
+   Pisa `.cabecera-datos-grilla` (más arriba, `repeat(2, 1fr)`): al sacar
+   FORMA de la cabecera quedan 3 celdas parejas, que entran cómodas en una
+   sola fila de 3 columnas — con 2 columnas la tercera celda quedaba sola en
+   un segundo renglón, con la cuarta columna vacía a su lado. */
+.cabecera-datos-grilla {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+/* --- Pedido 5: cinturones como 3 cajas fijas, apagadas/encendidas ---------
+   Tamaño fijo (ancho Y alto, pedido general "toda tarjeta con tamaño fijo"):
+   ninguna caja crece ni encoge según tenga o no el título — lo único que
+   cambia es el color/brillo. `justify-content:center` (nunca space-between)
+   es lo que deja "el mismo espacio a la izquierda que a la derecha" que
+   pidió el usuario -- las 3 cajas quedan agrupadas al centro del módulo, no
+   pegadas a los bordes. */
+.cinturones-fila {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+}
+
+.cinturon-caja {
+  position: relative;
+  flex: 0 0 auto;
+  width: 82px;
+  height: 82px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  border-radius: 12px;
+  color: var(--texto-sutil);
+  font-family: var(--fuente);
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.12s var(--ease-out);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .cinturon-caja:hover { border-color: var(--borde-fuerte); }
+}
+.cinturon-caja:active { transform: scale(0.96); }
+
+/* El ícono de cinturón de fondo, "ligeramente difuminado" (pedido textual):
+   ocupa la caja entera pero a muy baja opacidad, así nunca compite con el
+   nombre (que va arriba, en su propio color). Apagada = gris tenue; al
+   encenderse toma el color propio de esa caja y sube un poco de presencia,
+   sin dejar de ser un fondo (nunca el protagonista de la caja). */
+.cinturon-caja-icono {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.cinturon-caja.encendida .cinturon-caja-icono {
+  opacity: 0.4;
+  color: var(--color-cinturon);
+}
+
+.cinturon-caja-nombre {
+  position: relative;
+  font-size: 9px;
+  letter-spacing: 1px;
+  font-weight: 800;
+}
+
+/* Encendida: color propio (Plata/Oro/Diamante, según `COLOR_CAJA_CINTURON`
+   en panel-peleador.js) + un halo sutil. `--color-cinturon-glow` es una
+   rgba con el alpha ya resuelto por cada color (nunca `color-mix`: mezclar
+   opacidad con la variable de color arriesgaba soporte de navegador de
+   más, y una rgba fija por color alcanza igual de bien para el halo). El
+   fondo de la caja se queda igual que apagada (`--superficie`) — el color
+   entero se lee en el borde, el ícono y el nombre, sin necesitar teñir
+   también el fondo. */
+.cinturon-caja.encendida {
+  border-color: var(--color-cinturon);
+  color: var(--color-cinturon);
+  box-shadow: 0 0 0 1px var(--color-cinturon), 0 0 16px var(--color-cinturon-glow);
+}
+
+/* Historial de un cinturón (popup, Pedido 5): fecha | tipo de pelea |
+   bandera+rival | resultado, de más reciente a más vieja. `flex-wrap` para
+   que 390px nunca recorte texto (se acomoda en dos líneas antes que
+   cortar). Las peleas "destacadas" (el título cambió de manos: se ganó o se
+   perdió en una defensa) llevan un tinte dorado apenas visible — el resto
+   de las filas (una defensa exitosa más) quedan neutras. */
+.historial-cinturon-lista {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.historial-cinturon-fila {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+  padding: 9px 6px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+.historial-cinturon-fila + .historial-cinturon-fila { border-top: 1px solid var(--borde); }
+.historial-cinturon-fila.destacada { background: rgba(242, 193, 78, 0.08); font-weight: 800; }
+
+.historial-cinturon-fecha { flex: 0 0 auto; width: 64px; }
+.historial-cinturon-tipo { flex: 1 1 120px; min-width: 0; }
+
+.historial-cinturon-rival {
+  flex: 1 1 130px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow-wrap: break-word;
+}
+
+.historial-cinturon-resultado { flex: 0 0 auto; font-weight: 800; }
+
+/* --- Pedido 7: el botón de la tienda brilla cuando hay algo para comprar -
+   Señal útil, no ruido (pedido textual: "que sea una señal útil"): un halo
+   dorado pulsante — se apaga solo bajo `prefers-reduced-motion` (regla
+   global ya declarada más arriba en este archivo, fuerza toda duración de
+   animación a ~0), así que no hace falta ningún guard nuevo acá. */
+@keyframes brillo-tienda {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(242, 193, 78, 0.55); }
+  50%      { box-shadow: 0 0 14px 3px rgba(242, 193, 78, 0.55); }
+}
+
+.boton-tienda.brillo {
+  animation: brillo-tienda 1.8s ease-in-out infinite;
+}
