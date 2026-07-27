@@ -85,6 +85,48 @@ describe('avanzarBloque: cierra el año calendario que cruza y abre uno nuevo', 
   });
 });
 
+// v12 (causa real del "45.9% en enero" medido incluso DESPUÉS de arreglar el
+// cruce de calendario): un campamento (firmarPelea + campCarta/campSparring,
+// siguienteBeat) avanza semanaGlobal DENTRO del bloque actual, semanas que
+// son parte del año de ESE bloque — pero avanzarBloque sumaba
+// `semanasDeBloque` sobre la semana YA corrida por el campamento, así que
+// cada campamento agregaba semanas de MÁS que nunca se recuperaban: el
+// calendario se iba corriendo mes a mes, bloque a bloque, para siempre (el
+// mismo patrón que reportó el usuario: "los primeros 5 caen en enero,
+// después se van corriendo a marzo, junio, octubre"). El fix: el próximo
+// bloque arranca SIEMPRE `semanasDeBloque` semanas después de donde arrancó
+// ESTE bloque (`semanaInicioBloque`), nunca desde donde el campamento dejó
+// `semanaGlobal` a la deriva.
+describe('avanzarBloque: no arrastra el atraso de un campamento al próximo bloque', () => {
+  it('si un campamento ya adelantó semanaGlobal dentro del bloque, el próximo bloque igual arranca semanasDeBloque semanas después del inicio de ESTE', () => {
+    const p = nuevaPartida();
+    // Simula el estado DESPUÉS de que un campamento de 15 semanas (el máximo,
+    // 5 beats × 3 semanas) corrió semanaGlobal dentro del bloque actual —
+    // pero el bloque en sí sigue siendo el mismo (semanaInicioBloque no se
+    // toca hasta el próximo avanzarBloque).
+    const conCampamentoYaCorrido = { ...p, semanaGlobal: p.semanaInicioBloque + 15 };
+    const despues = avanzarBloque(conCampamentoYaCorrido);
+    expect(despues.semanaGlobal).toBe(p.semanaInicioBloque + 52);
+    // El próximo bloque también arranca alineado: su propio inicio queda
+    // registrado para el salto que viene.
+    expect(despues.semanaInicioBloque).toBe(despues.semanaGlobal);
+  });
+
+  it('sin ningún campamento de por medio, el resultado es igual al de siempre: 52 semanas después', () => {
+    const p = nuevaPartida();
+    const despues = avanzarBloque(p);
+    expect(despues.semanaGlobal).toBe(p.semanaInicioBloque + 52);
+  });
+
+  it('el atraso arrastrado no cambia CUÁNTOS años cruza el bloque (sigue siendo exactamente uno, con aniosPorBloque=1)', () => {
+    const p = nuevaPartida();
+    const conCampamentoYaCorrido = { ...p, semanaGlobal: p.semanaInicioBloque + 15 };
+    const despues = avanzarBloque(conCampamentoYaCorrido);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio).toBe(ANIO_INICIAL + 1);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).mes).toBe(1);
+  });
+});
+
 describe('registrarDecision / registrarMuestraMedia (envoltorio a nivel partida)', () => {
   it('registrarDecision suma una decision al registro del anio en curso, usando la semana actual de la partida', () => {
     const p = nuevaPartida();
@@ -128,6 +170,12 @@ function partidaAPuntoDeCerrarAnio(overrides = {}) {
     etapaIndice: 0,
     cola: [],
     semanaGlobal,
+    // El bloque actual arrancó 10 semanas antes de `semanaGlobal` (como si un
+    // campamento ya hubiera corrido esas 10 semanas dentro de este mismo
+    // bloque) — así avanzarBloque sigue saltando exactamente 52 semanas
+    // después de donde arrancó ESTE bloque (ver el comentario grande en
+    // avanzarBloque, career.js), no un valor arbitrario.
+    semanaInicioBloque: semanaGlobal - 10,
     registroAnioActual: iniciarRegistroAnio(semanaGlobal, p.jugador, p.mundo),
     ...overrides,
   };

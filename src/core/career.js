@@ -398,6 +398,14 @@ export function crearPartida({ jugador, semilla }) {
     // nunca lee `ofertaPendiente` (bug reportado: mostraba al rival antes de
     // aceptar la oferta).
     semanaGlobal: 1,
+    // Calendario (v12, "que el resumen aparezca en cada enero"): dónde
+    // arrancó el bloque que se está viviendo AHORA MISMO — ver el comentario
+    // grande en avanzarBloque. Sin esto, un campamento (que avanza
+    // semanaGlobal semana a semana, siguienteBeat) corría el calendario para
+    // siempre: avanzarBloque sumaba `semanasDeBloque` sobre la semana YA
+    // adelantada por el campamento, así que cada uno agregaba semanas de más
+    // que nunca se recuperaban.
+    semanaInicioBloque: 1,
     proximaPelea: null,
     ofertaPendiente: null,
     cola: [],
@@ -563,7 +571,20 @@ export function avanzarBloque(partida) {
   // cuántos años calendario cruzó este bloque — nunca asume que un bloque es
   // siempre exactamente un año).
   const semanaAntes = nueva.semanaGlobal ?? 1;
-  nueva.semanaGlobal = semanaAntes + semanasDeBloque(etapa.aniosPorBloque);
+  // Calendario (v12, "que el resumen aparezca en cada enero" — causa real
+  // medida DESPUÉS de arreglar el cruce de años: los primeros resúmenes
+  // caían en enero, pero después se corrían a marzo, junio, octubre...): el
+  // próximo bloque NO arranca `semanasDeBloque` semanas después de donde
+  // ESTÁ `semanaGlobal` ahora mismo — arranca esa cantidad de semanas
+  // después de donde ARRANCÓ este bloque (`semanaInicioBloque`). Si un
+  // campamento (siguienteBeat) ya adelantó `semanaGlobal` DENTRO de este
+  // bloque preparando una pelea, esas semanas son PARTE del año de este
+  // bloque, no un agregado extra: sumarlas de nuevo acá (como hacía antes)
+  // corría el calendario hacia adelante para siempre, sin que ningún bloque
+  // futuro lo recuperara jamás.
+  const inicioBloqueActual = nueva.semanaInicioBloque ?? 1;
+  nueva.semanaGlobal = inicioBloqueActual + semanasDeBloque(etapa.aniosPorBloque);
+  nueva.semanaInicioBloque = nueva.semanaGlobal;
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
