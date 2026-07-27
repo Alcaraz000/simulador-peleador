@@ -18,7 +18,9 @@
 // rival y le pegan a atributos/forma/fatiga/moral: lo que hagas en el
 // campamento tiene que importar para la pelea.
 
-import { elegirPorRareza, conSalvaguardaDeCondiciones } from './cards.js';
+import {
+  elegirPorRareza, conSalvaguardaDeCondiciones, excluirRecientes, recordarCarta,
+} from './cards.js';
 import { crearSparring } from './sparring.js';
 import { CARTAS_CAMPAMENTO } from '../content/cards-camp.js';
 
@@ -58,11 +60,21 @@ function rellenar(texto, oferta) {
  * mostrar (marcador {rival} relleno). `jugador` es opcional (Sistema 3,
  * cards.js): si no se pasa, `cumpleCondiciones` no filtra nada — así los
  * callers/tests que todavía no lo pasan siguen funcionando tal cual.
+ *
+ * `recientes` (Bug v7, "El video antes de dormir se repite todo el tiempo" —
+ * causa real: CARTAS_CAMPAMENTO tiene 17 cartas elegibles, pero
+ * `elegirPorRareza` no tenía memoria de qué acababa de salir, así que nada
+ * evitaba que la MISMA carta volviera enseguida): últimos ids de ESTE pool ya
+ * mostrados, se excluyen del sorteo (ver excluirRecientes, cards.js) sin
+ * vaciarlo nunca. Opcional (default `[]`) para no romper callers/tests viejos.
  */
-export function elegirCartaCampamento(rng, { etapa, oferta, jugador = null }) {
+export function elegirCartaCampamento(rng, {
+  etapa, oferta, jugador = null, recientes = [],
+}) {
   const elegibles = CARTAS_CAMPAMENTO.filter((c) => c.etapas.includes(etapa));
   const base = elegibles.length > 0 ? elegibles : CARTAS_CAMPAMENTO;
-  const fuente = conSalvaguardaDeCondiciones(base, jugador);
+  const conCondiciones = conSalvaguardaDeCondiciones(base, jugador);
+  const fuente = excluirRecientes(conCondiciones, recientes);
   const carta = elegirPorRareza(rng, fuente);
   return {
     ...carta,
@@ -96,10 +108,17 @@ function ordenDe(largo) {
  * responsable de guardar `rng.estado()`, mismo contrato que el resto de
  * career.js).
  *
- * @returns {{ beats: Array<{tipo:'campCarta'|'campSparring', datos:object}>, semanaObjetivo: number }}
+ * `recientes` (Bug v7, memoria corta de cartas de campamento, ver
+ * elegirCartaCampamento arriba): entra con lo que ya se vio en campamentos
+ * ANTERIORES (career.js la guarda en `partida.memoriaCartas.campamento`) y
+ * sale actualizada con lo que se mostró EN ESTE, encadenada beat a beat —
+ * así dos cartas del MISMO campamento tampoco pueden repetirse entre sí, no
+ * solo entre campamentos distintos.
+ *
+ * @returns {{ beats: Array<{tipo:'campCarta'|'campSparring', datos:object}>, semanaObjetivo: number, recientes: string[] }}
  */
 export function armarBeatsCampamento(rng, {
-  jugador, etapa, oferta, semanaInicial,
+  jugador, etapa, oferta, semanaInicial, recientes = [],
 }) {
   const largo = decidirLargoCampamento(rng, oferta);
   const totalSemanas = largo * SEMANAS_POR_BEAT_CAMPAMENTO;
@@ -107,6 +126,7 @@ export function armarBeatsCampamento(rng, {
   const semanas = repartirSemanas(totalSemanas, largo);
   const orden = ordenDe(largo);
 
+  let memoria = recientes;
   const beats = orden.map((clase, i) => {
     const ultimo = i === orden.length - 1;
     if (clase === 'sparring') {
@@ -117,13 +137,17 @@ export function armarBeatsCampamento(rng, {
         },
       };
     }
+    const carta = elegirCartaCampamento(rng, {
+      etapa, oferta, jugador, recientes: memoria,
+    });
+    memoria = recordarCarta(memoria, carta.id);
     return {
       tipo: 'campCarta',
       datos: {
-        carta: elegirCartaCampamento(rng, { etapa, oferta, jugador }), oferta, semanas: semanas[i], ultimo,
+        carta, oferta, semanas: semanas[i], ultimo,
       },
     };
   });
 
-  return { beats, semanaObjetivo };
+  return { beats, semanaObjetivo, recientes: memoria };
 }

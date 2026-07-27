@@ -131,6 +131,46 @@ export function elegirPorRareza(rng, elegibles, pesos = PESOS_RAREZA) {
   return rng.weighted(entradas);
 }
 
+// Bug reportado (v7, "una acción me aparece constantemente, la de 'El video
+// antes de dormir', fácil se habrá repetido 5 o 6 veces seguidas"): la causa
+// real no es que el pool sea chico (CARTAS_CAMPAMENTO tiene 17 cartas
+// elegibles en cualquier etapa) sino que `elegirPorRareza` no tiene NINGUNA
+// memoria de qué se mostró hace un instante — cada tirada es 100%
+// independiente de la anterior, así que nada le impide a la MISMA carta
+// salir de nuevo enseguida (dentro del mismo campamento, o en el que sigue).
+// Con pocas decenas de tiradas por carrera y una carta memorable (ese título
+// en particular llama la atención), un par de repeticiones cercanas alcanzan
+// para sentirse como "esto sale todo el tiempo".
+//
+// `excluirRecientes`/`recordarCarta` son el arreglo genérico (lo usan
+// elegirEvento/elegirCartaRedes/elegirCartaCampamento, los tres pools que
+// muestran UNA sola carta elegida — a diferencia de repartirMejoras, que
+// ofrece varias en simultáneo y ya garantiza "sin repetir entre sí" con
+// sortearPorRareza): una memoria CORTA (últimas `ventana` cartas vistas de
+// ESE pool) que se excluye del sorteo. Nunca vacía el pool — si excluir deja
+// cero elegibles (pool chico + ventana grande, o casi todo recién visto), se
+// cae con gracia devolviendo el pool sin filtrar, mismo criterio que
+// `conSalvaguardaDeCondiciones` (ver más arriba): más vale una repetición
+// ocasional que una pantalla sin nada para mostrar.
+//
+// La memoria viaja en la partida (`partida.memoriaCartas`, career.js) como un
+// array de ids por pool — plano, serializable, sin referencias circulares —
+// así el autoguardado la persiste sin problema y una partida retomada desde
+// localStorage sigue recordando qué vio hace un rato.
+export const MEMORIA_CARTAS_VENTANA = 4;
+
+export function excluirRecientes(pool, recientes = []) {
+  if (!recientes || recientes.length === 0) return pool;
+  const filtrado = pool.filter((carta) => !recientes.includes(carta.id));
+  return filtrado.length > 0 ? filtrado : pool;
+}
+
+export function recordarCarta(recientes = [], id, ventana = MEMORIA_CARTAS_VENTANA) {
+  if (!id) return recientes;
+  const actualizada = [...recientes, id];
+  return actualizada.length > ventana ? actualizada.slice(actualizada.length - ventana) : actualizada;
+}
+
 // Sortea `total` elementos sin repetir de `elegibles`, respetando los pesos
 // de rareza (ver elegirPorRareza, incluido el `pesos` opcional). Si una
 // rareza se queda sin elementos a mitad de camino, el peso restante se

@@ -1,7 +1,7 @@
 import { createRng } from './rng.js';
 import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './world.js';
 import { EDAD_INICIAL } from './fighter.js';
-import { repartirMejoras } from './cards.js';
+import { repartirMejoras, recordarCarta } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { CINTURONES } from './offers.js';
 import { intentosDePelea, permiteMarqueeEsteAnio, armarLotePeleas } from './tramite.js';
@@ -401,6 +401,15 @@ export function crearPartida({ jugador, semilla }) {
     historialBeats: 0,
     terminada: false,
     legado: null,
+    // Bug v7 ("una carta me aparece constantemente, se habrá repetido 5 o 6
+    // veces seguidas" — ver el comentario grande de excluirRecientes,
+    // cards.js): memoria CORTA de los últimos ids mostrados por cada pool de
+    // "una sola carta elegida" (evento/redes/campamento — repartirMejoras NO
+    // entra: ofrece varias a la vez y ya se garantiza sin repetir ENTRE SÍ).
+    // Plana y serializable (arrays de strings): viaja en la partida, así el
+    // autoguardado la persiste y una carrera retomada sigue recordando qué
+    // vio hace un rato, no vuelve a arrancar en blanco.
+    memoriaCartas: { evento: [], redes: [], campamento: [] },
   };
 }
 
@@ -429,6 +438,11 @@ function clonarPartida(partida) {
     rivalidades: partida.rivalidades.map((r) => ({ ...r, h2h: { ...r.h2h }, hitos: [...r.hitos] })),
     noticias: [...partida.noticias],
     cola: [...partida.cola],
+    memoriaCartas: {
+      evento: [...(partida.memoriaCartas?.evento ?? [])],
+      redes: [...(partida.memoriaCartas?.redes ?? [])],
+      campamento: [...(partida.memoriaCartas?.campamento ?? [])],
+    },
   };
 }
 
@@ -554,13 +568,28 @@ function armarCola(partida) {
     cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: jugadorActual }) } });
   }
 
+  // Bug v7 ("una carta se repite tan seguido"): cada pool de "una sola carta
+  // elegida" lleva su propia memoria corta (memoriaCartas, ver el comentario
+  // grande en crearPartida) — se lee de `partida` (todavía no tocada por
+  // esta función) y se escribe de vuelta apenas se elige, así que si AMBOS
+  // pools disparan en el mismo bloque cada uno actualiza su propia lista sin
+  // pisar a la otra.
+  let memoriaEvento = partida.memoriaCartas?.evento ?? [];
+  let memoriaRedes = partida.memoriaCartas?.redes ?? [];
+
   if (rng.chance(etapa.probEvento)) {
     const categoria = rng.chance(0.5) ? 'vida' : 'evento';
-    cola.push({ tipo: 'evento', datos: { carta: elegirEvento(rng, { jugador: jugadorActual, etapa: tag, categoria }) } });
+    const carta = elegirEvento(rng, {
+      jugador: jugadorActual, etapa: tag, categoria, recientes: memoriaEvento,
+    });
+    memoriaEvento = recordarCarta(memoriaEvento, carta.id);
+    cola.push({ tipo: 'evento', datos: { carta } });
   }
 
   if (rng.chance(etapa.probRedes)) {
-    cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: jugadorActual }) } });
+    const carta = elegirCartaRedes(rng, { jugador: jugadorActual, recientes: memoriaRedes });
+    memoriaRedes = recordarCarta(memoriaRedes, carta.id);
+    cola.push({ tipo: 'redes', datos: { carta } });
   }
 
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
@@ -651,7 +680,12 @@ function armarCola(partida) {
   }
 
   return {
-    cola, rngEstado: rng.estado(), ofertaPendiente, jugador: jugadorActual, rivalidades: rivalidadesActuales,
+    cola,
+    rngEstado: rng.estado(),
+    ofertaPendiente,
+    jugador: jugadorActual,
+    rivalidades: rivalidadesActuales,
+    memoriaCartas: { evento: memoriaEvento, redes: memoriaRedes },
   };
 }
 
@@ -668,12 +702,17 @@ export function firmarPelea(partida, { oferta }) {
   const nueva = clonarPartida(partida);
   const rng = rngDe(nueva);
   const etapa = etapaActual(nueva);
-  const { beats, semanaObjetivo } = armarBeatsCampamento(rng, {
-    jugador: nueva.jugador, etapa: tagContenido(etapa.id, nueva.jugador), oferta, semanaInicial: nueva.semanaGlobal ?? 1,
+  const { beats, semanaObjetivo, recientes } = armarBeatsCampamento(rng, {
+    jugador: nueva.jugador,
+    etapa: tagContenido(etapa.id, nueva.jugador),
+    oferta,
+    semanaInicial: nueva.semanaGlobal ?? 1,
+    recientes: nueva.memoriaCartas?.campamento ?? [],
   });
   nueva.cola = [...beats, ...nueva.cola];
   nueva.proximaPelea = { oferta, semanaObjetivo };
   nueva.ofertaPendiente = null;
+  nueva.memoriaCartas = { ...nueva.memoriaCartas, campamento: recientes };
   nueva.rngEstado = rng.estado();
   return nueva;
 }
@@ -724,6 +763,7 @@ export function siguienteBeat(partida) {
     // actualizados, antes de que el jugador vea ningún beat de este bloque.
     nueva.jugador = armado.jugador;
     nueva.rivalidades = armado.rivalidades;
+    nueva.memoriaCartas = { ...nueva.memoriaCartas, ...armado.memoriaCartas };
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }
