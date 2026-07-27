@@ -2184,3 +2184,95 @@ input.creacion-control { cursor: text; }
   flex: 0 0 58px;
   text-align: right;
 }
+
+/* ============================================================================
+   v10 — Reglas nuevas AL FINAL del archivo (mismo criterio que las secciones
+   "v8"/"v9" de más arriba: agregar acá en vez de editar en el medio minimiza
+   el choque con otros cambios en curso). Todo lo de acá PISA selectores que
+   ya existen más arriba o suma clases nuevas; ninguna línea de arriba se
+   tocó. Cubre los 3 pedidos de esta ronda:
+     1) El resumen del año y el módulo de noticias nunca pasan el "piso" del
+        último panel de la columna izquierda (la referencia). Los gráficos
+        se achican de entrada (grafico-media.js, viewBox más chato + este
+        panel con menos aire) y, si con todo y eso el contenido no entra,
+        `.resumen-anio-cuerpo` (scroll propio) y `.panel-noticias-lista`
+        (su `height` ya fijo) quedan acotados por `sincronizar-alturas.js`
+        — nunca estirando el módulo.
+     2) Más marcas en el eje Y de los gráficos (grafico-media.js).
+     3) El historial de un cinturón (popup) va todo en una sola línea.
+   ============================================================================ */
+
+/* --- Pedido 1: gráficos del resumen, con menos aire alrededor -------------
+   El viewBox ya se acható en grafico-media.js (menos alto por el mismo
+   ancho) — esto recorta el padding del `.panel` que lo envuelve (13px/14px
+   por defecto, pensado para contenido con más aire para dar) y el margen de
+   la etiqueta de arriba, así el "sobrante" que reportó el usuario ("se ven
+   demasiado grandes") no es solo el SVG sino todo el bloque. */
+.resumen-anio-grafico-panel { padding: 8px 10px; }
+
+/* --- Pedido 1: cabecera y botón "Seguir" SIEMPRE visibles, el resto scrollea
+   Antes TODO el contenido (cabecera, crónica, los dos gráficos, decisiones,
+   peleas Y el botón) vivía suelto dentro de `.resumen-anio` — sin ningún
+   límite propio, así que un año con mucho contenido (o un módulo central
+   ancho, que agranda los gráficos vía viewBox) empujaba el módulo entero
+   mucho más abajo que el "piso" de la columna izquierda (pedido textual:
+   "lo más bajo que puede estar el resumen es el piso del módulo de
+   ranking"). Ahora la cabecera (el año) y el botón quedan siempre a la
+   vista — nunca hay que salir a buscarlos — y el tramo que puede llegar a
+   no entrar (crónica + gráficos + decisiones + peleas) vive en ESTE
+   contenedor, con scroll propio.
+   El `max-height` de acá es el resguardo ESTÁTICO (por si el ajuste
+   dinámico de main.js — `limitarAlAltoDeIzquierda`, que lo acota al piso
+   real de la columna izquierda en cada partida — no llegara a correr, p.
+   ej. en un test): un número generoso pero finito, nunca "lo que ocupe el
+   contenido". El criterio "nunca se estira, scroll interno" no puede
+   depender solo de JS. */
+.resumen-anio-cuerpo {
+  max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.resumen-anio-cuerpo.stack > * + * { margin-top: 6px; }
+
+/* --- Pedido 3: historial de un cinturón (popup), todo en una sola línea ---
+   BUG REAL (reportado con captura: "ABR 2036 · Pelea por el título ·
+   [bandera] Álvaro Rueda" en un renglón, "Ganada" solo en el siguiente):
+   `.historial-cinturon-fila` (más arriba en este archivo) tenía
+   `flex-wrap: wrap`, y solo DOS de sus cuatro columnas (rival) llevaban un
+   ancho flexible con `min-width:0` — fecha/tipo/resultado se medían por su
+   PROPIO contenido (`flex:0 0 auto` o `flex:1 1 Npx` sin tope). El
+   navegador arma cada línea de un `flex-wrap:wrap` sumando el tamaño
+   HIPOTÉTICO (antes de repartir shrink) de cada columna en orden: con un
+   nombre de rival largo, la suma ya llegaba justo al ancho del popup
+   apenas antes de la última columna (resultado) — que quedaba afuera y
+   saltaba sola a un segundo renglón, aunque técnicamente pudiera haber
+   entrado más angosta. `flex-shrink` no alcanza a evitarlo: la decisión de
+   en qué línea entra cada item se toma ANTES de repartir el shrink.
+   La solución es la MISMA que ya se usó en el resumen del año (Pedido 3,
+   v9, la sección de más arriba con este mismo comentario): columnas de
+   ANCHO FIJO para fecha/tipo/resultado (nunca crecen ni se achican, así
+   que cada una arranca siempre en la misma posición X) y SIN
+   `flex-wrap: wrap` en la fila (nowrap, el valor por defecto — mismo
+   criterio que `.resumen-anio-fila`, que nunca lo puso). El rival sigue
+   siendo la ÚNICA columna flexible (`flex:1`, `min-width:0`): si el nombre
+   no entra, ENVUELVE dentro de su propia celda (nunca se recorta con "…",
+   regla general del proyecto) — pero el resultado, a la derecha, ya no
+   tiene forma de terminar en un renglón aparte. */
+.historial-cinturon-fila { flex-wrap: nowrap; }
+
+.historial-cinturon-fecha {
+  flex: 0 0 54px;
+  white-space: normal;
+}
+
+.historial-cinturon-tipo {
+  flex: 0 0 96px;
+  min-width: 0;
+}
+
+.historial-cinturon-resultado {
+  flex: 0 0 56px;
+  min-width: 0;
+  text-align: right;
+}

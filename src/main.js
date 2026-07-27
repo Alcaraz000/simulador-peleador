@@ -55,6 +55,7 @@ import { renderRanking } from './ui/screens/ranking.js';
 import { animarRoll } from './ui/components/roll.js';
 import { animarAtributos, destacarAtributos } from './ui/components/animar-numero.js';
 import { icono } from './ui/icons.js';
+import { limitarAlAltoDeIzquierda } from './ui/sincronizar-alturas.js';
 
 export const VERSION = '0.1.0';
 
@@ -384,6 +385,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       cancelarNoticiasPendiente = null;
     };
 
+    // Pedido 1 (v10, "el módulo de noticias tiene que tener de piso la
+    // misma altura que el piso del módulo de ranking [la columna
+    // izquierda]"): la lista de noticias ya tiene un `height` fijo (no
+    // depende de cuántas noticias haya, ver panel-noticias.js) — esto la
+    // acota un paso más, al piso REAL de la izquierda en esta partida
+    // puntual (que no es una constante: crece un escalón la primera vez que
+    // el jugador tiene historial de peleas, ver el comentario grande de
+    // sincronizar-alturas.js). Corre en cada montarTablero(), así que sigue
+    // valiendo beat tras beat, no solo al arrancar la carrera.
+    limitarAlAltoDeIzquierda({
+      izquierda: shell.regiones.izquierda,
+      columna: shell.regiones.derecha,
+      elemento: shell.regiones.derecha.querySelector('.panel-noticias-lista'),
+    });
+
     return shell;
   }
 
@@ -581,10 +597,24 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     }));
     // Pedido 3 (v8): mientras se ve el resumen, atributos/estado se ocultan
     // para que respire (ver `sinAtributosEstado` y `centro()`, más arriba).
-    centro(() => renderResumenAnio(centroContenido(), {
-      anio, muestrasMedia, decisiones, peleas: peleasConBandera, narrativa,
-      onContinuar: () => siguiente(),
-    }), { ocultarAtributosEstado: true });
+    centro(() => {
+      renderResumenAnio(centroContenido(), {
+        anio, muestrasMedia, decisiones, peleas: peleasConBandera, narrativa,
+        onContinuar: () => siguiente(),
+      });
+      // Pedido 1 (v10, "lo más bajo que puede estar el resumen es el piso
+      // del módulo de ranking"): el tramo scrolleable del resumen
+      // (`.resumen-anio-cuerpo`, ver resumen-anio.js — la cabecera con el
+      // año y el botón "Seguir" quedan siempre afuera, visibles) se acota al
+      // piso real de la columna izquierda EN ESTA PARTIDA — se mide recién
+      // acá porque `centro()` ya llamó a `volverAlTablero()` (montarTablero
+      // + este mismo callback), así que la izquierda ya está pintada.
+      limitarAlAltoDeIzquierda({
+        izquierda: shellActual.regiones.izquierda,
+        columna: shellActual.regiones.centro,
+        elemento: centroContenido().querySelector('.resumen-anio-cuerpo'),
+      });
+    }, { ocultarAtributosEstado: true });
   }
 
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas
