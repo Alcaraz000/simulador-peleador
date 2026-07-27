@@ -375,6 +375,28 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(typeof ultima.fecha).toBe('number');
   });
 
+  // Resumen de fin de año (pedido textual del usuario): al cerrar un año con
+  // al menos una pelea, aparece este beat ANTES que la mejora del año nuevo
+  // (ver siguienteBeat, career.js) — con el grafico de media, las decisiones
+  // tomadas y las peleas del año, y un solo "Seguir" que pasa derecho a la
+  // próxima tarjeta, sin pantalla intermedia (mismo criterio que el resto
+  // del tablero, Pedido 3 v7).
+  it('resumenAnio: muestra el resumen del año que cerró y "Seguir" pasa derecho a la próxima tarjeta', () => {
+    iniciar(cont, prepararPartidaGuardada('resumenAnio', 2));
+
+    expect(cont.querySelector('.grafico-media, .grafico-media-vacio')).toBeTruthy();
+    const boton = [...cont.querySelectorAll('button')].find((b) => b.textContent === 'Seguir');
+    expect(boton).toBeTruthy();
+    const contenidoAntes = cont.querySelector('[data-bloque="contenido"]');
+
+    boton.click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.contains(contenidoAntes)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+  });
+
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
     // semilla 3: con el rebalance del campamento (Task v3), probSparring bajó
     // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
