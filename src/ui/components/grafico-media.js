@@ -32,9 +32,9 @@
 //   3) El fallback de texto para "poco dato" ("Media estable en 75 durante
 //      todo el año.") se ELIMINA por completo — pedido explícito: "el
 //      gráfico se muestra SIEMPRE, aunque la media no haya cambiado: una
-//      línea plana también es información". Con un solo valor real (o
-//      variosidénticos) se dibuja una línea PLANA de punta a punta del año,
-//      nunca una oración. El único texto de respaldo que sigue existiendo es
+//      línea plana también es información". Con un solo valor real (o varios
+//      idénticos) se dibuja una línea PLANA de punta a punta del año, nunca
+//      una oración. El único texto de respaldo que sigue existiendo es
 //      para el caso genuinamente vacío (CERO muestras válidas — ni un solo
 //      dato, nada que graficar), que no es el caso que reportó el usuario.
 import {
