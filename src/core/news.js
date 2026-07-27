@@ -92,6 +92,44 @@ function hashTexto(texto) {
   return h;
 }
 
+// Pedido 3 (v9, "aparecen muchas noticias nuevas de golpe, quiero que no
+// sean tantas, más esporádicas"): con el roster de 100 (CANTIDAD_MUNDO,
+// career.js) y la elite de 20 que sí genera noticia (TAMANO_ELITE, world.js)
+// un solo bloque puede volcar 20+ sucesos de golpe al feed — la categoría
+// entera "hablando" en la misma tanda, que se lee como ruido, no como
+// noticias. Los de TÍTULO (cinturón ganado/perdido/vacante) SIEMPRE entran
+// enteros: son puntuales (a lo sumo un par por bloque) y estructuralmente
+// importantes — el jugador tiene que enterarse SIEMPRE de quién es el
+// campeón, perder alguno rompería el relato del mundo. `retiro`/`debut`/
+// `victoria`, que son el grueso real de la tanda, se recortan cada uno a un
+// puñado (`LIMITES_SUCESOS_POR_BLOQUE`). La selección es DETERMINÍSTICA
+// (orden estable por `hashTexto`, la misma función que ya elige la variante
+// de cuerpo acá arriba) — nunca Math.random ni una tirada de más del rng
+// compartido, que correría la secuencia de azar de toda la carrera.
+const LIMITES_SUCESOS_POR_BLOQUE = { retiro: 3, debut: 3, victoria: 4 };
+
+export function recortarSucesos(sucesos, limites = LIMITES_SUCESOS_POR_BLOQUE) {
+  const porTipo = new Map();
+  const sinLimite = [];
+
+  for (const suceso of sucesos) {
+    if (!(suceso.tipo in limites)) { sinLimite.push(suceso); continue; }
+    const lista = porTipo.get(suceso.tipo) ?? [];
+    lista.push(suceso);
+    porTipo.set(suceso.tipo, lista);
+  }
+
+  const recortados = [];
+  for (const [tipo, lista] of porTipo) {
+    const tope = limites[tipo];
+    recortados.push(...(lista.length <= tope
+      ? lista
+      : [...lista].sort((a, b) => hashTexto(a.texto) - hashTexto(b.texto)).slice(0, tope)));
+  }
+
+  return [...sinLimite, ...recortados];
+}
+
 // El cuerpo de estas noticias no usa `rng`: aunque la firma la recibe (por
 // compatibilidad y porque en teoría podría necesitarla), consumir tiradas acá
 // correría toda la secuencia de azar del resto de la carrera (avanzarMundo se

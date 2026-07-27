@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { PLANTILLAS } from '../../src/content/news-templates.js';
 import {
-  generarNoticia, noticiasDeSucesos, agregarNoticias, etiquetaTipo, marcarLeidas,
+  generarNoticia, noticiasDeSucesos, agregarNoticias, etiquetaTipo, marcarLeidas, recortarSucesos,
 } from '../../src/core/news.js';
 
 describe('plantillas', () => {
@@ -122,6 +122,56 @@ describe('noticiasDeSucesos', () => {
     const antes = rng.estado();
     noticiasDeSucesos(rng, sucesos, { anio: 2030 });
     expect(rng.estado()).toEqual(antes);
+  });
+});
+
+// Pedido 3 (v9, "aparecen muchas noticias nuevas de golpe... más
+// esporádicas"): con el roster de 100 (career.js) un solo bloque puede
+// generar 20+ sucesos de victoria — `recortarSucesos` es el filtro que
+// achica esa tanda antes de convertirla en noticias.
+describe('recortarSucesos', () => {
+  function sucesos(tipo, cantidad) {
+    return Array.from({ length: cantidad }, (_, i) => ({
+      tipo, peleadorId: `p${i}`, texto: `Texto ${tipo} ${i}`,
+    }));
+  }
+
+  it('recorta victoria/retiro/debut a un puñado cada uno', () => {
+    const muchos = [
+      ...sucesos('victoria', 20),
+      ...sucesos('retiro', 8),
+      ...sucesos('debut', 8),
+    ];
+    const recortado = recortarSucesos(muchos);
+    expect(recortado.filter((s) => s.tipo === 'victoria').length).toBeLessThan(20);
+    expect(recortado.filter((s) => s.tipo === 'retiro').length).toBeLessThan(8);
+    expect(recortado.filter((s) => s.tipo === 'debut').length).toBeLessThan(8);
+    expect(recortado.length).toBeLessThan(muchos.length);
+  });
+
+  it('nunca recorta los sucesos de título: son puntuales y estructuralmente importantes', () => {
+    const muchos = [...sucesos('victoria', 20), ...sucesos('titulo', 5)];
+    const recortado = recortarSucesos(muchos);
+    expect(recortado.filter((s) => s.tipo === 'titulo')).toHaveLength(5);
+  });
+
+  it('con pocos sucesos (por debajo del tope) no toca nada', () => {
+    const pocos = [...sucesos('victoria', 2), ...sucesos('retiro', 1)];
+    expect(recortarSucesos(pocos)).toHaveLength(3);
+  });
+
+  it('es determinístico: la misma entrada siempre recorta el mismo subconjunto', () => {
+    const muchos = sucesos('victoria', 20);
+    const a = recortarSucesos(muchos).map((s) => s.peleadorId).sort();
+    const b = recortarSucesos(muchos).map((s) => s.peleadorId).sort();
+    expect(a).toEqual(b);
+  });
+
+  it('no muta el array original', () => {
+    const muchos = sucesos('victoria', 20);
+    const copia = [...muchos];
+    recortarSucesos(muchos);
+    expect(muchos).toEqual(copia);
   });
 });
 

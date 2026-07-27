@@ -7,7 +7,7 @@ import { CINTURONES } from './offers.js';
 import { intentosDePelea, permiteMarqueeEsteAnio, armarLotePeleas } from './tramite.js';
 import { crearSparring } from './sparring.js';
 import {
-  noticiasDeSucesos, agregarNoticias, marcarLeidas,
+  noticiasDeSucesos, agregarNoticias, marcarLeidas, recortarSucesos,
 } from './news.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
@@ -529,7 +529,12 @@ export function avanzarBloque(partida) {
   // las peleas de título y las defensas obligatorias.
   nueva.jugador.ranking = rankingDelJugador(nueva.mundo, nueva.jugador);
 
-  const nuevas = noticiasDeSucesos(rng, paso.sucesos, { anio: paso.mundo.anio });
+  // Pedido 3 (v9, "aparecen muchas noticias de golpe, quiero que no sean
+  // tantas, más esporádicas"): `recortarSucesos` (news.js) recorta la tanda
+  // ANTES de convertirla en noticias — ver el comentario grande ahí. Los
+  // sucesos de título nunca se tocan; retiro/debut/victoria (el grueso con
+  // el roster de 100) se recortan a un puñado cada uno.
+  const nuevas = noticiasDeSucesos(rng, recortarSucesos(paso.sucesos), { anio: paso.mundo.anio });
   if (sponsor) {
     nuevas.unshift({
       id: `noticia_sponsor_${nueva.bloqueGlobal}`,
