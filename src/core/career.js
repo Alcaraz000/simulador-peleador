@@ -13,6 +13,10 @@ import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
+import {
+  iniciarRegistroAnio, registrarMuestraMedia as registrarMuestraMediaEnRegistro,
+  registrarDecision as registrarDecisionEnRegistro, peleasDelAnio, anioTieneAlgoQueContar,
+} from './year-summary.js';
 
 // Pedido 1 (v6, "el ranking está muy pobre... debe de haber al menos 100
 // peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
@@ -410,6 +414,16 @@ export function crearPartida({ jugador, semilla }) {
     // autoguardado la persiste y una carrera retomada sigue recordando qué
     // vio hace un rato, no vuelve a arrancar en blanco.
     memoriaCartas: { evento: [], redes: [], campamento: [] },
+    // Resumen de fin de año (pedido textual del usuario): `registroAnioActual`
+    // acumula la media y las decisiones del año que se está viviendo ahora
+    // mismo — ver el comentario grande de year-summary.js. `anioCerrado` es
+    // un dato SIEMPRE transitorio (lo pone avanzarBloque, lo consume
+    // siguienteBeat en el mismo golpe): nunca debería sobrevivir a un
+    // autoguardado, pero viaja en la partida (serializable, JSON-safe) para
+    // que una partida guardada justo en ese instante no pierda nada si algo
+    // interrumpe el ciclo.
+    registroAnioActual: iniciarRegistroAnio(1, jugador),
+    anioCerrado: null,
   };
 }
 
@@ -443,6 +457,23 @@ function clonarPartida(partida) {
       redes: [...(partida.memoriaCartas?.redes ?? [])],
       campamento: [...(partida.memoriaCartas?.campamento ?? [])],
     },
+    // Resumen de fin de año: `?? null` (en vez de asumir que siempre existe)
+    // es la migración silenciosa para una partida guardada de un esquema
+    // anterior a esta ronda — sin el campo, `registrarDecision`/
+    // `registrarMuestraMedia` no hacen nada (ver el resguardo en
+    // year-summary.js) hasta que el próximo avanzarBloque abre un registro
+    // nuevo solo; nunca revienta.
+    registroAnioActual: clonarRegistroAnio(partida.registroAnioActual),
+    anioCerrado: clonarRegistroAnio(partida.anioCerrado ?? null),
+  };
+}
+
+function clonarRegistroAnio(registro) {
+  if (!registro) return null;
+  return {
+    ...registro,
+    muestrasMedia: [...registro.muestrasMedia],
+    decisiones: [...registro.decisiones],
   };
 }
 
@@ -529,7 +560,46 @@ export function avanzarBloque(partida) {
   nueva.noticias = agregarNoticias(marcarLeidas(nueva.noticias), nuevas);
 
   nueva.rngEstado = rng.estado();
+
+  // Resumen de fin de año: acá es exactamente donde un año calendario
+  // termina y el próximo arranca (en este juego, un bloque = un año — ver
+  // ETAPAS, más abajo). El registro tal cual quedó (media + decisiones de
+  // todo lo que el jugador vivió en el año que se está cerrando: su cola ya
+  // estaba vacía, por eso se está armando un bloque nuevo) se guarda en
+  // `anioCerrado` — un dato transitorio que `siguienteBeat` consume en el
+  // mismo golpe para armar el beat 'resumenAnio' (si corresponde) y después
+  // limpia. `registroAnioActual` arranca de nuevo, con la MEDIA ya recalculada
+  // después del crecimiento/declive pasivo de este bloque (arriba).
+  nueva.anioCerrado = nueva.registroAnioActual;
+  nueva.registroAnioActual = iniciarRegistroAnio(nueva.semanaGlobal, nueva.jugador);
+
   return nueva;
+}
+
+/** Envoltorio a nivel partida de `registrarDecision` (year-summary.js): usa
+ * la semana actual de la partida. Lo llama main.js (y scripts/balance-sim.mjs)
+ * cada vez que el jugador elige una opción en una tarjeta (mejora/evento/
+ * redes/campamento) — nunca el núcleo por su cuenta, para no acoplar
+ * career.js a CADA punto donde eso pasa en la UI. */
+export function registrarDecision(partida, { tipo, titulo, opcion }) {
+  return {
+    ...partida,
+    registroAnioActual: registrarDecisionEnRegistro(partida.registroAnioActual, {
+      tipo, titulo, opcion, semana: partida.semanaGlobal,
+    }),
+  };
+}
+
+/** Envoltorio a nivel partida de `registrarMuestraMedia` (year-summary.js):
+ * usa el jugador y la semana actuales de la partida. Lo llama main.js en el
+ * único punto que YA centraliza "se acaba de aplicar un efecto sobre el
+ * jugador" (aplicarEfectoYSeguir) — así que cubre mejora/evento/redes/
+ * sparring/campamento de una sola vez, sin tener que tocar cada beat. */
+export function registrarMuestraMedia(partida) {
+  return {
+    ...partida,
+    registroAnioActual: registrarMuestraMediaEnRegistro(partida.registroAnioActual, partida.semanaGlobal, partida.jugador),
+  };
 }
 
 function armarCola(partida) {
@@ -641,6 +711,9 @@ function armarCola(partida) {
       permiteJugable,
       tono: tag,
       semanasPorIntento,
+      // Resumen de fin de año: la fecha de cada pelea de trámite (ver el
+      // comentario grande en armarLotePeleas, tramite.js).
+      semanaGlobal: partida.semanaGlobal,
     });
 
     jugadorActual = lote.jugador;
@@ -780,8 +853,33 @@ export function siguienteBeat(partida) {
       nueva.bloque = 1;
     }
     if (nueva.bloqueGlobal > 1) nueva = avanzarBloque(nueva);
+
+    // Resumen de fin de año (pedido textual del usuario): si avanzarBloque
+    // acaba de cerrar un año (siempre que bloqueGlobal>1, arriba) y ese año
+    // tuvo al menos una pelea (`anioTieneAlgoQueContar` — "un año sin peleas
+    // ni hitos no necesita ceremonia"), se arma su beat ACÁ, con los datos ya
+    // fotografiados: las peleas se leen del historial (nunca se duplican,
+    // ver peleasDelAnio/year-summary.js), las decisiones y muestras de media
+    // vienen tal cual quedaron en `anioCerrado`. Va AL FRENTE de la cola del
+    // bloque que arranca — antes que la mejora obligatoria — y `anioCerrado`
+    // se limpia ACÁ: es un dato puramente transitorio, nunca debe sobrevivir
+    // más de este golpe (ver el comentario grande en avanzarBloque).
+    let beatResumenAnio = null;
+    if (nueva.anioCerrado && anioTieneAlgoQueContar(nueva.anioCerrado, nueva.jugador)) {
+      beatResumenAnio = {
+        tipo: 'resumenAnio',
+        datos: {
+          anio: nueva.anioCerrado.anio,
+          muestrasMedia: nueva.anioCerrado.muestrasMedia,
+          decisiones: nueva.anioCerrado.decisiones,
+          peleas: peleasDelAnio(nueva.jugador, nueva.anioCerrado.anio),
+        },
+      };
+    }
+    nueva.anioCerrado = null;
+
     const armado = armarCola(nueva);
-    nueva.cola = armado.cola;
+    nueva.cola = beatResumenAnio ? [beatResumenAnio, ...armado.cola] : armado.cola;
     nueva.rngEstado = armado.rngEstado;
     nueva.ofertaPendiente = armado.ofertaPendiente;
     // v6: armarCola puede resolver una o varias peleas de trámite EN EL ACTO

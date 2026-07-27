@@ -154,6 +154,30 @@ describe('armarLotePeleas', () => {
     lote.jugador.historial.forEach((h) => expect(h.modo).toBe('tramite'));
   });
 
+  // Resumen de fin de año (pedido del usuario): "peleas hechas (contrincante,
+  // fecha, resultado...)" necesita la fecha de CADA pelea, no solo de las
+  // jugadas completas — antes de esto, `aplicarResultado` (offers.js) recibía
+  // `semanaGlobal` desde `cerrarPelea` (main.js) para las jugadas, pero NUNCA
+  // desde acá: la mayoría de las peleas de una carrera (trámite) quedaban con
+  // `fecha: null` en el historial, invisibles para cualquier filtro por año.
+  it('con semanaGlobal, cada resultado de tramite queda fechado en el historial (para el resumen de fin de año)', () => {
+    const yo = jugador({ edad: 30, ranking: 40 });
+    const lote = armarLotePeleas(createRng(9), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional', semanaGlobal: 421,
+    });
+    expect(lote.jugador.historial.length).toBeGreaterThan(0);
+    lote.jugador.historial.forEach((h) => expect(h.fecha).toBe(421));
+  });
+
+  it('sin semanaGlobal (llamadores viejos), la fecha sigue siendo null — no revienta nada', () => {
+    const yo = jugador({ edad: 30, ranking: 40 });
+    const lote = armarLotePeleas(createRng(9), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional',
+    });
+    expect(lote.jugador.historial.length).toBeGreaterThan(0);
+    lote.jugador.historial.forEach((h) => expect(h.fecha).toBeNull());
+  });
+
   it('sin intentos (0), no arma nada', () => {
     const yo = jugador();
     const lote = armarLotePeleas(createRng(1), {

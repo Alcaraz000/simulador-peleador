@@ -402,9 +402,17 @@ function cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento) {
  * con el beat 'lesionSinOferta', y scripts/balance-sim.mjs la suma para
  * medir el costo de la regla sobre una carrera completa).
  */
+// `semanaGlobal` (resumen de fin de año, pedido del usuario: "peleas hechas
+// -contrincante, fecha, resultado-"): TODO el lote se resuelve en el momento
+// (no hay campamento ni careo para el trámite), así que cada resultado del
+// lote queda fechado con la MISMA semana — la del arranque del bloque/año,
+// que es literalmente cuándo ocurrió. Sin esto (default null, mismo default
+// que ya tenía `aplicarResultado`), la mayoría de las peleas de una carrera
+// -las de trámite- quedaban con `fecha: null` en el historial, invisibles
+// para cualquier filtro por año (ver `peleasDelAnio`, year-summary.js).
 export function armarLotePeleas(rng, {
   jugador, mundo, etapa, rivalidades = [], forzarTitulo = false, intentos, permiteJugable = true, tono = 'profesional',
-  semanasPorIntento = 52,
+  semanasPorIntento = 52, semanaGlobal = null,
 }) {
   let jugadorActual = jugador;
   const excluidos = [];
@@ -475,7 +483,9 @@ export function armarLotePeleas(rng, {
     }
 
     const resultado = resolverResultadoRapido(rng, { jugador: jugadorActual, oferta });
-    const paso = aplicarResultado(jugadorActual, { oferta, resultado, modo: 'tramite' });
+    const paso = aplicarResultado(jugadorActual, {
+      oferta, resultado, modo: 'tramite', semanaGlobal,
+    });
     jugadorActual = paso.jugador;
     resultados.push({
       rivalNombre: oferta.rivalNombre,

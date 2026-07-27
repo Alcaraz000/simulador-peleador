@@ -642,8 +642,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
               alMejorDe,
             );
             const round = roundDeCierreMinijuego(rng, { jugador: partida.jugador, oferta, metodo });
+            // `semanaGlobal` (resumen de fin de año): sin esto, el destacado
+            // de trámite quedaba con `fecha: null` en el historial, igual que
+            // el resto del lote antes del fix de armarLotePeleas (tramite.js)
+            // — invisible para el filtro por año (peleasDelAnio,
+            // year-summary.js).
             const paso = aplicarResultado(partida.jugador, {
-              oferta, resultado: { ganador, metodo, round }, modo: 'tramite',
+              oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: partida.semanaGlobal,
             });
             partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
             resultadoFinal = { detalle, resultadoLetra: ganador === 'jugador' ? 'v' : 'd' };

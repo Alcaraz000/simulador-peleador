@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida, siguienteBeat } from '../../src/core/career.js';
-import { guardar } from '../../src/core/save.js';
+import { guardar, cargar } from '../../src/core/save.js';
 import { CLAVE_ACCESO } from '../../src/ui/screens/login.js';
 import { iniciar } from '../../src/main.js';
 
@@ -321,7 +321,8 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   // ronda a ronda de verdad) -> resultado, con Seguir pasando derecho a la
   // próxima tarjeta (Pedido 3).
   it('tramiteDestacado: muestra la tarjeta del destacado (con el anuncio adentro, activa próxima pelea), se juega el minijuego ronda a ronda de verdad y el resultado pasa a la próxima tarjeta', () => {
-    iniciar(cont, prepararPartidaGuardada('tramiteDestacado', 1));
+    const storage = prepararPartidaGuardada('tramiteDestacado', 1);
+    iniciar(cont, storage);
 
     // Fase 1: la tarjeta del rival, con la voz del entrenador, la bolsa y
     // cuánto falta ya adentro — activa panel-proxima.js (columna derecha).
@@ -359,6 +360,16 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.contains(resultado)).toBe(false);
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+
+    // Resumen de fin de año (pedido del usuario): el destacado de trámite
+    // tiene que quedar fechado en el historial, igual que cualquier otra
+    // pelea — antes de este fix (main.js pasa `semanaGlobal` a
+    // aplicarResultado), quedaba con `fecha: null`, invisible para el filtro
+    // por año (peleasDelAnio, year-summary.js).
+    const guardado = cargar(storage);
+    const ultima = guardado.jugador.historial.at(-1);
+    expect(ultima).toBeTruthy();
+    expect(typeof ultima.fecha).toBe('number');
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
