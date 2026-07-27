@@ -1672,3 +1672,191 @@ input.creacion-control { cursor: text; }
 .grafico-media { width: 100%; }
 .grafico-media-svg { display: block; width: 100%; height: auto; }
 .grafico-media-vacio { margin: 0; }
+
+/* ============================================================================
+   v8 — Reglas nuevas AL FINAL del archivo a propósito (aviso del
+   coordinador: hay otro implementador en paralelo tocando
+   panel-tramite.js/el minijuego de piedra-papel-tijera — agregar acá en vez
+   de editar en el medio del archivo minimiza el choque). Todo lo de esta
+   sección PISA selectores que ya existen más arriba (mismo selector, gana
+   por orden de cascada) o suma clases nuevas; ninguna línea de arriba se
+   tocó. Cubre los tres pedidos de esta ronda:
+     1) Nombres de atributos/estado completos (no abreviados, salvo IQ).
+     2) Resumen del año más compacto (filas de tabla, íconos, banderas,
+        gráfico de media a año completo + gráfico nuevo de ranking).
+     3) Ocultar atributos/estado mientras se ve el resumen del año.
+   Un par de reglas de más arriba quedan sin uso después de este cambio
+   (`.resumen-anio-item`, `.resumen-anio-item-icono`: el resumen ya no arma
+   un panel por item, ver resumen-anio.js) — se dejan tal cual, son CSS
+   muerto pero inofensivo; borrarlas hubiera significado editar en el medio
+   del archivo, que es justo lo que se quiere evitar acá.
+   ============================================================================ */
+
+/* --- Pedido 1: nombres de atributos/estado COMPLETOS, nunca abreviados ----
+   (salvo IQ) — pedido textual: "NO quiero que estén resumidos los títulos".
+   Pisa `.panel-peleador-atributo`/`.nombre` de más arriba: con el nombre
+   completo ("Potencia", "Velocidad", "Disciplina"...) la etiqueta puede
+   necesitar una segunda línea — nunca se recorta con "…" (pedido explícito,
+   ya se había quejado de esto antes). Como el cuadro usa `min-height` (no
+   `height` fija) y la etiqueta nunca lleva `overflow:hidden` ni
+   `white-space:nowrap`, el texto JAMÁS puede quedar cortado: en el peor caso
+   el cuadro crece un poco más alto, nunca recorta.
+   Los cuadros de un mismo grupo (la fila de atributos, la fila de estado)
+   siguen midiendo IGUAL entre sí: `.panel-peleador-atributos` es un flex-row
+   con `align-items:stretch` por defecto (nunca se pisó esa propiedad), así
+   que las N celdas de esa fila siempre igualan la altura de la más alta.
+   Esto también alcanza a la mini-ficha del rival en el trámite
+   (panel-tramite.js reusa esta misma clase con etiquetas cortas, ver su
+   propio archivo — no se tocó): sus cuadros miden un poco más de alto ahora,
+   pero sus etiquetas de 3 letras entran de sobra en una sola línea. */
+.panel-peleador-atributo {
+  min-height: 58px;
+  padding: 7px 3px 8px;
+}
+
+.panel-peleador-atributo .nombre {
+  display: block;
+  padding: 0 2px;
+  font-size: 7.4px;
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  line-height: 1.25;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-width: 100%;
+}
+
+/* --- Pedido 3: ocultar atributos/estado mientras se ve el resumen del año -
+   Se los sigue MONTANDO igual (main.js no bifurca esa lógica) — `oculto` es
+   puramente visual (`display:none`), así que no aporta nada raro a la
+   accesibilidad (el árbol de foco/lectura ya los saca solo). Solo afecta el
+   alto de la columna CENTRAL: cada región del shell es su propia columna
+   independiente (ver shell.js) — izquierda/derecha ni se enteran, nunca
+   saltan de lugar. */
+.oculto { display: none; }
+
+/* --- Pedido 2: resumen del año, mucho más compacto -------------------------
+   Antes cada decisión/pelea era su PROPIO `.panel` (borde + padding
+   completos) con un ícono circular y 2-3 líneas apiladas. Ahora la sección
+   entera es UN solo `.panel` (`.resumen-anio-filas`) con una fila liviana
+   por item (`.resumen-anio-fila`), separadas por un hairline — mismo
+   lenguaje que una tabla, mucho menos aire por dato. */
+.resumen-anio-icono-chico { width: 24px; height: 24px; }
+
+/* Un poco más apretado que el `.stack` genérico (8px): esta pantalla junta
+   harto contenido (2 gráficos + 2 secciones) y pidieron "mucho más
+   compacto". */
+.resumen-anio.stack > * + * { margin-top: 6px; }
+
+.resumen-anio-filas {
+  display: flex;
+  flex-direction: column;
+}
+
+.resumen-anio-fila {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 1px;
+  font-size: 12px;
+}
+
+.resumen-anio-fila + .resumen-anio-fila {
+  border-top: 1px solid var(--borde);
+}
+
+/* Etiqueta chica de la fila: el tipo de decisión (con su ícono) o el mes de
+   la pelea — mismo lenguaje visual que `.chip`, pero en flex (para poder
+   alinear un ícono + texto adentro, cosa que `.chip` solo no permite bien). */
+.resumen-anio-fila-tag {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 8.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--texto-sutil);
+  background: #1a1408;
+  padding: 3px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.resumen-anio-fila-titulo {
+  flex: 0 1 auto;
+  font-weight: 800;
+  overflow-wrap: break-word;
+}
+
+.resumen-anio-fila-desc {
+  flex: 1 1 110px;
+  min-width: 0;
+  font-size: 11.5px;
+  overflow-wrap: break-word;
+}
+
+/* Nombre del rival + su bandera SVG (nunca emoji, ver flags.js) en la misma
+   fila que el mes, el método y el veredicto. */
+.resumen-anio-fila-rival {
+  flex: 1 1 110px;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 800;
+  overflow-wrap: break-word;
+}
+
+.resumen-anio-fila-metodo {
+  flex: 0 0 auto;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+
+/* Gráfico de ranking (v8, pedido textual: "un gráfico nuevo, cómo escalaste
+   en el ranking"): mismo motor SVG que el de media (ver grafico-media.js),
+   mismas reglas de tamaño. */
+.grafico-ranking { width: 100%; }
+.grafico-ranking-svg { display: block; width: 100%; height: auto; }
+.grafico-ranking-vacio { margin: 0; }
+
+/* ================================================================
+   Rolleo del minijuego de trámite (v8, pedido textual: "quiero que se
+   vea cómo se rollea"). renderMinijuegoRonda (panel-tramite.js) reusa
+   renderPanelDecision tal cual (misma grilla de 3 tarjetas, tamaño fijo
+   de siempre) y le suma, entre el click y el aviso a main.js, un
+   barajado de suspenso (animarBarajado, roll.js) que viaja entre las 3
+   tarjetas sin comprometerse a ninguna — a diferencia de
+   .tarjeta-efecto.iluminado (que sí sabe el ganador desde el arranque),
+   acá nadie sabe todavía qué eligió el rival, así que termina siempre en
+   neutro: el resultado de verdad se lee en el texto y el marcador de la
+   PRÓXIMA pantalla, no en esta tarjeta. Transición (no keyframe), como
+   pide el criterio de animación del proyecto: interrumpible si el
+   barajado corta antes de tiempo (detener()), y nunca reserva ni empuja
+   layout nuevo (mismo box del botón .tarjeta de siempre, solo cambia
+   sombra/escala). */
+.tarjeta.tarjeta-rolleo {
+  transition: box-shadow 0.12s ease, transform 0.12s ease;
+  box-shadow: 0 0 0 1px var(--dorado), 0 0 16px rgba(242, 193, 78, 0.4);
+  transform: scale(1.03);
+}
+
+/* La tarjeta que el jugador tocó reusa .tarjeta-elegida tal cual (ya
+   existe, create.js): sigue con su anillo dorado durante todo el
+   barajado y aun disabled/atenuada, para que "esto elegiste vos" no se
+   pierda mientras las tres tarjetas están apagadas. */
+
+/* El marcador (bajada de renderMinijuegoRonda) hace un pop corto al
+   montar cada ronda nueva — pedido textual "que el marcador se mueva".
+   No hay conteo animado posible (el nodo viejo no existe más: cada
+   ronda es un remount entero), así que esto es la version honesta de
+   "se mueve": transform+opacity nomás, nunca cambia tamaño ni empuja lo
+   de abajo. La aplica renderMinijuegoRonda mismo, sobre el <h1> de la
+   cabecera que ya arma renderPanelDecision. */
+@keyframes marcador-pop {
+  from { opacity: 0; transform: scale(1.16); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.marcador-pop { animation: marcador-pop 0.22s var(--ease-out) both; }
