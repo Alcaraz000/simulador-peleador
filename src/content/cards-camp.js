@@ -180,4 +180,64 @@ export const CARTAS_CAMPAMENTO = [
       { id: 'pasar', texto: 'Pasar: confiar en el ojo de siempre.', mods: {} },
     ],
   },
+
+  // --- Pedido 2 y 3 (v7, "más tarjetas de % y también en el campamento" +
+  // "más de dos opciones, con alguna que no haga nada"): el campamento nunca
+  // había tenido azar — `resolverOpcion` (events.js) ya lo soportaba de
+  // arranque (beatCampCarta lo usa igual que evento/redes), así que sumarlo
+  // acá es puro contenido nuevo, sin tocar el motor.
+  {
+    id: 'suplemento_del_gimnasio',
+    categoria: 'campamento',
+    titulo: 'El suplemento "importado"',
+    texto: 'En el gimnasio venden un suplemento carísimo, de dudoso origen, que promete un plus de rendimiento justo para {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'rara',
+    opciones: [
+      { id: 'comprarlo', texto: 'Comprarlo y probarlo.', efectos: { dinero: -9000 }, probabilidades: [
+        { peso: 75, mods: { cardio: 4, potencia: 2 }, texto: 'Funciona mejor de lo esperado: llegás con las pilas a full.' },
+        { peso: 25, mods: { forma: -8 }, texto: 'Te cae pésimo al estómago. Dos días de entrenamiento livianito, a pura bronca.' },
+      ] },
+      { id: 'no_comprarlo', texto: 'Ahorrarte la plata y seguir como siempre.', mods: {} },
+    ],
+  },
+  {
+    id: 'pronostico_de_la_prensa',
+    categoria: 'campamento',
+    titulo: 'El pronóstico del diario',
+    texto: 'Un diario deportivo publica un pronóstico contundente sobre tu pelea contra {rival}. Para bien o para mal, todo el gimnasio ya lo leyó.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'leerlo', texto: 'Leerlo entero, aunque duela.', probabilidades: [
+        { peso: 60, mods: { moral: 6 }, texto: 'Te dan como ampli favorito. Entrenás con el pecho inflado.' },
+        { peso: 40, mods: { moral: -7 }, texto: 'Te dan como perdedor cantado. Cuesta sacárselo de la cabeza en cada sesión.' },
+      ] },
+      { id: 'no_leerlo', texto: 'Pedirle al entrenador que no te cuente nada.', mods: {} },
+    ],
+  },
+  {
+    id: 'musica_del_gimnasio',
+    categoria: 'campamento',
+    titulo: 'La música del gimnasio',
+    texto: 'El parlante de siempre se rompió y alguien trajo el suyo: lo que se elija va a sonar toda la semana antes de {rival}.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'elegirla', texto: 'Elegir vos la lista.', mods: { moral: 4, disciplinaPersonal: -2 } },
+      { id: 'dejarla', texto: 'Dejar que suene lo que venga.', mods: {} },
+    ],
+  },
+  {
+    id: 'visita_de_los_chicos',
+    categoria: 'campamento',
+    titulo: 'La visita de la escuelita',
+    texto: 'Los pibes de la escuelita del club piden ir a ver un entrenamiento tuyo antes de {rival}: quieren sacarse fotos y mirar de cerca.',
+    etapas: SIEMPRE,
+    rareza: 'normal',
+    opciones: [
+      { id: 'recibirlos', texto: 'Recibirlos y hacerles un rato.', mods: { moral: 6, forma: -3 } },
+      { id: 'otro_dia', texto: 'Pedirles que vuelvan otro día.', mods: {} },
+    ],
+  },
 ];

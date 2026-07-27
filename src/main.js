@@ -633,6 +633,67 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // prefers-reduced-motion como sí lo hacen animarRoll/animarDado.
   const PAUSA_RESULTADO_MS = 1100;
 
+  // Resuelve una opción (con o sin `probabilidades`) y, si tiene azar, corre
+  // el roll con suspenso sobre la propia tarjeta antes de avisar el
+  // resultado — EXACTAMENTE el mismo comportamiento para evento/redes
+  // (beatCarta) y, desde Pedido 2 (v7, "más tarjetas de %... también en el
+  // campamento"), también para campamento (beatCampCarta): una carta de
+  // azar tiene que sentirse igual de tensa esté donde esté, no solo en
+  // evento/redes. `alTerminar(resuelto)` es quien decide qué pasa DESPUÉS de
+  // aplicar el efecto — seguir al próximo beat (el caso de siempre) o, en
+  // campamento, pasar al careo si era el último beat antes de la pelea.
+  function resolverConRoll({
+    carta, opcionId, rivalObjetivoId = null, alTerminar,
+  }) {
+    const opcion = carta.opciones.find((o) => o.id === opcionId);
+    const resuelto = resolverOpcion(rng, {
+      jugador: partida.jugador, carta, opcionId, rivalidades: partida.rivalidades, rivalObjetivoId,
+    });
+    const terminar = () => alTerminar(resuelto);
+
+    if (!opcion.probabilidades) { terminar(); return; }
+
+    const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${opcionId}"]`);
+
+    // Ver el comentario largo junto a la declaración de
+    // `cancelarRollPendiente`: si el jugador se va del tablero (Ficha) antes
+    // de que el roll o la pausa de lectura terminen, esto resuelve YA el
+    // efecto (que `resolverOpcion` ya decidió más arriba, de forma síncrona)
+    // sin pintar nada — el tablero no está a la vista.
+    //
+    // `rollResuelto` evita pisar, con un cancelador viejo, el que recién dejó
+    // puesto `onFin` si `animarRoll` resolvió síncrono (motion reducido, o
+    // una sola rama posible): sin el guard, un roll ya terminado quedaría
+    // con `cancelarRollPendiente` apuntando igual a "cancelar el roll" en vez
+    // de a "cancelar la pausa de lectura", y aplicaría el efecto DOS VECES si
+    // el jugador entra a la Ficha después.
+    let rollResuelto = false;
+    const controladorRoll = animarRoll(nodoTarjeta, {
+      indiceGanador: resuelto.indiceGanador,
+      cantidad: opcion.probabilidades.length,
+      onFin: () => {
+        rollResuelto = true;
+        mostrarResultadoEnTarjeta(nodoTarjeta, resuelto.texto || carta.texto);
+        const timerId = setTimeout(() => {
+          cancelarRollPendiente = null;
+          terminar();
+        }, PAUSA_RESULTADO_MS);
+        cancelarRollPendiente = () => {
+          clearTimeout(timerId);
+          cancelarRollPendiente = null;
+          terminar();
+        };
+      },
+    });
+    if (!rollResuelto) {
+      cancelarRollPendiente = () => {
+        controladorRoll.detener();
+        cancelarRollPendiente = null;
+        terminar();
+      };
+    }
+  }
+
   function beatCarta(beat, titulo, nombreIcono) {
     const carta = beat.datos.carta;
 
@@ -643,69 +704,25 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       rareza: carta.rareza,
       opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, nombreIcono)),
       onElegir: (id) => {
-        const opcion = carta.opciones.find((o) => o.id === id);
         const rivalObjetivoId = partida.mundo.roster[0]?.id ?? null;
-        const resuelto = resolverOpcion(rng, {
-          jugador: partida.jugador, carta, opcionId: id,
-          rivalidades: partida.rivalidades, rivalObjetivoId,
-        });
-
-        // `caePelea` (Task v3, "cartas nuevas con azar"): la rama que salió
-        // canceló de verdad la pelea que estuviera en danza este bloque, no
-        // solo en el texto de la tarjeta — ver cancelarProximaPelea en
-        // career.js. Se aplica ANTES de aplicarEfectoYSeguir (que pinta el
-        // tablero ocioso): así el panel de "próxima pelea" ya sale limpio en
-        // el mismo repintado, sin un instante intermedio con la oferta vieja
-        // todavía puesta.
-        const aplicar = () => {
-          if (resuelto.caePelea) partida = cancelarProximaPelea(partida);
-          aplicarEfectoYSeguir({
-            jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
-          });
-        };
-
-        if (!opcion.probabilidades) { aplicar(); return; }
-
-        const nodoTarjeta = centroContenido().querySelector(`[data-opcion="${id}"]`);
-
-        // Ver el comentario largo junto a la declaración de
-        // `cancelarRollPendiente`: si el jugador se va del tablero (Ficha)
-        // antes de que el roll o la pausa de lectura terminen, esto resuelve
-        // YA el efecto (que `resolverOpcion` ya decidió más arriba, de forma
-        // síncrona) sin pintar nada — el tablero no está a la vista.
-        //
-        // `rollResuelto` evita pisar, con un cancelador viejo, el que recién
-        // dejó puesto `onFin` si `animarRoll` resolvió síncrono (motion
-        // reducido, o una sola rama posible): sin el guard, un roll ya
-        // terminado quedaría con `cancelarRollPendiente` apuntando igual a
-        // "cancelar el roll" en vez de a "cancelar la pausa de lectura", y
-        // aplicaría el efecto DOS VECES si el jugador entra a la Ficha
-        // después.
-        let rollResuelto = false;
-        const controladorRoll = animarRoll(nodoTarjeta, {
-          indiceGanador: resuelto.indiceGanador,
-          cantidad: opcion.probabilidades.length,
-          onFin: () => {
-            rollResuelto = true;
-            mostrarResultadoEnTarjeta(nodoTarjeta, resuelto.texto || carta.texto);
-            const timerId = setTimeout(() => {
-              cancelarRollPendiente = null;
-              aplicar();
-            }, PAUSA_RESULTADO_MS);
-            cancelarRollPendiente = () => {
-              clearTimeout(timerId);
-              cancelarRollPendiente = null;
-              aplicar();
-            };
+        resolverConRoll({
+          carta,
+          opcionId: id,
+          rivalObjetivoId,
+          // `caePelea` (Task v3, "cartas nuevas con azar"): la rama que salió
+          // canceló de verdad la pelea que estuviera en danza este bloque, no
+          // solo en el texto de la tarjeta — ver cancelarProximaPelea en
+          // career.js. Se aplica ANTES de aplicarEfectoYSeguir (que pinta el
+          // tablero ocioso): así el panel de "próxima pelea" ya sale limpio
+          // en el mismo repintado, sin un instante intermedio con la oferta
+          // vieja todavía puesta.
+          alTerminar: (resuelto) => {
+            if (resuelto.caePelea) partida = cancelarProximaPelea(partida);
+            aplicarEfectoYSeguir({
+              jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas,
+            });
           },
         });
-        if (!rollResuelto) {
-          cancelarRollPendiente = () => {
-            controladorRoll.detener();
-            cancelarRollPendiente = null;
-            aplicar();
-          };
-        }
       },
     }));
   }
@@ -765,15 +782,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       rareza: carta.rareza,
       opciones: carta.opciones.map((o) => opcionCartaAOpcion(o, 'pesa')),
       onElegir: (id) => {
-        const resuelto = resolverOpcion(rng, {
-          jugador: partida.jugador, carta, opcionId: id, rivalidades: partida.rivalidades,
+        // Pedido 2 (v7): el campamento ya puede traer cartas con azar (ver
+        // cards-camp.js) — `resolverConRoll` les da el mismo roll con
+        // suspenso que evento/redes, en vez de aplicar el efecto de una.
+        resolverConRoll({
+          carta,
+          opcionId: id,
+          alTerminar: (resuelto) => {
+            if (ultimo) {
+              partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+              careo(oferta);
+              return;
+            }
+            aplicarEfectoYSeguir({ jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas });
+          },
         });
-        if (ultimo) {
-          partida = { ...partida, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
-          careo(oferta);
-          return;
-        }
-        aplicarEfectoYSeguir({ jugador: resuelto.jugador, rivalidades: resuelto.rivalidades, deltas: resuelto.deltas });
       },
     }));
   }

@@ -62,12 +62,20 @@ describe('elegirCartaCampamento', () => {
     }
   });
 
-  it('cada carta trae exactamente dos opciones con mods', () => {
+  // La intención original de este test era "ninguna opción de campamento es
+  // un cascarón vacío que no hace nada" — hasta v7 eso se cumplía siempre
+  // vía `o.mods` porque el campamento nunca tenía azar. Pedido 2 (v7, "más
+  // tarjetas de %... también en el campamento") suma opciones con
+  // `probabilidades` (mismo mecanismo que evento/redes, resuelto por
+  // `resolverOpcion`): esas NO traen `mods` a nivel opción (el mod vive por
+  // rama, ver cards-camp.js), así que el chequeo tiene que aceptar cualquiera
+  // de los dos como "esta opción sí define un efecto".
+  it('cada carta trae exactamente dos opciones, y cada una define un efecto (mods fijos o probabilidades)', () => {
     for (let s = 1; s <= 50; s++) {
       const rng = createRng(s);
       const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta: { rivalApodo: 'X', esTitulo: false } });
       expect(carta.opciones.length).toBe(2);
-      carta.opciones.forEach((o) => expect(o.mods).toBeTruthy());
+      carta.opciones.forEach((o) => expect(o.mods || o.probabilidades).toBeTruthy());
     }
   });
 });

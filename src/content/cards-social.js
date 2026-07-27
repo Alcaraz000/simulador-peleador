@@ -17,8 +17,12 @@ export const CARTAS_REDES = [
       { id: 'promocionar', tono: 'promocional', texto: 'Etiquetando a los sponsors.', efectos: { fama: 2, dinero: 4000 } },
     ],
   },
+  // Sistema 3 (feedback del usuario, mismo criterio que en cards-improve.js
+  // y cards-events.js): "Después de una derrota" es incongruente si el
+  // jugador nunca perdió (o nunca peleó) todavía. `resultadoReciente:
+  // 'derrota'` la ata a que eso haya pasado de verdad.
   {
-    id: 'post_derrota', titulo: 'Después de una derrota', rareza: 'normal',
+    id: 'post_derrota', titulo: 'Después de una derrota', rareza: 'normal', condiciones: { resultadoReciente: 'derrota' },
     texto: 'Todos esperan que digas algo.',
     opciones: [
       { id: 'provocar', tono: 'provocador', texto: '"Revancha cuando quieras. Si tenés."', efectos: { fama: 7, heatRival: 30 } },
@@ -35,8 +39,10 @@ export const CARTAS_REDES = [
       { id: 'promocionar', tono: 'promocional', texto: 'Usarlo para vender la pelea.', efectos: { fama: 5, dinero: 3000, heatRival: 10 } },
     ],
   },
+  // Sistema 3: nadie le pregunta por el título a un desconocido. `famaMin`
+  // ata esta carta a que el jugador ya tenga algo de perfil público.
   {
-    id: 'post_titulo', titulo: 'Hablando del cinturón', rareza: 'normal',
+    id: 'post_titulo', titulo: 'Hablando del cinturón', rareza: 'normal', condiciones: { famaMin: 20 },
     texto: 'Todos preguntan cuándo vas por el título.',
     opciones: [
       { id: 'provocar', tono: 'provocador', texto: '"El campeón me esquiva y todos lo saben."', efectos: { fama: 7, heatRival: 25 } },
@@ -87,6 +93,34 @@ export const CARTAS_REDES = [
       ] },
       { id: 'humilde', tono: 'humilde', texto: '"Prefiero hablar arriba del ring."', efectos: { fama: 3 }, mods: { moral: 4 } },
       { id: 'promocionar', tono: 'promocional', texto: 'Dejar que el mánager arme el rumor por vos.', efectos: { fama: 5, dinero: 3000 } },
+    ],
+  },
+
+  // Pedido 2 (v7, "sumá más tarjetas de %, son lo más divertido"): mismo
+  // patrón que 'polemica_calculada' — la rama provocadora es la que arriesga
+  // (probabilidades), humilde/promocional quedan fijas como siempre.
+  {
+    id: 'entrevista_incomoda', titulo: 'La pregunta filosa', rareza: 'normal',
+    texto: 'Un cronista te tira una pregunta pensada para que te calientes frente a cámara, en vivo.',
+    opciones: [
+      { id: 'provocar', tono: 'provocador', texto: 'Contestarle con la misma moneda.', efectos: { heatRival: 20 }, probabilidades: [
+        { peso: 70, mods: {}, efectos: { fama: 10 }, texto: 'Se arma un clip picante que todos comparten esa noche.' },
+        { peso: 30, mods: {}, efectos: { fama: -6 }, texto: 'Te pasaste de rosca: quedás como el maleducado de la cadena nacional.' },
+      ] },
+      { id: 'humilde', tono: 'humilde', texto: 'Responder con calma, sin morder el anzuelo.', efectos: { fama: 2 }, mods: { moral: 3 } },
+      { id: 'promocionar', tono: 'promocional', texto: 'Desviar la pregunta hacia la venta de entradas.', efectos: { fama: 3, dinero: 2500 } },
+    ],
+  },
+  {
+    id: 'transmision_en_vivo', titulo: 'El vivo sin editar', rareza: 'rara',
+    texto: 'Te proponen entrenar en vivo para las redes, tal cual sale, sin cortes ni segundas tomas.',
+    opciones: [
+      { id: 'provocar', tono: 'provocador', texto: 'Aprovechar el vivo para picantear al rival.', efectos: { heatRival: 26 }, probabilidades: [
+        { peso: 55, mods: {}, efectos: { fama: 14 }, texto: 'Sale perfecto: la gente enloquece con la previa de la pelea.' },
+        { peso: 45, mods: {}, efectos: { fama: -10 }, texto: 'Un traspié en vivo, sin edición que lo tape, y se ríen de vos toda la semana.' },
+      ] },
+      { id: 'humilde', tono: 'humilde', texto: 'Mostrar el entrenamiento tal cual, sin careteo.', efectos: { fama: 4 }, mods: { disciplinaPersonal: 3 } },
+      { id: 'promocionar', tono: 'promocional', texto: 'Aprovechar para nombrar a los sponsors.', efectos: { fama: 2, dinero: 5000 } },
     ],
   },
 

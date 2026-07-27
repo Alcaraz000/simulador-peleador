@@ -207,13 +207,25 @@ describe('repartirMejoras', () => {
     expect(conEtapaTemprana).toBeGreaterThan(sinBonus);
   });
 
-  it('el entrenador mejora los numeros positivos', () => {
-    const sin = repartirMejoras(createRng(5), { jugador: jugador(), etapa: 'profesional' });
-    const con = repartirMejoras(createRng(5), { jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional' });
+  // Comparado en UNA sola semilla (como era antes), esto queda a merced de
+  // qué cartas puntuales tocan en ese draw exacto: con el catálogo real
+  // (que ahora filtra 'doble_turno' por condiciones.edadMin, Sistema 3) una
+  // semilla puntual podía, por pura casualidad de qué otras cartas salían en
+  // su lugar, mostrar el efecto contrario. La ventaja del entrenador es
+  // ESTADÍSTICA (bonusValor se suma pase lo que pase con la selección de
+  // cartas): se mide sobre muchas semillas pareadas, mismo criterio que ya
+  // usa el resto de esta describe (ver "el bonus de etapa temprana ya NO...").
+  it('el entrenador mejora los numeros positivos, en promedio sobre muchas semillas', () => {
     const positivos = (cartas) => cartas.reduce(
       (acc, c) => acc + Object.values(c.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0), 0,
     );
-    expect(positivos(con)).toBeGreaterThan(positivos(sin));
+    let totalSin = 0;
+    let totalCon = 0;
+    for (let semilla = 1; semilla <= 300; semilla += 1) {
+      totalSin += positivos(repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional' }));
+      totalCon += positivos(repartirMejoras(createRng(semilla), { jugador: jugador({ staff: ['entrenador'] }), etapa: 'profesional' }));
+    }
+    expect(totalCon).toBeGreaterThan(totalSin);
   });
 
   it('es determinista', () => {
