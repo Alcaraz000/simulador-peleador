@@ -385,6 +385,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     iniciar(cont, prepararPartidaGuardada('resumenAnio', 2));
 
     expect(cont.querySelector('.grafico-media, .grafico-media-vacio')).toBeTruthy();
+    // Pedido 2 (v8, "las peleas llevan la bandera del rival"): main.js busca
+    // al rival en `partida.mundo.roster` para sumarle la bandera SVG — de
+    // punta a punta, con el juego real (no un prop inyectado a mano).
+    expect(cont.querySelector('.resumen-anio-fila-rival svg.bandera-svg')).toBeTruthy();
     const boton = [...cont.querySelectorAll('button')].find((b) => b.textContent === 'Seguir');
     expect(boton).toBeTruthy();
     const contenidoAntes = cont.querySelector('[data-bloque="contenido"]');
@@ -395,6 +399,33 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.contains(contenidoAntes)).toBe(false);
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+  });
+
+  // Pedido 3 (v8, "cuando se muestre el resumen del año, está permitido
+  // 'ocultar' la sección de estado y atributos temporalmente"): los bloques
+  // siguen montados (con su contenido real adentro — ver montarTablero,
+  // main.js) pero marcados `.oculto` mientras el resumen está en pantalla, y
+  // vuelven a mostrarse solos al seguir a la próxima tarjeta — sin que las
+  // columnas laterales se muevan un pixel (identidad de nodo, misma garantía
+  // que tablero-persistente.test.js).
+  it('resumenAnio: oculta atributos/estado mientras se ve, y los restaura solos al seguir (sin mover las columnas laterales)', () => {
+    iniciar(cont, prepararPartidaGuardada('resumenAnio', 2));
+
+    const refIzquierda = cont.querySelector('.shell-izquierda');
+    const refDerecha = cont.querySelector('.shell-derecha');
+    expect(cont.querySelector('[data-bloque="atributos"]').classList.contains('oculto')).toBe(true);
+    expect(cont.querySelector('[data-bloque="estado"]').classList.contains('oculto')).toBe(true);
+    // Ocultos con CSS, no borrados: el contenido real sigue adentro.
+    expect(cont.querySelector('[data-bloque="atributos"] .panel-peleador-atributo')).toBeTruthy();
+
+    const boton = [...cont.querySelectorAll('button')].find((b) => b.textContent === 'Seguir');
+    boton.click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('[data-bloque="atributos"]').classList.contains('oculto')).toBe(false);
+    expect(cont.querySelector('[data-bloque="estado"]').classList.contains('oculto')).toBe(false);
+    expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
+    expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {

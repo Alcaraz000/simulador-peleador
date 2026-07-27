@@ -184,6 +184,18 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   let shellActual = null;
   let pintarCentro = () => {};
 
+  // Pedido 3 (v8, "cuando se muestre el resumen del año, está permitido
+  // 'ocultar' la sección de estado y atributos temporalmente para que se vea
+  // mejor"): un flag de sesión, no de props — vive ACÁ (no en `montarTablero`)
+  // porque tiene que sobrevivir a un viaje ida y vuelta a una pantalla
+  // completa (Ficha) mientras el resumen sigue "abierto" atrás (volverAlTablero
+  // no pasa por `centro()`, así que relee este mismo flag en vez de perderlo).
+  // Se pide explícitamente al armar el beat 'resumenAnio' (ver
+  // `beatResumenAnio`, más abajo) y `centro()` lo vuelve a `false` por
+  // default en CUALQUIER otro beat — "Seguir" nunca necesita restaurarlo a
+  // mano, el próximo beat normal ya lo hace solo.
+  let sinAtributosEstado = false;
+
   // --- El roll de una carta con azar no le puede robar la pantalla --------
   // (Hallazgo 1 de la revisión final): dopaje/chantaje/entrenador disparan un
   // roll con suspenso (animarRoll, 1.2-1.8s) cuyo timer, sin esto, sigue
@@ -308,9 +320,19 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     // datos del jugador) + contenido (lo que cambia: el panel de avance, una
     // decisión, el sparring) — el jugador nunca los pierde de vista mientras
     // decide, la garantía central del rediseño.
+    //
+    // Pedido 3 (v8): mientras se muestra el resumen de fin de año,
+    // `sinAtributosEstado` pide ocultar estos dos bloques con `display:none`
+    // (clase `.oculto`, ver theme.css) para que el resumen tenga más lugar.
+    // Se los sigue MONTANDO igual (renderPanelAtributos/Estado corren
+    // siempre, un par de líneas más abajo): más simple que bifurcar la
+    // lógica, y ocultos con CSS no aportan nada raro a la accesibilidad
+    // (display:none los saca del árbol). Solo afecta el alto de la columna
+    // CENTRAL — cada región del shell es su propia columna independiente
+    // (ver shell.js), así que izquierda/derecha ni se enteran.
     shell.montarCentro(el('div', { class: 'stack' }, [
-      el('div', { dataset: { bloque: 'atributos' } }),
-      el('div', { dataset: { bloque: 'estado' } }),
+      el('div', { dataset: { bloque: 'atributos' }, class: sinAtributosEstado ? 'oculto' : null }),
+      el('div', { dataset: { bloque: 'estado' }, class: sinAtributosEstado ? 'oculto' : null }),
       el('div', { dataset: { bloque: 'contenido' } }),
     ]));
     renderPanelAtributos(shell.regiones.centro.querySelector('[data-bloque="atributos"]'), { jugador: partida.jugador });
@@ -386,8 +408,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // shell y refrescando los laterales primero). Todo lo que ocurre "dentro
   // del tablero" —el estado ocioso, cada beat, cada desenlace— pasa por acá
   // exactamente una vez por transición.
-  function centro(pintar) {
+  //
+  // `ocultarAtributosEstado` (Pedido 3, v8): default `false` a propósito —
+  // solo `beatResumenAnio` lo pide en `true`; cualquier otro llamador (la
+  // inmensa mayoría) lo deja en `false` sin tener que acordarse de nada, así
+  // que apenas el jugador avanza a un beat normal el panel vuelve solo.
+  function centro(pintar, { ocultarAtributosEstado = false } = {}) {
     pintarCentro = pintar;
+    sinAtributosEstado = ocultarAtributosEstado;
     volverAlTablero();
   }
 
@@ -533,15 +561,29 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // ACÁ, con el rng cosmético (nunca el de la carrera: es sabor, no una
   // decisión de juego — mismo criterio que `textoResultadoDestacado`, más
   // arriba). Un solo botón ("Seguir") pasa a lo que siga en la cola.
+  //
+  // v8, Pedido 2 ("las peleas llevan la bandera del rival"): el historial de
+  // peleas (aplicarResultado, offers.js) solo guarda rivalId/nombre/apodo/
+  // media — nunca duplicó la nacionalidad porque ya vive en el roster del
+  // mundo. Se busca ACÁ, solo para esta pantalla: el roster nunca borra a un
+  // rival retirado (world.js lo marca `retirado:true`, nunca lo saca del
+  // array), así que el id siempre resuelve, aunque el resumen sea de varios
+  // años atrás.
   function beatResumenAnio(beat) {
     const {
       anio, muestrasMedia, decisiones, peleas,
     } = beat.datos;
     const narrativa = textoResumenAnio(rng, { peleas });
-    centro(() => renderResumenAnio(centroContenido(), {
-      anio, muestrasMedia, decisiones, peleas, narrativa,
-      onContinuar: () => siguiente(),
+    const peleasConBandera = peleas.map((p) => ({
+      ...p,
+      rivalNacionalidad: partida.mundo.roster.find((r) => r.id === p.rivalId)?.nacionalidad ?? null,
     }));
+    // Pedido 3 (v8): mientras se ve el resumen, atributos/estado se ocultan
+    // para que respire (ver `sinAtributosEstado` y `centro()`, más arriba).
+    centro(() => renderResumenAnio(centroContenido(), {
+      anio, muestrasMedia, decisiones, peleas: peleasConBandera, narrativa,
+      onContinuar: () => siguiente(),
+    }), { ocultarAtributosEstado: true });
   }
 
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas

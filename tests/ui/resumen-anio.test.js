@@ -22,14 +22,17 @@ function peleaDePrueba(over = {}) {
   return {
     rivalId: 'r1', rivalNombre: 'Juan Perez', rivalApodo: 'El Pibe', rivalMedia: 40,
     resultado: 'v', metodo: 'ko', round: 3, bolsa: 5000, enJuego: null, esTitulo: false,
-    esObligatoria: false, fecha: 10, modo: 'tramite', ...over,
+    esObligatoria: false, fecha: 10, modo: 'tramite', rivalNacionalidad: 'AR', ...over,
   };
 }
 
 function propsBase(over = {}) {
   return {
     anio: 2028,
-    muestrasMedia: [{ semana: 1, media: 60 }, { semana: 20, media: 64 }],
+    muestrasMedia: [
+      { semana: 1, media: 60, ranking: 40 },
+      { semana: 20, media: 64, ranking: 22 },
+    ],
     decisiones: [decisionDePrueba()],
     peleas: [peleaDePrueba()],
     narrativa: 'Un año parejo, con una victoria que hizo ruido.',
@@ -122,5 +125,60 @@ describe('renderResumenAnio', () => {
     // eslint-disable-next-line no-misleading-character-class
     const emojiRegex = /[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
     expect(emojiRegex.test(r.textContent)).toBe(false);
+  });
+
+  // v8 (pedido textual: "hay que mejorar esta sección, más compacta"). ------
+
+  it('muestra iconos en el encabezado del año y junto a la cronica', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    const encabezado = r.querySelector('h1').closest('.fila').parentElement;
+    expect(encabezado.querySelector('svg')).toBeTruthy();
+    const cronica = [...r.querySelectorAll('p.medio')].find((p) => p.textContent.includes('Un año parejo'));
+    expect(cronica.parentElement.querySelector('svg')).toBeTruthy();
+  });
+
+  it('cada pelea lleva la bandera SVG del rival, nunca un emoji', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({
+      peleas: [peleaDePrueba({ rivalApodo: 'El Zurdo', rivalNacionalidad: 'MX' })],
+    }));
+    expect(r.querySelector('svg.bandera-svg')).toBeTruthy();
+  });
+
+  // Compacto (Pedido 2, punto 1): las decisiones y las peleas son FILAS de
+  // una sola tabla (un `.panel` por sección con varias `.resumen-anio-fila`
+  // adentro), no un panel grande por cada item como antes.
+  it('las decisiones y las peleas son filas compactas dentro de UN panel por seccion, no un panel por item', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({
+      decisiones: [decisionDePrueba(), decisionDePrueba({ titulo: 'El biomecánico', opcion: 'Hacer la sesión completa.' })],
+      peleas: [peleaDePrueba(), peleaDePrueba({ rivalApodo: 'La Bala', fecha: 30 })],
+    }));
+    const filas = r.querySelectorAll('.resumen-anio-fila');
+    expect(filas.length).toBe(4); // 2 decisiones + 2 peleas
+    // Cada fila vive dentro de un contenedor .resumen-anio-filas (un solo
+    // panel por sección), no dentro de su propio .panel individual.
+    filas.forEach((fila) => expect(fila.classList.contains('panel')).toBe(false));
+  });
+
+  it('incluye el grafico de ranking (svg), con una nota que aclara que el puesto 1 es el mejor', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    expect(r.querySelector('.grafico-ranking-svg')).toBeTruthy();
+    expect(r.textContent).toMatch(/mejor puesto/i);
+  });
+
+  it('el titulo de la seccion de decisiones es compacto ("Decisiones")', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    expect(r.textContent).toMatch(/decisiones/i);
+  });
+
+  it('sin datos de ranking en las muestras (partida vieja), no revienta y cae a la lectura simple', () => {
+    const r = region();
+    expect(() => renderResumenAnio(r, propsBase({
+      muestrasMedia: [{ semana: 1, media: 60 }, { semana: 20, media: 64 }],
+    }))).not.toThrow();
   });
 });
