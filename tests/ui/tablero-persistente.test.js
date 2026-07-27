@@ -337,7 +337,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     const partida = nuevaPartida(4);
     partida.jugador.dinero = 100000;
     partida.jugador.estado.lesion = {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 2, costo: 22000, texto: 'x',
     };
     iniciar(cont, prepararStorage(partida));
 

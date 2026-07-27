@@ -420,9 +420,12 @@ describe('avanzarBloque', () => {
     expect(siguenNuevas).toHaveLength(0);
   });
 
+  // v7 ("contá la recuperación en semanas, no en bloques"): una lesión leve
+  // o moderada (bien por debajo de las 52 semanas que dura un bloque, ver
+  // ETAPAS) cura ENTERA en el primer tic del calendario después de sufrida.
   it('recupera lesiones con el paso de los bloques', () => {
     const p = nuevaPartida();
-    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' };
+    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' };
     expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
   });
 
@@ -435,19 +438,22 @@ describe('avanzarBloque', () => {
   // curarte.
   it('mientras sigue lesionado, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
     const p = nuevaPartida();
+    // 100 semanas: por encima de las 52 que descuenta un solo tic de bloque
+    // (ver ETAPAS), así que sigue activa después de este avanzarBloque —
+    // mismo caso que antes cubría una lesión "grave" de varios bloques.
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 3, costo: 1, texto: 'x',
+      id: 'rodilla', nombre: 'Rodilla', severidad: 3, semanasRestantes: 100, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.estado.lesion.bloquesRestantes).toBe(2);
+    expect(despues.jugador.estado.lesion.semanasRestantes).toBe(48);
     expect(despues.jugador.estado.forma).toBe(30);
   });
 
   it('en el bloque en que termina de curarse, la forma sube por el bonus de curación (no por el descanso normal)', () => {
     const p = nuevaPartida();
     p.jugador.estado.lesion = {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
     const despues = avanzarBloque(p);
@@ -597,17 +603,16 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   it('si esta lesionado y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2; // profesional: intentosDePelea siempre da >=1 cupo
-    // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
-    // mínimo de beats por bloque en profesional (mientras sigue lesionado)
-    // es 2 (mejora + lesionSinOferta, siempre) — así que en el peor caso
-    // (sin ningún beat opcional) 12 iteraciones alcanzan para 6 bloques como
-    // mucho, nunca para los 8 que hacen falta para recuperarse. Con 4 el
-    // test dependía de que los beats opcionales (sparring/evento/redes, con
-    // rng) NO aparecieran demasiado seguido para esa semilla en particular;
-    // eso dejó de cumplirse cuando el fix de apodos duplicados del roster
-    // (Task 6.3) corrió la secuencia de rng.
+    // semanasRestantes en 400, no en un número chico: con 12 iteraciones de
+    // siguienteBeat, el mínimo de beats por bloque en profesional (mientras
+    // sigue lesionado) es 2 (mejora + lesionSinOferta, siempre) — así que en
+    // el peor caso (sin ningún beat opcional) 12 iteraciones alcanzan para 6
+    // bloques como mucho, y cada uno descuenta 52 semanas (ver ETAPAS): 6×52
+    // = 312. 400 deja margen de sobra para que la lesión siga activa en todo
+    // el loop, igual que antes hacía bloquesRestantes:8 contra un máximo de 6
+    // bloques.
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 8, costo: 60000, texto: 'x',
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, semanasRestantes: 400, costo: 85000, texto: 'x',
     };
     let actual = p;
     const tipos = [];
@@ -643,18 +648,17 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   // armarCola (acá abajo, vía siguienteBeat) — no hay otro camino que pueda
   // saltarse el gate.
   it('con lesion leve o moderada, TAMBIÉN bloquea toda actividad de pelea (sin matices de severidad)', () => {
-    // bloquesRestantes en 8 con 12 iteraciones, mismo margen de seguridad que
-    // el test de la lesión grave (arriba): el mínimo de beats por bloque en
-    // profesional mientras sigue lesionado es 2 (mejora + lesionSinOferta),
-    // así que 12 iteraciones nunca alcanzan a agotar las 8 que hacen falta
-    // para curarse — sin este margen, una duración corta podía curarse a
-    // mitad del loop y hacer aparecer una oferta legítima (ya sano),
-    // arruinando el test.
+    // semanasRestantes en 400 con 12 iteraciones, mismo margen de seguridad
+    // que el test de la lesión grave (arriba): 12 iteraciones alcanzan para
+    // 6 bloques como mucho (2 beats mínimo por bloque mientras sigue
+    // lesionado), y 6×52=312 semanas — 400 nunca se agota en ese margen, sin
+    // depender de una duración "realista" de catálogo (acá lo que se prueba
+    // es el gate, no el número).
     for (const severidad of [1, 2]) {
       const p = nuevaPartida();
       p.etapaIndice = 2;
       p.jugador.estado.lesion = {
-        id: 'x', nombre: 'x', severidad, bloquesRestantes: 8, costo: 1, texto: 'x',
+        id: 'x', nombre: 'x', severidad, semanasRestantes: 400, costo: 1, texto: 'x',
       };
       let actual = p;
       const tipos = [];
@@ -669,14 +673,14 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     }
   });
 
-  // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
+  // No tiene que quedar trabado: en cuanto se cura (semanasRestantes llega a
   // 0 vía recuperar(), avanzarBloque), la actividad de pelea vuelve sola en
   // el próximo bloque, sin que el jugador tenga que hacer nada especial.
   it('en cuanto se cura, la actividad de pelea vuelve sin trabas', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     p.jugador.estado.lesion = {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     };
     let actual = p;
     let vioPelea = false;

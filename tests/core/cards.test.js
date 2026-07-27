@@ -350,7 +350,7 @@ describe('repartirMejoras', () => {
 
     function jugadorLesionado() {
       const j = jugador();
-      return { ...j, estado: { ...j.estado, lesion: { id: 'x', nombre: 'x', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' } } };
+      return { ...j, estado: { ...j.estado, lesion: { id: 'x', nombre: 'x', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' } } };
     }
 
     it('un jugador lesionado solo ve cartas marcadas para ese estado, nunca las de gimnasio', () => {

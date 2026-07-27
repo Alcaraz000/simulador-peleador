@@ -25,8 +25,17 @@ describe('catalogo de lesiones', () => {
   it('las mas graves duran mas y cuestan mas', () => {
     const leve = LESIONES.find((l) => l.severidad === 1);
     const grave = LESIONES.find((l) => l.severidad === 3);
-    expect(grave.bloques).toBeGreaterThan(leve.bloques);
+    expect(grave.semanas).toBeGreaterThan(leve.semanas);
     expect(grave.costo).toBeGreaterThan(leve.costo);
+  });
+
+  // v7 ("contá la recuperación en semanas, no en bloques"): las leves/
+  // moderadas tienen que ser creíbles en semanas (nunca meses y meses) — el
+  // propio catálogo documenta el porqué de cada número.
+  it('las leves y moderadas duran semanas creibles (nunca meses y meses)', () => {
+    for (const lesion of LESIONES.filter((l) => l.severidad <= 2)) {
+      expect(lesion.semanas).toBeLessThanOrEqual(16);
+    }
   });
 });
 
@@ -69,13 +78,13 @@ describe('tirarLesion', () => {
     expect(contar(95)).toBeLessThan(contar(15));
   });
 
-  it('devuelve una lesion con bloques restantes', () => {
+  it('devuelve una lesion con semanas restantes', () => {
     let lesion = null;
     for (let s = 1; s <= 200 && !lesion; s++) {
       lesion = tirarLesion(createRng(s), { peleador: jugador(), contexto: 'pelea', danoRecibido: 99 });
     }
     expect(lesion).toBeTruthy();
-    expect(lesion.bloquesRestantes).toBeGreaterThan(0);
+    expect(lesion.semanasRestantes).toBeGreaterThan(0);
     expect(lesion.texto).toBeTruthy();
   });
 });
@@ -84,7 +93,7 @@ describe('aplicarLesion', () => {
   it('no muta y baja la forma', () => {
     const p = jugador();
     const formaAntes = p.estado.forma;
-    const lesion = { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, bloquesRestantes: 1, costo: 5000, texto: 'x' };
+    const lesion = { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, semanasRestantes: 4, costo: 5000, texto: 'x' };
     const nuevo = aplicarLesion(p, lesion);
     expect(p.estado.lesion).toBeNull();
     expect(nuevo.estado.lesion.id).toBe('ceja');
@@ -93,40 +102,71 @@ describe('aplicarLesion', () => {
 });
 
 describe('recuperar', () => {
-  it('descuenta bloques y cura al llegar a cero', () => {
+  it('descuenta semanas y cura al llegar a cero', () => {
     let p = aplicarLesion(jugador(), {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 20000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 26000, texto: 'x',
     });
-    let paso = recuperar(p, { bloques: 1 });
+    let paso = recuperar(p, { semanas: 6 });
     expect(paso.curada).toBe(false);
-    expect(paso.peleador.estado.lesion.bloquesRestantes).toBe(1);
-    paso = recuperar(paso.peleador, { bloques: 1 });
+    expect(paso.peleador.estado.lesion.semanasRestantes).toBe(4);
+    paso = recuperar(paso.peleador, { semanas: 6 });
+    expect(paso.curada).toBe(true);
+    expect(paso.peleador.estado.lesion).toBeNull();
+  });
+
+  // v7: el tic real de la carrera (career.js, avanzarBloque) descuenta 52
+  // semanas por bloque (siempre, ver ETAPAS) — una lesión leve o moderada
+  // (bien por debajo de 52) ya cura ENTERA en el primer tic después de
+  // sufrida, no en dos como antes con `bloques:1`.
+  it('una lesion leve o moderada cura entera en el primer tic de un bloque (52 semanas)', () => {
+    let p = aplicarLesion(jugador(), {
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 26000, texto: 'x',
+    });
+    const paso = recuperar(p, { semanas: 52 });
     expect(paso.curada).toBe(true);
     expect(paso.peleador.estado.lesion).toBeNull();
   });
 
   it('sin lesion no hace nada', () => {
-    const paso = recuperar(jugador(), { bloques: 3 });
+    const paso = recuperar(jugador(), { semanas: 3 });
     expect(paso.curada).toBe(false);
     expect(paso.peleador.estado.lesion).toBeNull();
   });
 });
 
 describe('curarConDinero', () => {
-  it('cura al instante si alcanza la plata', () => {
+  it('cura al instante si la reduccion del 90% deja cero semanas', () => {
     let p = aplicarLesion(jugador({ dinero: 100000 }), {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 20000, texto: 'x',
+      id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, semanasRestantes: 4, costo: 8000, texto: 'x',
     });
     const paso = curarConDinero(p, p.estado.lesion);
     expect(paso.ok).toBe(true);
-    expect(paso.gasto).toBe(20000);
-    expect(paso.peleador.dinero).toBe(80000);
+    expect(paso.gasto).toBe(8000);
+    expect(paso.peleador.dinero).toBe(92000);
     expect(paso.peleador.estado.lesion).toBeNull();
+  });
+
+  // v7 (pedido textual: "reducir los tiempos de recuperación en un -90%",
+  // no necesariamente a cero): una lesión grave (rodilla, 64 semanas) queda
+  // con un resto tras la cirugía — pero ese resto (≈6 semanas) ya cae bien
+  // por debajo del próximo tic de 52, así que en los hechos le ahorra al
+  // jugador el bloque entero de ofertas perdidas que le hubiese costado sin
+  // pagar.
+  it('en una lesion grave, reduce el resto en un 90% en vez de curar del todo', () => {
+    let p = aplicarLesion(jugador({ dinero: 200000 }), {
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, semanasRestantes: 64, costo: 85000, texto: 'x',
+    });
+    const paso = curarConDinero(p, p.estado.lesion);
+    expect(paso.ok).toBe(true);
+    expect(paso.gasto).toBe(85000);
+    expect(paso.peleador.estado.lesion).not.toBeNull();
+    expect(paso.peleador.estado.lesion.semanasRestantes).toBe(6);
+    expect(paso.peleador.estado.lesion.semanasRestantes).toBeLessThan(52);
   });
 
   it('falla si no alcanza y no cobra nada', () => {
     let p = aplicarLesion(jugador({ dinero: 100 }), {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 20000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 26000, texto: 'x',
     });
     const paso = curarConDinero(p, p.estado.lesion);
     expect(paso.ok).toBe(false);
@@ -148,7 +188,7 @@ describe('puedePelear', () => {
   it('bloquea con cualquier lesion activa, sin importar la severidad', () => {
     for (const severidad of [1, 2, 3]) {
       const lesionado = aplicarLesion(jugador(), {
-        id: 'x', nombre: 'x', severidad, bloquesRestantes: 1, costo: 1, texto: 'x',
+        id: 'x', nombre: 'x', severidad, semanasRestantes: 4, costo: 1, texto: 'x',
       });
       expect(puedePelear(lesionado)).toBe(false);
     }
@@ -156,9 +196,9 @@ describe('puedePelear', () => {
 
   it('en cuanto se cura, vuelve a permitir pelear', () => {
     const lesionado = aplicarLesion(jugador(), {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     });
-    const { peleador: curado } = recuperar(lesionado, { bloques: 1 });
+    const { peleador: curado } = recuperar(lesionado, { semanas: 52 });
     expect(puedePelear(curado)).toBe(true);
   });
 });

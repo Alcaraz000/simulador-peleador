@@ -460,7 +460,12 @@ export function avanzarBloque(partida) {
   nueva.jugador.atributos = crecimientoPorEdadJugador(nueva.jugador);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
-  const recuperacion = recuperar(nueva.jugador, { bloques: 1 });
+  // v7 ("contá la recuperación en semanas, no en bloques"): `recuperar` ahora
+  // descuenta las semanas de calendario que de verdad pasaron este bloque
+  // (siempre 52 hoy, ver semanasDeBloque más arriba) en vez de un `bloques:1`
+  // fijo — mismo número, pero la unidad ya no está atada al tamaño del
+  // bloque (ver injuries.js para el porqué).
+  const recuperacion = recuperar(nueva.jugador, { semanas: semanasDeBloque(etapa.aniosPorBloque) });
   nueva.jugador = recuperacion.peleador;
 
   const sponsor = cobrarSponsor(nueva.jugador, rng);

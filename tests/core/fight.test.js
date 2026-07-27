@@ -209,10 +209,10 @@ describe('penalización por lesión', () => {
     };
     const sano = contarVictorias(null);
     const lesionLeve = contarVictorias({
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     });
     const lesionModerada = contarVictorias({
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 1, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 1, texto: 'x',
     });
     expect(lesionLeve).toBeLessThan(sano);
     expect(lesionModerada).toBeLessThan(lesionLeve);

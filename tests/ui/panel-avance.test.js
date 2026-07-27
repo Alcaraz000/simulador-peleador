@@ -46,21 +46,22 @@ describe('renderPanelAvance', () => {
     expect(cont.querySelector('[data-accion="curar"]')).toBeNull();
   });
 
-  it('con lesion muestra el nombre y los bloques que faltan', () => {
+  it('con lesion muestra el nombre y las semanas que faltan', () => {
     const p = partidaBase();
     p.jugador.estado.lesion = {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 22000, texto: 'x',
     };
     renderPanelAvance(cont, { partida: p, onSiguiente: () => {} });
     expect(cont.textContent).toContain('Mano fracturada');
-    expect(cont.textContent).toContain('2');
+    expect(cont.textContent).toContain('10');
+    expect(cont.textContent.toLowerCase()).toContain('semana');
   });
 
   it('con lesion ofrece pagar para curarse por el costo que define la lesion', () => {
     const p = partidaBase();
     p.jugador.dinero = 100000;
     p.jugador.estado.lesion = {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 22000, texto: 'x',
     };
     let curado = false;
     renderPanelAvance(cont, { partida: p, onSiguiente: () => {}, onCurar: () => { curado = true; } });
@@ -73,7 +74,7 @@ describe('renderPanelAvance', () => {
     const p = partidaBase();
     p.jugador.dinero = 100;
     p.jugador.estado.lesion = {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 10, costo: 22000, texto: 'x',
     };
     renderPanelAvance(cont, { partida: p, onSiguiente: () => {} });
     expect(cont.querySelector('[data-accion="curar"]').disabled).toBe(true);

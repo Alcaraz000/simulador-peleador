@@ -589,11 +589,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // desde antes.
   function beatLesionSinOferta(beat) {
     const { lesion } = beat.datos;
-    const bloques = lesion?.bloquesRestantes ?? null;
+    const semanas = lesion?.semanasRestantes ?? null;
     centro(() => renderDesenlace(centroContenido(), {
       titulo: 'Sin ofertas',
       texto: lesion
-        ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${bloques} ${bloques === 1 ? 'bloque' : 'bloques'} más para volver.`
+        ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${semanas} ${semanas === 1 ? 'semana' : 'semanas'} más para volver.`
         : 'Nadie te ofrece pelear mientras estás lesionado.',
       deltasTexto: [],
       onContinuar: irADashboard,

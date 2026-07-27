@@ -25,7 +25,7 @@ function bloqueLesion(jugador, onCurar) {
       el('div', { class: 'rojo', style: 'font-weight:800', text: lesion.nombre }),
       el('div', {
         class: 'etiqueta',
-        text: `Te quedan ${lesion.bloquesRestantes} ${lesion.bloquesRestantes === 1 ? 'bloque' : 'bloques'} para recuperarte`,
+        text: `Te quedan ${lesion.semanasRestantes} ${lesion.semanasRestantes === 1 ? 'semana' : 'semanas'} para recuperarte`,
       }),
     ]),
     el('button', {
