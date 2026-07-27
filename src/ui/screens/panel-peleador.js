@@ -2,14 +2,19 @@ import { el, mount, fmtDinero } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
 import {
-  mediaDe, recordTexto, CATEGORIAS, apodoParaMostrar,
+  mediaDe, recordTexto, CATEGORIAS,
 } from '../../core/fighter.js';
 import { getDisciplina } from '../../core/disciplines.js';
-import { ETIQUETAS, rangoDeMedia, etiquetaEstado } from '../../core/stats.js';
+import {
+  ETIQUETAS, rangoDeMedia,
+} from '../../core/stats.js';
 import { atributosConEntrenador } from '../../core/coach.js';
-import { h2hTexto } from '../../core/rivalry.js';
-import { rankingDelJugador } from '../../core/world.js';
+import { rankingDelJugador, ANIO_INICIAL } from '../../core/world.js';
 import { faseFisicaJugador, etapaActual, fraseDeEtapa } from '../../core/career.js';
+import { CINTURONES } from '../../core/offers.js';
+import { fechaDe } from '../../core/calendario.js';
+import { puedeComprarAlgo } from '../../core/money.js';
+import { abrirPopup } from '../components/popup.js';
 
 // El peleador (v2): antes una sola columna izquierda larguísima. La reforma
 // de grilla 3×3 (v4, feedback del usuario: "en PC está muy en vertical y no
@@ -21,8 +26,12 @@ import { faseFisicaJugador, etapaActual, fraseDeEtapa } from '../../core/career.
 //     rincón + etapa/categoría + historial/ranking — columna izquierda.
 //   - renderPanelAtributos / renderPanelEstado: columna central, arriba del
 //     módulo de decisión (que sigue siendo lo único que cambia ahí).
-//   - renderPanelDinero / renderPanelRecursos: columna derecha, junto al
-//     calendario y la próxima pelea/noticias (ver main.js, montarTablero).
+//   - renderPanelDinero: columna derecha, junto al calendario y la próxima
+//     pelea/noticias (ver main.js, montarTablero). El panel de "Archirrival"
+//     que vivía acá al lado (renderPanelRecursos) se sacó del tablero
+//     (Pedido 6, v9: "quitar el módulo de archirrival") — el sistema de
+//     rivalidades (core/rivalry.js) sigue vivo, solo perdió este consumidor
+//     visual; ver el comentario en main.js donde se sacó su celda.
 // Antes de esta reforma todo esto vivía junto en un solo renderPanelPeleador
 // que pintaba la columna izquierda entera; se mantiene acá porque comparten
 // los mismos helpers de datos (fighter.js, coach.js, stats.js) y no hay
@@ -55,15 +64,14 @@ function peleasTotales(jugador) {
 
 // Cabecera del peleador (Cambio 3, mockup del usuario): un cuadro grande de
 // MEDIA a la izquierda; a su derecha, arriba bandera+apodo y abajo el
-// apellido; debajo, en dos columnas, PESO|MANO HÁBIL y EDAD|FORMA (con
-// ícono); por último FAMA, que ANTES vivía en su propio panel
-// (bloqueRecursos, más abajo) y ahora se mudó acá — ya no hay panel de fama
-// aparte. Reemplaza a la cabecera de la v3 (MEDIA como badge chico arriba a
-// la derecha + una sola `h1` con bandera+apodo+apellido juntos, que en la
-// columna angosta del tablero se partía en tres líneas — queja del usuario).
-// Separar apodo (arriba) de apellido (abajo) en dos líneas propias es lo que
-// evita esa partidura: cada uno respira en su propio renglón, nunca los tres
-// juntos peleando por el mismo ancho.
+// apellido; debajo, en columnas, PESO|MANO HÁBIL|EDAD; por último FAMA, que
+// ANTES vivía en su propio panel (bloqueRecursos, ya no existe — Pedido 6)
+// y ahora se mudó acá. Reemplaza a la cabecera de la v3 (MEDIA como badge
+// chico arriba a la derecha + una sola `h1` con bandera+apodo+apellido
+// juntos, que en la columna angosta del tablero se partía en tres líneas —
+// queja del usuario). Separar apodo (arriba) de apellido (abajo) en dos
+// líneas propias es lo que evita esa partidura: cada uno respira en su
+// propio renglón, nunca los tres juntos peleando por el mismo ancho.
 //
 // Sistema 2 (feedback del usuario: "hay una edad donde el prime va bajando
 // [...] el tablero debería poder comunicarlo"): color por fase — dorado para
@@ -71,6 +79,17 @@ function peleasTotales(jugador) {
 // (aviso), sutil para el ascenso (todavía no hay nada que anunciar). Sigue
 // visible, ahora como una etiqueta chica debajo del apellido, en la columna
 // de identidad.
+//
+// Pedido 4 (v9, "dice 'En Punto' pero también dice 'En Declive' ¿no es
+// contradictorio?"): tenía razón — esta fila de la cabecera mostraba DOS
+// lecturas del mismo jugador que se leen como si se contradijeran: la FORMA
+// del momento ("En Punto"/"Normal"/"Oxidado", `etiquetaEstado('forma', ...)`,
+// stats.js) y la FASE física por edad ("En ascenso"/"En tu prime"/"En
+// declive", `cabecera-fase` más abajo). No son lo mismo (una es coyuntural,
+// la otra es el arco de la carrera), pero juntas en la misma esquina
+// confunden. Decisión: se saca la FORMA de acá (su número ya vive, sin
+// duplicar, en el módulo de ESTADO — renderPanelEstado, más abajo) y se deja
+// SOLO la fase física, que no está en ningún otro lado del tablero.
 const CLASE_FASE = {
   ascenso: 'sutil', prime: 'dorado', declive: 'rojo', declive_duro: 'rojo',
 };
@@ -101,9 +120,7 @@ function identidadDividida(jugador) {
 
 // Una celda de la grilla de datos de la cabecera: etiqueta chica arriba,
 // valor grande abajo (mismo lenguaje visual que los cuadros de
-// atributos/estado, ver filaAtributo más abajo). `contenido` puede ser un
-// string o una lista de nodos (FORMA le suma su ícono nuevo antes del
-// texto).
+// atributos/estado, ver filaAtributo más abajo).
 function filaDato(etiqueta, contenido) {
   return el('div', { class: 'cabecera-dato' }, [
     el('div', { class: 'etiqueta', text: etiqueta }),
@@ -144,16 +161,117 @@ function cuadroMedia(jugador) {
       filaDato('Peso', pesoDe(jugador)),
       filaDato('Mano hábil', MANO_TEXTO[jugador.mano] ?? jugador.mano),
       filaDato('Edad', `${Math.floor(jugador.edad)} años`),
-      filaDato('Forma', [icono('forma', { tamano: 14 }), ` ${etiquetaEstado('forma', jugador.estado.forma)}`]),
     ]),
     filaDato('Fama', String(jugador.fama)),
   ]);
 }
 
-function bloqueCinturones(jugador) {
-  if (jugador.titulos.length === 0) return null;
-  return el('div', { class: 'panel', style: 'display:flex;flex-wrap:wrap;gap:6px' },
-    jugador.titulos.map((t) => el('span', { class: 'chip dorado', text: `🏆 ${t}` })));
+// Pedido 5 (v9): los cinturones ya no son una lista de chips que aparece
+// recién con el primero (mismo bug del Pedido 1: un panel que aparece/
+// desaparece según el contenido, y de paso una "caja" sin tamaño fijo). Son
+// SIEMPRE las mismas 3 cajas — Regional, Nacional, Mundial (`CINTURONES`,
+// offers.js, en ese orden de menor a mayor) — "apagadas" de entrada, que se
+// "encienden" con su propio color cuando el jugador tiene ese título puesto
+// (`jugador.titulos.includes(cinturon.nombre)`) y se apagan solas si lo
+// pierde: `aplicarResultado` (offers.js) ya saca el nombre de `titulos` al
+// perder una defensa, así que esto no necesita ningún estado propio, solo
+// leer `jugador.titulos` en cada render — igual que el resto del tablero.
+const COLOR_CAJA_CINTURON = {
+  regional: { solido: '#c9d1d9', glow: 'rgba(201, 209, 217, 0.4)' }, // plata
+  nacional: { solido: '#f2c14e', glow: 'rgba(242, 193, 78, 0.4)' }, // oro
+  mundial: { solido: '#6fe0e8', glow: 'rgba(111, 224, 232, 0.4)' }, // diamante
+};
+
+function tipoPeleaCinturonTexto(h) {
+  return h.esObligatoria ? 'Defensa del título' : 'Pelea por el título';
+}
+
+function resultadoCinturonTexto(h) {
+  if (h.resultado === 'v') return 'Ganada';
+  if (h.resultado === 'e') return 'Empate';
+  return 'Perdida';
+}
+
+// "Destacadas las peleas importantes" (pedido textual): dentro de una lista
+// que YA es de peleas de título, las que de verdad hacen que el cinturón
+// cambie de manos —se ganó (no es defensa) o se perdió defendiéndolo— pesan
+// más que una defensa exitosa más (que sigue siendo una línea más, sin
+// remarcar).
+function esFilaDestacada(h) {
+  return (h.resultado === 'v' && !h.esObligatoria) || (h.resultado === 'd' && h.esObligatoria);
+}
+
+function filaHistorialCinturon(h) {
+  const fecha = h.fecha != null ? fechaDe(h.fecha, ANIO_INICIAL) : null;
+  return el('div', { class: `historial-cinturon-fila${esFilaDestacada(h) ? ' destacada' : ''}` }, [
+    el('span', {
+      class: 'historial-cinturon-fecha etiqueta',
+      text: fecha ? `${fecha.nombreMes.slice(0, 3)} ${fecha.anio}` : '—',
+    }),
+    el('span', { class: 'historial-cinturon-tipo', text: tipoPeleaCinturonTexto(h) }),
+    el('span', { class: 'historial-cinturon-rival' }, [
+      bandera(h.rivalNacionalidad, { ancho: 16 }),
+      el('span', { text: h.rivalApodo ?? h.rivalNombre }),
+    ]),
+    el('span', {
+      class: `historial-cinturon-resultado ${RESULTADO_CLASE[h.resultado] ?? 'sutil'}`,
+      text: resultadoCinturonTexto(h),
+    }),
+  ]);
+}
+
+// Peleas por ESTE cinturón puntual, de más reciente a más vieja: se filtra
+// `jugador.historial` (aplicarResultado, offers.js, ya guarda `esTitulo` y
+// `enJuego` — el nombre del cinturón en juego en esa pelea puntual) y se le
+// suma la nacionalidad del rival, que el historial no guarda (vive en el
+// roster del mundo, que nunca borra a un retirado — mismo criterio que
+// beatResumenAnio, main.js).
+function historialDeCinturon(partida, cinturon) {
+  return partida.jugador.historial
+    .filter((h) => h.esTitulo && h.enJuego === cinturon.nombre)
+    .map((h) => ({
+      ...h,
+      rivalNacionalidad: partida.mundo.roster.find((p) => p.id === h.rivalId)?.nacionalidad ?? null,
+    }))
+    .sort((a, b) => (b.fecha ?? 0) - (a.fecha ?? 0));
+}
+
+function abrirHistorialCinturon(partida, cinturon) {
+  const peleas = historialDeCinturon(partida, cinturon);
+  const contenido = el('div', { class: 'stack historial-cinturon-lista' }, peleas.length > 0
+    ? peleas.map(filaHistorialCinturon)
+    : [el('p', { class: 'medio', text: 'Todavía no disputaste ni defendiste este cinturón.' })]);
+  abrirPopup({ titulo: cinturon.nombre, contenido });
+}
+
+function cajaCinturon(cinturon, partida) {
+  const encendido = partida.jugador.titulos.includes(cinturon.nombre);
+  const color = COLOR_CAJA_CINTURON[cinturon.id] ?? COLOR_CAJA_CINTURON.regional;
+
+  const caja = el('button', {
+    class: `cinturon-caja${encendido ? ' encendida' : ''}`,
+    type: 'button',
+    style: encendido ? `--color-cinturon:${color.solido};--color-cinturon-glow:${color.glow}` : null,
+    dataset: { cinturon: cinturon.id },
+    'aria-label': `${cinturon.nombre}: ${encendido ? 'en tu poder' : 'todavía no lo tenés'}. Ver historial.`,
+  }, [
+    el('div', { class: 'cinturon-caja-icono' }, [icono('cinturon', { tamano: 34 })]),
+    el('div', { class: 'cinturon-caja-nombre', text: cinturon.id.toUpperCase() }),
+  ]);
+  caja.addEventListener('click', () => abrirHistorialCinturon(partida, cinturon));
+  return caja;
+}
+
+// Tamaño fijo, siempre las 3, centradas con el mismo espacio a cada lado del
+// módulo (pedido textual: "las 3 cajitas que estén bien centradas... dejando
+// el mismo espacio a la izquierda que a la derecha") — `justify-content:
+// center` en `.cinturones-fila` (theme.css), nunca `space-between` (que las
+// pegaría a los bordes en vez de agruparlas al medio).
+function bloqueCinturones(partida) {
+  return el('div', { class: 'panel cinturones-panel' }, [
+    el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Cinturones' }),
+    el('div', { class: 'cinturones-fila' }, CINTURONES.map((c) => cajaCinturon(c, partida))),
+  ]);
 }
 
 // Cambio 2 (feedback del usuario: "los módulos de atributos y estados están
@@ -382,41 +500,27 @@ function bloqueHistorial(jugador, mundo, onVerRanking) {
   ]);
 }
 
-// El cara a cara contra el archirrival: lo traía renderDashboard (v1,
-// `recursos`, junto con Fama) y no tenía casa todavía en el tablero v2. La
-// Fama se mudó a la cabecera del peleador (Cambio 3, "el módulo de fama ya
-// no estaría independiente") — este panel quedó solo para el archirrival,
-// que recién existe cuando hay al menos dos cruces con el mismo rival (ver
-// elegirArchirrival, rivalry.js), así que puede no haber ninguno todavía:
-// mismo criterio que "Sin cuerpo técnico" (entrenadorDe, más arriba) — un
-// estado neutro con su propio texto, nunca un panel vacío sin nada adentro.
-function bloqueRecursos(partida) {
-  const archi = (partida.rivalidades ?? []).find((r) => r.esArchirrival);
-  const datosArchi = archi ? partida.mundo.roster.find((p) => p.id === archi.rivalId) : null;
-
-  if (!datosArchi) {
-    return el('div', { class: 'panel' }, [
-      el('div', { class: 'etiqueta', text: 'Archirrival' }),
-      el('div', { class: 'medio', style: 'margin-top:6px', text: 'Todavía no tenés uno marcado.' }),
-    ]);
-  }
-
-  return el('div', { class: 'panel' }, [
-    el('div', { class: 'etiqueta rojo', text: `vs ${apodoParaMostrar(datosArchi)}` }),
-    el('div', { style: 'font-weight:800;margin-top:6px', text: h2hTexto(archi) }),
-  ]);
-}
-
+// Pedido 7 (v9, "quiero que brille cuando el jugador pueda comprar algo"):
+// `puedeComprarAlgo` (money.js) es la comprobación barata (recorre los 10
+// items del catálogo una sola vez, sin armar el catálogo completo con
+// "comprado"/"alcanza" resueltos para las dos listas — eso es para pintar la
+// tienda entera, esto es solo un booleano) — el tablero se repinta seguido
+// (cada beat) y este botón vive en la columna derecha, que se refresca en
+// cada uno. La clase `brillo` (theme.css) es una animación CSS: se apaga
+// sola con `prefers-reduced-motion` (regla global al final del archivo), no
+// necesita ningún guard acá.
 function bloqueDinero(jugador) {
+  const brilla = puedeComprarAlgo(jugador);
   return el('div', { class: 'panel fila', style: 'align-items:center;gap:10px' }, [
     el('div', { style: 'flex:1' }, [
       el('div', { class: 'etiqueta', text: 'Dinero' }),
       el('div', { class: 'verde', style: 'font-weight:800;font-size:16px', text: fmtDinero(jugador.dinero) }),
     ]),
     el('button', {
-      class: 'boton secundario boton-tienda',
+      class: `boton secundario boton-tienda${brilla ? ' brillo' : ''}`,
       dataset: { accion: 'tienda' },
       type: 'button',
+      'aria-label': brilla ? 'Tienda: hay algo nuevo para comprar' : 'Tienda',
     }, [icono('tienda', { tamano: 20, color: '#f2c14e' })]),
   ]);
 }
@@ -474,7 +578,7 @@ export function renderPanelPeleador(region, {
 
   mount(region, el('div', { class: 'stack panel-peleador' }, [
     cabecera,
-    bloqueCinturones(jugador),
+    bloqueCinturones(partida),
     bloqueRincon(jugador),
     bloqueEtapa(partida),
     historial,
@@ -510,12 +614,4 @@ export function renderPanelDinero(region, { jugador, onTienda = () => {} }) {
     onTienda();
   });
   mount(region, dinero);
-}
-
-// Columna derecha: el cara a cara con el archirrival, junto a la próxima
-// pelea (mudado desde la columna izquierda — el mockup los agrupa: "'vs
-// clásico rival' + Próxima pelea"). La Fama ya no vive acá: se mudó a la
-// cabecera del peleador (Cambio 3).
-export function renderPanelRecursos(region, { partida }) {
-  mount(region, bloqueRecursos(partida));
 }

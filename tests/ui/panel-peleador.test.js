@@ -2,8 +2,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
 import { rankingDelJugador, tablaRanking } from '../../src/core/world.js';
+import { STAFF } from '../../src/core/money.js';
 import {
-  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero, renderPanelRecursos,
+  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero,
 } from '../../src/ui/screens/panel-peleador.js';
 
 // Grilla 3×3 (v4, feedback del usuario: "en PC no se aprovecha bien el
@@ -95,11 +96,72 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
     expect(cont.textContent).toContain('Sin clasificar');
   });
 
-  it('muestra los cinturones cuando los tiene', () => {
-    const p = partidaBase();
-    p.jugador.titulos = ['Cinturón regional'];
-    renderPanelPeleador(cont, { partida: p });
-    expect(cont.textContent).toContain('Cinturón regional');
+  // Pedido 5 (v9): las 3 cajas (Regional/Nacional/Mundial) están SIEMPRE,
+  // "apagadas" de entrada, no solo cuando el jugador ya tiene algún título —
+  // eso era, además, el mismo bug de tamaño variable del Pedido 1.
+  describe('cinturones (Pedido 5, v9: 3 cajas fijas, apagadas/encendidas)', () => {
+    it('muestra las 3 cajas siempre, incluso sin ningún título todavía', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      const cajas = cont.querySelectorAll('.cinturon-caja');
+      expect(cajas).toHaveLength(3);
+      expect(cont.querySelector('[data-cinturon="regional"]')).toBeTruthy();
+      expect(cont.querySelector('[data-cinturon="nacional"]')).toBeTruthy();
+      expect(cont.querySelector('[data-cinturon="mundial"]')).toBeTruthy();
+      for (const caja of cajas) expect(caja.classList.contains('encendida')).toBe(false);
+    });
+
+    it('enciende solo la caja del cinturón que el jugador tiene puesto', () => {
+      const p = partidaBase();
+      p.jugador.titulos = ['Cinturón regional'];
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.querySelector('[data-cinturon="regional"]').classList.contains('encendida')).toBe(true);
+      expect(cont.querySelector('[data-cinturon="nacional"]').classList.contains('encendida')).toBe(false);
+      expect(cont.querySelector('[data-cinturon="mundial"]').classList.contains('encendida')).toBe(false);
+    });
+
+    it('se apaga si el jugador ya no lo tiene (perdió una defensa)', () => {
+      const p = partidaBase();
+      p.jugador.titulos = [];
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.querySelector('[data-cinturon="regional"]').classList.contains('encendida')).toBe(false);
+    });
+
+    it('al clickear una caja, abre un popup con el historial de ese cinturón (más reciente primero)', () => {
+      const p = partidaBase();
+      p.jugador.titulos = ['Cinturón regional'];
+      p.jugador.historial = [
+        {
+          rivalId: 'r1', rivalNombre: 'Viejo Rival', rivalApodo: 'El Viejo', resultado: 'v',
+          metodo: 'ko', round: 3, enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: false, fecha: 10,
+        },
+        {
+          rivalId: 'r2', rivalNombre: 'Nuevo Rival', rivalApodo: 'El Nuevo', resultado: 'v',
+          metodo: 'decision', round: 8, enJuego: 'Cinturón regional', esTitulo: true, esObligatoria: true, fecha: 60,
+        },
+      ];
+      renderPanelPeleador(cont, { partida: p });
+      cont.querySelector('[data-cinturon="regional"]').click();
+
+      const popup = document.querySelector('.popup-panel');
+      expect(popup).toBeTruthy();
+      expect(popup.textContent).toContain('Cinturón regional');
+      const filas = popup.querySelectorAll('.historial-cinturon-fila');
+      expect(filas).toHaveLength(2);
+      // Más reciente (fecha 60, la defensa) primero.
+      expect(filas[0].textContent).toContain('El Nuevo');
+      expect(filas[1].textContent).toContain('El Viejo');
+      popup.parentElement.querySelector('.popup-cerrar').click();
+    });
+
+    it('el popup avisa si todavía no hay peleas por ese cinturón, en vez de quedar vacío', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      cont.querySelector('[data-cinturon="mundial"]').click();
+      const popup = document.querySelector('.popup-panel');
+      expect(popup.textContent.length).toBeGreaterThan('Cinturón mundial'.length);
+      popup.querySelector('.popup-cerrar').click();
+    });
   });
 
   it('muestra el entrenador (tu rincón), con su frase', () => {
@@ -129,19 +191,31 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
       expect(cont.textContent).toContain('Derecha');
     });
 
-    it('muestra edad y forma, la forma con su icono nuevo', () => {
+    it('muestra la edad', () => {
       const p = partidaBase();
       renderPanelPeleador(cont, { partida: p });
       expect(cont.textContent).toContain(`${Math.floor(p.jugador.edad)} años`);
-      expect(cont.textContent).toContain('Forma');
-      expect(cont.textContent).toContain('NORMAL'); // forma=60 por defecto (crearEstado)
-      const filaForma = [...cont.querySelectorAll('.cabecera-dato')]
-        .find((n) => n.textContent.includes('Forma'));
-      expect(filaForma.querySelector('svg')).toBeTruthy();
     });
 
-    // La fama ya NO es un panel independiente (renderPanelRecursos, más
-    // abajo): vive acá, junto al resto de los datos del peleador.
+    // Pedido 4 (v9, "dice 'En Punto' pero también dice 'En Declive' ¿no es
+    // contradictorio?"): la cabecera ya NO muestra el estado de forma
+    // ("En Punto"/"Normal"/"Oxidado") — se saca de acá para no convivir con
+    // la fase física (ver describe "fase física" más abajo), que es la que
+    // queda. El valor numérico de forma sigue disponible, sin duplicar,
+    // en el módulo de Estado (renderPanelEstado).
+    it('ya NO muestra el estado de forma ("En Punto"/"Normal"/"Oxidado"): esa lectura vive solo en la fase física', () => {
+      const p = partidaBase();
+      renderPanelPeleador(cont, { partida: p });
+      const cabecera = cont.querySelector('.panel-peleador-cabecera');
+      expect(cabecera.textContent).not.toContain('Forma');
+      expect(cabecera.textContent).not.toContain('NORMAL');
+      expect(cabecera.textContent).not.toContain('EN PUNTO');
+      expect(cabecera.textContent).not.toContain('OXIDADO');
+    });
+
+    // La fama ya NO es un panel independiente (el viejo panel de
+    // "Archirrival" que la traía se sacó del tablero, Pedido 6): vive acá,
+    // junto al resto de los datos del peleador.
     it('la fama vive en la cabecera, no en un panel aparte', () => {
       const p = partidaBase();
       p.jugador.fama = 42;
@@ -207,6 +281,21 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
       p.jugador.edad = 34;
       renderPanelPeleador(cont, { partida: p });
       expect(cont.textContent).toContain('En declive');
+    });
+
+    // Pedido 4 (v9): la queja concreta era ver "En Punto" (forma) Y "En
+    // Declive" (fase física) juntos en la misma esquina, como si se
+    // contradijeran. Con forma sacada de la cabecera (test de arriba), un
+    // jugador en fase de declive nunca puede volver a mostrar ambas cosas
+    // acá, sea cual sea su forma del momento.
+    it('un jugador en declive con la forma "en punto" no muestra ambas lecturas juntas (ya no hay contradicción posible)', () => {
+      const p = partidaBase();
+      p.jugador.edad = 34;
+      p.jugador.estado.forma = 90; // "EN PUNTO"
+      renderPanelPeleador(cont, { partida: p });
+      const cabecera = cont.querySelector('.panel-peleador-cabecera');
+      expect(cabecera.textContent).toContain('En declive');
+      expect(cabecera.textContent).not.toContain('EN PUNTO');
     });
   });
 
@@ -406,37 +495,35 @@ describe('renderPanelDinero (columna derecha, junto al calendario)', () => {
     cont.querySelector('[data-accion="tienda"]').click();
     expect(tienda).toBe(1);
   });
-});
 
-// Función que traía renderDashboard (v1): el cara a cara contra el
-// archirrival. Se mudó a la columna derecha (v4, grilla 3×3), junto a la
-// próxima pelea. La Fama, que vivía acá también, se mudó a la cabecera del
-// peleador (Cambio 3, "el módulo de fama ya no estaría independiente") —
-// este panel quedó solo para el archirrival.
-describe('renderPanelRecursos (columna derecha: archirrival)', () => {
-  it('ya no muestra la fama del jugador (se mudó a la cabecera del peleador)', () => {
+  // Pedido 7 (v9, "quiero que brille cuando el jugador pueda comprar algo
+  // con el dinero que tiene, y no sea algo ya comprado"): la clase `brillo`
+  // en el botón de la tienda es la señal — se prueba acá con plata real
+  // (STAFF[0], el ítem más barato, ver money.js) en vez de mockear
+  // `puedeComprarAlgo`, así el test también cubre que panel-peleador.js está
+  // usando esa función de verdad.
+  it('el botón de la tienda brilla si el jugador puede comprar algo nuevo', () => {
     const p = partidaBase();
-    p.jugador.fama = 37;
-    renderPanelRecursos(cont, { partida: p });
-    expect(cont.textContent).not.toContain('Fama');
+    p.jugador.dinero = STAFF[0].precio;
+    p.jugador.staff = [];
+    renderPanelDinero(cont, { jugador: p.jugador });
+    expect(cont.querySelector('[data-accion="tienda"]').classList.contains('brillo')).toBe(true);
   });
 
-  it('sin archirrival todavia, muestra un estado neutro (nunca un panel vacio)', () => {
+  it('el botón de la tienda NO brilla sin plata para nada', () => {
     const p = partidaBase();
-    renderPanelRecursos(cont, { partida: p });
-    expect(cont.textContent).not.toContain('vs ');
-    expect(cont.textContent).toContain('Archirrival');
-    expect(cont.textContent.length).toBeGreaterThan('Archirrival'.length);
+    p.jugador.dinero = 0;
+    p.jugador.staff = [];
+    p.jugador.lujos = [];
+    renderPanelDinero(cont, { jugador: p.jugador });
+    expect(cont.querySelector('[data-accion="tienda"]').classList.contains('brillo')).toBe(false);
   });
 
-  it('con archirrival, muestra su apodo y el cara a cara', () => {
+  it('el botón de la tienda NO brilla si ya tiene comprado todo lo que puede pagar', () => {
     const p = partidaBase();
-    const rival = p.mundo.roster[0];
-    p.rivalidades = [{
-      rivalId: rival.id, heat: 80, h2h: { v: 2, d: 1, e: 0 }, esArchirrival: true, hitos: [],
-    }];
-    renderPanelRecursos(cont, { partida: p });
-    expect(cont.textContent).toContain(`vs ${rival.apodo}`);
-    expect(cont.textContent).toContain('2-1');
+    p.jugador.dinero = STAFF[0].precio;
+    p.jugador.staff = [STAFF[0].id];
+    renderPanelDinero(cont, { jugador: p.jugador });
+    expect(cont.querySelector('[data-accion="tienda"]').classList.contains('brillo')).toBe(false);
   });
 });
