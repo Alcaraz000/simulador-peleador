@@ -10,35 +10,62 @@
 //
 // v8: en vez de dos motores de gráfico separados, `construirGraficoLinea`
 // (más abajo) es el ÚNICO motor SVG — `graficoMedia` y `graficoRanking` son
-// wrappers finos que solo aportan lo que cambia entre uno y otro:
-//   - qué campo de la muestra leer (`.media` vs `.ranking`),
-//   - cómo formatear un valor (un decimal vs entero con "#"),
-//   - la ORIENTACIÓN del eje Y: en la media, más alto es mejor (arriba); en
-//     el ranking es AL REVÉS — el puesto #1 es el mejor, así que para que
-//     "mejorar" siga leyéndose "hacia arriba" el motor invierte el mapeo
-//     (ver `invertido`, más abajo) en vez de dejar que el puesto más alto
-//     (peor) quede arriba solo porque es un número más grande.
-//   - el texto en español de cada caso (título, aria-label, lectura simple).
-// Los dos comparten el mismo color de acento (dorado, la identidad visual
-// gótica-fría) — son dos vistazos de UNA sola serie cada uno, nunca se
-// muestran superpuestos como para necesitar distinguirse por color (ver la
-// skill dataviz: "un solo color no necesita leyenda"); reservar rojo/verde
-// para esto hubiera reusado un color de ESTADO (ganó/perdió, ver
-// RESULTADO_CLASE en toda la UI) para una serie que no es un estado, así que
-// se evitó a propósito.
-import { fechaDe, SEMANAS_POR_ANIO } from '../../core/calendario.js';
+// wrappers finos que solo aportan lo que cambia entre uno y otro.
+//
+// v9 (feedback del usuario sobre la ronda anterior, CON CAPTURA DE PANTALLA
+// en mano — "el pase anterior dijo haberlo hecho y en la captura sigue
+// yendo de Ene a Abr"): tres problemas reales que el v8 no resolvía del
+// todo:
+//   1) El DOMINIO del eje X ya abarcaba el año completo (limitesAnio, sigue
+//      igual más abajo), pero la LÍNEA VISIBLE se cortaba donde terminaba el
+//      último dato real — si la media no cambió después de marzo, el
+//      usuario veía la mitad derecha de la caja completamente vacía. Ahora
+//      la línea se EXTIENDE (proyectada, con opacidad reducida para que se
+//      lea distinta de un dato real — nunca inventa un valor nuevo, solo
+//      continúa el último conocido) hasta los dos bordes del año.
+//   2) No había eje Y: los valores flotaban pegados a cada punto. Ahora hay
+//      gridlines horizontales (recesivas, ver la skill dataviz) con sus
+//      valores a la izquierda — y de paso, para el ranking, ESO reemplaza el
+//      cartel "Más arriba, mejor puesto" (pedido explícito: sacarlo): los
+//      propios valores del eje, en orden decreciente de arriba hacia abajo,
+//      hacen evidente que el puesto chico (mejor) vive arriba.
+//   3) El fallback de texto para "poco dato" ("Media estable en 75 durante
+//      todo el año.") se ELIMINA por completo — pedido explícito: "el
+//      gráfico se muestra SIEMPRE, aunque la media no haya cambiado: una
+//      línea plana también es información". Con un solo valor real (o
+//      variosidénticos) se dibuja una línea PLANA de punta a punta del año,
+//      nunca una oración. El único texto de respaldo que sigue existiendo es
+//      para el caso genuinamente vacío (CERO muestras válidas — ni un solo
+//      dato, nada que graficar), que no es el caso que reportó el usuario.
+import {
+  fechaDe, SEMANAS_POR_ANIO, mesesDelAnio,
+} from '../../core/calendario.js';
 import { ANIO_INICIAL } from '../../core/world.js';
 import { el } from '../dom.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const DORADO = '#f2c14e';
 const FONDO = '#0d0708';
+// Mismos tokens que theme.css (--borde / --texto-sutil / --texto): el SVG se
+// arma con atributos planos (no puede leer custom properties de CSS), así
+// que se copian los hex una sola vez acá — ver la skill dataviz, "gridlines
+// recesivas, un paso apenas fuera de la superficie".
+const GRIS_EJE = '#241416';
+const GRIS_TEXTO = '#957777';
+const TEXTO_CLARO = '#f1e2e2';
 
 const VB_W = 320;
-const VB_H = 120;
-const PAD_X = 14;
-const PAD_TOP = 26;
-const PAD_BOTTOM = 22;
+const VB_H = 150;
+const PAD_LEFT = 32;
+const PAD_RIGHT = 8;
+const PAD_TOP = 18;
+const PAD_BOTTOM = 30;
+
+// Opacidad de la PROYECCIÓN (el tramo de línea que continúa el último valor
+// conocido hasta el borde del año, sin inventar un dato nuevo): bien por
+// debajo de la línea real, para que se lea como "esto es continuidad
+// asumida", nunca como si fuera otro dato medido.
+const OPACIDAD_PROYECCION = 0.38;
 
 function svgEl(tag, attrs = {}) {
   const nodo = document.createElementNS(NS, tag);
@@ -59,13 +86,12 @@ function limitesAnio(anio) {
 }
 
 // Colapsa muestras de la MISMA semana en una sola (se queda con la última:
-// varias decisiones resueltas "en el mismo instante" del calendario — ver el
-// comentario grande en year-summary.js — no son puntos distintos en el
-// tiempo, son el mismo instante con el valor ya actualizado). Cada muestra
-// trae media Y ranking (year-summary.js, v8): `obtenerValor` elige cuál de
-// los dos mira este gráfico en particular, y una muestra sin ese dato (p.
-// ej. `ranking:null` en una partida vieja sin mundo a mano) se descarta en
-// vez de romper el gráfico.
+// varias decisiones resueltas "en el mismo instante" del calendario no son
+// puntos distintos en el tiempo, son el mismo instante con el valor ya
+// actualizado). Cada muestra trae media Y ranking (year-summary.js, v8):
+// `obtenerValor` elige cuál de los dos mira este gráfico en particular, y una
+// muestra sin ese dato (p. ej. `ranking:null` en una partida vieja sin mundo
+// a mano) se descarta en vez de romper el gráfico.
 function puntosDe(muestras, obtenerValor) {
   const porSemana = new Map();
   for (const m of muestras) {
@@ -77,6 +103,47 @@ function puntosDe(muestras, obtenerValor) {
     .map(([semana, valor]) => ({ semana, valor }))
     .sort((a, b) => a.semana - b.semana);
 }
+
+// Paso "lindo" para los ticks del eje Y (algoritmo estándar tipo d3): nunca
+// un número pelado como 63.333 — redondea a 1/2/5 × una potencia de 10, así
+// los valores del eje siempre se leen como algo que un humano escribiría.
+function pasoLindo(rangoBruto, cantidadObjetivo) {
+  if (!(rangoBruto > 0)) return 1;
+  const bruto = rangoBruto / cantidadObjetivo;
+  const magnitud = 10 ** Math.floor(Math.log10(bruto));
+  const normalizado = bruto / magnitud;
+  let paso;
+  if (normalizado < 1.5) paso = 1;
+  else if (normalizado < 3) paso = 2;
+  else if (normalizado < 7) paso = 5;
+  else paso = 10;
+  return paso * magnitud;
+}
+
+// Ticks del eje Y a partir del rango REAL de los datos. Con el valor
+// completamente plano (todas las muestras iguales) no hay rango: se arma uno
+// artificial alrededor del valor único, para que la línea plana quede
+// centrada en la caja con aire arriba y abajo — nunca pegada a un borde.
+function ticksEjeY(valorMin, valorMax, cantidadObjetivo = 4) {
+  if (valorMax === valorMin) {
+    const paso = pasoLindo(Math.max(Math.abs(valorMin), 1) * 0.3, 1);
+    return [valorMin - paso, valorMin, valorMin + paso];
+  }
+  const paso = pasoLindo(valorMax - valorMin, cantidadObjetivo);
+  const desde = Math.floor(valorMin / paso) * paso;
+  const hasta = Math.ceil(valorMax / paso) * paso;
+  const ticks = [];
+  for (let v = desde; v <= hasta + paso / 1000; v += paso) {
+    ticks.push(Math.round(v * 1000) / 1000);
+  }
+  return ticks;
+}
+
+// Meses con etiqueta en el eje X (los otros 7 solo llevan una marca corta sin
+// texto, para no amontonar 12 palabras en 320 unidades de ancho): siempre
+// Enero y Diciembre —el pedido puntual del usuario ("va de enero a
+// diciembre")— más un par de referencias intermedias.
+const MESES_CON_ETIQUETA = new Set([1, 4, 7, 10, 12]);
 
 function mesCortoDe(semana) {
   return fechaDe(semana, ANIO_INICIAL).nombreMes.slice(0, 3);
@@ -92,75 +159,186 @@ function mesCortoDe(semana) {
  *   tituloDe: (punto: {semana:number, valor:number}) => string,
  *   ariaDe: (primero: object, ultimo: object) => string,
  *   textoVacio: string,
- *   textoEstable: (punto: {semana:number, valor:number}) => string,
  *   claseContenedor: string,
  *   claseSvg: string,
  *   claseVacio: string,
  * }} config
  */
 function construirGraficoLinea({
-  muestras, anio, obtenerValor, invertido, formatoValor, tituloDe, ariaDe, textoVacio, textoEstable,
+  muestras, anio, obtenerValor, invertido, formatoValor, tituloDe, ariaDe, textoVacio,
   claseContenedor, claseSvg, claseVacio,
 }) {
-  const puntos = puntosDe(muestras, obtenerValor);
+  const puntosReales = puntosDe(muestras, obtenerValor);
 
-  // Lectura simple (sin gráfico) para el caso degenerado: sin muestras, una
-  // sola, o todas cayeron en la misma semana (ver la skill dataviz, "¿es
-  // esto siquiera un gráfico?" — con un solo punto no hay evolución que
-  // dibujar, mejor un número directo que una línea sin sentido).
-  if (puntos.length < 2) {
-    const texto = puntos.length === 0 ? textoVacio : textoEstable(puntos[0]);
-    return el('div', { class: claseContenedor }, [el('p', { class: `medio ${claseVacio}`, text: texto })]);
+  // Único caso legítimo de "sin gráfico": CERO muestras con dato válido (ni
+  // un solo valor medido en todo el año) — no hay nada, ni siquiera una
+  // línea plana, que dibujar. Distinto del caso "un solo valor" (más abajo),
+  // que SÍ es un gráfico (una línea plana), por pedido explícito del
+  // usuario.
+  if (puntosReales.length === 0) {
+    return el('div', { class: claseContenedor }, [el('p', { class: `medio ${claseVacio}`, text: textoVacio })]);
   }
 
-  const semanas = puntos.map((p) => p.semana);
-  const valores = puntos.map((p) => p.valor);
-  // Dominio X: el año calendario COMPLETO (enero a diciembre) si se conoce el
-  // año — nunca solo el tramo entre la primera y la última muestra (v8, bug
-  // reportado: "en la captura va de Ene a Mar y queda raro" — antes el eje
-  // estiraba las semanas CON DATOS a todo el ancho, como si el año hubiera
-  // durado 3 meses). Sin año (llamador defensivo), se cae al rango real de
-  // las muestras — mejor eso que reventar.
   const limites = anio !== null && anio !== undefined ? limitesAnio(anio) : null;
+  const semanas = puntosReales.map((p) => p.semana);
   const semanaMin = limites ? limites.inicio : Math.min(...semanas);
   const semanaMax = limites ? limites.fin : Math.max(...semanas);
-  const valorMin = Math.min(...valores);
-  const valorMax = Math.max(...valores);
-  // Con el valor completamente plano (valorMax === valorMin), un rango
-  // artificial de 2 puntos evita dividir por cero y deja la línea centrada
-  // en vez de pegada a un borde.
+
+  const valores = puntosReales.map((p) => p.valor);
+  const ticks = ticksEjeY(Math.min(...valores), Math.max(...valores));
+  const valorMin = ticks[0];
+  const valorMax = ticks[ticks.length - 1];
   const rango = valorMax - valorMin || 2;
 
-  const anchoUtil = VB_W - PAD_X * 2;
+  const anchoUtil = VB_W - PAD_LEFT - PAD_RIGHT;
   const altoUtil = VB_H - PAD_TOP - PAD_BOTTOM;
-  const VB_X_MEDIO = PAD_X + anchoUtil / 2;
 
   function xDe(semana) {
-    if (semanaMax === semanaMin) return VB_X_MEDIO;
-    return PAD_X + ((semana - semanaMin) / (semanaMax - semanaMin)) * anchoUtil;
+    if (semanaMax === semanaMin) return PAD_LEFT + anchoUtil / 2;
+    const acotada = Math.min(semanaMax, Math.max(semanaMin, semana));
+    return PAD_LEFT + ((acotada - semanaMin) / (semanaMax - semanaMin)) * anchoUtil;
   }
 
-  // `invertido` (v8, gráfico de ranking): el puesto #1 es el MEJOR, así que
-  // un valor más CHICO tiene que quedar más ARRIBA — al revés que la media,
-  // donde un valor más grande es mejor y va arriba. En vez de dejar que el
-  // número más alto (el peor puesto) quede arriba solo porque es más grande,
-  // se invierte qué extremo del rango mapea a "arriba" del SVG (y chico).
+  // `invertido` (ranking): el puesto #1 es el MEJOR, así que un valor más
+  // CHICO tiene que quedar más ARRIBA — al revés que la media. En vez de
+  // dejar que el número más alto (el peor puesto) quede arriba solo porque es
+  // más grande, se invierte qué extremo del rango mapea a "arriba" del SVG.
   function yDe(valor) {
-    const fraccion = rango === 0 ? 0 : (valor - valorMin) / rango;
+    const fraccion = (valor - valorMin) / rango;
     const fraccionArriba = invertido ? fraccion : 1 - fraccion;
     return PAD_TOP + fraccionArriba * altoUtil;
   }
 
-  const coords = puntos.map((p) => ({ ...p, x: xDe(p.semana), y: yDe(p.valor) }));
+  const coords = puntosReales.map((p) => ({ ...p, x: xDe(p.semana), y: yDe(p.valor) }));
+  const primero = coords[0];
+  const ultimo = coords[coords.length - 1];
 
-  const linea = svgEl('polyline', {
-    points: coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '),
-    fill: 'none',
-    stroke: DORADO,
-    'stroke-width': 2,
-    'stroke-linejoin': 'round',
-    'stroke-linecap': 'round',
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${VB_W} ${VB_H}`,
+    class: claseSvg,
+    role: 'img',
+    'aria-label': ariaDe(primero, ultimo),
+    preserveAspectRatio: 'xMidYMid meet',
   });
+
+  // --- Eje Y: gridlines + valores (v9, pedido: "faltan el eje Y") --------
+  // Recesivas (hairline, un tono apenas fuera de la superficie — ver la
+  // skill dataviz): dan escala sin competir con la línea de datos.
+  const grupoEjeY = svgEl('g', { 'aria-hidden': 'true' });
+  ticks.forEach((tick) => {
+    const y = yDe(tick);
+    grupoEjeY.appendChild(svgEl('line', {
+      class: 'grafico-linea-grilla',
+      x1: PAD_LEFT.toFixed(1),
+      y1: y.toFixed(1),
+      x2: (PAD_LEFT + anchoUtil).toFixed(1),
+      y2: y.toFixed(1),
+      stroke: GRIS_EJE,
+      'stroke-width': 1,
+    }));
+    const etiqueta = svgEl('text', {
+      x: (PAD_LEFT - 6).toFixed(1),
+      y: (y + 3).toFixed(1),
+      'text-anchor': 'end',
+      fill: GRIS_TEXTO,
+      'font-size': 9,
+    });
+    etiqueta.textContent = formatoValor(tick);
+    grupoEjeY.appendChild(etiqueta);
+  });
+  svg.appendChild(grupoEjeY);
+
+  // --- Eje X: los 12 meses del año, siempre (v9, pedido: "sigue sin
+  // mostrar de enero a diciembre") — nunca solo el mes del primer/último
+  // dato real. Sin `anio` (llamador defensivo, dominio dinámico) no hay un
+  // año calendario que recorrer: se cae al comportamiento de antes, marcar
+  // solo el mes del primero y el último punto real. -------------------------
+  const grupoEjeX = svgEl('g', { 'aria-hidden': 'true' });
+  const yBase = PAD_TOP + altoUtil;
+  grupoEjeX.appendChild(svgEl('line', {
+    x1: PAD_LEFT.toFixed(1),
+    y1: yBase.toFixed(1),
+    x2: (PAD_LEFT + anchoUtil).toFixed(1),
+    y2: yBase.toFixed(1),
+    stroke: GRIS_EJE,
+    'stroke-width': 1,
+  }));
+  if (limites) {
+    mesesDelAnio(anio, ANIO_INICIAL).forEach((m) => {
+      const x = xDe(m.semanaGlobal);
+      grupoEjeX.appendChild(svgEl('line', {
+        x1: x.toFixed(1), y1: yBase.toFixed(1), x2: x.toFixed(1), y2: (yBase + 4).toFixed(1), stroke: GRIS_EJE, 'stroke-width': 1,
+      }));
+      if (MESES_CON_ETIQUETA.has(m.mes)) {
+        const texto = svgEl('text', {
+          x: x.toFixed(1),
+          y: (yBase + 14).toFixed(1),
+          'text-anchor': m.mes === 1 ? 'start' : 'middle',
+          fill: GRIS_TEXTO,
+          'font-size': 9.5,
+        });
+        texto.textContent = m.nombreMes.slice(0, 3);
+        grupoEjeX.appendChild(texto);
+      }
+    });
+  } else {
+    const etiquetaMes = (punto, anchor) => {
+      const texto = svgEl('text', {
+        x: punto.x.toFixed(1), y: (yBase + 14).toFixed(1), 'text-anchor': anchor, fill: GRIS_TEXTO, 'font-size': 9.5,
+      });
+      texto.textContent = mesCortoDe(punto.semana);
+      return texto;
+    };
+    grupoEjeX.appendChild(etiquetaMes(primero, 'start'));
+    if (ultimo.semana !== primero.semana) grupoEjeX.appendChild(etiquetaMes(ultimo, 'end'));
+  }
+  svg.appendChild(grupoEjeX);
+
+  // --- Proyección: continúa el último valor conocido hasta los bordes del
+  // año cuando el dato real no llega hasta ahí (v9, bug con captura: "sigue
+  // yendo de Ene a Abr, ocupa media caja"). NUNCA inventa un valor nuevo —
+  // solo repite, en horizontal, el último punto real conocido de ese lado.
+  // Opacidad reducida (`OPACIDAD_PROYECCION`) para que se lea distinto de un
+  // dato medido de verdad. Requiere `limites` (año conocido): sin año no hay
+  // "borde" al que proyectar. --------------------------------------------
+  if (limites) {
+    if (primero.semana > semanaMin) {
+      svg.appendChild(svgEl('polyline', {
+        class: 'grafico-linea-proyeccion',
+        points: `${PAD_LEFT.toFixed(1)},${primero.y.toFixed(1)} ${primero.x.toFixed(1)},${primero.y.toFixed(1)}`,
+        fill: 'none',
+        stroke: DORADO,
+        opacity: OPACIDAD_PROYECCION,
+        'stroke-width': 2,
+        'stroke-linecap': 'round',
+      }));
+    }
+    if (ultimo.semana < semanaMax) {
+      svg.appendChild(svgEl('polyline', {
+        class: 'grafico-linea-proyeccion',
+        points: `${ultimo.x.toFixed(1)},${ultimo.y.toFixed(1)} ${(PAD_LEFT + anchoUtil).toFixed(1)},${ultimo.y.toFixed(1)}`,
+        fill: 'none',
+        stroke: DORADO,
+        opacity: OPACIDAD_PROYECCION,
+        'stroke-width': 2,
+        'stroke-linecap': 'round',
+      }));
+    }
+  }
+
+  // --- Línea real (solo si hay 2+ puntos reales — con uno solo no hay nada
+  // que conectar, ya lo cubre la proyección de arriba, que con años
+  // conocidos forma una única línea plana continua). ----------------------
+  if (coords.length >= 2) {
+    svg.appendChild(svgEl('polyline', {
+      points: coords.map((c) => `${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' '),
+      fill: 'none',
+      stroke: DORADO,
+      'stroke-width': 2,
+      'stroke-linejoin': 'round',
+      'stroke-linecap': 'round',
+    }));
+  }
 
   const circulos = coords.map((c, i) => {
     const circulo = svgEl('circle', {
@@ -172,51 +350,31 @@ function construirGraficoLinea({
     circulo.dataset.puntoIndice = String(i);
     return circulo;
   });
+  circulos.forEach((c) => svg.appendChild(c));
 
   // Etiquetado directo selectivo (nunca un número en cada punto): solo el
   // primero y el último — "de dónde a dónde" es la lectura que más importa
-  // en un vistazo rápido.
-  const primero = coords[0];
-  const ultimo = coords[coords.length - 1];
-  const etiquetaValor = (punto, arriba) => svgEl('text', {
-    x: punto.x.toFixed(1),
-    y: (arriba ? punto.y - 9 : punto.y + 16).toFixed(1),
-    'text-anchor': punto === primero ? 'start' : 'end',
-    fill: '#f1e2e2',
-    'font-size': 12,
-    'font-weight': 700,
-  });
-  const textoPrimero = etiquetaValor(primero, primero.y > VB_H / 2);
-  textoPrimero.textContent = formatoValor(primero.valor);
-  const textoUltimo = etiquetaValor(ultimo, ultimo.y > VB_H / 2);
-  textoUltimo.textContent = formatoValor(ultimo.valor);
-
-  // Meses en el eje: solo el del primer y el del último punto (recesivo, sin
-  // amontonar etiquetas si hay varios puntos en semanas cercanas — el detalle
-  // exacto de cada punto ya vive en su <title>).
-  const ejeMeses = svgEl('g', { 'aria-hidden': 'true' });
-  const etiquetaMes = (punto, anchor) => {
+  // en un vistazo rápido. Con un solo punto real, primero === último: una
+  // sola etiqueta, no dos superpuestas.
+  const etiquetaValor = (punto, arriba, anchor) => {
     const texto = svgEl('text', {
-      x: punto.x.toFixed(1), y: VB_H - 4, 'text-anchor': anchor, fill: '#957777', 'font-size': 10,
+      x: punto.x.toFixed(1),
+      y: (arriba ? punto.y - 9 : punto.y + 18).toFixed(1),
+      'text-anchor': anchor,
+      fill: TEXTO_CLARO,
+      'font-size': 12,
+      'font-weight': 700,
     });
-    texto.textContent = mesCortoDe(punto.semana);
     return texto;
   };
-  ejeMeses.appendChild(etiquetaMes(primero, 'start'));
-  if (ultimo.semana !== primero.semana) ejeMeses.appendChild(etiquetaMes(ultimo, 'end'));
-
-  const svg = svgEl('svg', {
-    viewBox: `0 0 ${VB_W} ${VB_H}`,
-    class: claseSvg,
-    role: 'img',
-    'aria-label': ariaDe(primero, ultimo),
-    preserveAspectRatio: 'xMidYMid meet',
-  });
-  svg.appendChild(linea);
-  svg.appendChild(ejeMeses);
-  circulos.forEach((c) => svg.appendChild(c));
+  const textoPrimero = etiquetaValor(primero, primero.y > VB_H / 2, primero === ultimo ? 'middle' : 'start');
+  textoPrimero.textContent = formatoValor(primero.valor);
   svg.appendChild(textoPrimero);
-  svg.appendChild(textoUltimo);
+  if (ultimo !== primero) {
+    const textoUltimo = etiquetaValor(ultimo, ultimo.y > VB_H / 2, 'end');
+    textoUltimo.textContent = formatoValor(ultimo.valor);
+    svg.appendChild(textoUltimo);
+  }
 
   const listaAccesible = el('ul', { class: 'sr-only' }, coords.map((p) => el('li', { text: tituloDe(p) })));
 
@@ -234,8 +392,8 @@ function fechaTextoDe(semana) {
 
 /**
  * @param {{ muestras: Array<{semana:number, media:number}>, anio?: number }} opciones
- * @returns {HTMLElement} un <div> con el SVG (o la lectura simple, si no hay
- *   suficientes puntos distintos) y una lista accesible de respaldo.
+ * @returns {HTMLElement} un <div> con el SVG (o la lectura simple SOLO si no
+ *   hay ni un solo dato) y una lista accesible de respaldo.
  */
 export function graficoMedia({ muestras = [], anio = null } = {}) {
   return construirGraficoLinea({
@@ -247,7 +405,6 @@ export function graficoMedia({ muestras = [], anio = null } = {}) {
     tituloDe: (punto) => `${fechaTextoDe(punto.semana)}: ${redondearMedia(punto.valor)}`,
     ariaDe: (primero, ultimo) => `Evolución de la media: de ${redondearMedia(primero.valor)} en ${fechaTextoDe(primero.semana)} a ${redondearMedia(ultimo.valor)} en ${fechaTextoDe(ultimo.semana)}.`,
     textoVacio: 'Sin datos de media para este año.',
-    textoEstable: (punto) => `Media estable en ${redondearMedia(punto.valor)} durante todo el año.`,
     claseContenedor: 'grafico-media',
     claseSvg: 'grafico-media-svg',
     claseVacio: 'grafico-media-vacio',
@@ -262,7 +419,9 @@ function formatoPuesto(valor) {
  * Gráfico de ranking (v8, pedido textual: "un gráfico nuevo, cómo escalaste
  * en el ranking [...] el ranking es al revés que la media, el puesto 1 es lo
  * mejor"): mismo motor que `graficoMedia`, con el eje Y invertido (un puesto
- * más chico se dibuja más arriba) y los valores formateados como "#N".
+ * más chico se dibuja más arriba) y los valores formateados como "#N". v9:
+ * la inversión se lee en los propios VALORES del eje Y (decrecientes de
+ * arriba hacia abajo) — ya no hace falta un cartel aparte explicándolo.
  * @param {{ muestras: Array<{semana:number, ranking:number|null}>, anio?: number }} opciones
  */
 export function graficoRanking({ muestras = [], anio = null } = {}) {
@@ -275,7 +434,6 @@ export function graficoRanking({ muestras = [], anio = null } = {}) {
     tituloDe: (punto) => `${fechaTextoDe(punto.semana)}: puesto ${formatoPuesto(punto.valor)}`,
     ariaDe: (primero, ultimo) => `Evolución del ranking (más arriba es mejor puesto): de ${formatoPuesto(primero.valor)} en ${fechaTextoDe(primero.semana)} a ${formatoPuesto(ultimo.valor)} en ${fechaTextoDe(ultimo.semana)}.`,
     textoVacio: 'Sin datos de ranking para este año.',
-    textoEstable: (punto) => `Te mantuviste en el puesto ${formatoPuesto(punto.valor)} durante todo el año.`,
     claseContenedor: 'grafico-ranking',
     claseSvg: 'grafico-ranking-svg',
     claseVacio: 'grafico-ranking-vacio',
