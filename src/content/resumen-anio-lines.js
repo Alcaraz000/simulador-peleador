@@ -54,10 +54,11 @@ function rellenar(plantilla, datos) {
  * Compone la crónica del año a partir de las peleas ya resueltas (mismo
  * formato que jugador.historial: {resultado:'v'|'d'|'e', metodo}). `rng` es
  * SIEMPRE el cosmético de main.js (nunca el de la carrera — ver el comentario
- * grande arriba). Si `peleas` viene vacío, devuelve un texto neutro (no
- * debería pasar: el beat 'resumenAnio' solo se arma con al menos una pelea,
- * ver anioTieneAlgoQueContar en year-summary.js, pero esta función no confía
- * en esa garantía externa).
+ * grande arriba). Si `peleas` viene vacío, devuelve un texto neutro — v12:
+ * esto SÍ pasa ahora en el uso normal (`anioTieneAlgoQueContar`,
+ * year-summary.js, se relajó a "peleas O decisiones": un año con la mejora
+ * obligatoria pero sin ninguna pelea firmada igual dispara el beat
+ * 'resumenAnio'), no solo como resguardo defensivo.
  */
 export function textoResumenAnio(rng, { peleas }) {
   if (peleas.length === 0) return 'Año tranquilo, sin nada para el cronista.';

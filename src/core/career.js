@@ -547,8 +547,14 @@ function cerrarAniosCruzados({
         tipo: 'resumenAnio',
         datos: {
           anio,
-          muestrasMedia: registro.muestrasMedia,
-          decisiones: registro.decisiones,
+          // Copias defensivas (no una referencia directa a los arrays de
+          // `registro`): para el primer año cerrado, `registro` ES el
+          // `registroAnioActual` que recibió esta función — el beat no puede
+          // compartir array con nada que un llamador todavía pueda tener
+          // agarrado en otro lado (mismo criterio de pureza que
+          // `clonarBeatResumenAnio`, más abajo).
+          muestrasMedia: [...registro.muestrasMedia],
+          decisiones: [...registro.decisiones],
           peleas: peleasDelAnio(jugador, anio),
         },
       });
@@ -582,7 +588,18 @@ export function avanzarBloque(partida) {
   // bloque, no un agregado extra: sumarlas de nuevo acá (como hacía antes)
   // corría el calendario hacia adelante para siempre, sin que ningún bloque
   // futuro lo recuperara jamás.
-  const inicioBloqueActual = nueva.semanaInicioBloque ?? 1;
+  //
+  // Bug encontrado en revisión de código: `?? 1` (en vez de `?? semanaAntes`)
+  // rompía la migración de una partida guardada ANTES de este fix (esquema
+  // v2 ya publicado, ver save.js — a esas partidas nunca les existió este
+  // campo): la primera vez que una de esas partidas cargadas avanzaba de
+  // bloque, el calendario saltaba HACIA ATRÁS a la semana 1+52, sin importar
+  // cuántos años llevara la carrera. `?? semanaAntes` es el mismo criterio de
+  // migración silenciosa que ya usa `registroAnioActual: ?? null` (más
+  // abajo, clonarPartida): sin drift conocido para reclamar, el resultado es
+  // IDÉNTICO al comportamiento de antes de este fix (sumar sobre la semana
+  // actual) — nunca revienta ni retrocede.
+  const inicioBloqueActual = nueva.semanaInicioBloque ?? semanaAntes;
   nueva.semanaGlobal = inicioBloqueActual + semanasDeBloque(etapa.aniosPorBloque);
   nueva.semanaInicioBloque = nueva.semanaGlobal;
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);

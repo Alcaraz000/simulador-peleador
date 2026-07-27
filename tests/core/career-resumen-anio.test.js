@@ -125,6 +125,28 @@ describe('avanzarBloque: no arrastra el atraso de un campamento al próximo bloq
     expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio).toBe(ANIO_INICIAL + 1);
     expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).mes).toBe(1);
   });
+
+  // Bug encontrado en la revisión de código de esta misma ronda: una partida
+  // GUARDADA ANTES de este fix (esquema v2, ya publicado — ver save.js) no
+  // trae `semanaInicioBloque` en absoluto (el campo no existía). Sin este
+  // resguardo, `nueva.semanaInicioBloque ?? 1` caía siempre a 1, así que la
+  // primera vez que esa partida cargada avanzaba de bloque, el calendario
+  // saltaba HACIA ATRÁS varios años (a semana 1+52) en vez de seguir desde
+  // donde estaba — el mismo defecto que `registroAnioActual: ?? null` ya
+  // resuelve para otros campos de una partida vieja (ver clonarPartida).
+  it('una partida sin semanaInicioBloque (guardado de antes de este fix) no salta el calendario hacia atrás', () => {
+    const p = nuevaPartida();
+    const semanaGlobal = 1 + 52 * 7 + 20; // bien avanzada en la carrera
+    const partidaVieja = { ...p, semanaGlobal };
+    delete partidaVieja.semanaInicioBloque;
+
+    const despues = avanzarBloque(partidaVieja);
+
+    // Mismo comportamiento que ANTES de este fix (sin drift conocido: salta
+    // 52 semanas desde donde estaba, no desde semana 1).
+    expect(despues.semanaGlobal).toBe(semanaGlobal + 52);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio).toBeGreaterThan(ANIO_INICIAL + 7);
+  });
 });
 
 describe('registrarDecision / registrarMuestraMedia (envoltorio a nivel partida)', () => {
