@@ -2,6 +2,8 @@ import { el, mount, fmtDinero } from '../dom.js';
 import { bandera } from '../flags.js';
 import { icono } from '../icons.js';
 import { rangoDeMedia, ETIQUETAS } from '../../core/stats.js';
+import { renderPanelDecision } from './panel-decision.js';
+import { animarBarajado } from '../components/roll.js';
 
 // Pedidos 1 y 2 (v7): las peleas de trámite ya no aparecen resueltas de la
 // nada. Dos pantallas, siempre en la región central del tablero (nunca
@@ -120,4 +122,87 @@ export function renderCardTramite(region, {
       class: 'boton', type: 'button', dataset: { accion: 'simular-pelea' }, text: 'Simular pelea', onClick: onSimular,
     }),
   ]));
+}
+
+/**
+ * Una ronda del minijuego (Pedido v8, "que se vea cómo se rollea"): mismo
+ * layout y mismas 3 tarjetas que `renderPanelDecision` (de hecho lo llama
+ * tal cual, sin duplicar nada de su HTML), pero el click no dispara
+ * `onElegir` en el acto — primero corre un barajado de suspenso
+ * (`animarBarajado`, roll.js) sobre las propias tarjetas, y recién cuando
+ * termina se avisa qué eligió el jugador.
+ *
+ * Por qué el retraso es seguro: quien resuelve la ronda de verdad (main.js,
+ * `resolverRondaMinijuego` con el rng de sesión) sigue viviendo enteramente
+ * en el `onElegir` que se recibe acá — no se lo llama antes, no se lo llama
+ * dos veces, y las tarjetas quedan deshabilitadas apenas se clickea una
+ * (mismo guard `elegido` de `renderPanelDecision`), así que no hay forma de
+ * elegir de nuevo ni de saltear el barajado. Lo único que cambia es CUÁNDO
+ * se invoca ese callback (al terminar el barajado, no en el click), nunca
+ * CÓMO se decide la ronda.
+ *
+ * `detener()` (mismo criterio que `cancelarRollPendiente` en main.js /
+ * `raiz._limpiarAccion` en fight.js, ver el comentario grande de
+ * `animarBarajado`): si el jugador ya eligió y se va del tablero a mitad
+ * del barajado, resuelve la ronda YA (sin esperar el resto de la
+ * animación) en vez de dejar un timer colgado o una ronda sin cerrar. Si
+ * todavía no eligió nada, no hace nada — no hay ninguna ronda pendiente
+ * que resolver.
+ *
+ * `resolverRonda` es lo que hace que el barajado ATERRICE. Se llama en el
+ * click (antes de animar) y devuelve la jugada del rival: el barajado frena
+ * ahí, así el jugador ve dónde cayó el rolleo en vez de terminar en neutro
+ * y enterarse solo por texto. La ronda se sigue decidiendo afuera, con el
+ * rng con semilla — acá no se decide nada, solo se muestra.
+ *
+ * @param {HTMLElement} region
+ * @param {{
+ *   titulo: string, bajada?: string, texto?: string,
+ *   opciones: Array<{id:string, titulo:string, descripcion?:string, icono?:Node}>,
+ *   resolverRonda?: (id:string) => ({eleccionRival?:string}|null),
+ *   onElegir?: (id:string, datos:object|null) => void,
+ * }} opciones
+ * @returns {{detener: () => void}}
+ */
+export function renderMinijuegoRonda(region, {
+  titulo, bajada = '', texto = '', opciones, resolverRonda = null, onElegir = () => {},
+}) {
+  let controlador = { detener: () => {} };
+
+  renderPanelDecision(region, {
+    titulo,
+    bajada,
+    texto,
+    opciones,
+    onElegir: (accionId) => {
+      const tarjetas = [...region.querySelectorAll('.tarjeta')];
+      const elegida = tarjetas.find((t) => t.dataset.opcion === accionId);
+      if (elegida) elegida.classList.add('tarjeta-elegida');
+
+      // La ronda se resuelve ACÁ, antes de animar, para saber en qué tarjeta
+      // frenar. El resultado se guarda y se entrega tal cual al terminar el
+      // barajado: consumir el rng una sola vez, por ronda, sigue siendo
+      // responsabilidad de quien pasó `resolverRonda`.
+      const datos = resolverRonda ? resolverRonda(accionId) : null;
+      const indiceFinal = datos && datos.eleccionRival
+        ? tarjetas.findIndex((t) => t.dataset.opcion === datos.eleccionRival)
+        : -1;
+
+      controlador = animarBarajado(tarjetas, {
+        indiceFinal,
+        onFin: () => onElegir(accionId, datos),
+      });
+    },
+  });
+
+  // "Que el marcador se mueva" (pedido textual): cada ronda es un remount
+  // entero (no hay nodo previo para animar un conteo de verdad), así que la
+  // versión honesta es un pop corto de entrada sobre el propio <h1> de la
+  // cabecera (la `bajada`, "Vos N - M Rival") apenas se monta — mismo
+  // tratamiento en la primera ronda (0-0) que en las siguientes, sin
+  // necesidad de que quien llama distinga "primera vez" de "ya cambió".
+  const marcador = region.querySelector('.panel-decision-cabecera h1');
+  if (marcador) marcador.classList.add('marcador-pop');
+
+  return { detener: () => controlador.detener() };
 }

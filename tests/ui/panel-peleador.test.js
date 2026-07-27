@@ -315,6 +315,26 @@ describe('renderPanelAtributos (columna central, arriba del módulo de decisión
     expect(cont.querySelector('[data-atributo="forma"]')).toBeNull();
     expect(cont.querySelector('[data-atributo="moral"]')).toBeNull();
   });
+
+  // v8 (pedido textual: "NO quiero que estén resumidos los títulos... el
+  // único permitido así es IQ"): los cuadros de atributos muestran el nombre
+  // COMPLETO (Potencia, Velocidad, Técnica, Defensa, Cardio), nunca la
+  // abreviatura de 3 letras — salvo IQ, que se mantiene corto a propósito.
+  it('muestra el nombre completo de cada atributo, nunca la abreviatura (salvo IQ)', () => {
+    const p = partidaBase();
+    renderPanelAtributos(cont, { jugador: p.jugador });
+
+    const nombreDe = (clave) => cont.querySelector(`[data-atributo="${clave}"] .nombre`).textContent;
+    expect(nombreDe('potencia')).toBe('Potencia');
+    expect(nombreDe('velocidad')).toBe('Velocidad');
+    expect(nombreDe('tecnica')).toBe('Técnica');
+    expect(nombreDe('defensa')).toBe('Defensa');
+    expect(nombreDe('cardio')).toBe('Cardio');
+    // IQ es la única excepción explícita: su forma larga ("IQ de pelea") es
+    // demasiado larga para lo que aporta.
+    expect(nombreDe('iq')).toBe('IQ');
+    expect(cont.textContent).not.toContain('IQ de pelea');
+  });
 });
 
 // Diagnóstico del coordinador: las tarjetas modifican mentón/disciplina
@@ -354,6 +374,19 @@ describe('renderPanelEstado (columna central, debajo de atributos)', () => {
     const filaForma = cont.querySelector('[data-atributo="forma"]');
     expect(filaForma.classList.contains('con-aporte')).toBe(false);
     expect(filaForma.querySelector('.aporte-entrenador')).toBeNull();
+  });
+
+  // v8 (pedido textual, mismo criterio que renderPanelAtributos): nombre
+  // completo, nunca la abreviatura de 3 letras.
+  it('muestra el nombre completo de mentón/disciplina/forma/moral, nunca la abreviatura', () => {
+    const p = partidaBase();
+    renderPanelEstado(cont, { jugador: p.jugador });
+
+    const nombreDe = (clave) => cont.querySelector(`[data-atributo="${clave}"] .nombre`).textContent;
+    expect(nombreDe('menton')).toBe('Mentón');
+    expect(nombreDe('disciplinaPersonal')).toBe('Disciplina');
+    expect(nombreDe('forma')).toBe('Forma');
+    expect(nombreDe('moral')).toBe('Moral');
   });
 });
 

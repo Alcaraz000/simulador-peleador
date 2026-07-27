@@ -422,7 +422,7 @@ export function crearPartida({ jugador, semilla }) {
     // autoguardado, pero viaja en la partida (serializable, JSON-safe) para
     // que una partida guardada justo en ese instante no pierda nada si algo
     // interrumpe el ciclo.
-    registroAnioActual: iniciarRegistroAnio(1, jugador),
+    registroAnioActual: iniciarRegistroAnio(1, jugador, mundo),
     anioCerrado: null,
   };
 }
@@ -571,7 +571,7 @@ export function avanzarBloque(partida) {
   // limpia. `registroAnioActual` arranca de nuevo, con la MEDIA ya recalculada
   // después del crecimiento/declive pasivo de este bloque (arriba).
   nueva.anioCerrado = nueva.registroAnioActual;
-  nueva.registroAnioActual = iniciarRegistroAnio(nueva.semanaGlobal, nueva.jugador);
+  nueva.registroAnioActual = iniciarRegistroAnio(nueva.semanaGlobal, nueva.jugador, nueva.mundo);
 
   return nueva;
 }
@@ -591,14 +591,17 @@ export function registrarDecision(partida, { tipo, titulo, opcion }) {
 }
 
 /** Envoltorio a nivel partida de `registrarMuestraMedia` (year-summary.js):
- * usa el jugador y la semana actuales de la partida. Lo llama main.js en el
- * único punto que YA centraliza "se acaba de aplicar un efecto sobre el
- * jugador" (aplicarEfectoYSeguir) — así que cubre mejora/evento/redes/
- * sparring/campamento de una sola vez, sin tener que tocar cada beat. */
+ * usa el jugador, el mundo y la semana actuales de la partida (el mundo suma
+ * el puesto de ranking a la misma muestra, v8). Lo llama main.js en el único
+ * punto que YA centraliza "se acaba de aplicar un efecto sobre el jugador"
+ * (aplicarEfectoYSeguir) — así que cubre mejora/evento/redes/sparring/
+ * campamento de una sola vez, sin tener que tocar cada beat. */
 export function registrarMuestraMedia(partida) {
   return {
     ...partida,
-    registroAnioActual: registrarMuestraMediaEnRegistro(partida.registroAnioActual, partida.semanaGlobal, partida.jugador),
+    registroAnioActual: registrarMuestraMediaEnRegistro(
+      partida.registroAnioActual, partida.semanaGlobal, partida.jugador, partida.mundo,
+    ),
   };
 }
 

@@ -161,12 +161,25 @@ function bloqueCinturones(jugador) {
 // horizontal... cuadros con POT / 33, VEL / 43"): antes una fila
 // `nombre .......... valor`; ahora un CUADRO — etiqueta arriba, valor grande
 // abajo — que vive en una grilla junto a sus hermanos (bloqueAtributosSolo/
-// bloqueEstadoSolo, más abajo). Se usa `ETIQUETAS[clave].corta` (POT, VEL,
-// DIS, MEN...), no `.larga`: "Disciplina" o "IQ de pelea" no entran en un
-// cuadro angosto sin partirse o recortarse con "…" (inaceptable, pedido
-// explícito), y el proyecto ya traía estas abreviaturas listas para
-// exactamente este caso.
+// bloqueEstadoSolo, más abajo).
 //
+// v8 (pedido textual: "NO quiero que estén resumidos los títulos... el único
+// permitido así es IQ porque es muy largo"): se pasó de `ETIQUETAS[clave]
+// .corta` (POT, VEL, DIS, MEN...) a `.larga` (Potencia, Velocidad,
+// Disciplina...) para todos MENOS iq (su forma larga, "IQ de pelea", es
+// demasiado para lo que aporta — "IQ" a secas ya es corto y clarísimo). El
+// texto se muestra en mayúsculas por CSS (`text-transform`, ver
+// `.panel-peleador-atributo .nombre` al final de theme.css) — el string en
+// sí queda en su capitalización natural ("Potencia"), más legible para
+// lectores de pantalla. La solución a "no entran en un cuadro angosto" ya NO
+// es acortar el texto (inaceptable, pedido explícito): es dejar que la
+// etiqueta envuelva a una segunda línea dentro del mismo cuadro — mismo
+// criterio que `.cabecera-apellido`, más arriba ("nunca …, puede envolver").
+function etiquetaAtributo(clave) {
+  if (clave === 'iq') return ETIQUETAS.iq.corta;
+  return ETIQUETAS[clave].larga;
+}
+
 // El número grande sigue siendo la BASE sin entrenador; el badge dorado
 // sigue siendo lo que él aporta aparte (misma invariante de siempre:
 // `base + aporte === jugador.atributos[clave]`, ver atributosConEntrenador,
@@ -180,7 +193,7 @@ function filaAtributo(clave, { base, aporte }) {
     dataset: { atributo: clave },
   }, [
     aporte ? el('span', { class: 'aporte-entrenador', text: `+${aporte}` }) : null,
-    el('span', { class: 'nombre sutil', text: ETIQUETAS[clave].corta }),
+    el('span', { class: 'nombre sutil', text: etiquetaAtributo(clave) }),
     el('b', { class: 'valor', text: String(base) }),
   ]);
 }

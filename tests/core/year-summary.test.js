@@ -7,7 +7,8 @@
 // resultado/método, ver aplicarResultado en offers.js).
 import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { ANIO_INICIAL } from '../../src/core/world.js';
+import { createRng } from '../../src/core/rng.js';
+import { ANIO_INICIAL, crearMundo, rankingDelJugador } from '../../src/core/world.js';
 import { fechaDe } from '../../src/core/calendario.js';
 import {
   iniciarRegistroAnio, registrarMuestraMedia, registrarDecision, peleasDelAnio, anioTieneAlgoQueContar,
@@ -19,6 +20,10 @@ function jugadorDePrueba(overrides = {}) {
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
     ...overrides,
   });
+}
+
+function mundoDePrueba() {
+  return crearMundo(createRng(9), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 10 });
 }
 
 describe('iniciarRegistroAnio', () => {
@@ -37,6 +42,23 @@ describe('iniciarRegistroAnio', () => {
     const semana = 1 + 52 * 6; // ~6 años después
     const registro = iniciarRegistroAnio(semana, jugador);
     expect(registro.anio).toBe(fechaDe(semana, ANIO_INICIAL).anio);
+  });
+
+  // v8 (pedido textual: "un gráfico nuevo, cómo escalaste en el ranking"): la
+  // primera muestra también trae el puesto, calculado con el mismo criterio
+  // que el resto del tablero (rankingDelJugador, world.js).
+  it('con mundo, la primera muestra trae tambien el ranking real del jugador', () => {
+    const jugador = jugadorDePrueba();
+    const mundo = mundoDePrueba();
+    const registro = iniciarRegistroAnio(1, jugador, mundo);
+    expect(registro.muestrasMedia[0].ranking).toBe(rankingDelJugador(mundo, jugador));
+  });
+
+  it('sin mundo (llamador defensivo, o partida vieja), el ranking de la muestra queda en null y no revienta', () => {
+    const jugador = jugadorDePrueba();
+    expect(() => iniciarRegistroAnio(1, jugador)).not.toThrow();
+    const registro = iniciarRegistroAnio(1, jugador);
+    expect(registro.muestrasMedia[0].ranking).toBeNull();
   });
 });
 
@@ -62,6 +84,18 @@ describe('registrarMuestraMedia', () => {
 
   it('si no hay registro (null), no revienta: devuelve null', () => {
     expect(registrarMuestraMedia(null, 5, jugadorDePrueba())).toBeNull();
+  });
+
+  // v8: la nueva muestra suma ranking igual que la primera (mismo criterio,
+  // ver iniciarRegistroAnio más arriba) — un solo campo entero más por
+  // muestra, no una estructura paralela (mantiene el guardado liviano).
+  it('con mundo, la muestra nueva trae tambien su ranking real', () => {
+    const jugador = jugadorDePrueba();
+    const mundo = mundoDePrueba();
+    const registro = iniciarRegistroAnio(1, jugador, mundo);
+    const jugadorMasFuerte = { ...jugador, atributos: { ...jugador.atributos, potencia: jugador.atributos.potencia + 20 } };
+    const actualizado = registrarMuestraMedia(registro, 10, jugadorMasFuerte, mundo);
+    expect(actualizado.muestrasMedia[1].ranking).toBe(rankingDelJugador(mundo, jugadorMasFuerte));
   });
 });
 
