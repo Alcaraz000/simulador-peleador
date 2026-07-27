@@ -18,16 +18,16 @@ beforeEach(() => {
 });
 
 describe('renderPanelNoticias', () => {
-  it('lista titular y cuerpo, con el tipo como etiqueta legible (no el id crudo)', () => {
+  it('lista titular y cuerpo, sin un label de tipo (Pedido 3, v9: se sacaron los labels Resultado/Retiro/etc.)', () => {
     const noticias = [noticia({ id: 'n1', tipo: 'victoria', titular: 'Ganó otra vez', cuerpo: 'Un párrafo corto.' })];
     renderPanelNoticias(cont, { noticias });
     expect(cont.textContent).toContain('Ganó otra vez');
     expect(cont.textContent).toContain('Un párrafo corto.');
-    expect(cont.textContent).toContain('Resultado');
+    expect(cont.textContent).not.toContain('Resultado');
     expect(cont.textContent).not.toContain('victoria');
   });
 
-  it('el label ÚLTIMO MOMENTO aparece solo cuando hay noticias nuevas', () => {
+  it('el label ÚLTIMO MOMENTO de cada noticia nueva aparece solo cuando esa noticia es nueva', () => {
     const sinNuevas = [noticia({ id: 'n1', nueva: false })];
     renderPanelNoticias(cont, { noticias: sinNuevas });
     expect(cont.textContent).not.toContain('ÚLTIMO MOMENTO');
@@ -37,13 +37,43 @@ describe('renderPanelNoticias', () => {
     expect(cont.textContent).toContain('ÚLTIMO MOMENTO');
   });
 
+  // Pedido 3 (v9, "quitá el label 'Último momento' que aparece a la
+  // derecha, NO lo quites de las noticias nuevas"): el chip de cada noticia
+  // nueva se mantiene (test de arriba) — lo que se saca es el aviso
+  // DUPLICADO que vivía en la cabecera del módulo entero.
+  it('la cabecera del módulo ya no repite el aviso ÚLTIMO MOMENTO, aunque haya noticias nuevas', () => {
+    const noticias = [noticia({ id: 'n1', nueva: true })];
+    renderPanelNoticias(cont, { noticias });
+    const boton = cont.querySelector('.panel-noticias-boton');
+    expect(boton.textContent).not.toContain('ÚLTIMO MOMENTO');
+  });
+
   it('el panel tiene alto fijo con scroll interno, no crece indefinidamente', () => {
     const noticias = Array.from({ length: 20 }, (_, i) => noticia({ id: `n${i}` }));
     renderPanelNoticias(cont, { noticias });
     const lista = cont.querySelector('.panel-noticias-lista');
     expect(lista).toBeTruthy();
-    expect(lista.style.maxHeight).toMatch(/^\d+px$/);
+    expect(lista.style.height).toMatch(/^\d+px$/);
     expect(lista.style.overflowY).toBe('auto');
+  });
+
+  // Pedido 1 (v9, causa real de los huecos reportados al pie de las
+  // columnas izquierda y central): tenía que ser `height`, no `max-height` —
+  // con `max-height` el panel medía chico con pocas noticias y solo llegaba
+  // al tope cuando se llenaba, así que el alto de la columna derecha (y con
+  // él, el hueco que dejaban las otras dos) variaba con la carrera. Ahora es
+  // SIEMPRE el mismo, haya 0 noticias o 20.
+  it('el alto es fijo de verdad: el mismo con el feed vacío que con el feed lleno', () => {
+    renderPanelNoticias(cont, { noticias: [] });
+    const altoVacio = cont.querySelector('.panel-noticias-lista').style.height;
+
+    document.body.innerHTML = '<div id="region2"></div>';
+    const cont2 = document.getElementById('region2');
+    const noticias = Array.from({ length: 20 }, (_, i) => noticia({ id: `n${i}` }));
+    renderPanelNoticias(cont2, { noticias });
+    const altoLleno = cont2.querySelector('.panel-noticias-lista').style.height;
+
+    expect(altoLleno).toBe(altoVacio);
   });
 
   // Feedback textual del usuario: "el módulo, al menos en PC, no es lo
@@ -53,7 +83,7 @@ describe('renderPanelNoticias', () => {
     const noticias = [noticia({ id: 'n1' })];
     renderPanelNoticias(cont, { noticias });
     const lista = cont.querySelector('.panel-noticias-lista');
-    const alto = Number.parseInt(lista.style.maxHeight, 10);
+    const alto = Number.parseInt(lista.style.height, 10);
     expect(alto).toBeGreaterThanOrEqual(420);
   });
 
