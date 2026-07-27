@@ -102,6 +102,113 @@ function resolverResultadoRapido(rng, { jugador, oferta }) {
   };
 }
 
+// ===== Minijuego de trámite (Pedido 2, v7): "que se juegue un poco" ========
+//
+// Pedido textual del usuario: una tarjeta con el rival (media/rango/récord/
+// estadísticas) y un botón "Simular pelea" que dispara un piedra-papel-
+// tijera al mejor de 5, traducido a boxeo. El ciclo de tres reusa el que YA
+// existe entre estilos (styles.js: tecnico > noqueador > menton > tecnico,
+// un triángulo cerrado dentro del grafo más grande de ESTILOS) — acá no es
+// el estilo permanente del peleador, es la decisión TÁCTICA de una ronda
+// puntual: boxear a distancia (tecnico), ir a buscar el nocaut (noqueador) o
+// cerrarte en guardia a resistir (menton). Mismo lenguaje que el resto del
+// juego ya le enseñó al jugador, no una mecánica pegada con cinta.
+export const ACCIONES_MINIJUEGO = ['tecnico', 'noqueador', 'menton'];
+
+const LE_GANA_A_MINIJUEGO = { tecnico: 'noqueador', noqueador: 'menton', menton: 'tecnico' };
+
+/**
+ * La acción del RIVAL que hace falta mostrar para que la ronda cierre con el
+ * resultado ya decidido (`gana`): si el jugador ganó, el rival tiene que
+ * haber jugado la acción que la del jugador vence; si perdió, la que lo
+ * vence a él. El ciclo de 3 solo tiene una respuesta posible para cada caso,
+ * así que esto no consume rng — es pura consecuencia del ciclo.
+ */
+export function accionRivalDe(accionJugador, gana) {
+  if (gana) return LE_GANA_A_MINIJUEGO[accionJugador];
+  return ACCIONES_MINIJUEGO.find((a) => LE_GANA_A_MINIJUEGO[a] === accionJugador);
+}
+
+// Probabilidad de ganar CADA ronda del minijuego: mismo criterio que
+// `resolverResultadoRapido` (la diferencia de MEDIA empuja la probabilidad),
+// pero con un factor más suave (0.016 en vez de 0.02) y un piso/techo más
+// angosto (16%-84% en vez de 12%-88%): esto se compone hasta 5 veces (una
+// pelea puede necesitar hasta 5 rondas para definirse), así que el mismo
+// factor "por pelea" de resolverResultadoRapido, aplicado ronda a ronda,
+// volvería una diferencia de media moderada en un resultado casi cantado de
+// punta a punta (0.7^3 ya es 34%). Con 0.016/piso 16%, una ventaja de media
+// grande (ej. +20) sigue siendo MUY favorable pelea a pelea sin volverse
+// determinista ronda a ronda — "que se note sin volverlo determinista",
+// pedido textual del usuario.
+const PISO_PROB_RONDA = 0.16;
+const TECHO_PROB_RONDA = 0.84;
+const FACTOR_PROB_RONDA = 0.016;
+
+function probRondaJugador(jugador, rivalMedia) {
+  const fuerza = mediaDe(jugador) - rivalMedia;
+  return clamp(0.5 + fuerza * FACTOR_PROB_RONDA, PISO_PROB_RONDA, TECHO_PROB_RONDA);
+}
+
+/**
+ * El marcador completo de un combate de trámite jugado con el minijuego:
+ * ronda a ronda (Bernoulli, ver `probRondaJugador`) hasta que alguno de los
+ * dos llega a 3 — "al mejor de 5", nunca más de 5 rondas ni empate posible
+ * (ganar/perder una ronda siempre define a alguien, igual criterio que
+ * `resolverResultadoRapido`: un trámite es un resultado seco). `rondas` es
+ * la secuencia ORDENADA de quién ganó cada una ('jugador'|'rival') — la UI
+ * la recorre para revelar el minijuego ronda a ronda sin volver a consumir
+ * rng: la acción del rival en cada ronda se DERIVA de la del jugador más
+ * este resultado ya decidido (ver `accionRivalDe`), nunca al revés.
+ */
+export function armarMarcador(rng, { jugador, rivalMedia }) {
+  const prob = probRondaJugador(jugador, rivalMedia);
+  const rondas = [];
+  let puntosJugador = 0;
+  let puntosRival = 0;
+  while (puntosJugador < 3 && puntosRival < 3) {
+    const ganaJugador = rng.chance(prob);
+    rondas.push(ganaJugador ? 'jugador' : 'rival');
+    if (ganaJugador) puntosJugador += 1; else puntosRival += 1;
+  }
+  return { rondas, jugador: puntosJugador, rival: puntosRival };
+}
+
+// La tabla marcador -> resultado que pidió el usuario, textual: "3 a 0 es un
+// KO, 3 a 1 es por puntos (decisión unánime), 3 a 2 es decisión dividida" —
+// simétrica para la derrota (0-3 KO en contra, 1-3 unánime en contra, 2-3
+// dividida en contra). `perdedor` son las rondas que se llevó quien pierde
+// la pelea (0, 1 o 2 — nunca 3, eso sería un empate y acá no existen).
+const DETALLE_DE_RONDAS_PERDEDOR = { 0: 'ko', 1: 'unanime', 2: 'dividida' };
+
+/** Traduce un marcador (`armarMarcador`) al resultado de la pelea. */
+export function resultadoDeMarcador(marcador) {
+  const ganaJugador = marcador.jugador > marcador.rival;
+  const rondasPerdedor = ganaJugador ? marcador.rival : marcador.jugador;
+  const detalle = DETALLE_DE_RONDAS_PERDEDOR[rondasPerdedor];
+  return {
+    ganador: ganaJugador ? 'jugador' : 'rival',
+    metodo: detalle === 'ko' ? 'ko' : 'decision',
+    detalle,
+  };
+}
+
+/**
+ * Resuelve una pelea de trámite CON el minijuego: arma el marcador
+ * (`armarMarcador`) y lo traduce a un resultado completo, con `round` (para
+ * el historial) igual criterio que `resolverResultadoRapido` — un KO cae en
+ * cualquier round hasta el tope de la disciplina/nivel, una decisión llega
+ * al tope. Devuelve también el propio `marcador`: la UI lo necesita para
+ * revelar el minijuego ronda a ronda (ver `beatPeleasResueltas`, main.js).
+ */
+export function resolverConMinijuego(rng, { jugador, oferta }) {
+  const marcador = armarMarcador(rng, { jugador, rivalMedia: oferta.rivalMedia });
+  const { ganador, metodo, detalle } = resultadoDeMarcador(marcador);
+  const disc = getDisciplina(jugador.disciplina);
+  const tope = disc.roundsPorNivel[oferta.nivelPelea] ?? disc.roundsPorNivel.profesional;
+  const round = metodo === 'ko' ? rng.int(1, tope) : tope;
+  return { resultado: { ganador, metodo, round, detalle }, marcador };
+}
+
 const NUMERO = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete'];
 const numero = (n) => NUMERO[n] ?? String(n);
 const capitalizar = (s) => (s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1));
@@ -238,6 +345,17 @@ export function armarLotePeleas(rng, {
   // JUEGA — si los primeros cupos del año se pierden por lesión, el que
   // sigue en cuanto se cura hereda esa chance, no se pierde para siempre.
   let primerCupoDisponible = true;
+  // Pedido 1/2 (v7, "que se anuncie antes" + "que se juegue un poco"): DE
+  // TODO el lote, solo el primer combate que de verdad se resuelve como
+  // trámite (no marquee) se anuncia con el minijuego (armarMarcador,
+  // resolverConMinijuego, arriba) — el resto, si el año trae más de un cupo
+  // de trámite, se sigue resolviendo con el viejo resultado seco
+  // (resolverResultadoRapido). Bajarle el drama a "todos" hubiera reventado
+  // el presupuesto de minutos de la carrera entera (~30 trámite/carrera, ver
+  // el informe de balance) sin sumarle nada al eje central del juego — un
+  // solo destacado por bloque ya cumple "no aparece de la nada" y "se juega
+  // un poco" sin volver la partida una hora.
+  let esPrimerResultadoTramite = true;
 
   for (let i = 0; i < intentos; i += 1) {
     const { bloqueado, jugador: jugadorTrasChequeo } = cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento);
@@ -266,20 +384,43 @@ export function armarLotePeleas(rng, {
       continue;
     }
 
-    const resultado = resolverResultadoRapido(rng, { jugador: jugadorActual, oferta });
+    let resultado;
+    let marcador = null;
+    if (esPrimerResultadoTramite) {
+      const resuelto = resolverConMinijuego(rng, { jugador: jugadorActual, oferta });
+      resultado = resuelto.resultado;
+      marcador = resuelto.marcador;
+      esPrimerResultadoTramite = false;
+    } else {
+      resultado = resolverResultadoRapido(rng, { jugador: jugadorActual, oferta });
+    }
     const paso = aplicarResultado(jugadorActual, { oferta, resultado, modo: 'tramite' });
     jugadorActual = paso.jugador;
     resultados.push({
+      rivalId: oferta.rivalId,
       rivalNombre: oferta.rivalNombre,
       rivalApodo: oferta.rivalApodo,
       resultado: resultado.ganador === 'jugador' ? 'v' : 'd',
       metodo: resultado.metodo,
+      detalle: resultado.detalle ?? null,
       bolsa: oferta.bolsa,
+      // Solo el primer resultado (el destacado, ver arriba) trae `marcador`
+      // (ronda a ronda) y la `oferta` completa: es lo único que la tarjeta
+      // del minijuego necesita para mostrar al rival y revelar el
+      // combate — los demás resultados del lote se narran en la síntesis
+      // (resumenLote, más abajo), nunca con su propia tarjeta.
+      marcador,
+      oferta,
     });
   }
 
   const beatTramite = resultados.length > 0
-    ? { tipo: 'peleasResueltas', datos: { resultados, ...resumenLote(rng, { resultados, tono }) } }
+    ? {
+      tipo: 'peleasResueltas',
+      datos: {
+        resultados, semanasPorIntento, ...resumenLote(rng, { resultados, tono }),
+      },
+    }
     : null;
 
   return {
