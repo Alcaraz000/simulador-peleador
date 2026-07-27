@@ -9,11 +9,21 @@ import { ANIO_INICIAL } from '../../core/world.js';
 // que esté pasando en el centro (el panel de avance, una decisión, el
 // sparring): siempre visible, se refresca en cada transición del tablero
 // junto con los paneles laterales, nunca en cada micro-render.
-
+//
+// Pedido 2 (v9): se saca la etiqueta "Calendario" (se sobreentiende: es lo
+// único que vive en este panel) y se cambia la visual a una sola fila —
+// `(AÑO) Mes    Semana N` — con el año como un chip con fondo (mismo
+// lenguaje que el resto del tablero, `.chip`), separado del mes por un
+// espacio chico y del mes a la semana por uno más grande, proporcionado
+// (`.calendario-mes`/`.calendario-semana`, theme.css) — nunca apretados
+// entre sí como quedaban antes con "Mes Año · Semana N" corrido.
 export function renderCalendario(region, { partida }) {
   const fecha = fechaDe(partida.semanaGlobal, ANIO_INICIAL);
   mount(region, el('div', { class: 'panel panel-calendario' }, [
-    el('div', { class: 'etiqueta', text: 'Calendario' }),
-    el('div', { style: 'font-weight:800;margin-top:4px;font-size:13px', text: fecha.texto }),
+    el('div', { class: 'calendario-fila' }, [
+      el('span', { class: 'chip dorado calendario-anio', text: String(fecha.anio) }),
+      el('span', { class: 'calendario-mes', text: fecha.nombreMes }),
+      el('span', { class: 'calendario-semana', text: `Semana ${fecha.semanaDelMes}` }),
+    ]),
   ]));
 }
