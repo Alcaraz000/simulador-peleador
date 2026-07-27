@@ -32,6 +32,24 @@ function rachaMasLargaDe(historial) {
   return mejor;
 }
 
+// Pedido 3 (v7, "también mostrá la 'racha de victorias' más larga... y la
+// 'racha de derrotas' también" en la pantalla final): mismo criterio que
+// rachaMasLargaDe (arriba), pero contando derrotas consecutivas — un empate
+// corta la racha de derrotas igual que corta la de victorias.
+function rachaDerrotasMasLargaDe(historial) {
+  let mejor = 0;
+  let actual = 0;
+  for (const pelea of historial) {
+    if (pelea.resultado === 'd') {
+      actual += 1;
+      mejor = Math.max(mejor, actual);
+    } else {
+      actual = 0;
+    }
+  }
+  return mejor;
+}
+
 export function estadisticasDeCarrera(partida) {
   const { jugador } = partida;
   const historial = jugador.historial ?? [];
@@ -55,6 +73,7 @@ export function estadisticasDeCarrera(partida) {
     porcentajeKO: victorias.length === 0 ? 0 : Math.round((porKO.length / victorias.length) * 100),
     rachaActual: rachaActual(historial),
     rachaMasLarga: rachaMasLargaDe(historial),
+    rachaDerrotasMasLarga: rachaDerrotasMasLargaDe(historial),
     rivalMasDuro: rivalMasDuro
       ? { nombre: rivalMasDuro.rivalNombre, apodo: rivalMasDuro.rivalApodo, media: rivalMasDuro.rivalMedia }
       : null,

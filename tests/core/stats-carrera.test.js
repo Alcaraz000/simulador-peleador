@@ -68,6 +68,29 @@ describe('estadisticasDeCarrera', () => {
     expect(e.rachaMasLarga).toBe(3);
   });
 
+  // Pedido 3 (v7, "mostrá la 'racha de victorias' más larga... y la 'racha
+  // de derrotas' también"): mismo criterio que rachaMasLarga (victorias),
+  // pero contando derrotas consecutivas — los empates cortan la racha igual
+  // que una victoria la cortaría en la de arriba.
+  it('encuentra la racha de derrotas mas larga, no solo la actual', () => {
+    const e = estadisticasDeCarrera(partidaCon([
+      pelea('d'), pelea('v'), pelea('d'), pelea('d'), pelea('d'), pelea('v'), pelea('d'),
+    ]));
+    expect(e.rachaDerrotasMasLarga).toBe(3);
+  });
+
+  it('un empate corta la racha de derrotas, igual que corta la de victorias', () => {
+    const e = estadisticasDeCarrera(partidaCon([
+      pelea('d'), pelea('d'), pelea('e'), pelea('d'),
+    ]));
+    expect(e.rachaDerrotasMasLarga).toBe(2);
+  });
+
+  it('sin derrotas, la racha de derrotas mas larga es cero', () => {
+    const e = estadisticasDeCarrera(partidaCon([pelea('v'), pelea('v')]));
+    expect(e.rachaDerrotasMasLarga).toBe(0);
+  });
+
   it('reporta la bolsa mas grande', () => {
     const e = estadisticasDeCarrera(partidaCon([pelea('v', { bolsa: 5000 }), pelea('v', { bolsa: 90000 })]));
     expect(e.bolsaMayor).toBe(90000);
