@@ -224,3 +224,20 @@ describe('marcarLeidas', () => {
     expect(feed[0].nueva).toBe(true);
   });
 });
+
+// Hallazgo de la verificación visual (v9): con el feed en 30 noticias y el
+// grueso de tipo 'victoria', tres variantes de cuerpo por tipo hacían que la
+// MISMA frase apareciera siete veces en pantalla al mismo tiempo. Este test
+// fija el piso de variedad que hace falta para que eso no vuelva a pasar.
+describe('variedad de cuerpos (repetición en pantalla)', () => {
+  it('un feed lleno de victorias no repite el mismo cuerpo más de tres veces', () => {
+    const sucesos = Array.from({ length: 30 }, (_, i) => ({
+      tipo: 'victoria', peleadorId: `p${i}`, texto: `Peleador ${i} le ganó por puntos a Rival ${i}.`,
+    }));
+    const cuerpos = noticiasDeSucesos(createRng(1), sucesos, { anio: 2030 }).map((n) => n.cuerpo);
+
+    const veces = new Map();
+    for (const c of cuerpos) veces.set(c, (veces.get(c) ?? 0) + 1);
+    expect(Math.max(...veces.values())).toBeLessThanOrEqual(3);
+  });
+});

@@ -42,36 +42,65 @@ const MAPA_SUCESOS = {
 // reconstruir un cuerpo específico con marcadores. El cuerpo acá es
 // atmosférico, sin marcadores: cualquiera de las variantes sirve para
 // cualquier suceso de ese tipo.
+// Verificación visual (v9): con el feed en 30 noticias y el grueso siendo
+// de tipo 'victoria', tres variantes por tipo alcanzaban para que la MISMA
+// frase apareciera siete veces en pantalla al mismo tiempo. No es un
+// problema de selección (el hash reparte bien): es aritmética — pocas
+// variantes contra muchas noticias. La solución es contenido, no algoritmo.
 const CUERPOS_SUCESO = {
   victoria: [
     'Otro resultado que reordena la conversación en la categoría.',
     'La noticia ya corre por los gimnasios rivales.',
     'Nada cambia el calendario, pero sí las apuestas de la próxima cartelera.',
+    'En el ranking nadie lo dice en voz alta, pero todos toman nota.',
+    'Un resultado más para la pila de los que hay que tener en cuenta.',
+    'Los que estaban en la cartelera miraron con atención.',
+    'El teléfono del promotor no paró de sonar desde la campana final.',
+    'De esas noches que después se cuentan distinto según quién las cuente.',
+    'La cartelera de la categoría se acomoda un poco más.',
+    'Nada que no se supiera, pero ahora está escrito en el récord.',
   ],
   titulo: [
     'El cinturón cambia de manos y con él, la conversación de toda la categoría.',
     'Los promotores ya piensan en la próxima defensa.',
     'El vestuario todavía festeja: no todos los días se corona a alguien nuevo.',
+    'Se acabó un reinado y empieza otro, con todo lo que eso arrastra.',
+    'La foto con el cinturón al hombro ya está dando la vuelta.',
+    'A partir de esta noche, todos los caminos de la categoría pasan por él.',
+    'El que quiera el cinturón ahora sabe a qué puerta golpear.',
   ],
   retiro: [
     'El anuncio deja un lugar vacío en el ranking que alguien va a pelear.',
     'Otro nombre que se despide del ring por la puerta grande.',
     'Los rumores venían de hace rato, pero la confirmación igual pega fuerte.',
+    'Se va con el récord cerrado y la nariz torcida, como corresponde.',
+    'Colgó los guantes en el gimnasio donde había empezado.',
+    'Deja una escuela y unas cuantas peleas que se van a seguir mirando.',
+    'El aplauso duró más que el discurso.',
   ],
   lesion: [
     'El parte médico no da mayores precisiones por ahora.',
     'El calendario de la categoría se reordena mientras dura la baja.',
     'El entorno pide paciencia y evitar apurar los tiempos de vuelta.',
+    'En el gimnasio bajan el tono: nadie quiere hablar de plazos.',
+    'La fecha que tenía firmada se cae, y con ella los planes del año.',
+    'Dicen que volvió del médico sin decir una palabra.',
   ],
   ranking: [
     'La tabla se sigue moviendo semana a semana.',
     'Un movimiento así no pasa desapercibido para los promotores.',
     'Arriba se respira distinto, y ya se nota en las ofertas que empiezan a llegar.',
+    'Subir es fácil comparado con bancarse el lugar.',
+    'Los de arriba lo miran de reojo; los de abajo, con ganas.',
+    'Un par de puestos que valen más de lo que parecen.',
   ],
   debut: [
     'Otra promesa que se suma a pelear por un lugar en la categoría.',
     'Todavía no lo conoce nadie, pero en el gimnasio ya hablan de él.',
     'La categoría nunca se queda quieta: siempre hay una cara nueva golpeando la puerta.',
+    'Llega con más hambre que récord, que para empezar alcanza.',
+    'El que lo entrena dice que hay con qué. Habrá que verlo arriba del ring.',
+    'Debutó sin público propio y se fue con unos cuantos aplausos prestados.',
   ],
 };
 
