@@ -202,6 +202,11 @@ function resolverUnPaso(cont, { aceptarOfertas }) {
     return 'decision';
   }
 
+  // Resumen de fin de año (v7): pantalla propia (resumen-anio.js), no
+  // `renderDesenlace` — mismo criterio que tablero-persistente.test.js.
+  const seguirResumenAnio = cont.querySelector('.resumen-anio .boton');
+  if (seguirResumenAnio) { seguirResumenAnio.click(); return 'resumen-anio'; }
+
   const avisoDirecto = cont.querySelector('.panel-decision-desenlace .boton');
   if (avisoDirecto) { avisoDirecto.click(); return 'aviso'; }
 
