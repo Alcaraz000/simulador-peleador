@@ -40,14 +40,45 @@ export const CINTURONES = [
   { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
 ];
 
+// v7 (pedido textual del usuario: "un debutante NO puede pelear por el
+// título con 0 peleas"): antes `puedeDisputar` miraba SOLO el ranking (media
+// + récord, ver rankingDelJugador en world.js) — como el ranking se calcula
+// por MEDIA, un prodigio de origen/apodo legendario podía rankear top-3 con
+// 0 peleas profesionales (bonusRecord es 0 sin récord) y saltar derecho a
+// disputar un cinturón. Acá se suma un mínimo de peleas PROFESIONALES (las
+// que cuentan para `jugador.record` — jugables + trámite; las amateurs NO
+// cuentan, van a `recordAmateur`, ver aplicarResultado más abajo) escalonado
+// con criterio de boxeo: un regional se gana con un puñado de peleas de
+// verdad (más de un año de actividad pro), un nacional pide un historial ya
+// construido, y un mundial exige un currículum probado — ni el prodigio con
+// más suerte se salta la fila entera. Con el promedio de 30-40 peleas
+// profesionales por carrera completa (ver ETAPAS, career.js), estos mínimos
+// dejan margen de sobra para coronar los tres cinturones jugando bien — ver
+// el informe de balance (scripts/balance-sim.mjs) para el efecto medido en
+// el eje de cinturones.
+export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 16, mundial: 24 };
+
+function peleasProfesionales(jugador) {
+  const record = jugador.record ?? { v: 0, d: 0, e: 0 };
+  return record.v + record.d + record.e;
+}
+
 /** El próximo cinturón que el jugador puede disputar, o null si los tiene todos. */
 export function proximoCinturon(jugador) {
   return CINTURONES.find((c) => !jugador.titulos.includes(c.nombre)) ?? null;
 }
 
-/** ¿Puede pelear por ese cinturón según su ranking? */
+/** ¿Ya peleó lo suficiente como para que el ranking solo pueda decidir? */
+function cumpleMinimoDePeleas(jugador, cinturon) {
+  if (!cinturon) return false;
+  const minimo = PELEAS_MINIMAS_TITULO[cinturon.id] ?? 0;
+  return peleasProfesionales(jugador) >= minimo;
+}
+
+/** ¿Puede pelear por ese cinturón? Hace falta ranking Y un mínimo de peleas profesionales. */
 export function puedeDisputar(jugador, cinturon) {
   if (!cinturon) return false;
+  if (!cumpleMinimoDePeleas(jugador, cinturon)) return false;
   return (jugador.ranking ?? 99) <= cinturon.rankingMax;
 }
 
@@ -198,8 +229,12 @@ function decidirNivel({
   }
 
   // Sin cinturón puesto (o sin defensa/ascenso este turno): pelea por el próximo
-  // si está rankeado lo suficiente.
-  if (proximo && (forzarTitulo || puedeDisputar(jugador, proximo))) {
+  // si está rankeado lo suficiente. `forzarTitulo` (career.js: ranking top-3,
+  // sin título todavía) solo se salta la CHANCE probabilística de más abajo,
+  // nunca el mínimo de peleas — un prodigio con ranking altísimo pero 0
+  // peleas profesionales no puede saltar la fila (ver PELEAS_MINIMAS_TITULO,
+  // arriba), por más que su ranking ya alcance.
+  if (proximo && cumpleMinimoDePeleas(jugador, proximo) && (forzarTitulo || puedeDisputar(jugador, proximo))) {
     return { nivel: NIVELES.titulo, cinturon: proximo };
   }
 
