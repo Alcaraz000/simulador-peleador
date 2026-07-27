@@ -170,9 +170,40 @@ describe('recalcularRankings', () => {
 });
 
 describe('rankingDelJugador', () => {
-  it('un peleador flojo queda ultimo', () => {
+  // Bug reportado (v9, "en juvenil aparece como #101, y en amateur salta a
+  // #81 sin haber peleado nunca"): un jugador que todavía no debutó como
+  // profesional (0 peleas en `jugador.record` — el amateur va aparte, en
+  // `recordAmateur`) no puede tener puesto: ya lo dice el tablero ("Sin
+  // clasificar"), y `rankingDelJugador` tiene que coincidir, no calcular un
+  // puesto igual a partir de la MEDIA sola.
+  it('sin debutar como profesional (record en 0-0-0), no hay puesto: devuelve null', () => {
     const m = mundo();
-    const flojo = { ...m.roster[0], atributos: { ...m.roster[0].atributos, potencia: 1, velocidad: 1, tecnica: 1, defensa: 1, cardio: 1, iq: 1 }, record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const sinDebutar = { ...m.roster[0], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    expect(rankingDelJugador(m, sinDebutar)).toBeNull();
+  });
+
+  it('una MEDIA altísima sin haber debutado sigue sin dar puesto (no "engancha" por ser bueno)', () => {
+    const m = mundo();
+    const crackSinDebutar = {
+      ...m.roster[0],
+      atributos: { potencia: 99, velocidad: 99, tecnica: 99, defensa: 99, cardio: 99, iq: 99, grappling: 1 },
+      record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
+    };
+    expect(rankingDelJugador(m, crackSinDebutar)).toBeNull();
+  });
+
+  it('un empate ya cuenta como debut (peleó, aunque no ganó ni perdió): tiene puesto', () => {
+    const m = mundo();
+    const debutoConEmpate = { ...m.roster[0], record: { v: 0, d: 0, e: 1, ko: 0, sub: 0, dec: 0 } };
+    expect(rankingDelJugador(m, debutoConEmpate)).not.toBeNull();
+  });
+
+  it('un peleador flojo (ya debutado) queda ultimo', () => {
+    const m = mundo();
+    // `e: 1` (un empate) alcanza para contar como debutado sin mover el bono
+    // de récord (la fórmula usa v y d, nunca e) — mismo puntaje que 0-0-0,
+    // pero ahora SÍ tiene puesto.
+    const flojo = { ...m.roster[0], atributos: { ...m.roster[0].atributos, potencia: 1, velocidad: 1, tecnica: 1, defensa: 1, cardio: 1, iq: 1 }, record: { v: 0, d: 0, e: 1, ko: 0, sub: 0, dec: 0 } };
     expect(rankingDelJugador(m, flojo)).toBeGreaterThan(5);
   });
 
@@ -184,14 +215,15 @@ describe('rankingDelJugador', () => {
 
   it('ganar peleas mejora el puesto', () => {
     const m = mundo();
-    const base = { ...m.roster[5], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const base = { ...m.roster[5], record: { v: 0, d: 0, e: 1, ko: 0, sub: 0, dec: 0 } };
     const ganador = { ...base, record: { v: 12, d: 0, e: 0, ko: 8, sub: 0, dec: 4 } };
     expect(rankingDelJugador(m, ganador)).toBeLessThanOrEqual(rankingDelJugador(m, base));
   });
 
-  it('siempre devuelve un puesto valido', () => {
+  it('siempre devuelve un puesto valido (una vez debutado)', () => {
     const m = mundo();
-    const puesto = rankingDelJugador(m, m.roster[3]);
+    const debutado = { ...m.roster[3], record: { ...m.roster[3].record, e: m.roster[3].record.e + 1 } };
+    const puesto = rankingDelJugador(m, debutado);
     expect(puesto).toBeGreaterThanOrEqual(1);
     expect(puesto).toBeLessThanOrEqual(m.roster.length + 1);
   });
@@ -204,7 +236,10 @@ describe('rankingDelJugador', () => {
   // puesto de forma proporcional al tamaño de la montaña.
   it('con un roster grande, perder duele: una racha de derrotas empeora mucho el puesto', () => {
     const m = crearMundo(createRng(50), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
-    const base = { ...m.roster[50], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    // `e: 1` para que `base` cuente como debutado (si no, rankingDelJugador
+    // devuelve null y la comparación de abajo no tendría sentido) sin mover
+    // el bono de récord (la fórmula solo usa v y d).
+    const base = { ...m.roster[50], record: { v: 0, d: 0, e: 1, ko: 0, sub: 0, dec: 0 } };
     const rachaMala = { ...base, record: { v: 0, d: 8, e: 0, ko: 0, sub: 0, dec: 0 } };
     expect(rankingDelJugador(m, rachaMala)).toBeGreaterThan(rankingDelJugador(m, base));
   });
@@ -319,11 +354,21 @@ describe('buscarRival', () => {
   });
 });
 
-function jugadorDePrueba(media = 55) {
-  return crearPeleador({
-    nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
-    estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media, esJugador: true,
-  });
+// `crearPeleador` arranca siempre con `record` en 0-0-0 (sin debutar como
+// profesional, ver `yaDebutoProfesional` en world.js): la mayoría de estos
+// tests quieren un jugador YA rankeado (el escenario de siempre, antes de
+// este bug), así que acá se le pone un récord con al menos una pelea (un
+// empate, que no mueve el bono de récord — ver el comentario grande en
+// world.js) salvo que el test pida otra cosa explícitamente. El caso "sin
+// debutar" tiene su propio describe más abajo.
+function jugadorDePrueba(media = 55, record = { v: 0, d: 0, e: 1, ko: 0, sub: 0, dec: 0 }) {
+  return {
+    ...crearPeleador({
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media, esJugador: true,
+    }),
+    record,
+  };
 }
 
 describe('tablaRanking', () => {
@@ -415,5 +460,35 @@ describe('tablaRanking', () => {
     const fila = tabla.find((f) => f.esJugador);
     expect(fila.media).toBe(mediaDe(jugador));
     expect(fila.record).toBe(recordTexto(jugador));
+  });
+
+  // Bug reportado (v9): un jugador que todavía no debutó como profesional
+  // (record en 0-0-0, el estado real de juvenil/amateur — ver el comentario
+  // grande de `rankingDelJugador`, world.js) no puede aparecer rankeado en la
+  // tabla: tiene que coincidir con el "Sin clasificar" que ya muestra el
+  // tablero (bloqueHistorial, panel-peleador.js).
+  describe('jugador sin debutar como profesional (record en 0-0-0)', () => {
+    it('no aparece en la tabla en absoluto', () => {
+      const m = mundo();
+      const jugador = jugadorDePrueba(90, { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
+      const tabla = tablaRanking(m, jugador);
+      expect(tabla.some((f) => f.esJugador)).toBe(false);
+      expect(tabla.some((f) => f.id === jugador.id)).toBe(false);
+    });
+
+    it('la tabla es exactamente el roster activo, sin el jugador de más', () => {
+      const m = mundo();
+      const jugador = jugadorDePrueba(90, { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
+      const tabla = tablaRanking(m, jugador);
+      const activos = m.roster.filter((p) => !p.retirado);
+      expect(tabla).toHaveLength(activos.length);
+    });
+
+    it('los puestos siguen consecutivos de 1 a N (sin el jugador insertado)', () => {
+      const m = mundo();
+      const jugador = jugadorDePrueba(90, { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
+      const tabla = tablaRanking(m, jugador);
+      expect(tabla.map((f) => f.ranking)).toEqual(tabla.map((_, i) => i + 1));
+    });
   });
 });

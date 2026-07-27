@@ -4,6 +4,18 @@
 // serie, sin leyenda), marcas finas, etiquetas directas selectivas (primer y
 // último punto, no todos), tooltip nativo por punto (<title>) y una lista de
 // respaldo accesible (la "vista de tabla" que pide la skill).
+//
+// v9 (feedback del usuario sobre la ronda anterior, con captura de pantalla
+// en mano): "sigue sin mostrar de enero a diciembre", "faltan el eje Y", "el
+// gráfico tiene que aparecer SIEMPRE, incluso con la media plana". Esta
+// ronda:
+//   1) el eje X siempre marca los 12 meses del año (no solo el primero/último
+//      CON DATO) y la línea se extiende (proyectada, no un dato nuevo) hasta
+//      los dos bordes del año cuando el dato real no llega — antes la línea
+//      se cortaba donde se acababan los datos, dejando "media caja" vacía.
+//   2) hay un eje Y de verdad: gridlines + valores, no números flotando.
+//   3) el fallback de texto ("Media estable en X...") se elimina: con un solo
+//      valor real (o todos iguales) se dibuja una línea PLANA, nunca texto.
 import { describe, it, expect } from 'vitest';
 import { graficoMedia, graficoRanking } from '../../../src/ui/components/grafico-media.js';
 import { ANIO_INICIAL } from '../../../src/core/world.js';
@@ -70,14 +82,30 @@ describe('graficoMedia', () => {
     expect(lista.querySelectorAll('li')).toHaveLength(3);
   });
 
-  it('con una sola muestra (o todas en la misma semana), no dibuja un grafico degenerado: cae a una lectura simple', () => {
-    const nodo = graficoMedia({ muestras: [{ semana: 1, media: 60 }] });
-    expect(nodo.querySelector('svg')).toBeNull();
+  // v9: el fallback de texto para "poco dato" se elimina — el pedido
+  // explícito es "el gráfico se muestra SIEMPRE, aunque la media no haya
+  // cambiado [...] una línea plana también es información".
+  it('con una sola muestra Y año conocido, dibuja una linea PLANA a lo largo de todo el año (nunca texto)', () => {
+    const nodo = graficoMedia({ muestras: [{ semana: 5, media: 60 }], anio: ANIO_INICIAL });
+    const svg = nodo.querySelector('svg');
+    expect(svg).toBeTruthy();
+    expect(nodo.querySelector(`.${'grafico-media-vacio'}`)).toBeNull();
+    // Un solo dato real: un solo círculo (el dato), pero la línea sigue
+    // dibujada de punta a punta del año (ver el test de dominio X, más abajo).
+    expect(svg.querySelectorAll('circle').length).toBe(1);
     expect(nodo.textContent).toContain('60');
   });
 
-  it('sin muestras, no revienta (defensivo)', () => {
+  it('con una sola muestra y SIN año, igual dibuja un grafico (un punto), nunca texto', () => {
+    const nodo = graficoMedia({ muestras: [{ semana: 1, media: 60 }] });
+    expect(nodo.querySelector('svg')).toBeTruthy();
+    expect(nodo.querySelector('circle')).toBeTruthy();
+  });
+
+  it('sin muestras, no revienta (defensivo) — este es el único caso legítimo de texto (no hay NADA que graficar)', () => {
     expect(() => graficoMedia({ muestras: [] })).not.toThrow();
+    const nodo = graficoMedia({ muestras: [] });
+    expect(nodo.querySelector('svg')).toBeNull();
   });
 
   it('linea y puntos usan el color dorado del tema (identidad visual gotica-fria, una sola serie)', () => {
@@ -108,6 +136,59 @@ describe('graficoMedia', () => {
       expect(ultimoCx).toBeLessThan(vbAncho * 0.5);
     });
 
+    // v9 (bug reportado con captura: "sigue yendo de Ene a Abr, ocupa media
+    // caja"): que el DOMINIO abarque el año completo no alcanza si la LÍNEA
+    // visible se corta donde termina el dato — el usuario ve una caja vacía
+    // del lado derecho. La línea (proyectada, ver más abajo) tiene que llegar
+    // de verdad hasta el borde derecho del SVG.
+    it('la linea (incluida su proyeccion) llega hasta el borde derecho del grafico, aunque el ultimo dato real sea de marzo', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 1, media: 60 }, { semana: 10, media: 65 }],
+        anio: ANIO_INICIAL,
+      });
+      const lineas = [...nodo.querySelectorAll('polyline')];
+      const svg = nodo.querySelector('svg');
+      const vbAncho = Number(svg.getAttribute('viewBox').split(' ')[2]);
+      const maxX = Math.max(...lineas.flatMap((l) => l.getAttribute('points').split(' ').map((p) => Number(p.split(',')[0]))));
+      expect(maxX).toBeGreaterThan(vbAncho - 15);
+    });
+
+    it('la linea llega hasta el borde IZQUIERDO del grafico, aunque el primer dato real sea de marzo', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 10, media: 60 }, { semana: 20, media: 65 }],
+        anio: ANIO_INICIAL,
+      });
+      const lineas = [...nodo.querySelectorAll('polyline')];
+      const minX = Math.min(...lineas.flatMap((l) => l.getAttribute('points').split(' ').map((p) => Number(p.split(',')[0]))));
+      const svg = nodo.querySelector('svg');
+      const vbAncho = Number(svg.getAttribute('viewBox').split(' ')[2]);
+      // Bien cerca del borde izquierdo del área útil (no a mitad de camino).
+      expect(minX).toBeLessThan(vbAncho * 0.15);
+    });
+
+    it('el eje X siempre marca los 12 meses del año, no solo el tramo con datos (etiqueta "Ene" y "Dic" presentes)', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 1, media: 60 }, { semana: 10, media: 65 }],
+        anio: ANIO_INICIAL,
+      });
+      const textos = [...nodo.querySelectorAll('svg text')].map((t) => t.textContent);
+      expect(textos).toContain('Ene');
+      expect(textos).toContain('Dic');
+    });
+
+    it('con la media 100% plana durante el año (un solo valor real), la linea/proyeccion sigue yendo de punta a punta', () => {
+      const nodo = graficoMedia({ muestras: [{ semana: 20, media: 75 }], anio: ANIO_INICIAL });
+      const lineas = [...nodo.querySelectorAll('polyline')];
+      expect(lineas.length).toBeGreaterThan(0);
+      const svg = nodo.querySelector('svg');
+      const vbAncho = Number(svg.getAttribute('viewBox').split(' ')[2]);
+      const xs = lineas.flatMap((l) => l.getAttribute('points').split(' ').map((p) => Number(p.split(',')[0])));
+      expect(Math.min(...xs)).toBeLessThan(vbAncho * 0.15);
+      expect(Math.max(...xs)).toBeGreaterThan(vbAncho * 0.85);
+      // Nunca aparece el texto de fallback de antes.
+      expect(nodo.textContent).not.toMatch(/estable/i);
+    });
+
     it('sin "anio" (llamador defensivo), se cae al rango dinamico de antes (compatibilidad)', () => {
       const nodo = graficoMedia({
         muestras: [{ semana: 1, media: 60 }, { semana: 10, media: 65 }],
@@ -119,6 +200,34 @@ describe('graficoMedia', () => {
       // Sin año fijo, el último punto vuelve a quedar cerca del borde
       // derecho (el rango es el de los propios datos).
       expect(ultimoCx).toBeGreaterThan(vbAncho * 0.8);
+    });
+  });
+
+  // v9 (pedido: "faltan el eje Y, con sus valores").
+  describe('eje Y (gridlines + valores)', () => {
+    it('dibuja al menos 2 valores de referencia del eje Y, como texto (no solo los de los puntos)', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 1, media: 60 }, { semana: 30, media: 70 }],
+        anio: ANIO_INICIAL,
+      });
+      const svg = nodo.querySelector('svg');
+      const lineasGrilla = svg.querySelectorAll('.grafico-linea-grilla, line');
+      expect(lineasGrilla.length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('los valores del eje Y quedan a la IZQUIERDA del área de dibujo (no flotando sobre los puntos)', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 1, media: 60 }, { semana: 30, media: 70 }],
+        anio: ANIO_INICIAL,
+      });
+      const svg = nodo.querySelector('svg');
+      const grilla = [...svg.querySelectorAll('.grafico-linea-grilla')];
+      expect(grilla.length).toBeGreaterThan(0);
+      const inicioGrilla = Number(grilla[0].getAttribute('x1'));
+      const etiquetasEje = [...svg.querySelectorAll('text')].filter((t) => /^-?\d+(\.\d+)?$/.test(t.textContent.trim()));
+      // Al menos una etiqueta numérica del eje vive a la izquierda de donde
+      // arranca el área de dibujo (las gridlines), nunca sobre ella.
+      expect(etiquetasEje.some((t) => Number(t.getAttribute('x')) < inicioGrilla)).toBe(true);
     });
   });
 });
@@ -152,6 +261,26 @@ describe('graficoRanking', () => {
     expect(cy[1]).toBeLessThan(cy[0]);
   });
 
+  // v9 (pedido: sacar el cartel "Más arriba, mejor puesto" — la inversión se
+  // tiene que entender por el DISEÑO, no por un texto. Acá: los propios
+  // valores del eje Y, en orden decreciente de arriba hacia abajo, ya
+  // muestran que el número chico (mejor puesto) vive arriba.
+  it('el eje Y del ranking muestra los valores en orden DECRECIENTE de arriba hacia abajo (sin necesitar un cartel aparte)', () => {
+    const nodo = graficoRanking({
+      muestras: [{ semana: 1, ranking: 45 }, { semana: 30, ranking: 5 }],
+      anio: ANIO_INICIAL,
+    });
+    const svg = nodo.querySelector('svg');
+    const etiquetas = [...svg.querySelectorAll('text')].filter((t) => /^#\d+$/.test(t.textContent.trim()) && Number(t.getAttribute('x')) < 30);
+    expect(etiquetas.length).toBeGreaterThanOrEqual(2);
+    const ordenadas = etiquetas
+      .map((t) => ({ y: Number(t.getAttribute('y')), valor: Number(t.textContent.replace('#', '')) }))
+      .sort((a, b) => a.y - b.y);
+    for (let i = 1; i < ordenadas.length; i += 1) {
+      expect(ordenadas[i].valor).toBeGreaterThanOrEqual(ordenadas[i - 1].valor);
+    }
+  });
+
   it('formatea los valores directos como "#N", no un numero pelado', () => {
     const nodo = graficoRanking({ muestras: muestras(), anio: ANIO_INICIAL });
     const textos = [...nodo.querySelectorAll('svg text')].map((t) => t.textContent);
@@ -169,14 +298,16 @@ describe('graficoRanking', () => {
     expect(nodo.querySelectorAll('circle').length).toBe(2);
   });
 
-  it('con una sola muestra valida (o ninguna), cae a una lectura simple con el puesto', () => {
+  it('con una sola muestra valida Y año conocido, dibuja una linea plana (nunca texto)', () => {
     const nodo = graficoRanking({ muestras: [{ semana: 1, ranking: 12 }], anio: ANIO_INICIAL });
-    expect(nodo.querySelector('svg')).toBeNull();
+    expect(nodo.querySelector('svg')).toBeTruthy();
     expect(nodo.textContent).toContain('#12');
   });
 
-  it('sin muestras, no revienta (defensivo)', () => {
+  it('sin ninguna muestra valida, no revienta (defensivo) y cae a la lectura simple (unico caso legitimo de texto)', () => {
     expect(() => graficoRanking({ muestras: [] })).not.toThrow();
+    const nodo = graficoRanking({ muestras: [{ semana: 1, ranking: null }] });
+    expect(nodo.querySelector('svg')).toBeNull();
   });
 
   it('linea y puntos usan el mismo dorado del tema (una sola serie, sin leyenda)', () => {

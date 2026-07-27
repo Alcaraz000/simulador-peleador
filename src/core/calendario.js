@@ -54,6 +54,26 @@ export function semanasDeBloque(aniosPorBloque) {
 }
 
 /**
+ * Los 12 meses de UN año calendario dado, con la semanaGlobal en la que
+ * arranca cada uno (pedido textual: "el gráfico va de enero a diciembre,
+ * siempre" — ver grafico-media.js). Reusa el mismo reparto de 52 semanas en
+ * 12 meses que ya usa `fechaDe` (LIMITES_MES), así que un eje construido con
+ * esto siempre coincide con lo que `fechaDe` va a decir de esas mismas
+ * semanas — nunca un segundo cálculo de calendario por separado.
+ * @param {number} anio
+ * @param {number} anioInicial
+ * @returns {Array<{mes:number, nombreMes:string, semanaGlobal:number}>}
+ */
+export function mesesDelAnio(anio, anioInicial) {
+  const inicioAnio = (anio - anioInicial) * SEMANAS_POR_ANIO + 1;
+  return NOMBRES_MES.map((nombreMes, mesIndice) => ({
+    mes: mesIndice + 1,
+    nombreMes,
+    semanaGlobal: inicioAnio + LIMITES_MES[mesIndice],
+  }));
+}
+
+/**
  * Cuántas semanas faltan para la próxima pelea firmada. `null` si todavía no
  * hay ninguna pelea firmada (partida.proximaPelea) — una oferta sin aceptar
  * no cuenta, aunque ya esté armada internamente (ver ofertaPendiente en

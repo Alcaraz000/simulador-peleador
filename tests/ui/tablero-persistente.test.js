@@ -415,13 +415,20 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
     iniciar(cont, prepararStorage(partida));
 
-    const textoEsperado = fechaDe(semanaGuardada, ANIO_INICIAL).texto;
+    // Pedido 2 (v9): la visual del calendario cambió de "Mes Año · Semana N"
+    // a piezas separadas (año en chip, mes, semana) — se verifica por
+    // partes, no por el string concatenado `.texto` (que ya no se pinta tal
+    // cual, ver panel-calendario.js).
+    const fechaEsperada = fechaDe(semanaGuardada, ANIO_INICIAL);
     // Calendario en la columna derecha (v4, grilla 3×3: "Calendario + Botón
     // tienda"), no en el centro.
-    expect(cont.querySelector('.shell-derecha').textContent).toContain(textoEsperado);
+    const textoDerecha = cont.querySelector('.shell-derecha').textContent;
+    expect(textoDerecha).toContain(String(fechaEsperada.anio));
+    expect(textoDerecha).toContain(fechaEsperada.nombreMes);
+    expect(textoDerecha).toContain(`Semana ${fechaEsperada.semanaDelMes}`);
     // Y no quedó pegada en la semana 1 (el bug que rompería si la carga
     // ignorara semanaGlobal y el calendario mostrara siempre el arranque).
-    expect(textoEsperado).not.toBe(fechaDe(1, ANIO_INICIAL).texto);
+    expect(fechaEsperada.texto).not.toBe(fechaDe(1, ANIO_INICIAL).texto);
   });
 
   it('una carrera completa jugada por la UI real (aceptando las peleas) llega al legado sin excepciones', () => {

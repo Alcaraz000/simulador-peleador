@@ -42,7 +42,7 @@ import { renderResumenAnio } from './ui/screens/resumen-anio.js';
 
 import { crearShell } from './ui/shell.js';
 import {
-  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero, renderPanelRecursos,
+  renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero,
 } from './ui/screens/panel-peleador.js';
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
@@ -306,9 +306,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // Asegura el shell y REFRESCA los tres paneles del tablero con la partida
   // actual, según la grilla 3×3 (v4, feedback del usuario: "en PC no se
   // aprovecha bien el ancho"):
-  //   - izquierda: personaje, tu rincón, categoría/ranking.
+  //   - izquierda: personaje, cinturones, tu rincón, categoría/ranking.
   //   - centro: atributos, estado, y lo que esté pasando ahora (contenido).
-  //   - derecha: calendario+dinero, fama+próxima pelea, noticias.
+  //   - derecha: calendario+dinero, próxima pelea, noticias. (El panel de
+  //     "Archirrival" que vivía acá se sacó del tablero, Pedido 6, v9.)
   // Se llama en cada transición del tablero (nuevo beat, o volver al estado
   // ocioso) — nunca en cada micro-render dentro de un mismo beat (p. ej. cada
   // golpe del sparring, o cada frame del roll de azar, repintan solo
@@ -353,13 +354,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     shell.montarDerecha(el('div', { class: 'stack' }, [
       el('div', { dataset: { bloque: 'calendario' } }),
       el('div', { dataset: { bloque: 'dinero' } }),
-      el('div', { dataset: { bloque: 'recursos' } }),
       el('div', { dataset: { bloque: 'proxima' } }),
       el('div', { dataset: { bloque: 'noticias' } }),
     ]));
     renderCalendario(shell.regiones.derecha.querySelector('[data-bloque="calendario"]'), { partida });
     renderPanelDinero(shell.regiones.derecha.querySelector('[data-bloque="dinero"]'), propsPanelDinero());
-    renderPanelRecursos(shell.regiones.derecha.querySelector('[data-bloque="recursos"]'), { partida });
     renderPanelProxima(shell.regiones.derecha.querySelector('[data-bloque="proxima"]'), {
       partida,
       onVerRival: (rivalId) => {
@@ -831,7 +830,20 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // la carrera al repetirse. No es una animación de movimiento (nada se
   // mueve mientras tanto), así que no depende de prefers-reduced-motion como
   // sí lo hace animarRoll.
-  const PAUSA_RESULTADO_MS = 1100;
+  //
+  // Bug reportado (v9, "el roll de los dados ocurre demasiado rápido, no da
+  // margen a ver qué fue lo que pasó"): la causa real no era `animarRoll`
+  // (roll.js, DURACION_MS=1500, ya dentro de la ventana 1200-1800ms pedida y
+  // sin tocar acá) sino ESTA pausa — 1100ms es muy poco para registrar que
+  // apareció una frase nueva Y leerla completa (los textos de rama son cortos,
+  // pero de todos modos una oración entera). Subida a 2200ms: de sobra para
+  // leer una frase corta con calma, sin que se sienta como una espera muerta.
+  // Presupuesto de minutos (medido con un script puntual, no versionado, 300
+  // semillas "jugando bien" con el mismo criterio que balance-sim.mjs):
+  // ~3.2 rolls/carrera en promedio (máx. 9), así que el aumento de +1100ms
+  // suma ~3.5s por carrera en el caso típico — muy por debajo del margen de
+  // 1 minuto que el brief permite para este ajuste.
+  const PAUSA_RESULTADO_MS = 2200;
 
   // Resuelve una opción (con o sin `probabilidades`) y, si tiene azar, corre
   // el roll con suspenso sobre la propia tarjeta antes de avisar el

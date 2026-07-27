@@ -37,6 +37,35 @@ describe('renderCalendario', () => {
     const p = partidaBase();
     p.semanaGlobal = 60;
     renderCalendario(cont, { partida: p });
-    expect(cont.textContent).toContain(fechaDe(60, ANIO_INICIAL).texto);
+    const fecha = fechaDe(60, ANIO_INICIAL);
+    expect(cont.textContent).toContain(String(fecha.anio));
+    expect(cont.textContent).toContain(fecha.nombreMes);
+    expect(cont.textContent).toContain(`Semana ${fecha.semanaDelMes}`);
+  });
+
+  // Pedido 2 (v9, "no hace falta la etiqueta 'calendario' (se sobreentiende)"
+  // + visual nueva "(2024) Septiembre    Semana 3"): sin el título del
+  // módulo, el año como chip con fondo (mismo lenguaje que el resto del
+  // tablero) separado del mes y la semana.
+  it('no muestra la etiqueta "Calendario" (se sobreentiende)', () => {
+    renderCalendario(cont, { partida: partidaBase() });
+    expect(cont.textContent).not.toContain('Calendario');
+  });
+
+  it('el año se muestra como un chip con fondo, no como texto suelto', () => {
+    renderCalendario(cont, { partida: partidaBase() });
+    const chipAnio = cont.querySelector('.calendario-anio');
+    expect(chipAnio).toBeTruthy();
+    expect(chipAnio.classList.contains('chip')).toBe(true);
+    expect(chipAnio.textContent).toBe('2026');
+  });
+
+  it('mes y semana viven en sus propios elementos, separados del año', () => {
+    const p = partidaBase();
+    p.semanaGlobal = 60;
+    renderCalendario(cont, { partida: p });
+    const fecha = fechaDe(60, ANIO_INICIAL);
+    expect(cont.querySelector('.calendario-mes').textContent).toBe(fecha.nombreMes);
+    expect(cont.querySelector('.calendario-semana').textContent).toBe(`Semana ${fecha.semanaDelMes}`);
   });
 });

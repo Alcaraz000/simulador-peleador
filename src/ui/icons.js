@@ -184,6 +184,20 @@ const PATHS = {
   // Resumen de fin de año (v7): tendencia ascendente (Feather/Lucide
   // "trending-up") — el ícono de la cabecera del resumen.
   grafico: ['M23 6 13.5 15.5 8.5 10.5 1 18', 'M17 6h6v6'],
+
+  // Cinturón de campeón (Pedido 5, v9): las 3 cajas de título en el tablero
+  // ("Regional/Nacional/Mundial") piden un ícono de cinturón de fondo,
+  // ligeramente difuminado — correa a los costados + placa central (el
+  // "broche") con una gema en el medio. No hay un ícono de cinturón en
+  // Feather/Lucide (de donde salen los demás trazos de este archivo), así
+  // que este es propio: simple a propósito, se usa chico y a baja opacidad
+  // como textura de fondo, nunca como ícono principal de una fila.
+  cinturon: [
+    'M2 12h4',
+    'M18 12h4',
+    'M6 8h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z',
+    'M12 10.5v3',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

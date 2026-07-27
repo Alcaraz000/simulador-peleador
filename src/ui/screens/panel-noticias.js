@@ -1,5 +1,5 @@
 import { el, mount } from '../dom.js';
-import { etiquetaTipo, marcarLeidas } from '../../core/news.js';
+import { marcarLeidas } from '../../core/news.js';
 
 // Panel de noticias en la columna derecha: alto fijo con scroll interno (no
 // crece indefinidamente con la carrera). El botón de cabecera hace doble
@@ -11,6 +11,20 @@ import { etiquetaTipo, marcarLeidas } from '../../core/news.js';
 // Más alto (revisión v3, feedback textual del usuario: "el módulo, al menos
 // en PC, no es lo suficientemente alto como para acompañar al resto de la
 // interfaz"): antes 320px, muy corto comparado con la columna izquierda.
+//
+// Pedido 1 (v9, causa real de los dos huecos reportados — esquina inferior
+// izquierda Y centro inferior, debajo de las decisiones): esto usaba
+// `max-height`, no `height`. Con `max-height` el panel mide chico apenas
+// arranca la carrera (sin noticias, o dos o tres) y va CRECIENDO hasta el
+// tope a medida que se llena — la columna derecha crece con él, la grilla
+// (`align-items:stretch`, theme.css) estira izquierda/centro a esa misma
+// altura, y como esas dos no tienen contenido real de sobra para llenar ese
+// alto, queda el hueco. El usuario ya lo había pedido antes ("que el módulo
+// de noticias tenga un tamaño fijo y NUNCA cambie haya o no noticias") — acá
+// se corrige de raíz: `height` fijo siempre, con o sin noticias, scrolleable
+// por dentro si el contenido no entra. El alto de la columna derecha queda
+// constante durante TODA la carrera, así que ya no es la variable que
+// empuja a las otras dos a estirarse de más.
 const ALTO_LISTA_PX = 480;
 
 // Intervalo entre una noticia y la siguiente al entrar (pedido: "que se
@@ -32,6 +46,15 @@ function prefiereMovimientoReducido() {
 // noticias del mundo (generarNoticia/PLANTILLAS), pero marcada aparte — acá
 // solo se traduce esa marca a un look distinto (borde y chip dorados, ver
 // theme.css), nunca a una estructura de datos distinta.
+// Pedido 3 (v9, "quitar los labels 'Resultado/Retiro/etc.' de las
+// noticias"): se saca la etiqueta de TIPO de cada noticia (antes
+// `etiquetaTipo(n.tipo)`, arriba de todo) — el titular ya cuenta de qué se
+// trata sin necesitar una etiqueta aparte encima. `etiquetaTipo` (news.js)
+// sigue existiendo en el núcleo (no se tocó, sigue con sus tests propios),
+// simplemente ya no tiene consumidor acá. El chip "ÚLTIMO MOMENTO" de cada
+// noticia NUEVA se mantiene (pedido explícito: "NO lo quites de las
+// noticias nuevas") — lo único que se saca es el de la CABECERA del módulo,
+// ver el botón más abajo.
 function itemNoticia(n, { oculta }) {
   return el('div', {
     class: `panel noticia-item${n.nueva ? ' nueva' : ''}${n.propia ? ' propia' : ''}${oculta ? ' noticia-oculta' : ''}`,
@@ -39,8 +62,7 @@ function itemNoticia(n, { oculta }) {
   }, [
     n.propia ? el('span', { class: 'chip dorado', style: 'margin-bottom:4px', text: 'TU CARRERA' }) : null,
     n.nueva ? el('span', { class: 'chip rojo', style: 'margin-bottom:4px', text: 'ÚLTIMO MOMENTO' }) : null,
-    el('div', { class: 'etiqueta', text: etiquetaTipo(n.tipo) }),
-    el('div', { style: 'font-weight:800;margin-top:3px;font-size:12.5px', text: n.titular }),
+    el('div', { style: 'font-weight:800;font-size:12.5px', text: n.titular }),
     n.cuerpo ? el('p', { class: 'medio', style: 'margin:4px 0 0;font-size:11.5px', text: n.cuerpo }) : null,
   ]);
 }
@@ -84,20 +106,27 @@ export function renderPanelNoticias(region, {
 
   const lista = el('div', {
     class: 'panel-noticias-lista',
-    style: `max-height:${ALTO_LISTA_PX}px;overflow-y:auto`,
+    style: `height:${ALTO_LISTA_PX}px;overflow-y:auto`,
   }, noticias.length > 0
     ? noticias.map((n) => itemNoticia(n, { oculta: idsPendientes.has(n.id) }))
     : [el('p', { class: 'medio', style: 'font-size:12px', text: 'Semana tranquila. Nadie habló de nadie.' })]);
 
   const raiz = el('div', { class: 'panel panel-noticias' });
 
+  // Pedido 3 (v9, "quitá el label 'Último momento' que aparece a la
+  // derecha, NO lo quites de las noticias nuevas"): esto es la cabecera del
+  // MÓDULO entero, no de una noticia puntual — antes repetía el mismo aviso
+  // que ya da, MUCHO más específico, el chip de cada noticia nueva (arriba,
+  // itemNoticia). El título "Noticias" de la cabecera se mantiene tal cual
+  // (el pedido de sacar la etiqueta redundante es el del calendario, Pedido
+  // 2 — acá no se pidió sacar nada más que el chip rojo).
   const boton = el('button', {
     class: 'panel-noticias-boton',
     type: 'button',
     dataset: { accion: 'abrir-noticias' },
+    'aria-label': 'Noticias',
   }, [
     el('span', { class: 'etiqueta', text: 'Noticias' }),
-    hayNuevas ? el('span', { class: 'chip rojo', text: 'ÚLTIMO MOMENTO' }) : null,
   ]);
 
   boton.addEventListener('click', () => {

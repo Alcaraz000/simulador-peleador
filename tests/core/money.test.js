@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
-  STAFF, LUJOS, catalogo, comprar, tieneStaff, bonusCartas, cobrarSponsor,
+  STAFF, LUJOS, catalogo, comprar, tieneStaff, bonusCartas, cobrarSponsor, puedeComprarAlgo,
 } from '../../src/core/money.js';
 
 function jugador(extra = {}) {
@@ -79,6 +79,45 @@ describe('comprar', () => {
     const yo = jugador({ dinero: 999999 });
     const antes = JSON.stringify(yo);
     comprar(yo, STAFF[0].id);
+    expect(JSON.stringify(yo)).toBe(antes);
+  });
+});
+
+// Pedido 7 (v9, "quiero que brille [el botón de la tienda] cuando el
+// jugador pueda comprar algo con el dinero que tiene, y no sea algo ya
+// comprado"): la comprobación barata que alimenta ese brillo.
+describe('puedeComprarAlgo', () => {
+  it('true si alcanza para algo que todavía no tiene', () => {
+    expect(puedeComprarAlgo(jugador({ dinero: STAFF[0].precio }))).toBe(true);
+  });
+
+  it('false sin plata para nada', () => {
+    expect(puedeComprarAlgo(jugador({ dinero: 0 }))).toBe(false);
+  });
+
+  it('false si lo único que podría pagar ya lo tiene comprado', () => {
+    const yo = jugador({ dinero: STAFF[0].precio, staff: [STAFF[0].id], lujos: [] });
+    // Con exactamente la plata del ítem más barato (y nada más alcanzable),
+    // si ya lo tiene, no queda nada nuevo para comprar.
+    const soloEseAlcanza = STAFF.every((s) => s.id === STAFF[0].id || s.precio > yo.dinero)
+      && LUJOS.every((l) => l.precio > yo.dinero);
+    expect(soloEseAlcanza).toBe(true);
+    expect(puedeComprarAlgo(yo)).toBe(false);
+  });
+
+  it('true si con lo comprado todavía queda algo más barato sin comprar', () => {
+    const yo = jugador({ dinero: STAFF[1].precio, staff: [STAFF[0].id] });
+    expect(puedeComprarAlgo(yo)).toBe(true);
+  });
+
+  it('true con plata de sobra para comprar cualquier cosa (isla privada, el más caro)', () => {
+    expect(puedeComprarAlgo(jugador({ dinero: 999999999 }))).toBe(true);
+  });
+
+  it('no muta el jugador', () => {
+    const yo = jugador({ dinero: STAFF[0].precio });
+    const antes = JSON.stringify(yo);
+    puedeComprarAlgo(yo);
     expect(JSON.stringify(yo)).toBe(antes);
   });
 });
