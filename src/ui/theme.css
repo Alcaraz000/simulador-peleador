@@ -2105,3 +2105,82 @@ input.creacion-control { cursor: text; }
 .boton-tienda.brillo {
   animation: brillo-tienda 1.8s ease-in-out infinite;
 }
+
+/* ============================================================================
+   v9 (segunda vuelta) — Reglas nuevas AL FINAL del archivo a propósito
+   (aviso del coordinador: hay otro implementador en paralelo tocando
+   src/core/world.js, src/core/career.js, src/ui/components/roll.js y
+   src/main.js — agregar acá en vez de editar en el medio del archivo
+   minimiza el choque). Todo lo de acá PISA selectores que ya existen más
+   arriba (mismo selector, gana por orden de cascada — mismo truco que ya
+   usan los bloques "v8"/"v9" de más arriba) o suma clases nuevas; ninguna
+   línea de arriba se tocó.
+
+   Feedback puntual del usuario sobre el resumen de fin de año, CON CAPTURA
+   DE PANTALLA en mano (el pase anterior había dado por resuelto parte de
+   esto sin verificar visualmente):
+     1) "(Resumen del año)" pegado al año, no flotando a la derecha.
+     2) Sacar la leyenda "Más arriba, mejor puesto" del gráfico de ranking
+        (la parte visual de esto vive en grafico-media.js: el eje Y ahora
+        muestra los valores en orden decreciente de arriba hacia abajo).
+     3) Decisiones y Peleas del año alineadas: ancho fijo por columna, misma
+        columna de "tipo/mes" entre las dos secciones.
+   ============================================================================ */
+
+/* --- Pedido 1: el año y "(Resumen del año)" pegados, de una vez ----------
+   BUG REAL (no una regla que faltara): el contenedor de esta pareja ya vivía
+   en una fila con gap chico, pero reusaba la clase genérica `.fila` — y
+   `.fila > *` (más arriba en este archivo) le da `flex:1` a CUALQUIER hijo
+   directo de una `.fila`. Con dos hijos (`h1` y el `span.etiqueta`), cada uno
+   terminaba ocupando el 50% del ancho disponible en vez de medir su propio
+   contenido: la etiqueta arrancaba a mitad de camino del contenedor, lejos
+   del número del año — exactamente el "flotando a la derecha" que reportó el
+   usuario. Clase dedicada (ver resumen-anio.js), SIN heredar `.fila`: sin
+   `flex` en la regla de más arriba pisándola, cada hijo vuelve a su
+   `flex: 0 1 auto` de fábrica (mide su propio contenido), así que la etiqueta
+   queda pegada al número, cualquiera sea el ancho del año en pantalla. */
+.resumen-anio-cabecera-anio {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+/* --- Pedido 3: Decisiones y Peleas del año, alineadas de verdad ----------
+   Verificación visual (captura del usuario): "MEJORA" y "CAMPAMENTO" medían
+   distinto (la etiqueta de tipo se ajustaba a su propio texto,
+   `flex:0 0 auto`), así que la columna siguiente (el título de la decisión)
+   arrancaba en un lugar distinto en cada fila — y lo mismo pasaba, más
+   abajo, entre "rival"/"método"/"resultado" de cada pelea. La idea del
+   usuario ("imaginalas como columnas, siempre empiezan en el mismo lugar")
+   es literal: cada columna pasa a tener un ANCHO FIJO (`flex: 0 0 Npx`, ni
+   crece ni se achica con su propio contenido), así que la columna que sigue
+   siempre arranca en la misma posición X, fila tras fila.
+   La columna de "tipo" (`.resumen-anio-fila-tag`) es la MISMA clase en
+   decisiones (ícono + "Mejora"/"Campamento"/etc) Y en peleas (el mes, sin
+   ícono) — fijarle un ancho acá alinea esa columna EN LAS DOS SECCIONES a
+   la vez, que es el ejemplo puntual que dio el usuario ("que 'Mejora' y
+   'CAMPAMENTO' ocupen el mismo espacio"). Nunca `white-space:nowrap`: un
+   texto que no entra (p. ej. "Redes sociales", o "Septiembre") envuelve a
+   una segunda línea en vez de recortarse — regla general del proyecto,
+   "nunca se recortan con …". `.resumen-anio-fila-rival` no necesita ancho
+   fijo: ya usa `flex:1` (llena lo que sobra), así que su columna siempre
+   arranca pegada al tag fijo — lo único que hacía falta para que LAS
+   COLUMNAS DE DESPUÉS (método/resultado) tuvieran una posición constante era
+   que método/resultado dejaran de medirse por su propio contenido. */
+.resumen-anio-fila-tag {
+  flex: 0 0 92px;
+  white-space: normal;
+}
+
+.resumen-anio-fila-titulo {
+  flex: 0 0 120px;
+}
+
+.resumen-anio-fila-metodo {
+  flex: 0 0 78px;
+}
+
+.resumen-anio-fila-resultado {
+  flex: 0 0 58px;
+  text-align: right;
+}

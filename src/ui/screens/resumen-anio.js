@@ -79,8 +79,10 @@ function itemPelea(p) {
     ]),
     el('span', { class: 'resumen-anio-fila-metodo medio', text: metodo }),
     el('span', {
-      class: RESULTADO_CLASE[p.resultado] ?? 'sutil',
-      style: 'font-weight:800;flex:0 0 auto',
+      // Pedido 6 (v9, "columnas alineadas"): ancho fijo (ver
+      // .resumen-anio-fila-resultado, theme.css) en vez del inline style de
+      // antes — mismo motivo que el resto de las columnas de esta fila.
+      class: `resumen-anio-fila-resultado ${RESULTADO_CLASE[p.resultado] ?? 'sutil'}`,
       text: RESULTADO_TEXTO[p.resultado] ?? p.resultado,
     }),
   ]);
@@ -100,15 +102,17 @@ function seccion(titulo, items) {
 
 // Un gráfico con su propia etiqueta chica arriba (Media / Ranking) — antes el
 // gráfico de media vivía solo, sin nombre propio, porque era el único; ahora
-// que hay dos apilados hace falta distinguirlos de un vistazo. `nota` es el
-// texto corto que aclara la inversión del ranking ("más arriba, mejor
-// puesto") — pedido explícito: "que se lea bien esa inversión".
-function bloqueGrafico(titulo, nota, nodoGrafico) {
+// que hay dos apilados hace falta distinguirlos de un vistazo.
+//
+// v9 (feedback del usuario: "sacar la leyenda 'Más arriba, mejor puesto' del
+// gráfico de ranking [...] la inversión de la escala se tiene que entender
+// por el diseño del gráfico, no por un cartel"): este bloque ya NO recibe una
+// nota aparte — el propio eje Y del gráfico de ranking (grafico-media.js)
+// ahora dibuja sus valores en orden decreciente de arriba hacia abajo, así
+// que la inversión se lee sola, sin texto adicional.
+function bloqueGrafico(titulo, nodoGrafico) {
   return el('div', { class: 'panel' }, [
-    el('div', { class: 'fila', style: 'justify-content:space-between;align-items:baseline;margin-bottom:4px' }, [
-      el('span', { class: 'etiqueta', text: titulo }),
-      nota ? el('span', { class: 'medio', style: 'font-size:10px', text: nota }) : null,
-    ]),
+    el('span', { class: 'etiqueta', style: 'display:block;margin-bottom:4px', text: titulo }),
     nodoGrafico,
   ]);
 }
@@ -130,7 +134,16 @@ export function renderResumenAnio(region, {
   const cuerpo = el('div', { class: 'stack resumen-anio' }, [
     el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
       el('div', { class: 'resumen-anio-icono' }, [icono('grafico', { tamano: 18 })]),
-      el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
+      // v9 (feedback del usuario: "(Resumen del año) tiene que estar pegado
+      // al año, no flotando a la derecha"): esto YA vivía en una `fila` con
+      // gap chico — el bug real era que `.fila > *` (regla genérica,
+      // theme.css) le da `flex:1` a CUALQUIER hijo directo de una `.fila`,
+      // así que el h1 y la etiqueta se repartían el ancho disponible 50/50
+      // en vez de pegarse uno al otro (la etiqueta terminaba arrancando a
+      // mitad de camino del contenedor, lejos del año). Clase dedicada
+      // (`resumen-anio-cabecera-anio`, ver theme.css) que fija sus hijos en
+      // `flex:0 0 auto`: ambos miden su propio contenido, nunca más.
+      el('div', { class: 'resumen-anio-cabecera-anio' }, [
         el('h1', { style: 'margin:0', text: String(anio) }),
         el('span', { class: 'etiqueta', text: '(Resumen del año)' }),
       ]),
@@ -139,8 +152,8 @@ export function renderResumenAnio(region, {
       el('div', { class: 'resumen-anio-icono resumen-anio-icono-chico' }, [icono('microfono', { tamano: 13 })]),
       el('p', { class: 'medio', style: 'margin:0;flex:1;min-width:0', text: narrativa }),
     ]) : null,
-    bloqueGrafico('Media', null, graficoMedia({ muestras: muestrasMedia, anio })),
-    bloqueGrafico('Ranking', 'Más arriba, mejor puesto', graficoRanking({ muestras: muestrasMedia, anio })),
+    bloqueGrafico('Media', graficoMedia({ muestras: muestrasMedia, anio })),
+    bloqueGrafico('Ranking', graficoRanking({ muestras: muestrasMedia, anio })),
     seccion('Decisiones', decisiones.map(itemDecision)),
     seccion('Peleas del año', peleas.map(itemPelea)),
     el('button', {

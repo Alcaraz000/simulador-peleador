@@ -49,6 +49,26 @@ describe('renderResumenAnio', () => {
     expect(r.textContent).toContain('Un año parejo, con una victoria que hizo ruido.');
   });
 
+  // v9 (feedback del usuario, con captura: "(Resumen del año) tiene que
+  // estar pegado al año, no flotando a la derecha"). El bug real era que el
+  // contenedor de ambos reusaba la clase genérica `.fila` (que reparte
+  // `flex:1` entre sus hijos directos, separándolos según el ancho
+  // disponible en vez de su propio contenido) — se verifica acá que el año
+  // y la etiqueta viven en un contenedor PROPIO, no en un `.fila` a secas.
+  it('el año y "(Resumen del año)" viven pegados, en un contenedor dedicado (no la fila generica que los separaba)', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    const h1 = r.querySelector('h1');
+    const contenedor = h1.parentElement;
+    expect(contenedor.classList.contains('resumen-anio-cabecera-anio')).toBe(true);
+    expect(contenedor.classList.contains('fila')).toBe(false);
+    const etiqueta = [...contenedor.children].find((n) => n.textContent.includes('Resumen del año'));
+    expect(etiqueta).toBeTruthy();
+    // Son los ÚNICOS dos hijos de ese contenedor: nada se interpone entre
+    // el año y su etiqueta.
+    expect(contenedor.children).toHaveLength(2);
+  });
+
   it('incluye el grafico de media (svg) cuando hay al menos 2 muestras', () => {
     const r = region();
     renderResumenAnio(r, propsBase());
@@ -162,11 +182,63 @@ describe('renderResumenAnio', () => {
     filas.forEach((fila) => expect(fila.classList.contains('panel')).toBe(false));
   });
 
-  it('incluye el grafico de ranking (svg), con una nota que aclara que el puesto 1 es el mejor', () => {
+  // v9 (feedback del usuario: "sacar la leyenda 'Más arriba, mejor puesto'
+  // del gráfico de ranking [...] que se entienda por el diseño, no por un
+  // cartel"): ya no hay un texto VISIBLE aclarando la inversión — la
+  // explicación para lectores de pantalla sigue viva en el aria-label del
+  // propio SVG (no es un "cartel" en pantalla, es el equivalente accesible
+  // de lo que un usuario vidente lee en el eje Y, ver grafico-media.js).
+  it('incluye el grafico de ranking (svg), SIN una leyenda visible aclarando la inversion (se resuelve con el diseno del eje)', () => {
     const r = region();
     renderResumenAnio(r, propsBase());
-    expect(r.querySelector('.grafico-ranking-svg')).toBeTruthy();
-    expect(r.textContent).toMatch(/mejor puesto/i);
+    const svg = r.querySelector('.grafico-ranking-svg');
+    expect(svg).toBeTruthy();
+    expect(r.textContent).not.toMatch(/más arriba,? mejor puesto/i);
+    // La aclaración sigue disponible para lectores de pantalla.
+    expect(svg.getAttribute('aria-label')).toMatch(/mejor puesto/i);
+  });
+
+  // v9 (feedback del usuario, con captura: "Decisiones y Peleas del año no
+  // están alineadas [...] que 'Mejora' y 'CAMPAMENTO' ocupen el mismo
+  // espacio [...] empiecen en el mismo lugar"). La verificación PIXEL a
+  // pixel es responsabilidad de la captura de pantalla real (theme.css no se
+  // aplica en este entorno de test) — acá se verifica lo que SÍ se puede
+  // verificar sin layout real: que la columna de "tipo" (decisiones) y la de
+  // "mes" (peleas) son literalmente la MISMA clase CSS, condición necesaria
+  // para que theme.css les dé el mismo ancho fijo en las dos secciones.
+  it('la columna de tipo (decisiones) y la de mes (peleas) comparten la misma clase, para medir igual en las dos secciones', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({
+      decisiones: [decisionDePrueba()],
+      peleas: [peleaDePrueba()],
+    }));
+    const filas = [...r.querySelectorAll('.resumen-anio-fila')];
+    const tagDecision = filas[0].querySelector('.resumen-anio-fila-tag');
+    const tagPelea = filas[1].querySelector('.resumen-anio-fila-tag');
+    expect(tagDecision).toBeTruthy();
+    expect(tagPelea).toBeTruthy();
+    expect(tagDecision.className).toBe(tagPelea.className);
+  });
+
+  it('el resultado de la pelea usa una clase de ancho fijo, no un estilo inline suelto', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({ peleas: [peleaDePrueba({ resultado: 'v' })] }));
+    const resultado = r.querySelector('.resumen-anio-fila-resultado');
+    expect(resultado).toBeTruthy();
+    expect(resultado.getAttribute('style')).toBeFalsy();
+  });
+
+  // v9 (feedback del usuario, con captura: "Media estable en 75 durante
+  // todo el año [...] MAL, siempre mostrar gráfico y su evolución"). Antes,
+  // un año sin más de 1 muestra distinta caía a una oración de texto — ahora
+  // tiene que dibujarse el SVG siempre (una línea plana es igual de válida).
+  it('con la media sin cambios en todo el año (una sola muestra), sigue mostrando el SVG, nunca una oracion de texto', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({
+      muestrasMedia: [{ semana: 1, media: 75, ranking: 20 }],
+    }));
+    expect(r.querySelector('.grafico-media-svg')).toBeTruthy();
+    expect(r.textContent).not.toMatch(/estable/i);
   });
 
   it('el titulo de la seccion de decisiones es compacto ("Decisiones")', () => {
