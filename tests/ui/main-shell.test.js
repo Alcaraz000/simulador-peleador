@@ -178,15 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 10 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 16 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
-    // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 6: v7, "más parodias" -46 parodias, antes 19- corrió la
-    // secuencia de rng de toda la carrera desde el arranque -crearRoster
-    // arranca con menos candidatos aleatorios cuando hay más parodias fijas
-    // para insertar-, así que 6 dejó de llegar a esta carta puntual; 10 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 10));
+    // (verificado aparte): ejercita el camino con roll. Esta semilla se
+    // reeligió dos veces por el mismo motivo (cualquier cambio de contenido
+    // que consuma rng en el camino corre la secuencia entera): primero 6->10
+    // (v7, "más parodias") y ahora 10->16 (cartas nuevas de condiciones
+    // situacionales, commits 7320e36/09ce595, ajenos a esta ronda).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -470,11 +470,10 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 10 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 16 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 6 antes de v7 -"más parodias", 46 en vez de 19-,
-    // que corrió la secuencia de rng de toda la carrera desde el arranque).
-    iniciar(cont, prepararPartidaGuardada('evento', 10));
+    // roll — ver el comentario grande ahí).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -514,8 +513,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 10: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 10));
+    // semilla 16: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');

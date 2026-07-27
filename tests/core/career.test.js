@@ -420,47 +420,69 @@ describe('avanzarBloque', () => {
     expect(siguenNuevas).toHaveLength(0);
   });
 
-  // v7 ("contá la recuperación en semanas, no en bloques"): una lesión leve
-  // o moderada (bien por debajo de las 52 semanas que dura un bloque, ver
-  // ETAPAS) cura ENTERA en el primer tic del calendario después de sufrida.
-  it('recupera lesiones con el paso de los bloques', () => {
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad, evaluadas semana a semana, no una vez por bloque"): la
+  // recuperación ya NO se descuenta acá, en avanzarBloque — se mudó al gate
+  // por cupo de armarLotePeleas (tramite.js), disparado dentro de
+  // armarCola/siguienteBeat (career.js). avanzarBloque solo, aislado, ya no
+  // toca `estado.lesion` para nada (ver el test siguiente para esa
+  // invariante) — para ver la recuperación de verdad hay que pasar por
+  // siguienteBeat, que corre avanzarBloque Y armarCola en el mismo golpe al
+  // cambiar de bloque.
+  it('avanzarBloque solo (sin pasar por armarCola) no toca la lesion', () => {
     const p = nuevaPartida();
     p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' };
-    expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion).not.toBeNull();
+    expect(despues.jugador.estado.lesion.semanasRestantes).toBe(4);
+  });
+
+  // Vía siguienteBeat (avanzarBloque + armarCola en el mismo golpe): una
+  // lesión corta cura apenas el primer cupo de pelea del bloque la
+  // encuentra activa (ver armarLotePeleas, tramite.js) — profesional
+  // siempre tiene al menos un cupo (intentosDePelea nunca da 0).
+  it('recupera lesiones con el paso de los bloques (via armarCola, tramite.js)', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2; // profesional: intentosDePelea siempre da >=1 cupo
+    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' };
+    const { partida: despues } = siguienteBeat(p);
+    expect(despues.jugador.estado.lesion).toBeNull();
   });
 
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): antes, la forma se recuperaba +5 TODOS
-  // los bloques sin importar si seguías lesionado, así que una lesión leve
-  // (1 bloque de duración) quedaba borrada de la forma antes incluso de que
-  // `recuperar()` te diera de alta. Ahora, mientras sigue activa la lesión,
-  // ese descanso pasivo se frena: la forma se queda baja de verdad hasta
-  // curarte.
-  it('mientras sigue lesionado, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
+  // los bloques sin importar si seguías lesionado. Mientras sigue activa la
+  // lesión AL ARRANCAR el bloque (el estado tal cual venía del bloque
+  // anterior — la recuperación de este bloque todavía no corrió, eso pasa
+  // recién en armarCola), ese descanso pasivo se frena: la forma se queda
+  // baja de verdad.
+  it('mientras sigue lesionado al arrancar el bloque, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
     const p = nuevaPartida();
-    // 100 semanas: por encima de las 52 que descuenta un solo tic de bloque
-    // (ver ETAPAS), así que sigue activa después de este avanzarBloque —
-    // mismo caso que antes cubría una lesión "grave" de varios bloques.
     p.jugador.estado.lesion = {
       id: 'rodilla', nombre: 'Rodilla', severidad: 3, semanasRestantes: 100, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.estado.lesion.semanasRestantes).toBe(48);
     expect(despues.jugador.estado.forma).toBe(30);
   });
 
-  it('en el bloque en que termina de curarse, la forma sube por el bonus de curación (no por el descanso normal)', () => {
+  // Vía siguienteBeat: en cuanto el primer cupo del bloque encuentra la
+  // lesión curada (o la termina de curar), la forma sube por el bonus de
+  // curación de `recuperar()` (injuries.js) — no por el descanso pasivo
+  // normal (ese solo corre en avanzarBloque, y solo si YA no había lesión al
+  // arrancar el bloque).
+  it('en cuanto se cura (dentro de armarCola), la forma sube por el bonus de curación (no por el descanso normal)', () => {
     const p = nuevaPartida();
+    p.etapaIndice = 2;
     p.jugador.estado.lesion = {
       id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
-    const despues = avanzarBloque(p);
+    const { partida: despues } = siguienteBeat(p);
     expect(despues.jugador.estado.lesion).toBeNull();
     // +10 del bonus de curación (recuperar, injuries.js), SIN el +5 pasivo de
-    // un bloque sano (ese solo corre cuando no hay lesión activa al arrancar
-    // el bloque).
+    // un bloque sano (avanzarBloque lo frenó: al arrancar este bloque la
+    // lesión seguía activa).
     expect(despues.jugador.estado.forma).toBe(40);
   });
 

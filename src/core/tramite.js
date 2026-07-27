@@ -18,6 +18,7 @@ import {
   generarOferta, aplicarResultado, esPeleaImportante,
   cinturonActual, proximoCinturon, puedeDisputar, CINTURONES,
 } from './offers.js';
+import { recuperar, puedePelear } from './injuries.js';
 import { POOLS_TRAMITE } from '../content/tramite-lines.js';
 
 // Cuántos cupos de pelea trae un año de carrera profesional, según la edad
@@ -162,32 +163,91 @@ export function resumenLote(rng, { resultados, tono = 'profesional' }) {
   };
 }
 
+// v7, corrección del coordinador ("las lesiones tienen que costar de
+// verdad, evaluadas semana a semana, no una vez por bloque"): antes, el
+// gate de lesión vivía ENTERO en career.js/armarCola, evaluado UNA sola vez
+// por bloque, contra el estado de la lesión tal cual quedó al CIERRE del
+// bloque anterior — así que un salto instantáneo de 52 semanas (avanzarBloque)
+// siempre corría ANTES de esa única revisión, y cualquier lesión de 52
+// semanas o menos ya aparecía curada la primera vez que se la miraba. Cero
+// costo real para ceja/nariz/costillas/mano/hombro; la cirugía no cambiaba
+// nada.
+//
+// Ahora cada CUPO (`intentos`, más abajo) representa una porción del año —
+// `semanasPorIntento` semanas, calculadas en career.js como
+// `semanasDeBloque(...) / intentos` — y la revisión de "¿puede pelear
+// AHORA?" pasa a hacerse cupo por cupo, en el momento puntual en que ese
+// cupo se juega, no una vez para todo el año. Si el jugador sigue
+// lesionado EN ESE MOMENTO, el cupo se pierde del todo (ni oferta ni
+// trámite: nadie te ofrece nada estando de baja) y esas semanas se
+// descuentan de lo que falta para recuperarse (`recuperar`, injuries.js) —
+// si con eso alcanza para curarse, el PRÓXIMO cupo del mismo bloque (si lo
+// hay) ya lo encuentra sano y genera una oferta real. Consecuencia directa:
+// un pibe de 21 con tres cupos por año pierde SOLO los cupos que caen
+// mientras sigue de baja, nunca el año entero salvo que la lesión sea larga
+// de verdad; un veterano con un único cupo por año, en cambio, pierde el
+// año completo si le toca estar lesionado justo en ese momento — igual que
+// en el boxeo real, menos actividad significa menos margen para el error.
+function cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento) {
+  if (puedePelear(jugadorActual)) return { bloqueado: false, jugador: jugadorActual };
+  const paso = recuperar(jugadorActual, { semanas: semanasPorIntento });
+  return { bloqueado: true, jugador: paso.peleador };
+}
+
 /**
  * Arma (y resuelve) el lote de peleas de un bloque: hasta `intentos` cupos,
- * de los cuales como MUCHO el primero puede terminar siendo una pelea que
- * importa (ver esPeleaImportante) — el resto son siempre de trámite (nivel
- * regional forzado, ver `soloRegional` en generarOferta). Si el primer cupo
- * SÍ importa, se lo deja afuera del lote (`marqueeOferta`): esa la juega el
- * jugador de verdad (career.js la encola como beat 'oferta'); las demás se
- * resuelven acá mismo, en el momento.
+ * de los cuales como MUCHO el primero que de verdad se juega puede terminar
+ * siendo una pelea que importa (ver esPeleaImportante) — el resto son
+ * siempre de trámite (nivel regional forzado, ver `soloRegional` en
+ * generarOferta). Si ese cupo SÍ importa, se lo deja afuera del lote
+ * (`marqueeOferta`): esa la juega el jugador de verdad (career.js la encola
+ * como beat 'oferta'); las demás se resuelven acá mismo, en el momento.
  *
  * `permiteJugable=false` (juvenil/amateur): NINGÚN cupo puede volverse
  * jugable — la etapa de formación entera se resuelve sola (ver el criterio
- * en el comentario grande de ETAPAS, career.js).
+ * en el comentario grande de ETAPAS, career.js). Esas etapas tampoco pueden
+ * tener una lesión activa (nunca juegan una pelea de verdad, único origen de
+ * una lesión — ver cerrarPelea, main.js), así que el gate de acá abajo nunca
+ * las afecta en la práctica.
+ *
+ * `semanasPorIntento` (v7): cuántas semanas de calendario representa CADA
+ * cupo, para el gate de lesión (ver `cupoBloqueadoPorLesion`, arriba). El
+ * default (52) es una red de seguridad para llamadores que no lo pasen
+ * (equivale al viejo comportamiento "un cupo = el año entero").
  *
  * No muta `jugador` ni `rivalidades`; el `rng` sí viaja mutado (mismo
  * contrato que el resto de career.js: quien llama guarda `rng.estado()`).
+ *
+ * Devuelve además `bloqueados`: cuántos cupos de ESTE lote se perdieron por
+ * seguir lesionado en ese momento — es la métrica real de "cuántas ofertas
+ * le costó la lesión" (career.js la usa para decidir si hace falta avisar
+ * con el beat 'lesionSinOferta', y scripts/balance-sim.mjs la suma para
+ * medir el costo de la regla sobre una carrera completa).
  */
 export function armarLotePeleas(rng, {
   jugador, mundo, etapa, rivalidades = [], forzarTitulo = false, intentos, permiteJugable = true, tono = 'profesional',
+  semanasPorIntento = 52,
 }) {
   let jugadorActual = jugador;
   const excluidos = [];
   let marqueeOferta = null;
   const resultados = [];
+  let bloqueados = 0;
+  // Reemplaza al viejo `i === 0`: el "primer cupo" (el único que puede
+  // volverse jugable/forzar título) ahora es el primero que de verdad se
+  // JUEGA — si los primeros cupos del año se pierden por lesión, el que
+  // sigue en cuanto se cura hereda esa chance, no se pierde para siempre.
+  let primerCupoDisponible = true;
 
   for (let i = 0; i < intentos; i += 1) {
-    const primerCupo = i === 0 && permiteJugable && !marqueeOferta;
+    const { bloqueado, jugador: jugadorTrasChequeo } = cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento);
+    jugadorActual = jugadorTrasChequeo;
+    if (bloqueado) {
+      bloqueados += 1;
+      continue;
+    }
+
+    const primerCupo = primerCupoDisponible && permiteJugable && !marqueeOferta;
     const oferta = generarOferta(rng, {
       jugador: jugadorActual,
       mundo,
@@ -198,6 +258,7 @@ export function armarLotePeleas(rng, {
       excluirIdsExtra: excluidos,
     });
     if (!oferta) continue; // sin rivales disponibles (rarísimo, roster agotado)
+    primerCupoDisponible = false;
     excluidos.push(oferta.rivalId);
 
     if (primerCupo && esPeleaImportante(oferta)) {
@@ -222,6 +283,6 @@ export function armarLotePeleas(rng, {
     : null;
 
   return {
-    marqueeOferta, beatTramite, jugador: jugadorActual, rivalidades,
+    marqueeOferta, beatTramite, jugador: jugadorActual, rivalidades, bloqueados,
   };
 }

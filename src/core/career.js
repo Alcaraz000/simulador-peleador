@@ -9,7 +9,6 @@ import { crearSparring } from './sparring.js';
 import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas,
 } from './news.js';
-import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
@@ -443,13 +442,11 @@ export function avanzarBloque(partida) {
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
-  // los bloques, incluso mientras seguías lesionado — así que una lesión leve
-  // (1 bloque) quedaba borrada de la forma antes de que `recuperar()` (más
-  // abajo) te diera de alta. Mientras la lesión sigue activa AL ARRANCAR este
-  // bloque, el descanso pasivo se frena: la forma se queda baja de verdad. El
-  // bonus de curación de `recuperar()` (+10, en el bloque que te da de alta)
-  // no se toca: sigue siendo la recompensa de terminar la recuperación, no el
-  // descanso de rutina.
+  // los bloques, incluso mientras seguías lesionado. Mientras la lesión
+  // sigue activa AL ARRANCAR este bloque (el estado tal cual quedó al
+  // cierre del bloque anterior — la recuperación de ESTE bloque todavía no
+  // corrió, ver más abajo), el descanso pasivo se frena: la forma se queda
+  // baja de verdad.
   if (!nueva.jugador.estado.lesion) {
     nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
   }
@@ -460,13 +457,15 @@ export function avanzarBloque(partida) {
   nueva.jugador.atributos = crecimientoPorEdadJugador(nueva.jugador);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
-  // v7 ("contá la recuperación en semanas, no en bloques"): `recuperar` ahora
-  // descuenta las semanas de calendario que de verdad pasaron este bloque
-  // (siempre 52 hoy, ver semanasDeBloque más arriba) en vez de un `bloques:1`
-  // fijo — mismo número, pero la unidad ya no está atada al tamaño del
-  // bloque (ver injuries.js para el porqué).
-  const recuperacion = recuperar(nueva.jugador, { semanas: semanasDeBloque(etapa.aniosPorBloque) });
-  nueva.jugador = recuperacion.peleador;
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad, evaluadas semana a semana, no una vez por bloque"): antes ACÁ se
+  // descontaban de un saque las 52 semanas del bloque entero, así que
+  // CUALQUIER lesión de 52 semanas o menos ya aparecía curada la primera vez
+  // que armarCola la revisaba — cero costo real. La recuperación ya no se
+  // toca en avanzarBloque: ahora se descuenta cupo por cupo, dentro de
+  // armarCola/armarLotePeleas (tramite.js), al ritmo real de cuántas semanas
+  // representa cada intento de pelea del año — así una lesión corta pierde
+  // solo los cupos que caen mientras sigue activa, no el bloque entero.
 
   const sponsor = cobrarSponsor(nueva.jugador, rng);
   if (sponsor) nueva.jugador = sponsor.jugador;
@@ -564,66 +563,91 @@ function armarCola(partida) {
     cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: jugadorActual }) } });
   }
 
-  if (puedePelear(jugadorActual)) {
-    // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
-    // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
-    // tramite.js — declina con la edad, sube si hay mucho en juego). En
-    // juvenil/amateur sigue siendo el viejo gate de un solo intento
-    // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
-    // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
-    // resuelve sola — ver el comentario grande de ETAPAS.
-    const esProfesional = etapa.id === 'profesional';
-    const intentos = esProfesional
-      ? intentosDePelea(rng, jugadorActual)
-      : (rng.chance(etapa.probPelea) ? 1 : 0);
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
+  // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
+  // tramite.js — declina con la edad, sube si hay mucho en juego). En
+  // juvenil/amateur sigue siendo el viejo gate de un solo intento
+  // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
+  // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
+  // resuelve sola — ver el comentario grande de ETAPAS.
+  //
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad"): el gate de lesión YA NO se revisa acá, de una sola vez para
+  // todo el año (ver `puedePelear`, injuries.js) — se mudó DENTRO de
+  // `armarLotePeleas` (tramite.js), cupo por cupo, así que armarLotePeleas
+  // se llama siempre que haya intentos, esté o no lesionado el jugador AL
+  // ARRANCAR el bloque.
+  const esProfesional = etapa.id === 'profesional';
+  const intentos = esProfesional
+    ? intentosDePelea(rng, jugadorActual)
+    : (rng.chance(etapa.probPelea) ? 1 : 0);
 
-    if (intentos > 0) {
-      const forzarTitulo = esProfesional
-        && jugadorActual.titulos.length === 0
-        && (jugadorActual.ranking ?? 99) <= 3;
-      // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
-      // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
-      // para el porqué: sin este freno, "jugando bien" convierte cada año
-      // que le queda de carrera en una defensa jugable más, reventando el
-      // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
-      // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
-      // de peleas profesionales totales no se toca) — se resuelven todos
-      // como trámite.
-      const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
+  if (intentos > 0) {
+    const forzarTitulo = esProfesional
+      && jugadorActual.titulos.length === 0
+      && (jugadorActual.ranking ?? 99) <= 3;
+    // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
+    // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
+    // para el porqué: sin este freno, "jugando bien" convierte cada año
+    // que le queda de carrera en una defensa jugable más, reventando el
+    // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
+    // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
+    // de peleas profesionales totales no se toca) — se resuelven todos
+    // como trámite.
+    const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
+    // Cuántas semanas de calendario representa CADA cupo (ver el comentario
+    // grande de armarLotePeleas, tramite.js): con más intentos en el año, el
+    // año se reparte en ventanas más chicas — una lesión corta puede caer
+    // entera dentro de una sola ventana y no costar nada; con pocos
+    // intentos (veterano), cada ventana es casi el año entero.
+    const semanasPorIntento = Math.round(semanasDeBloque(etapa.aniosPorBloque) / intentos);
 
-      const lote = armarLotePeleas(rng, {
-        jugador: jugadorActual,
-        mundo: partida.mundo,
-        etapa: tag,
-        rivalidades: rivalidadesActuales,
-        forzarTitulo,
-        intentos,
-        permiteJugable,
-        tono: tag,
-      });
+    const lote = armarLotePeleas(rng, {
+      jugador: jugadorActual,
+      mundo: partida.mundo,
+      etapa: tag,
+      rivalidades: rivalidadesActuales,
+      forzarTitulo,
+      intentos,
+      permiteJugable,
+      tono: tag,
+      semanasPorIntento,
+    });
 
-      jugadorActual = lote.jugador;
-      rivalidadesActuales = lote.rivalidades;
-      // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
-      // año fue pasando" antes de llegar a la que de verdad importa.
-      if (lote.beatTramite) cola.push(lote.beatTramite);
-      if (lote.marqueeOferta) {
-        cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
-        ofertaPendiente = { oferta: lote.marqueeOferta };
-      }
-      // El ranking se recalcula ACÁ (no solo una vez por bloque en
-      // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
-      // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
-      // tiene que verlas reflejadas, no el ranking de antes de pelear.
-      if (lote.beatTramite) {
-        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
-      }
+    jugadorActual = lote.jugador;
+    rivalidadesActuales = lote.rivalidades;
+    // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
+    // año fue pasando" antes de llegar a la que de verdad importa.
+    if (lote.beatTramite) cola.push(lote.beatTramite);
+    if (lote.marqueeOferta) {
+      cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
+      ofertaPendiente = { oferta: lote.marqueeOferta };
     }
-  } else {
-    // Le tocaba pelea pero está lesionado grave (ver puedePelear en
-    // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
-    // por qué no llegan ofertas.
-    cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
+    // El ranking se recalcula ACÁ (no solo una vez por bloque en
+    // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
+    // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
+    // tiene que verlas reflejadas, no el ranking de antes de pelear.
+    if (lote.beatTramite) {
+      jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
+    }
+    // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
+    // por seguir lesionado en su momento — ver `bloqueados`, tramite.js), el
+    // juego avisa por qué no llegó ninguna oferta. Si al menos uno se
+    // recuperó a tiempo y sí hubo pelea (jugable o de trámite), no hace
+    // falta este aviso: la actividad de la que sí hubo ya lo cuenta.
+    if (!lote.marqueeOferta && !lote.beatTramite && lote.bloqueados > 0) {
+      cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
+    }
+    // Cuántas ofertas le costó la lesión en total en la carrera (contador
+    // acumulado, mismo criterio que `lesionesSufridas` en main.js): la
+    // métrica real de si la regla "cualquier lesión bloquea" pesa de
+    // verdad — ver el informe de balance de esta ronda.
+    if (lote.bloqueados > 0) {
+      jugadorActual = {
+        ...jugadorActual,
+        ofertasPerdidasPorLesion: (jugadorActual.ofertasPerdidasPorLesion ?? 0) + lote.bloqueados,
+      };
+    }
   }
 
   return {

@@ -335,6 +335,15 @@ function jugarCarrera(semilla, {
     defensas,
     lesiones,
     bloquesLesionado,
+    // v7, corrección del coordinador ("las lesiones tienen que costar de
+    // verdad, evaluadas semana a semana"): cuántos CUPOS de pelea (no
+    // bloques enteros) se perdieron por seguir lesionado en el momento
+    // puntual de ese cupo — ver `ofertasPerdidasPorLesion` en career.js
+    // (armarCola) y `bloqueados` en armarLotePeleas (tramite.js). Es la
+    // métrica real de "cuánto cuesta" la regla "cualquier lesión activa
+    // bloquea la oferta", más fina que `bloquesLesionado` (que solo cuenta
+    // los años en los que TODOS los cupos se perdieron).
+    ofertasPerdidasPorLesion: partida.jugador.ofertasPerdidasPorLesion ?? 0,
     tresCinturones,
     mediaFinal,
     mediaAMitad,
@@ -428,10 +437,15 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   const con3 = conLesiones.filter((r) => r.tresCinturones).length;
   const lesionesPromedio = avg(conLesiones.map((r) => r.lesiones));
   const bloquesLesionadoPromedio = avg(conLesiones.map((r) => r.bloquesLesionado));
+  // v7: `ofertasPerdidasPorLesion` es la métrica que de verdad responde "¿la
+  // regla existe?" — cuántos CUPOS de pelea puntuales se perdieron por seguir
+  // lesionado en ese momento (ver el comentario grande en jugarCarrera, más
+  // arriba), no solo cuántos AÑOS enteros quedaron en blanco.
+  const ofertasPerdidasPromedio = avg(conLesiones.map((r) => r.ofertasPerdidasPorLesion));
   console.log('\n=== Costo real de "cualquier lesión bloquea" (mismas semillas, creación real) ===');
   console.log(`peleas jugables/carrera: sin lesiones=${avg(peleasJugablesSinLesiones).toFixed(2)} | con lesiones reales=${avg(peleasJugablesConLesiones).toFixed(2)} | diferencia=${(avg(peleasJugablesSinLesiones) - avg(peleasJugablesConLesiones)).toFixed(2)}`);
   console.log(`3 cinturones con lesiones reales: ${con3}/${N} = ${((con3 / N) * 100).toFixed(2)}%`);
-  console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | beats "lesionSinOferta" vistos por carrera: avg=${bloquesLesionadoPromedio.toFixed(2)}`);
+  console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | ofertas/cupos PERDIDOS por lesión: avg=${ofertasPerdidasPromedio.toFixed(2)} por carrera | años ENTEROS en blanco ("lesionSinOferta"): avg=${bloquesLesionadoPromedio.toFixed(2)}`);
 }
 
 // Comparación directa techo (promedio real) vs piso (mismas 500 semillas, sin

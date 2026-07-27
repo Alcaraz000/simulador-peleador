@@ -16,20 +16,40 @@ import { clamp } from './stats.js';
 // (leve: 2-6 semanas; moderada: 2-3 meses; grave: varios meses, con margen
 // para una lesión de las que de verdad asustan), elegidos siempre hacia el
 // extremo ALTO del rango real: el usuario pidió "creíble", no "el piso más
-// optimista". El único gate mecánico que sigue existiendo es `puedePelear`
-// (más abajo, sin tocar: CUALQUIER lesión activa sigue bloqueando toda
-// oferta, pedido explícito del usuario) — y ese gate solo se revisa una vez
-// por bloque (career.js, avanzarBloque → armarCola). Con esta unidad más
-// fina, una lesión leve o moderada (siempre bien por debajo de las 52
-// semanas de un bloque) ya cura ENTERA en el primer tic del calendario
-// después de sufrida — cero ofertas perdidas, un año de "casi medio año de
-// baja" que en los hechos nunca le costó ninguna pelea al jugador. Solo las
-// graves (rodilla/conmoción, con margen deliberado por encima de las 52
-// semanas) siguen constando UN bloque entero de ofertas perdidas — la mitad
-// de lo que costaban antes (dos), pero con stakes de verdad: ahí es donde
+// optimista".
+//
+// Corrección del coordinador (segunda vuelta de esta misma ronda): la
+// primera versión de este cambio contaba las semanas correctamente pero
+// seguía revisando `puedePelear` UNA sola vez por bloque, en avanzarBloque,
+// justo DESPUÉS de un salto instantáneo de 52 semanas — así que cualquier
+// lesión de 52 semanas o menos (todas las leves/moderadas) ya aparecía
+// curada la primera vez que se la miraba: cero ofertas perdidas, la cirugía
+// no cambiaba nada. El arreglo de fondo NO fue acá: fue mover el gate a
+// donde de verdad se juega cada oportunidad de pelea — ver el comentario
+// grande de `armarLotePeleas` en tramite.js. Cada CUPO de pelea del año
+// (`intentos`, tramite.js) representa una porción de esas 52 semanas, y si
+// el jugador sigue lesionado EN ESE MOMENTO puntual, ese cupo se pierde de
+// verdad (ni oferta ni trámite) — recién ahí, con el gate evaluado semana a
+// semana en vez de una vez al año, una lesión corta le cuesta al menos una
+// oportunidad real, y una larga (rodilla/conmoción) puede costarle varias, o
+// el año entero si el jugador tiene pocos cupos (veterano). Ahí es donde
 // pagar la cirugía (ver `curarConDinero`) cambia el resultado real de la
-// carrera, no solo el cosmético. Medido el efecto en el eje de cinturones
-// con `node scripts/balance-sim.mjs` — ver el informe de la ronda.
+// carrera, no solo el cosmético.
+//
+// Medido con `node scripts/balance-sim.mjs 400` ("creación real, jugando
+// bien") y con un script ad hoc sobre el jugador MÁS DÉBIL del proyecto
+// (media=45 fija, n=2500, mismo método que career-lesiones-reales.test.js):
+//   - Ofertas/cupos perdidos por lesión: avg=0.36 por carrera (creación
+//     real, jugador fuerte) | avg=0.65 por carrera (jugador más débil,
+//     44.2% de sus carreras pierden al menos una oferta por lesión). Ya no
+//     es cero: la regla "cualquier lesión activa bloquea la oferta" cuesta
+//     algo de verdad, sin volverse devastadora.
+//   - 3 cinturones: sigue en 100% (creación real, n=400) y 99.1% (jugador
+//     más débil, n=2500) — el piso de 85% del eje de cinturones aguanta con
+//     margen amplio, tanto en el test de 3000 semillas (career.test.js)
+//     como en el de lesiones reales sobre 2500 (career-lesiones-reales.test.js).
+//   - Minutos estimados (creación real, balance-sim): ~22.3 (objetivo ~20,
+//     mismo margen chico que ya tenía la ronda anterior).
 export const LESIONES = [
   { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, semanas: 4, costo: 8000, modsForma: -8, texto: 'Te abrieron la ceja. Nada grave, pero molesta.' },
   { id: 'nariz', nombre: 'Nariz rota', severidad: 1, semanas: 5, costo: 9000, modsForma: -10, texto: 'Nariz rota. Vas a respirar por la boca un tiempo.' },
@@ -45,9 +65,10 @@ export const LESIONES = [
 // cualquier severidad, la frecuencia vieja se comía demasiadas ofertas.
 // También se corrieron los PESOS de severidad (más abajo, en tirarLesion) de
 // 6/3/1 a 8/1/1: además de menos frecuente, cuando toca lesión ahora es
-// mucho más probable que sea la leve y rápida (1 bloque) que la moderada o
-// grave — moderada/grave siguen existiendo (y siguen doliendo cuando tocan),
-// pero ahora son la excepción de verdad, no un tercio de las lesiones.
+// mucho más probable que sea la leve y rápida (semanas, no meses) que la
+// moderada o grave — moderada/grave siguen existiendo (y siguen doliendo
+// cuando tocan), pero ahora son la excepción de verdad, no un tercio de las
+// lesiones.
 //
 // Medido sobre el jugador MÁS DÉBIL del proyecto (nuevaPartida en
 // tests/core/career-lesiones-reales.test.js: media=45 fija, sin
@@ -107,10 +128,11 @@ export function aplicarLesion(peleador, lesion) {
   return nuevo;
 }
 
-// `semanas` es cuánto tiempo de calendario de verdad pasó (career.js manda
-// `semanasDeBloque(etapa.aniosPorBloque)`, hoy siempre 52 — un bloque entero
-// por tic, ver el comentario grande de ETAPAS en career.js): el default de 1
-// solo es una red de seguridad para llamadores que no lo pasen.
+// `semanas` es cuánto tiempo de calendario de verdad pasó desde el último
+// chequeo. Quien llama en la práctica es `armarLotePeleas` (tramite.js), con
+// `semanasPorIntento` — una porción del bloque, no el bloque entero (ver el
+// comentario grande de LESIONES, arriba, para el porqué): el default de 1
+// acá solo es una red de seguridad para llamadores que no lo pasen.
 export function recuperar(peleador, { semanas = 1 } = {}) {
   if (!peleador.estado.lesion) return { peleador, curada: false };
   const nuevo = clonar(peleador);
@@ -128,21 +150,20 @@ export function recuperar(peleador, { semanas = 1 } = {}) {
 // reducir los tiempos de recuperación en un -90%"): antes esto curaba
 // SIEMPRE del todo, por un precio fijo — ahora reduce lo que falta de
 // recuperación al 10% (redondeado), lo mismo que pide el brief, ni más ni
-// menos. En la práctica, para una lesión leve o moderada (que ya cura sola
-// en el primer tic del calendario, ver el comentario grande de LESIONES)
-// esto es cosmético — la plata no compra nada que no fueras a tener gratis
-// una semana después. Donde SÍ cambia el resultado real de la carrera es en
-// las graves (rodilla/conmoción, con semanas > 52): sin pagar, cuestan un
-// bloque entero de ofertas perdidas; el 10% que queda tras la cirugía cae
-// bien por debajo de esas 52 semanas, así que cura en el mismo tic que
-// cualquier lesión leve — la cirugía LE AHORRA AL JUGADOR ese bloque
-// perdido. Precios calibrados contra cuánto dinero tiene en el bolsillo un
-// jugador típico en el momento de lesionarse (medido con una corrida "creación
+// menos. Con el gate de lesión evaluado cupo por cupo (ver el comentario
+// grande de LESIONES, arriba, y armarLotePeleas en tramite.js), pagar SÍ
+// cambia el resultado real de la carrera para cualquier severidad, no solo
+// las graves: una mano fracturada (10 semanas) que iba a costarle el cupo
+// de este momento puntual puede quedar en 1 semana tras la cirugía —
+// suficiente para no perderse el cupo SIGUIENTE del mismo bloque, si lo hay.
+// Cuanto más larga la lesión de base, más cupos reales le ahorra pagar.
+// Precios calibrados contra cuánto dinero tiene en el bolsillo un jugador
+// típico en el momento de lesionarse (medido con una corrida "creación
 // real, jugando bien": mínimo ≈US$130-150K, mediana ≈US$290K — ver el informe
 // de la ronda): las leves/moderadas quedan en la escala del STAFF más caro
 // (money.js, US$12-34K, sin quitarle sentido a esa referencia), pero las
-// graves —las únicas que de verdad cambian el resultado— cuestan bastante
-// más (US$75-85K, escala de un LUJO como la mansión): caras de verdad, pero
+// graves —las que más cupos reales pueden costar— cuestan bastante más
+// (US$75-85K, escala de un LUJO como la mansión): caras de verdad, pero
 // alcanzables incluso para el jugador con menos plata en ese momento — que
 // paguen es una decisión que tiene que doler, no un trámite.
 const REDUCCION_CIRUGIA = 0.1;

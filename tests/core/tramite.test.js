@@ -198,6 +198,107 @@ describe('armarLotePeleas', () => {
   });
 });
 
+// v7, corrección del coordinador ("las lesiones tienen que costar de
+// verdad, evaluadas semana a semana, no una vez por bloque"): antes, el
+// gate de lesión vivía en career.js, revisado UNA sola vez por bloque contra
+// el estado ya actualizado por un salto instantáneo de 52 semanas — así que
+// cualquier lesión de 52 semanas o menos ya aparecía curada la primera vez
+// que se la miraba (cero costo real). Ahora el gate vive ACÁ, cupo por cupo:
+// cada intento representa `semanasPorIntento` semanas, y si el jugador sigue
+// lesionado EN ESE MOMENTO puntual, el cupo se pierde (ni oferta ni trámite)
+// y esas semanas se descuentan de la recuperación — si alcanza para curarse,
+// el cupo SIGUIENTE del mismo bloque ya lo encuentra sano.
+describe('armarLotePeleas y el gate de lesión por cupo (v7, "las lesiones cuestan de verdad")', () => {
+  function conLesion(semanasRestantes, extra = {}) {
+    const yo = jugador(extra);
+    yo.estado = {
+      ...yo.estado,
+      lesion: {
+        id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes, costo: 1, texto: 'x',
+      },
+    };
+    return yo;
+  }
+
+  it('sin lesion, ningun cupo se pierde', () => {
+    const yo = jugador({ edad: 25 });
+    const lote = armarLotePeleas(createRng(5), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional', semanasPorIntento: 17,
+    });
+    expect(lote.bloqueados).toBe(0);
+  });
+
+  it('una lesion corta (menos que un cupo) pierde solo el primer cupo, no el resto del año', () => {
+    // 5 semanas de lesión, 17 por cupo: el primer cupo la encuentra activa
+    // (se pierde) pero la cura de una — el segundo y tercer cupo del mismo
+    // bloque ya la encuentran sana y generan actividad real (permiteJugable
+    // false fuerza que ambos sean trámite, sin depender del matchmaking).
+    const yo = conLesion(5, { edad: 22 });
+    const lote = armarLotePeleas(createRng(3), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional', semanasPorIntento: 17,
+    });
+    expect(lote.bloqueados).toBe(1);
+    expect(lote.jugador.estado.lesion).toBeNull();
+    expect(lote.beatTramite).not.toBeNull();
+    expect(lote.beatTramite.datos.resultados.length).toBe(2);
+  });
+
+  it('una lesion mas larga que todos los cupos del año bloquea el año entero (bloqueados === intentos)', () => {
+    const yo = conLesion(400, { edad: 34 });
+    const lote = armarLotePeleas(createRng(4), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 2, permiteJugable: true, tono: 'profesional', semanasPorIntento: 17,
+    });
+    expect(lote.bloqueados).toBe(2);
+    expect(lote.marqueeOferta).toBeNull();
+    expect(lote.beatTramite).toBeNull();
+    expect(lote.jugador.estado.lesion).not.toBeNull();
+  });
+
+  // El caso que de verdad le da dientes a la regla: un veterano con un solo
+  // cupo en el año no tiene "segundo cupo" al que pasarle la posta dentro
+  // del mismo bloque — si está lesionado justo cuando le toca, pierde el año
+  // entero aunque la lesión en sí sea corta. Menos actividad, menos margen.
+  it('con un solo cupo en el año, hasta una lesion corta cuesta el año completo si cae justo ahi', () => {
+    const yo = conLesion(3, { edad: 35 });
+    const lote = armarLotePeleas(createRng(2), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 1, permiteJugable: true, tono: 'profesional', semanasPorIntento: 52,
+    });
+    expect(lote.bloqueados).toBe(1);
+    expect(lote.marqueeOferta).toBeNull();
+    expect(lote.beatTramite).toBeNull();
+    // Aun así, ya se curó (52 semanas de calendario le alcanzan de sobra a
+    // una lesión de 3): el próximo bloque ya la encuentra sana.
+    expect(lote.jugador.estado.lesion).toBeNull();
+  });
+
+  it('si el primer cupo se pierde por lesion, el que sigue (ya sano) hereda la chance de ser jugable/forzar titulo', () => {
+    // v7 (regla "un debutante no pelea por el título con 0 peleas"): sin un
+    // récord que ya cumpla el mínimo del regional, ni forzarTitulo ni la
+    // eliminatoria de respaldo alcanzan (ver PELEAS_MINIMAS_TITULO,
+    // offers.js) — este jugador ya lleva un año largo de actividad.
+    const yo = conLesion(5, {
+      edad: 22, ranking: 1, record: {
+        v: 8, d: 0, e: 0, ko: 0, sub: 0, dec: 0,
+      },
+    });
+    let vioMarqueeTrasBloqueo = false;
+    for (let s = 1; s <= 60; s += 1) {
+      const lote = armarLotePeleas(createRng(s), {
+        jugador: yo,
+        mundo: mundo(),
+        etapa: 'profesional',
+        forzarTitulo: true,
+        intentos: 3,
+        permiteJugable: true,
+        tono: 'profesional',
+        semanasPorIntento: 17,
+      });
+      if (lote.bloqueados >= 1 && lote.marqueeOferta) { vioMarqueeTrasBloqueo = true; break; }
+    }
+    expect(vioMarqueeTrasBloqueo).toBe(true);
+  });
+});
+
 // v6, segunda vuelta: freno al presupuesto de minutos. Sin esto, un
 // "jugando bien" que corona los tres cinturones a mitad de carrera pasa el
 // resto defendiendo el mundial año a año SIN EXCEPCIÓN — cada uno de esos
