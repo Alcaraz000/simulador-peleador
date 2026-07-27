@@ -210,7 +210,7 @@ export const CARTAS_CAMPAMENTO = [
     rareza: 'normal',
     opciones: [
       { id: 'leerlo', texto: 'Leerlo entero, aunque duela.', probabilidades: [
-        { peso: 60, mods: { moral: 6 }, texto: 'Te dan como ampli favorito. Entrenás con el pecho inflado.' },
+        { peso: 60, mods: { moral: 6 }, texto: 'Te dan como amplio favorito. Entrenás con el pecho inflado.' },
         { peso: 40, mods: { moral: -7 }, texto: 'Te dan como perdedor cantado. Cuesta sacárselo de la cabeza en cada sesión.' },
       ] },
       { id: 'no_leerlo', texto: 'Pedirle al entrenador que no te cuente nada.', mods: {} },
