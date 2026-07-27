@@ -237,6 +237,37 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
+  // Bug reportado (v9, "el roll de los dados ocurre demasiado rápido, no da
+  // margen a ver qué fue lo que pasó"): con `prefers-reduced-motion` (el modo
+  // por defecto de este archivo, ver beforeEach) el roll en sí resuelve en el
+  // mismo tick — el único temporizador real en juego es PAUSA_RESULTADO_MS
+  // (main.js), que deja la tarjeta con el resultado a la vista antes de
+  // seguir. Antes de este fix eran 1100ms: muy poco para registrar y leer una
+  // frase nueva que recién apareció. Este test fija una cota INFERIOR muy por
+  // encima de esos 1100ms viejos (falla contra el código sin arreglar) y una
+  // cota SUPERIOR para que la lectura no se vuelva tediosa (el roll se repite
+  // varias veces por carrera).
+  it('la pausa de lectura tras el roll dura bastante más que antes (1100ms), sin volverse tediosa', () => {
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
+    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
+    tarjetaAzar.click();
+
+    // El roll resolvió en el mismo tick (reduced motion): el resultado ya
+    // está pintado sobre la tarjeta.
+    expect(tarjetaAzar.querySelector('.tarjeta-resultado')).toBeTruthy();
+
+    // A 1500ms de la pausa (bien por encima del viejo PAUSA_RESULTADO_MS de
+    // 1100ms): con el bug sin arreglar, ya se habría aplicado el efecto y la
+    // tarjeta habría desaparecido. Con el fix, todavía tiene que estar.
+    vi.advanceTimersByTime(1500);
+    expect(cont.contains(tarjetaAzar)).toBe(true);
+
+    // Pero tampoco se vuelve tediosa: a los 3000ms totales de pausa, ya se
+    // tiene que haber aplicado el efecto y pasado a la próxima tarjeta.
+    vi.advanceTimersByTime(1500);
+    expect(cont.contains(tarjetaAzar)).toBe(false);
+  });
+
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
     // semilla 6: la corrección del coordinador ("el pick del jugador no
     // puede ser cosmético") rehizo el minijuego de trámite entero —
