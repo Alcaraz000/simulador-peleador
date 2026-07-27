@@ -143,6 +143,12 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
     return 'decision';
   }
 
+  // Resumen de fin de año (v7): pantalla propia (resumen-anio.js), no
+  // `renderDesenlace` — un solo botón "Seguir", escopado a `.resumen-anio`
+  // (mismo criterio que `.shell-centro [data-accion="aceptar"]` más abajo).
+  const seguirResumenAnio = cont.querySelector('.resumen-anio .boton');
+  if (seguirResumenAnio) { seguirResumenAnio.click(); return 'resumen-anio'; }
+
   // Aviso sin tarjeta previa (noticias / lesionSinOferta, Task 6.1): el
   // desenlace se pinta directo, sin pasar por una grilla.
   const avisoDirecto = cont.querySelector('.panel-decision-desenlace .boton');
