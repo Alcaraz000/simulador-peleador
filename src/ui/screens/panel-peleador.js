@@ -311,8 +311,12 @@ function filaAtributo(clave, { base, aporte }) {
     dataset: { atributo: clave },
   }, [
     aporte ? el('span', { class: 'aporte-entrenador', text: `+${aporte}` }) : null,
-    el('span', { class: 'nombre sutil', text: etiquetaAtributo(clave) }),
+    // El número va PRIMERO y el nombre debajo (pedido del usuario): en el
+    // cuadro manda el valor, la etiqueta lo acompaña. El orden del DOM
+    // coincide con el visual a propósito — invertirlo solo por CSS deja a
+    // quien navega con lector de pantalla leyendo otra cosa que la pantalla.
     el('b', { class: 'valor', text: String(base) }),
+    el('span', { class: 'nombre sutil', text: etiquetaAtributo(clave) }),
   ]);
 }
 

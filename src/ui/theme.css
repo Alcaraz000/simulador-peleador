@@ -2276,3 +2276,90 @@ input.creacion-control { cursor: text; }
   min-width: 0;
   text-align: right;
 }
+
+/* ============================================================================
+   AJUSTES VISUALES v11 — cuatro pedidos puntuales del usuario, todos de
+   proporción y orden. Van al final del archivo (mismo criterio que los
+   bloques anteriores) para no editar en el medio y pisarle el trabajo a
+   nadie.
+   ============================================================================ */
+
+/* --- 1: los títulos de las decisiones NUNCA parten en dos líneas -----------
+   En el resumen del año, "El suplemento importado" y "La casa llena de
+   gente" se partían: el título tenía ancho automático y `break-word`. Ahora
+   la etiqueta de tipo y el título tienen ANCHO FIJO (aunque no lo usen), que
+   es lo que hace que todas las filas arranquen en la misma columna, y el
+   título va en una sola línea. El ancho está calculado sobre el título más
+   largo del catálogo con este tamaño de fuente, así que el ellipsis es una
+   red de seguridad que en la práctica no se activa — el usuario ya dejó
+   claro que texto cortado con "…" no es aceptable. */
+.resumen-anio-fila-tag {
+  flex: 0 0 92px;
+  justify-content: center;
+}
+
+/* El ancho y el tamaño de fuente están medidos contra el título MÁS LARGO de
+   los catálogos ("El secreto que el entrenador guardaba", 36 caracteres): con
+   estos valores entra completo, sin ellipsis. El `text-overflow` es una red
+   por si algún día se suma un título más largo — pero la regla del proyecto
+   es que el texto nunca se corte, así que si eso pasa hay que agrandar acá o
+   acortar el título, no dejar que se recorte. */
+.resumen-anio-fila-titulo {
+  flex: 0 0 224px;
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  overflow-wrap: normal;
+}
+
+.resumen-anio-fila-desc {
+  overflow-wrap: normal;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --- 2: el nombre del cinturón se montaba sobre el ícono -------------------
+   El ícono ocupa la caja entera (`inset: 0`) y quedaba centrado exactamente
+   donde va el nombre. Se separan: el ícono baja, el nombre sube. */
+.cinturon-caja-icono {
+  align-items: flex-end;
+  padding-bottom: 6px;
+}
+
+.cinturon-caja-nombre {
+  margin-bottom: 34px;
+}
+
+/* --- 3: el número manda, la etiqueta acompaña -----------------------------
+   Número más grande, etiqueta más grande también (venía en 7.4px, ilegible)
+   y debajo del número — el orden ya se invirtió en el DOM, ver
+   panel-peleador.js. El `min-height` del cuadro sube para acompañar sin que
+   el texto quede apretado; los cuadros de una misma fila se siguen igualando
+   entre sí por el `align-items: stretch` del contenedor. */
+.panel-peleador-atributo {
+  min-height: 62px;
+  justify-content: center;
+  gap: 3px;
+}
+
+.panel-peleador-atributo .valor {
+  font-size: 21px;
+}
+
+.panel-peleador-atributo .nombre {
+  font-size: 9px;
+  letter-spacing: 0.6px;
+}
+
+/* --- 4: la semana, más a la derecha ---------------------------------------
+   Año y mes quedan juntos a la izquierda; la semana se va al otro extremo de
+   la fila. */
+.panel-calendario .calendario-fila {
+  flex-wrap: nowrap;
+}
+
+.panel-calendario .calendario-semana {
+  margin-left: auto;
+}
