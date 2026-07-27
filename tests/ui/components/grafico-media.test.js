@@ -229,6 +229,48 @@ describe('graficoMedia', () => {
       // arranca el área de dibujo (las gridlines), nunca sobre ella.
       expect(etiquetasEje.some((t) => Number(t.getAttribute('x')) < inicioGrilla)).toBe(true);
     });
+
+    // v10 (pedido textual: "los gráficos están demasiado simples, agregá más
+    // datos en el eje Y"): el caso más pobre de todos era justo el que el
+    // usuario citó como ejemplo (media plana en 75 -> solo 55/75/95, 3
+    // marcas) — ese es el caso de "línea plana" (una sola muestra real o
+    // todas iguales), que antes armaba un rango artificial con una sola
+    // llamada a `pasoLindo(...,1)` sin importar cuántas marcas se pidieran.
+    // Ahora tiene que traer más contexto alrededor del valor, no solo
+    // min/valor/max.
+    it('con la media plana en el año entero (una sola muestra real), el eje Y trae MAS de 3 marcas', () => {
+      const nodo = graficoMedia({ muestras: [{ semana: 20, media: 75 }], anio: ANIO_INICIAL });
+      const svg = nodo.querySelector('svg');
+      const grilla = svg.querySelectorAll('.grafico-linea-grilla');
+      expect(grilla.length).toBeGreaterThan(3);
+    });
+
+    it('con la media plana, las marcas del eje Y no se amontonan: quedan repartidas con paso constante', () => {
+      const nodo = graficoMedia({ muestras: [{ semana: 20, media: 75 }], anio: ANIO_INICIAL });
+      const svg = nodo.querySelector('svg');
+      const ys = [...svg.querySelectorAll('.grafico-linea-grilla')].map((l) => Number(l.getAttribute('y1'))).sort((a, b) => a - b);
+      const pasos = ys.slice(1).map((y, i) => Math.round((y - ys[i]) * 10) / 10);
+      // Mismo paso entre cada gridline consecutiva (grilla pareja, no al azar).
+      pasos.forEach((p) => expect(p).toBeCloseTo(pasos[0], 1));
+    });
+
+    // El viewBox pasa a ser bien más chato (pedido 1 de la misma ronda: "los
+    // gráficos están demasiado grandes... son lo que más sobra"): con
+    // `width:100%` fijo por CSS, un viewBox más chato es lo que baja el alto
+    // renderizado en pantalla sin sacrificar el ancho completo del módulo.
+    it('el viewBox es bien mas chato que alto (menos alto renderizado para el mismo ancho de modulo)', () => {
+      const nodo = graficoMedia({
+        muestras: [{ semana: 1, media: 60 }, { semana: 10, media: 70 }],
+        anio: ANIO_INICIAL,
+      });
+      const svg = nodo.querySelector('svg');
+      const [, , w, h] = svg.getAttribute('viewBox').split(' ').map(Number);
+      // El achique tiene un límite real: demasiado chato y el eje Y del
+      // Pedido 2 (más marcas) deja de tener aire para no superponerse (ver
+      // el comentario grande en grafico-media.js) — 3:1 es, ya medido a
+      // ojo con Playwright, el punto donde ambos pedidos conviven bien.
+      expect(w / h).toBeGreaterThanOrEqual(3);
+    });
   });
 });
 
@@ -302,6 +344,16 @@ describe('graficoRanking', () => {
     const nodo = graficoRanking({ muestras: [{ semana: 1, ranking: 12 }], anio: ANIO_INICIAL });
     expect(nodo.querySelector('svg')).toBeTruthy();
     expect(nodo.textContent).toContain('#12');
+  });
+
+  // v10 (mismo pedido que graficoMedia: "agregá más datos en el eje Y") — el
+  // ejemplo textual del usuario para ranking fue justo #18/#13/#8 (3 marcas,
+  // el caso de ranking plano).
+  it('con el ranking plano en el año entero, el eje Y trae MAS de 3 marcas', () => {
+    const nodo = graficoRanking({ muestras: [{ semana: 1, ranking: 13 }], anio: ANIO_INICIAL });
+    const svg = nodo.querySelector('svg');
+    const grilla = svg.querySelectorAll('.grafico-linea-grilla');
+    expect(grilla.length).toBeGreaterThan(3);
   });
 
   it('sin ninguna muestra valida, no revienta (defensivo) y cae a la lectura simple (unico caso legitimo de texto)', () => {
