@@ -51,12 +51,31 @@ export const CINTURONES = [
 // con criterio de boxeo: un regional se gana con un puñado de peleas de
 // verdad (más de un año de actividad pro), un nacional pide un historial ya
 // construido, y un mundial exige un currículum probado — ni el prodigio con
-// más suerte se salta la fila entera. Con el promedio de 30-40 peleas
+// más suerte se salta la fila entera.
+//
+// El mismo mínimo también frena la vieja salida de "eliminatoria" en
+// `decidirNivel` (más abajo): antes, un ranking top-6 sin título alcanzaba
+// para ofrecer eliminatorias (SIEMPRE jugables, ver esPeleaImportante) sin
+// límite mientras el jugador esperaba calificar — con el mínimo de peleas
+// ahora exigido ahí también, un prodigio sin currículum vuelve a la
+// cartelera regional de trámite hasta cumplirlo.
+//
+// Números calibrados con `node scripts/balance-sim.mjs 400` para no
+// disparar el presupuesto de ~20 minutos de la partida: escalones más altos
+// (probado: 8/16/24) empujan a un jugador "jugando bien" a pasar más años
+// defendiendo cada cinturón intermedio en vez de coronarlos rápido y
+// descansar como campeón indiscutido (permiteMarqueeEsteAnio, tramite.js) —
+// cada uno de esos años extra es una defensa JUGABLE de más. Con 8/13/18 el
+// promedio de "creación real" queda en ~22 min (antes de este cambio: ~21
+// min) y >=99% de peleas profesionales totales dentro de [30,40] — el mismo
+// margen que ya tenía la ronda anterior. Con el promedio de 30-40 peleas
 // profesionales por carrera completa (ver ETAPAS, career.js), estos mínimos
-// dejan margen de sobra para coronar los tres cinturones jugando bien — ver
-// el informe de balance (scripts/balance-sim.mjs) para el efecto medido en
-// el eje de cinturones.
-export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 16, mundial: 24 };
+// dejan margen de sobra para coronar los tres cinturones jugando bien: 3
+// cinturones sigue en 100% sobre 400 semillas, y el piso de 85% sobre 3000
+// semillas del jugador más débil del proyecto (career.test.js, "progresión
+// de cinturones") también se mantiene — ver el informe de balance entregado
+// con esta ronda.
+export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 13, mundial: 18 };
 
 function peleasProfesionales(jugador) {
   const record = jugador.record ?? { v: 0, d: 0, e: 0 };
@@ -239,7 +258,20 @@ function decidirNivel({
   }
 
   if (etapa === 'veterano') return { nivel: NIVELES.eliminatoria, cinturon: null };
-  return { nivel: (jugador.ranking ?? 99) <= 6 ? NIVELES.eliminatoria : NIVELES.regional, cinturon: null };
+  // v7: una eliminatoria es "la pelea que define el ascenso al puesto de
+  // retador" — sin sentido para alguien que ni siquiera tiene el mínimo de
+  // peleas para disputar ese título todavía (ver PELEAS_MINIMAS_TITULO,
+  // arriba). Sin este freno, un prodigio rankeado top-6 pero con pocas
+  // peleas quedaba atrapado ofreciéndole eliminatoria tras eliminatoria
+  // (SIEMPRE jugable, ver esPeleaImportante) mientras esperaba cumplir el
+  // mínimo — medido con scripts/balance-sim.mjs: reventaba el presupuesto de
+  // ~20 minutos (peleas jugables/carrera subía de ~6 a ~8-9) sin sumarle
+  // nada al eje de cinturones, que ya lo esperaba de todos modos. `!proximo`
+  // (ya tiene los tres cinturones) preserva el comportamiento de siempre: no
+  // hay "próximo mínimo" contra el cual medir.
+  const calificaParaEliminatoria = (jugador.ranking ?? 99) <= 6
+    && (!proximo || cumpleMinimoDePeleas(jugador, proximo));
+  return { nivel: calificaParaEliminatoria ? NIVELES.eliminatoria : NIVELES.regional, cinturon: null };
 }
 
 let contadorOferta = 0;

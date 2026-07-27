@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
-import { CINTURONES } from '../../src/core/offers.js';
+import { CINTURONES, PELEAS_MINIMAS_TITULO } from '../../src/core/offers.js';
 import {
   intentosDePelea, resumenLote, armarLotePeleas, permiteMarqueeEsteAnio,
 } from '../../src/core/tramite.js';
@@ -112,15 +112,35 @@ describe('armarLotePeleas', () => {
   });
 
   it('con permiteJugable=true y ranking alto, en algun momento el primer cupo se vuelve una oferta jugable', () => {
+    // v7 ("un debutante NO puede pelear por el título con 0 peleas"): con
+    // ranking top-6 pero SIN el mínimo de peleas para el próximo cinturón,
+    // ni el título ni la eliminatoria (que exige lo mismo, ver decidirNivel
+    // en offers.js) están disponibles — el récord de acá abajo ya cumple el
+    // mínimo del regional para seguir probando lo que este test dice probar:
+    // que un ranking alto SÍ vuelve jugable el primer cupo.
     let vioMarquee = false;
     for (let s = 1; s <= 60; s += 1) {
-      const yo = jugador({ edad: 22, ranking: 1, fama: 50 });
+      const yo = jugador({ edad: 22, ranking: 1, fama: 50, record: { v: PELEAS_MINIMAS_TITULO.regional, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } });
       const lote = armarLotePeleas(createRng(s), {
         jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: true, tono: 'profesional',
       });
       if (lote.marqueeOferta) vioMarquee = true;
     }
     expect(vioMarquee).toBe(true);
+  });
+
+  // v7: cubre exactamente lo contrario — SIN el mínimo de peleas, ni
+  // siquiera un ranking altísimo vuelve jugable el primer cupo (ni título ni
+  // eliminatoria disponibles), así que un debutante de ranking top-1 sigue
+  // siendo trámite de punta a punta.
+  it('con ranking alto pero 0 peleas profesionales, el primer cupo NUNCA se vuelve jugable', () => {
+    for (let s = 1; s <= 60; s += 1) {
+      const yo = jugador({ edad: 22, ranking: 1, fama: 50, record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } });
+      const lote = armarLotePeleas(createRng(s), {
+        jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: true, tono: 'profesional',
+      });
+      expect(lote.marqueeOferta).toBeNull();
+    }
   });
 
   it('cada resultado de tramite queda en el historial del jugador con modo "tramite"', () => {
