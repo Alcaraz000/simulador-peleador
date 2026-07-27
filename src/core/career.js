@@ -398,6 +398,14 @@ export function crearPartida({ jugador, semilla }) {
     // nunca lee `ofertaPendiente` (bug reportado: mostraba al rival antes de
     // aceptar la oferta).
     semanaGlobal: 1,
+    // Calendario (v12, "que el resumen aparezca en cada enero"): dónde
+    // arrancó el bloque que se está viviendo AHORA MISMO — ver el comentario
+    // grande en avanzarBloque. Sin esto, un campamento (que avanza
+    // semanaGlobal semana a semana, siguienteBeat) corría el calendario para
+    // siempre: avanzarBloque sumaba `semanasDeBloque` sobre la semana YA
+    // adelantada por el campamento, así que cada uno agregaba semanas de más
+    // que nunca se recuperaban.
+    semanaInicioBloque: 1,
     proximaPelea: null,
     ofertaPendiente: null,
     cola: [],
@@ -416,14 +424,16 @@ export function crearPartida({ jugador, semilla }) {
     memoriaCartas: { evento: [], redes: [], campamento: [] },
     // Resumen de fin de año (pedido textual del usuario): `registroAnioActual`
     // acumula la media y las decisiones del año que se está viviendo ahora
-    // mismo — ver el comentario grande de year-summary.js. `anioCerrado` es
-    // un dato SIEMPRE transitorio (lo pone avanzarBloque, lo consume
-    // siguienteBeat en el mismo golpe): nunca debería sobrevivir a un
-    // autoguardado, pero viaja en la partida (serializable, JSON-safe) para
-    // que una partida guardada justo en ese instante no pierda nada si algo
-    // interrumpe el ciclo.
+    // mismo — ver el comentario grande de year-summary.js. `beatsResumenAnio`
+    // es un dato SIEMPRE transitorio (lo llena `cerrarAniosCruzados` apenas
+    // detecta que un avance de `semanaGlobal` cruzó uno o más años calendario,
+    // lo consume `siguienteBeat` en el mismo golpe): nunca debería sobrevivir
+    // a un autoguardado, pero viaja en la partida (serializable, JSON-safe,
+    // SIEMPRE un array — puede traer más de un beat si el avance cruzó más
+    // de un año de una sola vez) para que una partida guardada justo en ese
+    // instante no pierda nada si algo interrumpe el ciclo.
     registroAnioActual: iniciarRegistroAnio(1, jugador, mundo),
-    anioCerrado: null,
+    beatsResumenAnio: [],
   };
 }
 
@@ -457,14 +467,14 @@ function clonarPartida(partida) {
       redes: [...(partida.memoriaCartas?.redes ?? [])],
       campamento: [...(partida.memoriaCartas?.campamento ?? [])],
     },
-    // Resumen de fin de año: `?? null` (en vez de asumir que siempre existe)
-    // es la migración silenciosa para una partida guardada de un esquema
-    // anterior a esta ronda — sin el campo, `registrarDecision`/
+    // Resumen de fin de año: `?? null`/`?? []` (en vez de asumir que siempre
+    // existe) es la migración silenciosa para una partida guardada de un
+    // esquema anterior a esta ronda — sin el campo, `registrarDecision`/
     // `registrarMuestraMedia` no hacen nada (ver el resguardo en
-    // year-summary.js) hasta que el próximo avanzarBloque abre un registro
+    // year-summary.js) hasta que el próximo cruce de año abre un registro
     // nuevo solo; nunca revienta.
     registroAnioActual: clonarRegistroAnio(partida.registroAnioActual),
-    anioCerrado: clonarRegistroAnio(partida.anioCerrado ?? null),
+    beatsResumenAnio: (partida.beatsResumenAnio ?? []).map(clonarBeatResumenAnio),
   };
 }
 
@@ -477,13 +487,121 @@ function clonarRegistroAnio(registro) {
   };
 }
 
+function clonarBeatResumenAnio(beat) {
+  return {
+    ...beat,
+    datos: {
+      ...beat.datos,
+      muestrasMedia: [...beat.datos.muestrasMedia],
+      decisiones: [...beat.datos.decisiones],
+      peleas: [...beat.datos.peleas],
+    },
+  };
+}
+
+// Resumen de fin de año (v12, pedido textual: "que se muestre al principio
+// de cada año, en cada enero"): el disparador del resumen deja de ser "se
+// terminó un bloque" y pasa a ser "se cruzó un año calendario" — lo mismo da
+// si ese cruce lo produjo el salto grande de `avanzarBloque` o el avance
+// semana a semana de un beat de campamento (`campCarta`/`campSparring`, ver
+// `siguienteBeat`): CUALQUIER avance de `semanaGlobal` puede terminar de
+// cruzar un año, y acá es donde se lo detecta y se cierra.
+//
+// `semanaAntes`/`semanaDespues` son las dos puntas del avance YA calculado
+// por quien llama (esta función nunca suma semanas por su cuenta: solo
+// compara, para no duplicar la lógica de cuánto avanzar en cada uno de los
+// dos caminos). Si no cruzó ningún año (caso normal, semana a semana dentro
+// del mismo año), devuelve el registro tal cual y ningún beat.
+//
+// Si cruzó uno o más años, la decisión de diseño (pedido explícito: "decidí
+// cómo — emitir uno por año, o fusionar, y documentá el criterio") es EMITIR
+// UNO POR AÑO, nunca fusionar: cada año conserva sus propias peleas,
+// decisiones y muestras de media en su propia pantalla, en vez de mezclar
+// dos años en un solo resumen. El primer año que se cierra (`semanaAntes`)
+// es el que de verdad estaba corriendo — trae el registro real acumulado.
+// Si el salto alcanzó a cruzar MÁS de un año de una sola vez (hoy no pasa
+// con los `aniosPorBloque` actuales, siempre 1 — ver ETAPAS —, pero un beat
+// de campamento en teoría también podría si esas constantes cambiaran), los
+// años intermedios nunca llegaron a tener su propio registro abierto: se
+// cierran con un registro vacío (sin muestras ni decisiones, porque nadie
+// jugó nada mientras "estaban" esos años) y quedan sujetos al mismo filtro
+// `anioTieneAlgoQueContar` — en la práctica, solo sus peleas (si hubo alguna
+// fechada ahí) pueden salvarlos de quedar en silencio. Así ningún año se
+// pierde: o bien aparece su resumen, o bien de verdad no tuvo nada que
+// contar.
+function cerrarAniosCruzados({
+  semanaAntes, semanaDespues, registroAnioActual, jugador, mundo,
+}) {
+  const anioAntes = fechaDe(semanaAntes, ANIO_INICIAL).anio;
+  const anioDespues = fechaDe(semanaDespues, ANIO_INICIAL).anio;
+  if (anioDespues <= anioAntes) {
+    return { registroAnioActual, beatsResumen: [] };
+  }
+  const beatsResumen = [];
+  for (let anio = anioAntes; anio < anioDespues; anio += 1) {
+    const registro = anio === anioAntes
+      ? registroAnioActual
+      : { anio, muestrasMedia: [], decisiones: [] };
+    if (anioTieneAlgoQueContar(registro, jugador)) {
+      beatsResumen.push({
+        tipo: 'resumenAnio',
+        datos: {
+          anio,
+          // Copias defensivas (no una referencia directa a los arrays de
+          // `registro`): para el primer año cerrado, `registro` ES el
+          // `registroAnioActual` que recibió esta función — el beat no puede
+          // compartir array con nada que un llamador todavía pueda tener
+          // agarrado en otro lado (mismo criterio de pureza que
+          // `clonarBeatResumenAnio`, más abajo).
+          muestrasMedia: [...registro.muestrasMedia],
+          decisiones: [...registro.decisiones],
+          peleas: peleasDelAnio(jugador, anio),
+        },
+      });
+    }
+  }
+  return {
+    registroAnioActual: iniciarRegistroAnio(semanaDespues, jugador, mundo),
+    beatsResumen,
+  };
+}
+
 export function avanzarBloque(partida) {
   const nueva = clonarPartida(partida);
   const rng = rngDe(nueva);
   const etapa = etapaActual(nueva);
 
   nueva.jugador.edad += etapa.aniosPorBloque;
-  nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + semanasDeBloque(etapa.aniosPorBloque);
+  // Resumen de fin de año: se guarda la semana ANTES de este salto (ver
+  // `cerrarAniosCruzados`, más abajo, que compara las dos puntas para saber
+  // cuántos años calendario cruzó este bloque — nunca asume que un bloque es
+  // siempre exactamente un año).
+  const semanaAntes = nueva.semanaGlobal ?? 1;
+  // Calendario (v12, "que el resumen aparezca en cada enero" — causa real
+  // medida DESPUÉS de arreglar el cruce de años: los primeros resúmenes
+  // caían en enero, pero después se corrían a marzo, junio, octubre...): el
+  // próximo bloque NO arranca `semanasDeBloque` semanas después de donde
+  // ESTÁ `semanaGlobal` ahora mismo — arranca esa cantidad de semanas
+  // después de donde ARRANCÓ este bloque (`semanaInicioBloque`). Si un
+  // campamento (siguienteBeat) ya adelantó `semanaGlobal` DENTRO de este
+  // bloque preparando una pelea, esas semanas son PARTE del año de este
+  // bloque, no un agregado extra: sumarlas de nuevo acá (como hacía antes)
+  // corría el calendario hacia adelante para siempre, sin que ningún bloque
+  // futuro lo recuperara jamás.
+  //
+  // Bug encontrado en revisión de código: `?? 1` (en vez de `?? semanaAntes`)
+  // rompía la migración de una partida guardada ANTES de este fix (esquema
+  // v2 ya publicado, ver save.js — a esas partidas nunca les existió este
+  // campo): la primera vez que una de esas partidas cargadas avanzaba de
+  // bloque, el calendario saltaba HACIA ATRÁS a la semana 1+52, sin importar
+  // cuántos años llevara la carrera. `?? semanaAntes` es el mismo criterio de
+  // migración silenciosa que ya usa `registroAnioActual: ?? null` (más
+  // abajo, clonarPartida): sin drift conocido para reclamar, el resultado es
+  // IDÉNTICO al comportamiento de antes de este fix (sumar sobre la semana
+  // actual) — nunca revienta ni retrocede.
+  const inicioBloqueActual = nueva.semanaInicioBloque ?? semanaAntes;
+  nueva.semanaGlobal = inicioBloqueActual + semanasDeBloque(etapa.aniosPorBloque);
+  nueva.semanaInicioBloque = nueva.semanaGlobal;
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
@@ -566,17 +684,27 @@ export function avanzarBloque(partida) {
 
   nueva.rngEstado = rng.estado();
 
-  // Resumen de fin de año: acá es exactamente donde un año calendario
-  // termina y el próximo arranca (en este juego, un bloque = un año — ver
-  // ETAPAS, más abajo). El registro tal cual quedó (media + decisiones de
-  // todo lo que el jugador vivió en el año que se está cerrando: su cola ya
-  // estaba vacía, por eso se está armando un bloque nuevo) se guarda en
-  // `anioCerrado` — un dato transitorio que `siguienteBeat` consume en el
-  // mismo golpe para armar el beat 'resumenAnio' (si corresponde) y después
-  // limpia. `registroAnioActual` arranca de nuevo, con la MEDIA ya recalculada
-  // después del crecimiento/declive pasivo de este bloque (arriba).
-  nueva.anioCerrado = nueva.registroAnioActual;
-  nueva.registroAnioActual = iniciarRegistroAnio(nueva.semanaGlobal, nueva.jugador, nueva.mundo);
+  // Resumen de fin de año (v12: el disparador es el cruce de año calendario,
+  // no el fin del bloque en sí — ver el comentario grande de
+  // `cerrarAniosCruzados`, arriba). `semanaAntes`/`nueva.semanaGlobal` son
+  // las dos puntas del salto que este bloque acaba de dar: casi siempre es
+  // exactamente un año (aniosPorBloque=1 en las tres ETAPAS de hoy), pero la
+  // función no lo asume — si llegara a cruzar más de uno, cierra cada año
+  // por separado, ninguno se pierde. Los beats ya armados y filtrados
+  // (`anioTieneAlgoQueContar`) quedan en `beatsResumenAnio` — un dato
+  // transitorio que `siguienteBeat` consume en el mismo golpe (los prepende
+  // a la cola del bloque nuevo) y después limpia. `registroAnioActual` queda
+  // reabierto para el año que arranca, con la MEDIA ya recalculada después
+  // del crecimiento/declive pasivo de este bloque (arriba).
+  const cierre = cerrarAniosCruzados({
+    semanaAntes,
+    semanaDespues: nueva.semanaGlobal,
+    registroAnioActual: nueva.registroAnioActual,
+    jugador: nueva.jugador,
+    mundo: nueva.mundo,
+  });
+  nueva.registroAnioActual = cierre.registroAnioActual;
+  nueva.beatsResumenAnio = [...nueva.beatsResumenAnio, ...cierre.beatsResumen];
 
   return nueva;
 }
@@ -862,32 +990,18 @@ export function siguienteBeat(partida) {
     }
     if (nueva.bloqueGlobal > 1) nueva = avanzarBloque(nueva);
 
-    // Resumen de fin de año (pedido textual del usuario): si avanzarBloque
-    // acaba de cerrar un año (siempre que bloqueGlobal>1, arriba) y ese año
-    // tuvo al menos una pelea (`anioTieneAlgoQueContar` — "un año sin peleas
-    // ni hitos no necesita ceremonia"), se arma su beat ACÁ, con los datos ya
-    // fotografiados: las peleas se leen del historial (nunca se duplican,
-    // ver peleasDelAnio/year-summary.js), las decisiones y muestras de media
-    // vienen tal cual quedaron en `anioCerrado`. Va AL FRENTE de la cola del
-    // bloque que arranca — antes que la mejora obligatoria — y `anioCerrado`
-    // se limpia ACÁ: es un dato puramente transitorio, nunca debe sobrevivir
-    // más de este golpe (ver el comentario grande en avanzarBloque).
-    let beatResumenAnio = null;
-    if (nueva.anioCerrado && anioTieneAlgoQueContar(nueva.anioCerrado, nueva.jugador)) {
-      beatResumenAnio = {
-        tipo: 'resumenAnio',
-        datos: {
-          anio: nueva.anioCerrado.anio,
-          muestrasMedia: nueva.anioCerrado.muestrasMedia,
-          decisiones: nueva.anioCerrado.decisiones,
-          peleas: peleasDelAnio(nueva.jugador, nueva.anioCerrado.anio),
-        },
-      };
-    }
-    nueva.anioCerrado = null;
+    // Resumen de fin de año (v12: el cruce de año calendario, no el fin de
+    // bloque en sí — ver `cerrarAniosCruzados`): si avanzarBloque acaba de
+    // cerrar uno o más años (siempre que bloqueGlobal>1, arriba), sus beats
+    // ya vienen armados y filtrados en `beatsResumenAnio`, en orden
+    // cronológico. Van AL FRENTE de la cola del bloque que arranca — antes
+    // que la mejora obligatoria — y `beatsResumenAnio` se limpia ACÁ: es un
+    // dato puramente transitorio, nunca debe sobrevivir más de este golpe.
+    const beatsResumenAnio = nueva.beatsResumenAnio;
+    nueva.beatsResumenAnio = [];
 
     const armado = armarCola(nueva);
-    nueva.cola = beatResumenAnio ? [beatResumenAnio, ...armado.cola] : armado.cola;
+    nueva.cola = [...beatsResumenAnio, ...armado.cola];
     nueva.rngEstado = armado.rngEstado;
     nueva.ofertaPendiente = armado.ofertaPendiente;
     // v6: armarCola puede resolver una o varias peleas de trámite EN EL ACTO
@@ -906,8 +1020,30 @@ export function siguienteBeat(partida) {
   // calendario del tablero (semanaGlobal, calendario.js) lo que le toca, así
   // "faltan N semanas" en el panel de próxima pelea baja de verdad beat a
   // beat en vez de quedarse fijo hasta el próximo bloque.
+  //
+  // Resumen de fin de año (v12): este es el SEGUNDO lugar donde semanaGlobal
+  // avanza (el primero es el salto grande de avanzarBloque, arriba) — y
+  // antes de esta ronda era el que se escapaba: un campamento podía empujar
+  // el calendario a un año calendario nuevo sin que nadie lo notara hasta el
+  // próximo avanzarBloque, mucho más tarde. Se chequea el cruce ACÁ, en el
+  // momento exacto en que pasa, con el mismo `cerrarAniosCruzados` que usa
+  // avanzarBloque: si cruzó uno o más años, sus beats van AL FRENTE de lo
+  // que quede en la cola (antes que el resto del campamento), así el
+  // jugador los ve apenas terminen de cruzar, no al final del bloque.
   if (beat && (beat.tipo === 'campCarta' || beat.tipo === 'campSparring')) {
-    nueva.semanaGlobal = (nueva.semanaGlobal ?? 1) + (beat.datos.semanas ?? 0);
+    const semanaAntes = nueva.semanaGlobal ?? 1;
+    nueva.semanaGlobal = semanaAntes + (beat.datos.semanas ?? 0);
+    const cierre = cerrarAniosCruzados({
+      semanaAntes,
+      semanaDespues: nueva.semanaGlobal,
+      registroAnioActual: nueva.registroAnioActual,
+      jugador: nueva.jugador,
+      mundo: nueva.mundo,
+    });
+    nueva.registroAnioActual = cierre.registroAnioActual;
+    if (cierre.beatsResumen.length > 0) {
+      nueva.cola = [...cierre.beatsResumen, ...nueva.cola];
+    }
   }
   nueva.beatActual = beat;
   nueva.historialBeats += beat ? 1 : 0;

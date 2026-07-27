@@ -38,33 +38,114 @@ describe('crearPartida: abre el registro del primer año', () => {
     expect(p.registroAnioActual.muestrasMedia).toHaveLength(1);
     expect(p.registroAnioActual.muestrasMedia[0].semana).toBe(1);
     expect(p.registroAnioActual.decisiones).toEqual([]);
-    expect(p.anioCerrado ?? null).toBeNull();
+    expect(p.beatsResumenAnio ?? []).toEqual([]);
   });
 });
 
-describe('avanzarBloque: cierra el año en curso y abre uno nuevo', () => {
-  it('deja anioCerrado con el registro tal cual estaba, y abre un registroAnioActual nuevo para el anio que arranca', () => {
+// v12 (pedido textual: "que el resumen aparezca al principio de cada año
+// calendario, no al final de un bloque"): `anioCerrado` (un solo registro
+// crudo) pasa a ser `beatsResumenAnio` (un ARRAY de beats 'resumenAnio' ya
+// armados y filtrados) — el filtro `anioTieneAlgoQueContar` y el armado del
+// beat pasan a resolverse en el momento en que se detecta el cruce (ver
+// `cerrarAniosCruzados` en career.js), no después: un salto de calendario
+// puede cerrar más de un año de una sola vez (ver el describe de más abajo,
+// "un salto que cruza más de un año"), así que hace falta poder devolver
+// más de un beat.
+describe('avanzarBloque: cierra el año calendario que cruza y abre uno nuevo', () => {
+  it('deja beatsResumenAnio con el beat resumenAnio del año que cierra, y abre un registroAnioActual nuevo para el año que arranca', () => {
     const p = nuevaPartida();
     const conDecision = registrarDecision(p, {
       tipo: 'mejora', titulo: 'Mejora', opcion: 'Más potencia', semana: p.semanaGlobal,
     });
     const despues = avanzarBloque(conDecision);
 
-    expect(despues.anioCerrado).toEqual(conDecision.registroAnioActual);
-    expect(despues.anioCerrado.decisiones).toHaveLength(1);
-    expect(despues.anioCerrado.anio).toBe(p.registroAnioActual.anio);
+    expect(despues.beatsResumenAnio).toHaveLength(1);
+    const [beat] = despues.beatsResumenAnio;
+    expect(beat.tipo).toBe('resumenAnio');
+    expect(beat.datos.anio).toBe(p.registroAnioActual.anio);
+    expect(beat.datos.decisiones).toHaveLength(1);
 
     expect(despues.registroAnioActual.anio).toBe(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio);
-    expect(despues.registroAnioActual.anio).toBeGreaterThan(despues.anioCerrado.anio);
+    expect(despues.registroAnioActual.anio).toBeGreaterThan(beat.datos.anio);
     expect(despues.registroAnioActual.decisiones).toEqual([]);
     expect(despues.registroAnioActual.muestrasMedia).toHaveLength(1);
   });
 
-  it('no muta la partida original (registroAnioActual/anioCerrado incluidos)', () => {
+  it('un año sin nada que contar no deja ningún beat pendiente', () => {
+    const p = nuevaPartida();
+    const despues = avanzarBloque(p);
+    expect(despues.beatsResumenAnio).toEqual([]);
+  });
+
+  it('no muta la partida original (registroAnioActual/beatsResumenAnio incluidos)', () => {
     const p = nuevaPartida();
     const antes = JSON.stringify(p);
     avanzarBloque(p);
     expect(JSON.stringify(p)).toBe(antes);
+  });
+});
+
+// v12 (causa real del "45.9% en enero" medido incluso DESPUÉS de arreglar el
+// cruce de calendario): un campamento (firmarPelea + campCarta/campSparring,
+// siguienteBeat) avanza semanaGlobal DENTRO del bloque actual, semanas que
+// son parte del año de ESE bloque — pero avanzarBloque sumaba
+// `semanasDeBloque` sobre la semana YA corrida por el campamento, así que
+// cada campamento agregaba semanas de MÁS que nunca se recuperaban: el
+// calendario se iba corriendo mes a mes, bloque a bloque, para siempre (el
+// mismo patrón que reportó el usuario: "los primeros 5 caen en enero,
+// después se van corriendo a marzo, junio, octubre"). El fix: el próximo
+// bloque arranca SIEMPRE `semanasDeBloque` semanas después de donde arrancó
+// ESTE bloque (`semanaInicioBloque`), nunca desde donde el campamento dejó
+// `semanaGlobal` a la deriva.
+describe('avanzarBloque: no arrastra el atraso de un campamento al próximo bloque', () => {
+  it('si un campamento ya adelantó semanaGlobal dentro del bloque, el próximo bloque igual arranca semanasDeBloque semanas después del inicio de ESTE', () => {
+    const p = nuevaPartida();
+    // Simula el estado DESPUÉS de que un campamento de 15 semanas (el máximo,
+    // 5 beats × 3 semanas) corrió semanaGlobal dentro del bloque actual —
+    // pero el bloque en sí sigue siendo el mismo (semanaInicioBloque no se
+    // toca hasta el próximo avanzarBloque).
+    const conCampamentoYaCorrido = { ...p, semanaGlobal: p.semanaInicioBloque + 15 };
+    const despues = avanzarBloque(conCampamentoYaCorrido);
+    expect(despues.semanaGlobal).toBe(p.semanaInicioBloque + 52);
+    // El próximo bloque también arranca alineado: su propio inicio queda
+    // registrado para el salto que viene.
+    expect(despues.semanaInicioBloque).toBe(despues.semanaGlobal);
+  });
+
+  it('sin ningún campamento de por medio, el resultado es igual al de siempre: 52 semanas después', () => {
+    const p = nuevaPartida();
+    const despues = avanzarBloque(p);
+    expect(despues.semanaGlobal).toBe(p.semanaInicioBloque + 52);
+  });
+
+  it('el atraso arrastrado no cambia CUÁNTOS años cruza el bloque (sigue siendo exactamente uno, con aniosPorBloque=1)', () => {
+    const p = nuevaPartida();
+    const conCampamentoYaCorrido = { ...p, semanaGlobal: p.semanaInicioBloque + 15 };
+    const despues = avanzarBloque(conCampamentoYaCorrido);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio).toBe(ANIO_INICIAL + 1);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).mes).toBe(1);
+  });
+
+  // Bug encontrado en la revisión de código de esta misma ronda: una partida
+  // GUARDADA ANTES de este fix (esquema v2, ya publicado — ver save.js) no
+  // trae `semanaInicioBloque` en absoluto (el campo no existía). Sin este
+  // resguardo, `nueva.semanaInicioBloque ?? 1` caía siempre a 1, así que la
+  // primera vez que esa partida cargada avanzaba de bloque, el calendario
+  // saltaba HACIA ATRÁS varios años (a semana 1+52) en vez de seguir desde
+  // donde estaba — el mismo defecto que `registroAnioActual: ?? null` ya
+  // resuelve para otros campos de una partida vieja (ver clonarPartida).
+  it('una partida sin semanaInicioBloque (guardado de antes de este fix) no salta el calendario hacia atrás', () => {
+    const p = nuevaPartida();
+    const semanaGlobal = 1 + 52 * 7 + 20; // bien avanzada en la carrera
+    const partidaVieja = { ...p, semanaGlobal };
+    delete partidaVieja.semanaInicioBloque;
+
+    const despues = avanzarBloque(partidaVieja);
+
+    // Mismo comportamiento que ANTES de este fix (sin drift conocido: salta
+    // 52 semanas desde donde estaba, no desde semana 1).
+    expect(despues.semanaGlobal).toBe(semanaGlobal + 52);
+    expect(fechaDe(despues.semanaGlobal, ANIO_INICIAL).anio).toBeGreaterThan(ANIO_INICIAL + 7);
   });
 });
 
@@ -111,6 +192,12 @@ function partidaAPuntoDeCerrarAnio(overrides = {}) {
     etapaIndice: 0,
     cola: [],
     semanaGlobal,
+    // El bloque actual arrancó 10 semanas antes de `semanaGlobal` (como si un
+    // campamento ya hubiera corrido esas 10 semanas dentro de este mismo
+    // bloque) — así avanzarBloque sigue saltando exactamente 52 semanas
+    // después de donde arrancó ESTE bloque (ver el comentario grande en
+    // avanzarBloque, career.js), no un valor arbitrario.
+    semanaInicioBloque: semanaGlobal - 10,
     registroAnioActual: iniciarRegistroAnio(semanaGlobal, p.jugador, p.mundo),
     ...overrides,
   };
@@ -186,12 +273,16 @@ describe('siguienteBeat: el resumen de fin de año aparece como su propio beat',
   });
 });
 
-describe('siguienteBeat: sin peleas en el año, no aparece el resumen (nada de ceremonia)', () => {
-  it('un año sin ninguna pelea (aunque haya elegido la mejora obligatoria) no interrumpe: el primer beat sigue siendo mejora', () => {
+describe('siguienteBeat: un año completamente vacío no dispara el resumen (nada de ceremonia)', () => {
+  // v12: `anioTieneAlgoQueContar` se relajó a "peleas O decisiones" — un año
+  // con la mejora obligatoria ya elegida SÍ amerita resumen ahora (ver
+  // year-summary.test.js). Este test pasa a cubrir el caso que de verdad
+  // sigue sin ceremonia: CERO peleas y CERO decisiones.
+  it('un año sin ninguna pelea NI ninguna decisión no interrumpe: el primer beat sigue siendo mejora', () => {
     const p = partidaAPuntoDeCerrarAnio();
-    const conDecision = registrarDecision(p, { tipo: 'mejora', titulo: 'Mejora', opcion: 'Más potencia' });
-    // jugador.historial/historialAmateur ya arrancan vacíos en crearPeleador.
-    const paso = siguienteBeat(conDecision);
+    // jugador.historial/historialAmateur ya arrancan vacíos en crearPeleador,
+    // y no se registró ninguna decisión sobre `p`.
+    const paso = siguienteBeat(p);
     expect(paso.beat.tipo).not.toBe('resumenAnio');
     expect(paso.beat.tipo).toBe('mejora');
   });
@@ -200,5 +291,158 @@ describe('siguienteBeat: sin peleas en el año, no aparece el resumen (nada de c
     const p = nuevaPartida(2);
     const paso = siguienteBeat(p);
     expect(paso.beat.tipo).not.toBe('resumenAnio');
+  });
+});
+
+// v12 (pedido textual: "revisá que el resumen se muestre al principio de
+// cada año, en cada enero"): la causa real medida (54% de los resúmenes
+// caían fuera de enero, 28% de los años ni siquiera tenían resumen) era que
+// el resumen estaba atado al FIN DE BLOQUE, no al año calendario — y
+// `semanaGlobal` avanza en DOS lugares: el salto grande de `avanzarBloque`
+// (ya cubierto arriba) y acá, semana a semana, cada beat de campamento
+// (`campCarta`/`campSparring`, ver `armarBeatsCampamento` en campamento.js).
+// Antes de esta ronda, ese segundo camino nunca chequeaba si el avance
+// cruzaba un año — el registro seguía acumulando semanas de MÁS de un año
+// calendario antes de que el próximo `avanzarBloque` lo cerrara, así que el
+// resumen se iba corriendo mes a mes con cada campamento hasta terminar
+// saltándose años enteros.
+describe('siguienteBeat: un beat de campamento que cruza el año calendario también dispara el resumen', () => {
+  it('si un campCarta empuja semanaGlobal al año siguiente, el resumen aparece antes de que siga el campamento', () => {
+    const p = nuevaPartida(1);
+    // Dos semanas antes de que cambie el año: el propio campCarta (3
+    // semanas, SEMANAS_POR_BEAT_CAMPAMENTO) es lo que cruza la frontera.
+    const semanaGlobal = 1 + 52 * 3 - 2;
+    const anioQueCierra = fechaDe(semanaGlobal, ANIO_INICIAL).anio;
+    const jugadorConPelea = { ...p.jugador, historial: [peleaDePrueba(semanaGlobal)] };
+    const partida = {
+      ...p,
+      jugador: jugadorConPelea,
+      semanaGlobal,
+      registroAnioActual: iniciarRegistroAnio(semanaGlobal, jugadorConPelea, p.mundo),
+      cola: [
+        { tipo: 'campCarta', datos: { carta: { id: 'x' }, oferta: { rivalId: 'r1' }, semanas: 3, ultimo: false } },
+        { tipo: 'mejora', datos: { cartas: [] } },
+      ],
+    };
+
+    const paso1 = siguienteBeat(partida);
+    expect(paso1.beat.tipo).toBe('campCarta');
+    expect(fechaDe(paso1.partida.semanaGlobal, ANIO_INICIAL).anio).toBeGreaterThan(anioQueCierra);
+
+    const paso2 = siguienteBeat(paso1.partida);
+    expect(paso2.beat.tipo).toBe('resumenAnio');
+    expect(paso2.beat.datos.anio).toBe(anioQueCierra);
+    expect(paso2.beat.datos.peleas).toHaveLength(1);
+
+    // El resto del campamento (acá, la mejora que seguía en la cola) no se
+    // pierde: aparece justo después del resumen.
+    const paso3 = siguienteBeat(paso2.partida);
+    expect(paso3.beat.tipo).toBe('mejora');
+  });
+
+  it('no muta la partida original', () => {
+    const p = nuevaPartida(1);
+    const semanaGlobal = 1 + 52 * 3 - 2;
+    const partida = {
+      ...p,
+      semanaGlobal,
+      registroAnioActual: iniciarRegistroAnio(semanaGlobal, p.jugador, p.mundo),
+      cola: [{ tipo: 'campCarta', datos: { carta: { id: 'x' }, oferta: { rivalId: 'r1' }, semanas: 3, ultimo: false } }],
+    };
+    const antes = JSON.stringify(partida);
+    siguienteBeat(partida);
+    expect(JSON.stringify(partida)).toBe(antes);
+  });
+});
+
+// v12 (pedido explícito: "si un avance cruza más de un año, resolvelo de
+// forma que no se pierda ningún año — decidí cómo, emitir uno por año o
+// fusionar, y documentá el criterio"). Decisión: EMITIR UNO POR AÑO, nunca
+// fusionar — así cada año conserva sus propias peleas/decisiones/muestras
+// intactas, sin mezclar dos años en una sola pantalla. Con los
+// `aniosPorBloque` actuales (siempre 1, ver ETAPAS en career.js) un salto de
+// `avanzarBloque` nunca cruza más de un año exacto — pero un beat de
+// campamento SÍ podría, en teoría, si alguna vez `SEMANAS_POR_BEAT_CAMPAMENTO`
+// o la cantidad de beats creciera. Estos tests fuerzan la situación con un
+// beat de campamento "de juguete" (semanas artificialmente grandes: la
+// forma del dato es la misma que cualquier campCarta real, solo que ningún
+// camino del juego hoy genera una tan larga) para probar que el mecanismo
+// genérico de cierre (`cerrarAniosCruzados`, career.js) no pierde ningún año
+// en el medio, sea cual sea el tamaño del salto.
+describe('siguienteBeat: un salto que cruza más de un año calendario no pierde ninguno', () => {
+  it('emite un resumenAnio por cada año cruzado, en orden cronológico', () => {
+    const p = nuevaPartida(1);
+    const semanaGlobal = 1 + 52 * 5; // arranca justo al principio de un año
+    const anioAntes = fechaDe(semanaGlobal, ANIO_INICIAL).anio;
+    const jugador = {
+      ...p.jugador,
+      historial: [
+        peleaDePrueba(semanaGlobal, { rivalNombre: 'Del año que arranca' }),
+        peleaDePrueba(semanaGlobal + 52 + 5, { rivalNombre: 'Del año intermedio' }),
+      ],
+    };
+    const partida = {
+      ...p,
+      jugador,
+      semanaGlobal,
+      registroAnioActual: iniciarRegistroAnio(semanaGlobal, jugador, p.mundo),
+      cola: [
+        // Un beat de campamento "de juguete": nunca sale así de un
+        // campamento real, pero la forma del dato es la misma (ver el
+        // comentario grande arriba).
+        { tipo: 'campCarta', datos: { carta: { id: 'x' }, oferta: { rivalId: 'r1' }, semanas: 52 * 2 + 20, ultimo: false } },
+        { tipo: 'mejora', datos: { cartas: [] } },
+      ],
+    };
+
+    const paso1 = siguienteBeat(partida);
+    expect(paso1.beat.tipo).toBe('campCarta');
+    expect(fechaDe(paso1.partida.semanaGlobal, ANIO_INICIAL).anio).toBe(anioAntes + 2);
+
+    const paso2 = siguienteBeat(paso1.partida);
+    expect(paso2.beat.tipo).toBe('resumenAnio');
+    expect(paso2.beat.datos.anio).toBe(anioAntes);
+    expect(paso2.beat.datos.peleas.map((x) => x.rivalNombre)).toEqual(['Del año que arranca']);
+
+    const paso3 = siguienteBeat(paso2.partida);
+    expect(paso3.beat.tipo).toBe('resumenAnio');
+    expect(paso3.beat.datos.anio).toBe(anioAntes + 1);
+    expect(paso3.beat.datos.peleas.map((x) => x.rivalNombre)).toEqual(['Del año intermedio']);
+    // El registro que queda corriendo es el del año NUEVO (el que recién
+    // arrancó), no uno de los que se cerraron.
+    expect(paso3.partida.registroAnioActual.anio).toBe(anioAntes + 2);
+
+    const paso4 = siguienteBeat(paso3.partida);
+    expect(paso4.beat.tipo).toBe('mejora');
+  });
+
+  it('si el año intermedio queda completamente vacío, se saltea sin perder el resto', () => {
+    const p = nuevaPartida(1);
+    const semanaGlobal = 1 + 52 * 5;
+    const anioAntes = fechaDe(semanaGlobal, ANIO_INICIAL).anio;
+    const jugador = {
+      ...p.jugador,
+      historial: [peleaDePrueba(semanaGlobal, { rivalNombre: 'Del año que arranca' })],
+    };
+    const partida = {
+      ...p,
+      jugador,
+      semanaGlobal,
+      registroAnioActual: iniciarRegistroAnio(semanaGlobal, jugador, p.mundo),
+      cola: [
+        { tipo: 'campCarta', datos: { carta: { id: 'x' }, oferta: { rivalId: 'r1' }, semanas: 52 * 2 + 20, ultimo: false } },
+        { tipo: 'mejora', datos: { cartas: [] } },
+      ],
+    };
+
+    const paso1 = siguienteBeat(partida);
+    const paso2 = siguienteBeat(paso1.partida);
+    expect(paso2.beat.tipo).toBe('resumenAnio');
+    expect(paso2.beat.datos.anio).toBe(anioAntes);
+
+    // El año intermedio no tuvo peleas ni decisiones: no aparece su
+    // resumen, pero lo que seguía en la cola tampoco se pierde.
+    const paso3 = siguienteBeat(paso2.partida);
+    expect(paso3.beat.tipo).toBe('mejora');
   });
 });
