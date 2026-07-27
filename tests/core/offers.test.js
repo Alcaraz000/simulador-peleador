@@ -670,6 +670,34 @@ describe('aplicarResultado', () => {
     expect(paso.jugador.titulos).not.toContain('Título regional');
   });
 
+  // Pedido 1 (v7, "¿no debería perder el cinturón en esos casos?... debería
+  // poder recuperarlo"): perder una defensa no cierra la puerta — el
+  // cinturón perdido vuelve a ser el "próximo objetivo" (proximoCinturon),
+  // así que decidirNivel puede volver a ofrecerlo como pelea de título más
+  // adelante (ver el comentario grande de decidirNivel, más arriba en
+  // offers.js). Y, al seguir siendo esTitulo, esa revancha por el cinturón
+  // siempre es esPeleaImportante — nunca cae en el lote de trámite.
+  it('perder una defensa deja el cinturón disponible como próximo objetivo, listo para recuperarlo', () => {
+    const yo = jugador({ titulos: ['Cinturón regional'], record: conPeleas(8) });
+    const o = {
+      ...oferta(), esTitulo: true, esObligatoria: true, enJuego: 'Cinturón regional', cinturonId: 'regional',
+    };
+    const paso = aplicarResultado(yo, {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'rival', metodo: 'ko', round: 4, texto: 'Perdió' },
+    });
+    expect(paso.jugador.titulos).toEqual([]);
+    expect(cinturonActual(paso.jugador)).toBeNull();
+    // Sigue calificando (mismo récord/ranking de antes de la defensa): el
+    // próximo objetivo vuelve a ser el mismo cinturón que se le acaba de ir.
+    expect(proximoCinturon(paso.jugador)).toEqual(CINTURONES[0]);
+
+    const revancha = {
+      ...oferta(), esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional', nivel: 'titulo',
+    };
+    expect(esPeleaImportante(revancha)).toBe(true);
+  });
+
   it('guarda la pelea en el historial', () => {
     const paso = aplicarResultado(jugador(), {
       oferta: oferta(), mundo: mundo(),
