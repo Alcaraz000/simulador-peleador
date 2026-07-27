@@ -149,16 +149,23 @@ export function renderCardTramite(region, {
  * todavía no eligió nada, no hace nada — no hay ninguna ronda pendiente
  * que resolver.
  *
+ * `resolverRonda` es lo que hace que el barajado ATERRICE. Se llama en el
+ * click (antes de animar) y devuelve la jugada del rival: el barajado frena
+ * ahí, así el jugador ve dónde cayó el rolleo en vez de terminar en neutro
+ * y enterarse solo por texto. La ronda se sigue decidiendo afuera, con el
+ * rng con semilla — acá no se decide nada, solo se muestra.
+ *
  * @param {HTMLElement} region
  * @param {{
  *   titulo: string, bajada?: string, texto?: string,
  *   opciones: Array<{id:string, titulo:string, descripcion?:string, icono?:Node}>,
- *   onElegir?: (id:string) => void,
+ *   resolverRonda?: (id:string) => ({eleccionRival?:string}|null),
+ *   onElegir?: (id:string, datos:object|null) => void,
  * }} opciones
  * @returns {{detener: () => void}}
  */
 export function renderMinijuegoRonda(region, {
-  titulo, bajada = '', texto = '', opciones, onElegir = () => {},
+  titulo, bajada = '', texto = '', opciones, resolverRonda = null, onElegir = () => {},
 }) {
   let controlador = { detener: () => {} };
 
@@ -172,8 +179,18 @@ export function renderMinijuegoRonda(region, {
       const elegida = tarjetas.find((t) => t.dataset.opcion === accionId);
       if (elegida) elegida.classList.add('tarjeta-elegida');
 
+      // La ronda se resuelve ACÁ, antes de animar, para saber en qué tarjeta
+      // frenar. El resultado se guarda y se entrega tal cual al terminar el
+      // barajado: consumir el rng una sola vez, por ronda, sigue siendo
+      // responsabilidad de quien pasó `resolverRonda`.
+      const datos = resolverRonda ? resolverRonda(accionId) : null;
+      const indiceFinal = datos && datos.eleccionRival
+        ? tarjetas.findIndex((t) => t.dataset.opcion === datos.eleccionRival)
+        : -1;
+
       controlador = animarBarajado(tarjetas, {
-        onFin: () => onElegir(accionId),
+        indiceFinal,
+        onFin: () => onElegir(accionId, datos),
       });
     },
   });

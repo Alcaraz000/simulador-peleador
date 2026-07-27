@@ -119,13 +119,17 @@ export const DURACION_BARAJADO_MS = 900;
 
 /**
  * Cicla un resaltado entre varios nodos (p.ej. las 3 tarjetas del minijuego
- * de trámite) durante `duracionMs`, sin comprometerse a ningún índice final
- * — a diferencia de `animarRoll`, no hay "ganador" que mostrar acá, el
- * resultado real lo narra quien llama, en la pantalla siguiente.
+ * de trámite) durante `duracionMs` y frena en `indiceFinal`.
+ *
+ * `indiceFinal` es la jugada que eligió el rival: el pedido del usuario fue
+ * "quiero que se vea cómo se rollea", y lo que hace satisfactorio un rolleo
+ * es ver DÓNDE cae. Sin él (o con -1) el barajado termina en neutro, que es
+ * el comportamiento correcto cuando no hay nada que revelar.
  *
  * @param {HTMLElement[]} nodos - los nodos a resaltar en secuencia (se les
  *   alterna la clase `claseActiva`).
- * @param {{duracionMs?:number, claseActiva?:string, onFin?:()=>void}} opciones
+ * @param {{duracionMs?:number, claseActiva?:string, indiceFinal?:number,
+ *   claseFinal?:string, onFin?:()=>void}} opciones
  * @returns {{detener: () => void}} - a diferencia de `animarRoll.detener()`,
  *   acá "cancelar" significa "resolvé ya": limpia el nodo, dispara `onFin`
  *   de inmediato (una sola vez) y no deja timers vivos. No hay, para este
@@ -133,8 +137,15 @@ export const DURACION_BARAJADO_MS = 900;
  *   jugador se va a mitad del barajado — mismo criterio de "nunca perder ni
  *   duplicar" que el resto del proyecto, resuelto acá adentro.
  */
-export function animarBarajado(nodos, { duracionMs = DURACION_BARAJADO_MS, claseActiva = 'tarjeta-rolleo', onFin = () => {} } = {}) {
+export function animarBarajado(nodos, {
+  duracionMs = DURACION_BARAJADO_MS,
+  claseActiva = 'tarjeta-rolleo',
+  indiceFinal = -1,
+  claseFinal = 'tarjeta-rival',
+  onFin = () => {},
+} = {}) {
   const n = nodos.length;
+  const aterriza = indiceFinal >= 0 && indiceFinal < n;
 
   let terminado = false;
   let timerId = null;
@@ -154,7 +165,12 @@ export function animarBarajado(nodos, { duracionMs = DURACION_BARAJADO_MS, clase
     if (terminado) return;
     terminado = true;
     limpiarTimer();
-    marcar(-1); // neutro: ninguno queda resaltado
+    // Con `indiceFinal` el barajado aterriza: la tarjeta que eligió el rival
+    // queda marcada (clase propia, distinta de la del ciclo) para que el
+    // jugador vea dónde cayó antes de leer el texto de la ronda. Sin él,
+    // neutro: ninguno queda resaltado.
+    marcar(-1);
+    if (aterriza) nodos[indiceFinal].classList.add(claseFinal);
     onFin();
   }
 

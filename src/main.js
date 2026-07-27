@@ -47,7 +47,9 @@ import {
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
-import { renderCardTramite, opcionesMinijuego, NOMBRE_ACCION } from './ui/screens/panel-tramite.js';
+import {
+  renderCardTramite, renderMinijuegoRonda, opcionesMinijuego, NOMBRE_ACCION,
+} from './ui/screens/panel-tramite.js';
 import { renderCalendario } from './ui/screens/panel-calendario.js';
 import { renderRanking } from './ui/screens/ranking.js';
 import { animarRoll } from './ui/components/roll.js';
@@ -682,21 +684,24 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         return;
       }
       if (fase === 'minijuego') {
-        renderPanelDecision(centroContenido(), {
+        const control = renderMinijuegoRonda(centroContenido(), {
           titulo: `Ronda ${numeroRonda} de hasta ${alMejorDe}`,
           bajada: `Vos ${puntosJugador} - ${puntosRival} Rival`,
           texto: ultimaRondaTexto ?? `Elegí cómo boxear esta ronda contra "${oferta.rivalApodo ?? oferta.rivalNombre}".`,
           opciones: opcionesMinijuego(),
-          onElegir: (accionId) => {
-            // La ronda se juega de verdad acá: el rng de sesión "elige" por
-            // el rival (sesgado por la diferencia de media — ver
-            // resolverRondaMinijuego, tramite.js) y el resultado sale de
-            // comparar esa elección con la del jugador en el ciclo. El pick
-            // del jugador SÍ cambia lo que pasa — no es una animación sobre
-            // un resultado ya decidido.
-            const { eleccionRival, resultado } = resolverRondaMinijuego(rng, {
-              jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: accionId,
-            });
+          // La ronda se juega de verdad acá: el rng de sesión "elige" por
+          // el rival (sesgado por la diferencia de media — ver
+          // resolverRondaMinijuego, tramite.js) y el resultado sale de
+          // comparar esa elección con la del jugador en el ciclo. El pick
+          // del jugador SÍ cambia lo que pasa — no es una animación sobre
+          // un resultado ya decidido. Se resuelve en el click (no al
+          // terminar el barajado) porque el barajado necesita saber en qué
+          // tarjeta frenar: el jugador ve dónde cae el rolleo.
+          resolverRonda: (accionId) => resolverRondaMinijuego(rng, {
+            jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: accionId,
+          }),
+          onElegir: (accionId, datos) => {
+            const { eleccionRival, resultado } = datos;
             const gano = resultado === 'jugador';
             if (gano) puntosJugador += 1; else puntosRival += 1;
             ultimaRondaTexto = `Elegiste "${NOMBRE_ACCION[accionId]}", el rival fue a "${NOMBRE_ACCION[eleccionRival]}" — ${gano ? 'ganaste' : 'perdiste'} la ronda.`;
@@ -726,6 +731,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
             centro(pintarTramite);
           },
         });
+        // Mismo criterio que el roll de cartas: si el jugador ya eligió y se
+        // va del tablero a mitad del barajado, la ronda se resuelve ya en vez
+        // de quedar un timer colgado (ver animarBarajado en roll.js).
+        cancelarRollPendiente = () => {
+          cancelarRollPendiente = null;
+          control.detener();
+        };
         return;
       }
       // fase === 'resultado': `proximaPelea` ya se limpió y el resultado ya

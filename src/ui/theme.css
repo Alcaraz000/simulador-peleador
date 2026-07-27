@@ -1848,6 +1848,17 @@ input.creacion-control { cursor: text; }
    barajado y aun disabled/atenuada, para que "esto elegiste vos" no se
    pierda mientras las tres tarjetas están apagadas. */
 
+/* Donde ATERRIZA el barajado: la jugada que eligió el rival. Rojo, para
+   que se lea de inmediato contra el dorado de "esto elegiste vos" — y si
+   caen en la misma tarjeta (empate en el ciclo), los dos anillos se ven
+   juntos. Mismo criterio que el ciclo: solo sombra y escala, nunca
+   empuja layout. */
+.tarjeta.tarjeta-rival {
+  transition: box-shadow 0.16s var(--ease-out), transform 0.16s var(--ease-out);
+  box-shadow: 0 0 0 2px var(--rojo), 0 0 20px rgba(224, 62, 62, 0.45);
+  transform: scale(1.04);
+}
+
 /* El marcador (bajada de renderMinijuegoRonda) hace un pop corto al
    montar cada ronda nueva — pedido textual "que el marcador se mueva".
    No hay conteo animado posible (el nodo viejo no existe más: cada

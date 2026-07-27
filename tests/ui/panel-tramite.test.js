@@ -273,4 +273,55 @@ describe('renderMinijuegoRonda', () => {
     montar();
     expect(document.getElementById('afuera').textContent).toBe('intacto');
   });
+
+  // El barajado ATERRIZA en la jugada del rival: el pedido fue "quiero que se
+  // vea cómo se rollea", y lo que hace satisfactorio un rolleo es ver dónde
+  // cae. Antes terminaba en neutro y el rival solo se sabía por el texto.
+  describe('aterrizaje en la jugada del rival', () => {
+    function montarConRonda(eleccionRival, onElegir = () => {}) {
+      return renderMinijuegoRonda(cont, {
+        titulo: 'Ronda 1 de hasta 5',
+        opciones: opcionesMinijuego(),
+        resolverRonda: () => ({ eleccionRival, resultado: 'rival' }),
+        onElegir,
+      });
+    }
+
+    it('marca la tarjeta que eligio el rival al terminar el barajado', () => {
+      const tarjetasIniciales = [...cont.querySelectorAll('.tarjeta')];
+      expect(tarjetasIniciales).toHaveLength(0);
+
+      const control = montarConRonda('noqueador');
+      const tarjetas = [...cont.querySelectorAll('.tarjeta')];
+      tarjetas[0].click();
+      control.detener();
+
+      const marcada = cont.querySelector('.tarjeta-rival');
+      expect(marcada).not.toBeNull();
+      expect(marcada.dataset.opcion).toBe('noqueador');
+    });
+
+    it('le pasa a onElegir los datos de la ronda ya resuelta, sin volver a resolverla', () => {
+      let vueltas = 0;
+      let recibido = null;
+      const control = renderMinijuegoRonda(cont, {
+        titulo: 'Ronda 1 de hasta 5',
+        opciones: opcionesMinijuego(),
+        resolverRonda: () => { vueltas += 1; return { eleccionRival: 'tecnico', resultado: 'jugador' }; },
+        onElegir: (id, datos) => { recibido = datos; },
+      });
+      cont.querySelector('.tarjeta').click();
+      control.detener();
+
+      expect(vueltas).toBe(1);
+      expect(recibido).toEqual({ eleccionRival: 'tecnico', resultado: 'jugador' });
+    });
+
+    it('sin resolverRonda termina en neutro, sin marcar ninguna', () => {
+      const control = montar();
+      cont.querySelector('.tarjeta').click();
+      control.detener();
+      expect(cont.querySelector('.tarjeta-rival')).toBeNull();
+    });
+  });
 });
