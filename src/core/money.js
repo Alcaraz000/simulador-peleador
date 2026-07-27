@@ -65,6 +65,19 @@ export function catalogo(jugador) {
   return { staff: STAFF.map(marcar), lujos: LUJOS.map(marcar) };
 }
 
+// Pedido 7 (v9, "quiero que brille [el botón de la tienda] cuando el jugador
+// pueda comprar algo con el dinero que tiene, y no sea algo ya comprado"): a
+// diferencia de `catalogo` (arriba), que arma DOS arrays nuevos con
+// "comprado"/"alcanza" ya resueltos para pintar la tienda entera, esto es
+// solo la pregunta booleana que le hace falta al tablero (¿brilla el botón,
+// sí o no?) — el tablero se repinta seguido (cada beat, y `bloqueDinero`
+// vive en la columna derecha, que se refresca en cada uno), así que tiene
+// que ser barato: un solo recorrido de los 10 items de `TODOS`, sin asignar
+// ningún array intermedio.
+export function puedeComprarAlgo(jugador) {
+  return TODOS.some((item) => jugador.dinero >= item.precio && !yaComprado(jugador, item.id));
+}
+
 function clonar(jugador) {
   return { ...jugador, staff: [...(jugador.staff ?? [])], lujos: [...(jugador.lujos ?? [])] };
 }
