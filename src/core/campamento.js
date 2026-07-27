@@ -78,6 +78,14 @@ export function elegirCartaCampamento(rng, {
   const carta = elegirPorRareza(rng, fuente);
   return {
     ...carta,
+    // Bug encontrado por la barrida de la UI real (tests/ui/barrida-
+    // jugador.test.js) al correr con semillas nuevas (el minijuego de
+    // trámite, Pedido 2 v7, corre la secuencia de rng de toda la carrera):
+    // "Estudiar a {rival}" (cards-camp.js) quedaba con el marcador crudo en
+    // pantalla — `titulo` nunca pasaba por `rellenar`, solo `texto` y las
+    // `opciones`. El comentario de la función ya prometía "{rival} relleno"
+    // sin ninguna excepción; ahora lo cumple de verdad.
+    titulo: rellenar(carta.titulo, oferta),
     texto: rellenar(carta.texto, oferta),
     opciones: carta.opciones.map((o) => ({ ...o, texto: rellenar(o.texto, oferta) })),
   };

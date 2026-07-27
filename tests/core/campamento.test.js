@@ -48,12 +48,20 @@ describe('decidirLargoCampamento', () => {
 });
 
 describe('elegirCartaCampamento', () => {
-  it('rellena el marcador {rival} con el apodo del rival en texto y opciones', () => {
-    const rng = createRng(1);
-    const oferta = { rivalApodo: 'El Zurdo', esTitulo: false };
-    const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta });
-    expect(carta.texto).not.toMatch(/\{rival\}/);
-    carta.opciones.forEach((o) => expect(o.texto).not.toMatch(/\{rival\}/));
+  it('rellena el marcador {rival} con el apodo del rival en titulo, texto y opciones', () => {
+    // Bug real (encontrado por tests/ui/barrida-jugador.test.js con una
+    // semilla nueva): "Estudiar a {rival}" (cards-camp.js) se mostraba con
+    // el marcador crudo en pantalla — `titulo` no pasaba por `rellenar`,
+    // solo `texto` y las opciones. Se recorren varias semillas para pisar
+    // esa carta en particular sin depender de que salga en la primera.
+    for (let s = 1; s <= 30; s += 1) {
+      const rng = createRng(s);
+      const oferta = { rivalApodo: 'El Zurdo', esTitulo: false };
+      const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta });
+      expect(carta.titulo).not.toMatch(/\{rival\}/);
+      expect(carta.texto).not.toMatch(/\{rival\}/);
+      carta.opciones.forEach((o) => expect(o.texto).not.toMatch(/\{rival\}/));
+    }
   });
 
   it('nunca elige una carta que no aplique a la etapa', () => {
