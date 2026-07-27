@@ -4,6 +4,8 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import {
   decidirLargoCampamento, elegirCartaCampamento, armarBeatsCampamento, SEMANAS_POR_BEAT_CAMPAMENTO,
 } from '../../src/core/campamento.js';
+import { CARTAS_CAMPAMENTO } from '../../src/content/cards-camp.js';
+import { porcentajesDe } from '../../src/core/cards.js';
 
 const jugador = () => crearPeleador({
   nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
@@ -77,6 +79,30 @@ describe('elegirCartaCampamento', () => {
       expect(carta.opciones.length).toBe(2);
       carta.opciones.forEach((o) => expect(o.mods || o.probabilidades).toBeTruthy());
     }
+  });
+
+  // Pedido 2 (v7, "más tarjetas de %... también en el campamento"): antes de
+  // esta ronda CARTAS_CAMPAMENTO no tenía ninguna carta con azar.
+  describe('cartas de azar nuevas en el campamento (Pedido 2, v7)', () => {
+    const conAzar = () => CARTAS_CAMPAMENTO.filter((c) => c.opciones.some((o) => o.probabilidades));
+
+    it('hay al menos 2 cartas de campamento con alguna opción de azar', () => {
+      expect(conAzar().length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('siguen el patrón arriesgar-o-no (la opción segura no tiene mods) y sus ramas suman 100%', () => {
+      for (const carta of conAzar()) {
+        expect(carta.opciones).toHaveLength(2);
+        const [conProb, sinProb] = carta.opciones[0].probabilidades
+          ? [carta.opciones[0], carta.opciones[1]]
+          : [carta.opciones[1], carta.opciones[0]];
+        expect(conProb.probabilidades).toBeTruthy();
+        expect(sinProb.probabilidades).toBeFalsy();
+        expect(Object.keys(sinProb.mods ?? {})).toHaveLength(0);
+        const pct = porcentajesDe(conProb);
+        expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+      }
+    });
   });
 });
 
