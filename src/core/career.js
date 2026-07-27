@@ -647,7 +647,30 @@ function armarCola(partida) {
     rivalidadesActuales = lote.rivalidades;
     // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
     // año fue pasando" antes de llegar a la que de verdad importa.
-    if (lote.beatTramite) cola.push(lote.beatTramite);
+    //
+    // Pedidos 1/2 (v7): si el lote sacó un destacado (armarLotePeleas,
+    // tramite.js — a lo sumo uno por lote, ver PROB_DESTACADO_TRAMITE), su
+    // oferta todavía NO está resuelta (mismo criterio que `marqueeOferta`:
+    // se juega de verdad, acá con el minijuego en vez de la crónica
+    // completa) — se encola como su propio beat 'tramiteDestacado', que
+    // main.js resuelve con card+minijuego y recién ahí aplica el resultado.
+    // El resto del lote (si lo hay) NO se encola aparte: viaja DENTRO del
+    // mismo beat como `resumenResto` (recortar un "Seguir" de más que no
+    // aportaba nada — pedido del coordinador). Sin destacado, es la
+    // síntesis de siempre.
+    if (lote.destacadoOferta) {
+      cola.push({
+        tipo: 'tramiteDestacado',
+        datos: {
+          oferta: lote.destacadoOferta,
+          alMejorDe: lote.alMejorDeDestacado,
+          semanasPorIntento,
+          resumenResto: lote.beatTramite ? lote.beatTramite.datos : null,
+        },
+      });
+    } else if (lote.beatTramite) {
+      cola.push(lote.beatTramite);
+    }
     if (lote.marqueeOferta) {
       cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
       ofertaPendiente = { oferta: lote.marqueeOferta };
@@ -655,16 +678,19 @@ function armarCola(partida) {
     // El ranking se recalcula ACÁ (no solo una vez por bloque en
     // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
     // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
-    // tiene que verlas reflejadas, no el ranking de antes de pelear.
+    // tiene que verlas reflejadas, no el ranking de antes de pelear. El
+    // destacado (si lo hay) todavía no se resolvió, así que no participa acá
+    // — su resultado recalcula el ranking recién en el próximo bloque
+    // (avanzarBloque), igual que cualquier oferta jugable normal.
     if (lote.beatTramite) {
       jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
     }
     // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
     // por seguir lesionado en su momento — ver `bloqueados`, tramite.js), el
     // juego avisa por qué no llegó ninguna oferta. Si al menos uno se
-    // recuperó a tiempo y sí hubo pelea (jugable o de trámite), no hace
-    // falta este aviso: la actividad de la que sí hubo ya lo cuenta.
-    if (!lote.marqueeOferta && !lote.beatTramite && lote.bloqueados > 0) {
+    // recuperó a tiempo y sí hubo pelea (jugable, trámite, o el destacado
+    // todavía pendiente de jugarse), no hace falta este aviso.
+    if (!lote.marqueeOferta && !lote.destacadoOferta && !lote.beatTramite && lote.bloqueados > 0) {
       cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
     }
     // Cuántas ofertas le costó la lesión en total en la carrera (contador

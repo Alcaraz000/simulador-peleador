@@ -650,6 +650,10 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     }
     expect(tipos).not.toContain('oferta');
     expect(tipos).not.toContain('peleasResueltas');
+    // Pedidos 1/2 (v7): el destacado de trámite (beat 'tramiteDestacado')
+    // tampoco puede aparecer con la lesión activa — mismo gate que
+    // 'oferta'/'peleasResueltas', ver más arriba.
+    expect(tipos).not.toContain('tramiteDestacado');
     expect(tipos).toContain('lesionSinOferta');
   });
 
@@ -663,7 +667,11 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       actual = paso.partida;
       if (paso.beat) tipos.push(paso.beat.tipo);
     }
-    expect(tipos.includes('oferta') || tipos.includes('peleasResueltas')).toBe(true);
+    // Pedidos 1/2 (v7): un cupo de trámite puede resolverse en el momento
+    // (peleasResueltas) o aparecer como destacado sin resolver, para
+    // jugarse con el minijuego (tramiteDestacado) — cualquiera de las tres
+    // cuenta como "hubo actividad de pelea".
+    expect(tipos.includes('oferta') || tipos.includes('peleasResueltas') || tipos.includes('tramiteDestacado')).toBe(true);
     expect(tipos).not.toContain('lesionSinOferta');
   });
 
@@ -696,6 +704,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       }
       expect(tipos).not.toContain('oferta');
       expect(tipos).not.toContain('peleasResueltas');
+      expect(tipos).not.toContain('tramiteDestacado');
       expect(tipos).toContain('lesionSinOferta');
     }
   });
@@ -714,7 +723,7 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     for (let i = 0; i < 8 && !vioPelea; i++) {
       const paso = siguienteBeat(actual);
       actual = paso.partida;
-      if (paso.beat?.tipo === 'oferta' || paso.beat?.tipo === 'peleasResueltas') vioPelea = true;
+      if (paso.beat?.tipo === 'oferta' || paso.beat?.tipo === 'peleasResueltas' || paso.beat?.tipo === 'tramiteDestacado') vioPelea = true;
     }
     expect(actual.jugador.estado.lesion).toBeNull();
     expect(vioPelea).toBe(true);
@@ -729,12 +738,14 @@ describe('ofertas de pelea por carrera', () => {
   // otro eje — ver 'ritmo de la carrera' más arriba para el objetivo de
   // 30-40. Medido con jugarTodo (nunca acepta nada, pero eso no frena a las
   // de trámite: se resuelven solas igual) sobre las semillas 1-10: entre 7 y
-  // 14 jugables por carrera (rango recalculado tras el minijuego de trámite,
-  // Pedido 2 v7 — `armarMarcador` consume más tiradas de rng por lote de
-  // trámite que el viejo `resolverResultadoRapido`, así que corre la
-  // secuencia entera y cambia qué semillas caen en qué matchup puntual; el
-  // eje que de verdad importa, el de 30-40 profesionales sobre 3000
-  // semillas, sigue intacto).
+  // 15 jugables por carrera (rango recalculado tras el minijuego de trámite,
+  // Pedido 2 v7 — `armarLotePeleas` consume tiradas de rng nuevas por lote
+  // de trámite, primero para decidir si el lote saca destacado
+  // (PROB_DESTACADO_TRAMITE) y después, si lo saca, para el propio
+  // minijuego cuando el jugador lo juega — así que corre la secuencia
+  // entera y cambia qué semillas caen en qué matchup puntual; el eje que de
+  // verdad importa, el de 30-40 profesionales sobre 3000 semillas, sigue
+  // intacto).
   const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   it('nunca caen por debajo de 5 peleas jugables en toda la carrera', () => {

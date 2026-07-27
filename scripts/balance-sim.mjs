@@ -43,6 +43,9 @@
 import { crearPeleador, mediaDe, repartirOrigenes } from '../src/core/fighter.js';
 import { crearPartida, siguienteBeat, firmarPelea } from '../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../src/core/offers.js';
+import {
+  resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
+} from '../src/core/tramite.js';
 import { aplicarCarta } from '../src/core/cards.js';
 import { resolverOpcion } from '../src/core/events.js';
 import { repartirApodos } from '../src/core/nicknames.js';
@@ -274,28 +277,44 @@ function jugarCarrera(semilla, {
       // se cuenta para el informe. Cuenta como UN beat estructural (leer el
       // resumen), no una acción por cada pelea del lote.
       peleasTramite += beat.datos.resultados.length;
+    } else if (beat.tipo === 'tramiteDestacado') {
       // Pedidos 1/2 (v7, "que se anuncie antes" + "que se juegue un poco",
       // ~30% de los lotes con trámite — PROB_DESTACADO_TRAMITE, tramite.js):
-      // el PRIMER resultado del lote, cuando el lote saca destacado, ya no
-      // se resuelve mudo — se juega en dos fases (tarjeta del rival, CON el
-      // anuncio del entrenador ya adentro -> minijuego ronda a ronda ->
-      // resultado), ver beatPeleasResueltas en main.js. El beat en sí YA
-      // sumó 1 acción arriba (la tarjeta + "Simular pelea", la primera
-      // pantalla del beat); acá se agregan las que faltan: una por cada
-      // ronda del marcador (armarMarcador, tramite.js — hasta 5, "al mejor
-      // de 5") y el resultado final ("Seguir"). Mismo supuesto de
-      // SEGUNDOS_POR_BEAT que el resto: cada click de ronda es "mirar 3
-      // opciones cortas y tocar una", el mismo ritmo que cualquier otra
-      // tarjeta de decisión — no se le baja el costo por acción solo porque
-      // el texto es más corto.
-      const destacado = beat.datos.resultados[0];
-      if (destacado && destacado.marcador) {
-        const accionesDestacado = destacado.marcador.rondas.length /* rondas del minijuego */
-          + 1; /* resultado final + "Seguir" */
-        accionesJugadas += accionesDestacado;
-        accionesTramiteDestacado += accionesDestacado;
-        tramitesDestacados += 1;
+      // el destacado del lote se juega de verdad, ronda a ronda (corrección
+      // del coordinador: "el pick del jugador no puede ser cosmético") — se
+      // simula acá con el motor REAL (resolverRondaMinijuego, tramite.js),
+      // no con un número inventado, para medir el presupuesto de minutos de
+      // verdad. "Jugando bien" siempre elige la MISMA acción táctica
+      // ('tecnico'): en un ciclo de 3 simultáneo y sesgado solo por la
+      // media (nunca por lo que el jugador elige, ver el comentario grande
+      // de resolverRondaMinijuego), cuál de las tres se elija no cambia la
+      // distribución agregada de resultados — el ciclo es simétrico. El
+      // beat en sí YA sumó 1 acción arriba (la tarjeta + "Simular pelea",
+      // la primera pantalla del beat); acá se agregan las rondas que hizo
+      // falta jugar y el resultado final ("Seguir").
+      peleasTramite += 1;
+      const { oferta, alMejorDe } = beat.datos;
+      const necesarias = rondasParaGanar(alMejorDe);
+      let puntosJugador = 0;
+      let puntosRival = 0;
+      let rondasJugadas = 0;
+      while (puntosJugador < necesarias && puntosRival < necesarias) {
+        rondasJugadas += 1;
+        const { resultado } = resolverRondaMinijuego(rngCosmetico, {
+          jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: 'tecnico',
+        });
+        if (resultado === 'jugador') puntosJugador += 1; else puntosRival += 1;
       }
+      const { metodo, ganador } = resultadoDeMarcador({ jugador: puntosJugador, rival: puntosRival }, alMejorDe);
+      const round = roundDeCierreMinijuego(rngCosmetico, { jugador: partida.jugador, oferta, metodo });
+      const resuelto = aplicarResultado(partida.jugador, { oferta, resultado: { ganador, metodo, round }, modo: 'tramite' });
+      partida = { ...partida, jugador: resuelto.jugador };
+
+      const accionesDestacado = rondasJugadas /* rondas del minijuego */
+        + 1; /* resultado final + "Seguir" */
+      accionesJugadas += accionesDestacado;
+      accionesTramiteDestacado += accionesDestacado;
+      tramitesDestacados += 1;
     } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
       // No se puede simular el minijuego de reacción; se asume un desempeño
       // "bien" (velocidad +2 — bug v4: MS_BIEN no se exigía y el mod era de

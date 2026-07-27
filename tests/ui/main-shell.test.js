@@ -238,13 +238,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 4: el minijuego de trámite (Pedido 2, v7) agrega tiradas de
-    // rng nuevas dentro de armarLotePeleas, así que corre la secuencia
-    // entera de la carrera de nuevo (mismo motivo que ya movió esta semilla
-    // varias veces antes) — la semilla 3 usada hasta acá dejó de llegar a un
-    // beat "redes" dentro de las 500 iteraciones de avanzarHasta; 4 sí
-    // (carta "entrevista_incomoda", 3 opciones).
-    iniciar(cont, prepararPartidaGuardada('redes', 4));
+    // semilla 6: la corrección del coordinador ("el pick del jugador no
+    // puede ser cosmético") rehizo el minijuego de trámite entero —
+    // resolverRondaMinijuego consume otras tiradas de rng dentro de
+    // armarLotePeleas, así que corre la secuencia entera de la carrera de
+    // nuevo (mismo motivo que ya movió esta semilla varias veces antes) — la
+    // semilla 4 usada hasta acá dejó de llegar a un beat "redes" dentro de
+    // las 500 iteraciones de avanzarHasta; 6 sí (carta "post_rival", 3
+    // opciones).
+    iniciar(cont, prepararPartidaGuardada('redes', 6));
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta');
@@ -290,16 +292,36 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
+  // v6: el lote de trámite (cuando NO sacó destacado, ver tramiteDestacado
+  // más abajo) sigue siendo el resumen de siempre: título + texto + Seguir,
+  // sin ninguna tarjeta interactiva.
+  it('peleasResueltas: muestra el resumen de tramite (con detalle de cada combate) y Seguir pasa a la próxima tarjeta', () => {
+    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 3));
+
+    const desenlace = cont.querySelector('.panel-decision-desenlace');
+    expect(desenlace).toBeTruthy();
+    expect(desenlace.textContent.length).toBeGreaterThan(0);
+
+    desenlace.querySelector('.boton').click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.contains(desenlace)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+  });
+
   // Pedidos 1 y 2 (v7, "que se anuncie antes" + "que se juegue un poco"): el
-  // lote de trámite ya no aparece resuelto de la nada. El primer resultado
-  // del lote (cuando el lote saca destacado, ver PROB_DESTACADO_TRAMITE en
-  // tramite.js) se juega en dos fases dentro del MISMO beat: la tarjeta del
-  // rival (con el anuncio del entrenador ya adentro — activa
-  // panel-proxima.js) -> minijuego (piedra/papel/tijera de boxeo, al mejor
-  // de 5) -> resultado, con Seguir pasando derecho a la próxima tarjeta
-  // (Pedido 3).
-  it('peleasResueltas: muestra la tarjeta del destacado (con el anuncio adentro, activa próxima pelea), se juega el minijuego y el resultado pasa a la próxima tarjeta', () => {
-    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 1));
+  // destacado del lote de trámite (a lo sumo uno por lote, ver
+  // PROB_DESTACADO_TRAMITE en tramite.js) ya no aparece resuelto de la
+  // nada. Es su PROPIO beat ('tramiteDestacado', corrección del coordinador:
+  // antes vivía adentro de 'peleasResueltas' con un marcador precalculado —
+  // ahora cada ronda se juega de verdad, en el momento). Se juega en dos
+  // fases: la tarjeta del rival (con el anuncio del entrenador ya adentro —
+  // activa panel-proxima.js) -> minijuego (piedra/papel/tijera de boxeo,
+  // ronda a ronda de verdad) -> resultado, con Seguir pasando derecho a la
+  // próxima tarjeta (Pedido 3).
+  it('tramiteDestacado: muestra la tarjeta del destacado (con el anuncio adentro, activa próxima pelea), se juega el minijuego ronda a ronda de verdad y el resultado pasa a la próxima tarjeta', () => {
+    iniciar(cont, prepararPartidaGuardada('tramiteDestacado', 1));
 
     // Fase 1: la tarjeta del rival, con la voz del entrenador, la bolsa y
     // cuánto falta ya adentro — activa panel-proxima.js (columna derecha).
@@ -309,9 +331,11 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
     boton.click();
 
-    // Fase 2: el minijuego — al mejor de 5, nunca más de 5 rondas. Se juega
-    // hasta que aparezca el resultado final (mismo patrón que el drill de
-    // sparring más abajo en este archivo).
+    // Fase 2: el minijuego — al mejor de 3 o de 5 (alMejorDeCuantos). Se
+    // juega hasta que aparezca el resultado final (mismo patrón que el
+    // drill de sparring más abajo en este archivo). Cada click resuelve una
+    // ronda DE VERDAD (resolverRondaMinijuego, con el rng de sesión) — no
+    // hay ningún marcador precalculado esperando a mostrarse.
     let guardia = 0;
     while (!cont.querySelector('.panel-decision-desenlace') && guardia < 10) {
       const grilla = cont.querySelector('.panel-decision-grilla');

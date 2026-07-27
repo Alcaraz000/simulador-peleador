@@ -105,10 +105,12 @@ export const ANUNCIO_TRAMITE = [
 
 // ===== Pedido 2 (v7): crónica del combate de trámite jugado con el
 // minijuego ==================================================================
-// La tabla marcador->resultado (armarMarcador/resultadoDeMarcador,
-// tramite.js): 'ko' (3-0), 'unanime' (3-1), 'dividida' (3-2), cada una con
-// su texto para la victoria ('v') y la derrota ('d'). Marcador {rival} (mote
-// del rival) y {marcador} ("3-0", ya armado en panel-tramite.js).
+// La tabla marcador->resultado (resultadoDeMarcador, tramite.js): 'ko'
+// (perdedor en 0), 'unanime' (perdedor a mitad de camino, solo posible al
+// mejor de 5), 'dividida' (perdedor al margen más ajustado posible — 3-2 al
+// mejor de 5, o 2-1 al mejor de 3), cada una con su texto para la victoria
+// ('v') y la derrota ('d'). Marcador {rival} (mote del rival) y {marcador}
+// ("3-0", ya armado en main.js).
 export const RESULTADO_DESTACADO_TRAMITE = {
   ko: {
     v: [

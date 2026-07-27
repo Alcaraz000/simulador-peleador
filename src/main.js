@@ -20,7 +20,9 @@ import { calcularLegado } from './core/legacy.js';
 import { guardar, cargar, borrar } from './core/save.js';
 import { clamp } from './core/stats.js';
 import { estadisticasDeCarrera } from './core/stats-carrera.js';
-import { accionRivalDe } from './core/tramite.js';
+import {
+  resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
+} from './core/tramite.js';
 import { ANUNCIO_TRAMITE, RESULTADO_DESTACADO_TRAMITE } from './content/tramite-lines.js';
 import { el, fmtDinero } from './ui/dom.js';
 
@@ -510,6 +512,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
     if (beat.tipo === 'peleasResueltas') return beatPeleasResueltas(beat);
+    if (beat.tipo === 'tramiteDestacado') return beatTramiteDestacado(beat);
     return volverAlTablero();
   }
 
@@ -518,7 +521,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // llegan acá RESUELTAS — career.js las aplicó al jugador dentro de
   // armarCola, antes de que este beat exista. Acá solo hay que mostrar el
   // resumen con sabor (titulo/texto ya armados por resumenLote) y un
-  // detalle corto de cada combate.
+  // detalle corto de cada combate. El destacado del lote (si lo hubo, ver
+  // PROB_DESTACADO_TRAMITE en tramite.js) es un beat APARTE — ver
+  // beatTramiteDestacado, más abajo — así que acá nunca hace falta revisar
+  // nada de eso.
   const METODO_TEXTO_TRAMITE = {
     ko: 'KO', tko: 'TKO', decision: 'decisión', sumision: 'sumisión',
   };
@@ -530,6 +536,16 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       const metodo = METODO_TEXTO_TRAMITE[r.metodo] ?? r.metodo;
       return `${veredicto} vs ${rival} (${metodo})`;
     });
+  }
+
+  function beatPeleasResueltas(beat) {
+    const { titulo, texto, resultados } = beat.datos;
+    centro(() => renderDesenlace(centroContenido(), {
+      titulo,
+      texto,
+      deltasTexto: deltasTextoTramite(resultados),
+      onContinuar: () => siguiente(),
+    }));
   }
 
   function textoFaltanSemanas(semanas) {
@@ -544,52 +560,45 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     return `${marcador.jugador}-${marcador.rival}`;
   }
 
-  function textoResultadoDestacado(entrada) {
-    const pool = RESULTADO_DESTACADO_TRAMITE[entrada.detalle]?.[entrada.resultado] ?? [];
+  function textoResultadoDestacado({
+    detalle, resultado, rivalApodo, rivalNombre, marcador,
+  }) {
+    const pool = RESULTADO_DESTACADO_TRAMITE[detalle]?.[resultado] ?? [];
     if (pool.length === 0) return '';
     const plantilla = rng.pick(pool);
-    const mote = entrada.rivalApodo ?? entrada.rivalNombre;
-    return plantilla.replace(/\{rival\}/g, mote).replace(/\{marcador\}/g, textoMarcador(entrada.marcador));
+    const mote = rivalApodo ?? rivalNombre;
+    return plantilla.replace(/\{rival\}/g, mote).replace(/\{marcador\}/g, textoMarcador(marcador));
   }
 
-  // Pedidos 1 y 2 (v7): un lote de trámite ya no aparece resuelto de la
-  // nada, de un saque. El PRIMER resultado del lote (si lo hay — ver
-  // armarLotePeleas, tramite.js) llega con `marcador`+`oferta` completos:
-  // ese es el que se "juega un poco" acá, en dos fases dentro del MISMO beat
-  // (tarjeta del rival, con el anuncio del entrenador ya adentro -> minijuego
-  // -> resultado), nunca una pantalla aparte. El resto del lote (si el año
-  // trajo más de un cupo de trámite) sigue narrado en la síntesis de
-  // siempre (resumenLote), como parte del resultado final — "además,
-  // tuviste otras N peleas esa temporada", nunca su propia tarjeta (ver el
-  // comentario grande en armarLotePeleas sobre el presupuesto de minutos).
-  function beatPeleasResueltas(beat) {
+  // Pedidos 1 y 2 (v7): el destacado de trámite (a lo sumo uno por lote —
+  // PROB_DESTACADO_TRAMITE, tramite.js) ya no aparece resuelto de la nada:
+  // se juega en tres fases dentro del MISMO beat (tarjeta del rival, con el
+  // anuncio del entrenador ya adentro -> minijuego, ronda a ronda de
+  // verdad -> resultado), nunca una pantalla aparte. Corrección del
+  // coordinador ("el pick del jugador no puede ser cosmético"): a
+  // diferencia de un primer borrador de esta ronda, ACÁ no hay ningún
+  // marcador precalculado — cada ronda se resuelve en el momento, con el rng
+  // de sesión (mismo criterio que la pelea real completa, fight-
+  // interactive.js vía crearPelea: el resultado recién se aplica al cerrar,
+  // con aplicarResultado, más abajo). El resto del lote (si lo hubo) viaja
+  // ya resuelto en `resumenResto` (career.js lo fusiona ahí para no gastar
+  // un beat + un click aparte) y se narra junto al resultado del destacado.
+  function beatTramiteDestacado(beat) {
     const {
-      titulo, texto, resultados, semanasPorIntento,
+      oferta, alMejorDe, semanasPorIntento, resumenResto,
     } = beat.datos;
-    const destacado = resultados[0];
+    const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId) ?? null;
+    const necesarias = rondasParaGanar(alMejorDe);
 
-    // Red de seguridad: si por algún motivo el primer resultado no trae
-    // minijuego (no debería pasar nunca en la práctica: o el lote no sacó
-    // destacado esta vez — ver PROB_DESTACADO_TRAMITE, tramite.js — o de
-    // verdad no hay ninguno), cae al resumen de siempre, sin la tarjeta
-    // interactiva.
-    if (!destacado || !destacado.marcador) {
-      centro(() => renderDesenlace(centroContenido(), {
-        titulo,
-        texto,
-        deltasTexto: deltasTextoTramite(resultados),
-        onContinuar: () => siguiente(),
-      }));
-      return;
-    }
-
-    const { oferta, marcador } = destacado;
-    const rival = partida.mundo.roster.find((p) => p.id === destacado.rivalId) ?? null;
-    const hayResto = resultados.length > 1;
-
+    // `fase` es SIEMPRE una de 'card' | 'minijuego' | 'resultado' — nunca
+    // otra cosa (evita mezclar el estado de "qué pantalla toca" con los
+    // datos del desenlace, que viven en `resultadoFinal` aparte).
     let fase = 'card';
-    let ronda = 0;
+    let puntosJugador = 0;
+    let puntosRival = 0;
     let ultimaRondaTexto = null;
+    let numeroRonda = 1;
+    let resultadoFinal = null; // { detalle, resultadoLetra } una vez definida la pelea
 
     function pintarTramite() {
       if (fase === 'card') {
@@ -603,47 +612,61 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         return;
       }
       if (fase === 'minijuego') {
-        const puntosJugador = marcador.rondas.slice(0, ronda).filter((r) => r === 'jugador').length;
-        const puntosRival = ronda - puntosJugador;
         renderPanelDecision(centroContenido(), {
-          titulo: `Ronda ${ronda + 1} de hasta ${marcador.rondas.length}`,
+          titulo: `Ronda ${numeroRonda} de hasta ${alMejorDe}`,
           bajada: `Vos ${puntosJugador} - ${puntosRival} Rival`,
           texto: ultimaRondaTexto ?? `Elegí cómo boxear esta ronda contra "${oferta.rivalApodo ?? oferta.rivalNombre}".`,
           opciones: opcionesMinijuego(),
           onElegir: (accionId) => {
-            // El resultado de ESTA ronda ya está decidido desde el núcleo
-            // (armarMarcador, tramite.js, pesado por la diferencia de
-            // media) — acá solo se deriva qué acción tuvo que jugar el
-            // rival para que ese resultado cierre con el ciclo (nunca al
-            // revés: el pick del jugador no cambia el marcador, solo la
-            // crónica de la ronda).
-            const gana = marcador.rondas[ronda] === 'jugador';
-            const accionRival = accionRivalDe(accionId, gana);
-            ultimaRondaTexto = `Elegiste "${NOMBRE_ACCION[accionId]}", el rival fue a "${NOMBRE_ACCION[accionRival]}" — ${gana ? 'ganaste' : 'perdiste'} la ronda.`;
-            ronda += 1;
-            if (ronda < marcador.rondas.length) { pintarTramite(); return; }
+            // La ronda se juega de verdad acá: el rng de sesión "elige" por
+            // el rival (sesgado por la diferencia de media — ver
+            // resolverRondaMinijuego, tramite.js) y el resultado sale de
+            // comparar esa elección con la del jugador en el ciclo. El pick
+            // del jugador SÍ cambia lo que pasa — no es una animación sobre
+            // un resultado ya decidido.
+            const { eleccionRival, resultado } = resolverRondaMinijuego(rng, {
+              jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: accionId,
+            });
+            const gano = resultado === 'jugador';
+            if (gano) puntosJugador += 1; else puntosRival += 1;
+            ultimaRondaTexto = `Elegiste "${NOMBRE_ACCION[accionId]}", el rival fue a "${NOMBRE_ACCION[eleccionRival]}" — ${gano ? 'ganaste' : 'perdiste'} la ronda.`;
+            numeroRonda += 1;
+            if (puntosJugador < necesarias && puntosRival < necesarias) { pintarTramite(); return; }
+
+            // Se definió: cierra el combate (aplicarResultado, como
+            // cualquier pelea) y limpia `proximaPelea` ANTES de repintar
+            // (mismo criterio que cerrarPelea con una pelea grande), así el
+            // panel de la derecha ya sale limpio en el mismo repintado.
+            const { metodo, ganador, detalle } = resultadoDeMarcador(
+              { jugador: puntosJugador, rival: puntosRival },
+              alMejorDe,
+            );
+            const round = roundDeCierreMinijuego(rng, { jugador: partida.jugador, oferta, metodo });
+            const paso = aplicarResultado(partida.jugador, {
+              oferta, resultado: { ganador, metodo, round }, modo: 'tramite',
+            });
+            partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+            resultadoFinal = { detalle, resultadoLetra: ganador === 'jugador' ? 'v' : 'd' };
             fase = 'resultado';
-            // La pelea ya se jugó: se limpia `proximaPelea` ANTES de
-            // repintar (mismo criterio que cerrarPelea con una pelea
-            // grande), así el panel de la derecha ya sale limpio en el
-            // mismo repintado — nunca con la cuenta regresiva vieja todavía
-            // puesta un instante. `centro()` (no un `pintarTramite()`
-            // suelto) es lo que dispara ESE repintado: a diferencia de las
-            // otras transiciones de fase (puramente locales), acá `partida`
-            // de verdad cambió.
-            partida = { ...partida, proximaPelea: null };
             centro(pintarTramite);
           },
         });
         return;
       }
-      // fase === 'resultado': `proximaPelea` ya se limpió al entrar acá (ver
-      // arriba) — solo queda narrar el desenlace con la voz del juego.
-      const restoTexto = hayResto ? ` ${texto}` : '';
+      // fase === 'resultado': `proximaPelea` ya se limpió y el resultado ya
+      // se aplicó al jugador (arriba) — solo queda narrar el desenlace.
+      const { detalle, resultadoLetra } = resultadoFinal;
+      const restoTexto = resumenResto ? ` ${resumenResto.texto}` : '';
       renderDesenlace(centroContenido(), {
-        titulo: destacado.resultado === 'v' ? 'Ganaste' : 'Perdiste',
-        texto: `${textoResultadoDestacado(destacado)}${restoTexto}`,
-        deltasTexto: [`Bolsa: ${fmtDinero(oferta.bolsa)}`, textoMarcador(marcador)],
+        titulo: resultadoLetra === 'v' ? 'Ganaste' : 'Perdiste',
+        texto: `${textoResultadoDestacado({
+          detalle,
+          resultado: resultadoLetra,
+          rivalApodo: oferta.rivalApodo,
+          rivalNombre: oferta.rivalNombre,
+          marcador: { jugador: puntosJugador, rival: puntosRival },
+        })}${restoTexto}`,
+        deltasTexto: [`Bolsa: ${fmtDinero(oferta.bolsa)}`, textoMarcador({ jugador: puntosJugador, rival: puntosRival })],
         onContinuar: () => siguiente(),
       });
     }

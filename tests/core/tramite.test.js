@@ -5,7 +5,8 @@ import { crearMundo } from '../../src/core/world.js';
 import { CINTURONES, PELEAS_MINIMAS_TITULO } from '../../src/core/offers.js';
 import {
   intentosDePelea, resumenLote, armarLotePeleas, permiteMarqueeEsteAnio,
-  ACCIONES_MINIJUEGO, accionRivalDe, armarMarcador, resultadoDeMarcador, resolverConMinijuego,
+  ACCIONES_MINIJUEGO, accionRivalDe, resolverRondaMinijuego, alMejorDeCuantos,
+  resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
 } from '../../src/core/tramite.js';
 
 function jugador(extra = {}) {
@@ -240,8 +241,12 @@ describe('armarLotePeleas y el gate de lesión por cupo (v7, "las lesiones cuest
     });
     expect(lote.bloqueados).toBe(1);
     expect(lote.jugador.estado.lesion).toBeNull();
-    expect(lote.beatTramite).not.toBeNull();
-    expect(lote.beatTramite.datos.resultados.length).toBe(2);
+    // Los 2 cupos que no se pierden por la lesión SÍ se juegan, resueltos en
+    // el momento (beatTramite) o apartados como destacado sin resolver
+    // (destacadoOferta, ~10% de las veces — PROB_DESTACADO_TRAMITE): entre
+    // los dos suman exactamente 2, sea cual sea el reparto.
+    const resultados = lote.beatTramite ? lote.beatTramite.datos.resultados.length : 0;
+    expect(resultados + (lote.destacadoOferta ? 1 : 0)).toBe(2);
   });
 
   it('una lesion mas larga que todos los cupos del año bloquea el año entero (bloqueados === intentos)', () => {
@@ -331,160 +336,202 @@ describe('accionRivalDe (ciclo del minijuego)', () => {
   });
 });
 
-describe('armarMarcador / resultadoDeMarcador (el marcador del minijuego)', () => {
-  function jugadorConMedia(media) {
-    return crearPeleador({
-      nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
-      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media, esJugador: true,
-    });
-  }
+function jugadorConMedia(media) {
+  return crearPeleador({
+    nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
+    estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media, esJugador: true,
+  });
+}
 
-  it('nunca da empate: siempre hay un lado con 3 rondas y el otro con 0, 1 o 2', () => {
+// Corrección del coordinador ("el pick del jugador no puede ser cosmético"):
+// cada ronda se juega de verdad, en el momento, con el rng — nunca hay un
+// marcador precalculado antes de que el jugador elija nada. La media entra
+// como SESGO en la elección del rival (no como resultado fijado de
+// antemano): un rival muy superior "adivina" más seguido la acción que te
+// gana, uno inferior se equivoca más — y la elección del rival siempre
+// tiene que ser consistente con el ciclo respecto de lo que eligió el
+// jugador (ver accionRivalDe).
+describe('resolverRondaMinijuego (la ronda se juega de verdad)', () => {
+  it('la eleccion del rival siempre es consistente con el ciclo respecto de la eleccion del jugador', () => {
     for (let s = 1; s <= 200; s += 1) {
-      const marcador = armarMarcador(createRng(s), { jugador: jugador(), rivalMedia: 55 });
-      const max = Math.max(marcador.jugador, marcador.rival);
-      const min = Math.min(marcador.jugador, marcador.rival);
-      expect(max).toBe(3);
-      expect(min).toBeLessThanOrEqual(2);
-      expect(marcador.rondas.length).toBe(marcador.jugador + marcador.rival);
-      expect(marcador.rondas.length).toBeGreaterThanOrEqual(3);
-      expect(marcador.rondas.length).toBeLessThanOrEqual(5);
+      const { eleccionRival, resultado } = resolverRondaMinijuego(createRng(s), {
+        jugador: jugador(), rivalMedia: 60, eleccionJugador: 'tecnico',
+      });
+      expect(ACCIONES_MINIJUEGO).toContain(eleccionRival);
+      if (resultado === 'jugador') expect(eleccionRival).toBe(accionRivalDe('tecnico', true));
+      else expect(eleccionRival).toBe(accionRivalDe('tecnico', false));
     }
   });
 
-  it('la tabla marcador->resultado: 3-0 es KO, 3-1 decision unanime, 3-2 dividida (y lo mismo en contra)', () => {
-    expect(resultadoDeMarcador({ jugador: 3, rival: 0 })).toEqual({ ganador: 'jugador', metodo: 'ko', detalle: 'ko' });
-    expect(resultadoDeMarcador({ jugador: 3, rival: 1 })).toEqual({ ganador: 'jugador', metodo: 'decision', detalle: 'unanime' });
-    expect(resultadoDeMarcador({ jugador: 3, rival: 2 })).toEqual({ ganador: 'jugador', metodo: 'decision', detalle: 'dividida' });
-    expect(resultadoDeMarcador({ jugador: 0, rival: 3 })).toEqual({ ganador: 'rival', metodo: 'ko', detalle: 'ko' });
-    expect(resultadoDeMarcador({ jugador: 1, rival: 3 })).toEqual({ ganador: 'rival', metodo: 'decision', detalle: 'unanime' });
-    expect(resultadoDeMarcador({ jugador: 2, rival: 3 })).toEqual({ ganador: 'rival', metodo: 'decision', detalle: 'dividida' });
+  it('el resultado de la ronda depende del rng, no de cual de las 3 acciones se elija (ninguna es "la correcta")', () => {
+    // Mismo rng, misma media, TRES elecciones distintas: la ronda tiene que
+    // resolverse igual de "jugador"/"rival" en las tres (ninguna acción es
+    // objetivamente mejor que otra — es un ciclo simétrico), aunque la
+    // acción mostrada del rival varíe para seguir siendo consistente con el
+    // ciclo en cada caso.
+    for (let s = 1; s <= 100; s += 1) {
+      const resultados = ACCIONES_MINIJUEGO.map((eleccionJugador) => resolverRondaMinijuego(createRng(s), {
+        jugador: jugador(), rivalMedia: 60, eleccionJugador,
+      }).resultado);
+      expect(new Set(resultados).size).toBe(1);
+    }
+  });
+
+  it('es determinista: misma semilla, mismo resultado y misma eleccion del rival', () => {
+    const a = resolverRondaMinijuego(createRng(9), { jugador: jugador(), rivalMedia: 60, eleccionJugador: 'noqueador' });
+    const b = resolverRondaMinijuego(createRng(9), { jugador: jugador(), rivalMedia: 60, eleccionJugador: 'noqueador' });
+    expect(a).toEqual(b);
   });
 
   it('una media muy superior gana la MAYORIA de las rondas (ventaja notoria, sin ser 100% determinista)', () => {
-    let rondasGanadas = 0;
-    let rondasTotales = 0;
-    for (let s = 1; s <= 300; s += 1) {
-      const marcador = armarMarcador(createRng(s), { jugador: jugadorConMedia(90), rivalMedia: 30 });
-      rondasGanadas += marcador.rondas.filter((r) => r === 'jugador').length;
-      rondasTotales += marcador.rondas.length;
+    const rng = createRng(1);
+    let ganadas = 0;
+    const n = 400;
+    for (let i = 0; i < n; i += 1) {
+      const { resultado } = resolverRondaMinijuego(rng, { jugador: jugadorConMedia(90), rivalMedia: 30, eleccionJugador: 'tecnico' });
+      if (resultado === 'jugador') ganadas += 1;
     }
-    const ratio = rondasGanadas / rondasTotales;
+    const ratio = ganadas / n;
     expect(ratio).toBeGreaterThan(0.7);
     expect(ratio).toBeLessThan(1);
   });
 
-  it('una media muy inferior sufre la desventaja (gana la minoria de las rondas)', () => {
-    let rondasGanadas = 0;
-    let rondasTotales = 0;
-    for (let s = 1; s <= 300; s += 1) {
-      const marcador = armarMarcador(createRng(s), { jugador: jugadorConMedia(30), rivalMedia: 90 });
-      rondasGanadas += marcador.rondas.filter((r) => r === 'jugador').length;
-      rondasTotales += marcador.rondas.length;
+  it('una media muy inferior sufre la desventaja (gana la minoria de las rondas, nunca cero)', () => {
+    const rng = createRng(1);
+    let ganadas = 0;
+    const n = 400;
+    for (let i = 0; i < n; i += 1) {
+      const { resultado } = resolverRondaMinijuego(rng, { jugador: jugadorConMedia(30), rivalMedia: 90, eleccionJugador: 'tecnico' });
+      if (resultado === 'jugador') ganadas += 1;
     }
-    const ratio = rondasGanadas / rondasTotales;
+    const ratio = ganadas / n;
     expect(ratio).toBeLessThan(0.3);
     expect(ratio).toBeGreaterThan(0);
   });
 
-  it('con la misma media de los dos lados, gana un poco mas de la mitad de las veces cada uno (parejo)', () => {
-    let victorias = 0;
-    const n = 400;
-    for (let s = 1; s <= n; s += 1) {
-      const marcador = armarMarcador(createRng(s), { jugador: jugadorConMedia(55), rivalMedia: 55 });
-      if (marcador.jugador > marcador.rival) victorias += 1;
+  it('con media pareja, reproduce un piedra-papel-tijera parejo (cerca del 50%)', () => {
+    const rng = createRng(1);
+    let ganadas = 0;
+    const n = 600;
+    for (let i = 0; i < n; i += 1) {
+      const { resultado } = resolverRondaMinijuego(rng, { jugador: jugadorConMedia(55), rivalMedia: 55, eleccionJugador: 'menton' });
+      if (resultado === 'jugador') ganadas += 1;
     }
-    expect(victorias / n).toBeGreaterThan(0.35);
-    expect(victorias / n).toBeLessThan(0.65);
+    const ratio = ganadas / n;
+    expect(ratio).toBeGreaterThan(0.4);
+    expect(ratio).toBeLessThan(0.6);
   });
 });
 
-describe('resolverConMinijuego', () => {
-  it('devuelve un resultado consistente con su propio marcador', () => {
-    for (let s = 1; s <= 60; s += 1) {
-      const { resultado, marcador } = resolverConMinijuego(createRng(s), {
-        jugador: jugador(),
-        oferta: { rivalMedia: 50, nivelPelea: 'profesional' },
-      });
-      const { round, ...sinRound } = resultado;
-      expect(sinRound).toEqual(resultadoDeMarcador(marcador));
-      expect(round).toBeGreaterThanOrEqual(1);
-    }
+describe('alMejorDeCuantos (mejor de 3 para las palizas, mejor de 5 si es parejo)', () => {
+  it('con diferencia de media grande, es al mejor de 3', () => {
+    expect(alMejorDeCuantos(jugadorConMedia(90), 30)).toBe(3);
+    expect(alMejorDeCuantos(jugadorConMedia(30), 90)).toBe(3);
   });
 
+  it('con media pareja, es al mejor de 5', () => {
+    expect(alMejorDeCuantos(jugadorConMedia(55), 55)).toBe(5);
+    expect(alMejorDeCuantos(jugadorConMedia(55), 60)).toBe(5);
+  });
+
+  it('es simetrico (no importa de que lado esta la ventaja)', () => {
+    expect(alMejorDeCuantos(jugadorConMedia(80), 50)).toBe(alMejorDeCuantos(jugadorConMedia(50), 80));
+  });
+});
+
+describe('rondasParaGanar', () => {
+  it('al mejor de 5 hacen falta 3; al mejor de 3 hacen falta 2', () => {
+    expect(rondasParaGanar(5)).toBe(3);
+    expect(rondasParaGanar(3)).toBe(2);
+  });
+});
+
+describe('resultadoDeMarcador (generalizado por alMejorDe)', () => {
+  it('al mejor de 5: 3-0 es KO, 3-1 decision unanime, 3-2 dividida (y lo mismo en contra)', () => {
+    expect(resultadoDeMarcador({ jugador: 3, rival: 0 }, 5)).toEqual({ ganador: 'jugador', metodo: 'ko', detalle: 'ko' });
+    expect(resultadoDeMarcador({ jugador: 3, rival: 1 }, 5)).toEqual({ ganador: 'jugador', metodo: 'decision', detalle: 'unanime' });
+    expect(resultadoDeMarcador({ jugador: 3, rival: 2 }, 5)).toEqual({ ganador: 'jugador', metodo: 'decision', detalle: 'dividida' });
+    expect(resultadoDeMarcador({ jugador: 0, rival: 3 }, 5)).toEqual({ ganador: 'rival', metodo: 'ko', detalle: 'ko' });
+    expect(resultadoDeMarcador({ jugador: 1, rival: 3 }, 5)).toEqual({ ganador: 'rival', metodo: 'decision', detalle: 'unanime' });
+    expect(resultadoDeMarcador({ jugador: 2, rival: 3 }, 5)).toEqual({ ganador: 'rival', metodo: 'decision', detalle: 'dividida' });
+  });
+
+  // Al mejor de 3 no hay margen para un intermedio: con solo 2 rondas
+  // necesarias, el único desenlace que no es KO es el más ajustado posible
+  // (2-1), así que es siempre "dividida" — nunca "unanime".
+  it('al mejor de 3: 2-0 es KO, 2-1 es dividida (nunca "unanime")', () => {
+    expect(resultadoDeMarcador({ jugador: 2, rival: 0 }, 3)).toEqual({ ganador: 'jugador', metodo: 'ko', detalle: 'ko' });
+    expect(resultadoDeMarcador({ jugador: 2, rival: 1 }, 3)).toEqual({ ganador: 'jugador', metodo: 'decision', detalle: 'dividida' });
+    expect(resultadoDeMarcador({ jugador: 0, rival: 2 }, 3)).toEqual({ ganador: 'rival', metodo: 'ko', detalle: 'ko' });
+    expect(resultadoDeMarcador({ jugador: 1, rival: 2 }, 3)).toEqual({ ganador: 'rival', metodo: 'decision', detalle: 'dividida' });
+  });
+});
+
+describe('roundDeCierreMinijuego', () => {
   it('un KO cae en un round <= tope de la disciplina/nivel; una decision llega justo al tope', () => {
     for (let s = 1; s <= 60; s += 1) {
-      const { resultado } = resolverConMinijuego(createRng(s), {
-        jugador: jugador(),
-        oferta: { rivalMedia: 50, nivelPelea: 'profesional' },
-      });
-      if (resultado.metodo === 'ko') {
-        expect(resultado.round).toBeLessThanOrEqual(8); // roundsPorNivel.profesional (disciplines.js)
-      } else {
-        expect(resultado.round).toBe(8);
-      }
+      const rng = createRng(s);
+      const oferta = { nivelPelea: 'profesional' };
+      const roundKo = roundDeCierreMinijuego(rng, { jugador: jugador(), oferta, metodo: 'ko' });
+      expect(roundKo).toBeGreaterThanOrEqual(1);
+      expect(roundKo).toBeLessThanOrEqual(8); // roundsPorNivel.profesional (disciplines.js)
+      const roundDecision = roundDeCierreMinijuego(rng, { jugador: jugador(), oferta, metodo: 'decision' });
+      expect(roundDecision).toBe(8);
     }
-  });
-
-  it('es determinista: misma semilla, mismo resultado y marcador', () => {
-    const a = resolverConMinijuego(createRng(9), { jugador: jugador(), oferta: { rivalMedia: 60, nivelPelea: 'profesional' } });
-    const b = resolverConMinijuego(createRng(9), { jugador: jugador(), oferta: { rivalMedia: 60, nivelPelea: 'profesional' } });
-    expect(a).toEqual(b);
   });
 });
 
-// Pedido 1/2 (v7): el primer resultado de trámite del lote (si lo hay) trae
-// `marcador`+`oferta` completos (para la tarjeta destacada); el resto, si el
-// año trae más de un cupo de trámite, no los trae (se resuelven en silencio,
-// sin la tarjeta interactiva — ver el comentario grande de armarLotePeleas).
-describe('armarLotePeleas y el destacado del minijuego (Pedido 1/2, v7)', () => {
-  // v7, ajuste de presupuesto de minutos (ver el comentario grande de
-  // PROB_DESTACADO_TRAMITE, tramite.js): NO todo lote saca un destacado —
-  // ~30% de las veces. El test busca un lote de al menos 2 resultados QUE
-  // además haya sacado el destacado (probá con varias semillas hasta
-  // encontrar ambas condiciones a la vez, ninguna de las dos garantizada
-  // sola).
-  it('cuando el lote saca destacado, el primer resultado trae marcador y oferta; los siguientes (si hay) no', () => {
+// Pedidos 1/2 (v7): a lo sumo un cupo de trámite por lote se aparta SIN
+// resolver (`destacadoOferta`) para jugarse de verdad con el minijuego
+// (career.js lo encola aparte, como beat 'tramiteDestacado' — ver
+// main.js); el resto, si el año trae más de un cupo de trámite, se sigue
+// resolviendo en el momento (beatTramite), como siempre.
+describe('armarLotePeleas y el destacado del minijuego (Pedidos 1/2, v7)', () => {
+  // Ajuste de presupuesto de minutos (ver el comentario grande de
+  // PROB_DESTACADO_TRAMITE, tramite.js): NO todo lote saca un destacado. El
+  // test busca un lote de al menos 2 cupos de trámite QUE además haya
+  // sacado el destacado (probá con varias semillas hasta encontrar ambas
+  // condiciones a la vez, ninguna de las dos garantizada sola).
+  it('cuando el lote saca destacado, esa oferta queda SIN resolver (no está en el historial ni en beatTramite)', () => {
     const yo = jugador({ edad: 21, ranking: 40 });
-    let vioVarios = false;
-    for (let s = 1; s <= 300 && !vioVarios; s += 1) {
+    let visto = false;
+    for (let s = 1; s <= 400 && !visto; s += 1) {
       const lote = armarLotePeleas(createRng(s), {
         jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional',
       });
-      if (lote.beatTramite && lote.beatTramite.datos.resultados.length >= 2 && lote.beatTramite.datos.resultados[0].marcador) {
-        vioVarios = true;
-        const [primero, ...resto] = lote.beatTramite.datos.resultados;
-        expect(primero.marcador).not.toBeNull();
-        expect(primero.oferta).toBeTruthy();
-        expect(primero.marcador.jugador + primero.marcador.rival).toBeGreaterThanOrEqual(3);
-        for (const r of resto) {
-          expect(r.marcador).toBeNull();
-        }
+      if (lote.destacadoOferta && lote.beatTramite) {
+        visto = true;
+        expect(lote.alMejorDeDestacado === 3 || lote.alMejorDeDestacado === 5).toBe(true);
+        // La oferta del destacado nunca aparece en el historial (todavía no
+        // se jugó) ni en el resumen de las que sí se resolvieron solas.
+        const idsEnHistorial = lote.jugador.historial.map((h) => h.rivalId);
+        expect(idsEnHistorial).not.toContain(lote.destacadoOferta.rivalId);
+        const idsEnResumen = lote.beatTramite.datos.resultados.map((r) => r.rivalApodo ?? r.rivalNombre);
+        expect(idsEnResumen).not.toContain(lote.destacadoOferta.rivalApodo ?? lote.destacadoOferta.rivalNombre);
       }
     }
-    expect(vioVarios).toBe(true);
+    expect(visto).toBe(true);
   });
 
-  it('a veces el lote NO saca ningun destacado (ninguno de los resultados trae marcador)', () => {
+  it('a veces el lote NO saca ningun destacado (destacadoOferta queda null)', () => {
     const yo = jugador({ edad: 21, ranking: 40 });
     let vioSinDestacado = false;
     for (let s = 1; s <= 60 && !vioSinDestacado; s += 1) {
       const lote = armarLotePeleas(createRng(s), {
         jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 2, permiteJugable: false, tono: 'profesional',
       });
-      if (lote.beatTramite && lote.beatTramite.datos.resultados.every((r) => r.marcador === null)) {
-        vioSinDestacado = true;
-      }
+      if (!lote.destacadoOferta) vioSinDestacado = true;
     }
     expect(vioSinDestacado).toBe(true);
   });
 
-  it('el beat de tramite trae semanasPorIntento (para el anuncio/cuenta regresiva del destacado)', () => {
-    const yo = jugador({ edad: 30, ranking: 40 });
-    const lote = armarLotePeleas(createRng(11), {
-      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 2, permiteJugable: false, tono: 'profesional', semanasPorIntento: 26,
+  it('sin intentos, tampoco hay destacado', () => {
+    const yo = jugador();
+    const lote = armarLotePeleas(createRng(1), {
+      jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 0, permiteJugable: true, tono: 'profesional',
     });
-    expect(lote.beatTramite.datos.semanasPorIntento).toBe(26);
+    expect(lote.destacadoOferta).toBeNull();
+    expect(lote.alMejorDeDestacado).toBeNull();
   });
 });
 
