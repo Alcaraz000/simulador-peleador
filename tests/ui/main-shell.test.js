@@ -178,15 +178,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+    // semilla 10 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
     // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 18: la Ronda v6 -roster de 100, Pedido 1- corrió la secuencia
-    // de rng de toda la carrera desde el arranque -crearRoster consume
-    // muchas más tiradas con 100 rivales que con 12-, así que 18 dejó de
-    // llegar a esta carta puntual; 6 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // semilla 6: v7, "más parodias" -46 parodias, antes 19- corrió la
+    // secuencia de rng de toda la carrera desde el arranque -crearRoster
+    // arranca con menos candidatos aleatorios cuando hay más parodias fijas
+    // para insertar-, así que 6 dejó de llegar a esta carta puntual; 10 sí.)
+    iniciar(cont, prepararPartidaGuardada('evento', 10));
     continuar();
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
@@ -315,16 +315,15 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
-    // semilla 2: con el rebalance del campamento (Task v3), probSparring bajó
+    // semilla 3: con el rebalance del campamento (Task v3), probSparring bajó
     // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
     // cada pelea, ver campamento.js), así que un "sparring" suelto solo
-    // puede salir en los 6 bloques de juvenil/amateur. Sistema 2 (segunda
-    // ronda, corrección del coordinador): las opciones extra de
-    // repartirMejoras en esas mismas etapas (cards.js) consumen más tiradas
-    // de rng por bloque, así que corrieron la secuencia y la semilla 3 (que
-    // antes sí llegaba) dejó de encontrar un "sparring" dentro del límite de
-    // búsqueda — 2 sí lo encuentra.
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
+    // puede salir en los 6 bloques de juvenil/amateur. v7 ("más parodias", 46
+    // en vez de 19) volvió a correr la secuencia de rng desde el arranque
+    // (crearRoster arranca con menos candidatos aleatorios cuando hay más
+    // parodias fijas para insertar) — la semilla 2 (que venía encontrando un
+    // "sparring") dejó de hacerlo dentro del límite de búsqueda; 3 sí.
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
     continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
@@ -471,13 +470,11 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 6 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 10 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 50 antes de la Ronda v6 -roster de 100, Pedido
-    // 1-, que corrió la secuencia de rng de toda la carrera desde el
-    // arranque -crearRoster consume muchas más tiradas con 100 rivales que
-    // con 12-).
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // roll; era la semilla 6 antes de v7 -"más parodias", 46 en vez de 19-,
+    // que corrió la secuencia de rng de toda la carrera desde el arranque).
+    iniciar(cont, prepararPartidaGuardada('evento', 10));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -517,8 +514,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 6: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
+    // semilla 10: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 10));
     continuar();
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
@@ -553,7 +550,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     // semilla 3: mismo caso ya usado más arriba para llegar a un beat
     // "sparring" suelto (en profesional/veterano probSparring es 0 — el
     // campamento ya lo garantiza en cada pelea).
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
     continuar();
 
     expect(cont.querySelector('.grilla-paos')).toBeTruthy();
@@ -582,7 +579,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
   // "Golpes" tiene que seguir en 0: el timer pendiente se corta ANTES de que
   // la Ficha reemplace la pantalla (abandonarSparringPendiente).
   it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
     continuar();
 
     cont.querySelector('[data-accion="empezar"]').click();
