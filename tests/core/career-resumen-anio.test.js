@@ -135,8 +135,12 @@ describe('siguienteBeat: el resumen de fin de año aparece como su propio beat',
     ]);
     expect(paso.beat.datos.muestrasMedia.length).toBeGreaterThanOrEqual(1);
     // v8: cada muestra trae también el ranking del jugador en ese momento
-    // (mismo criterio que la media), no solo su valor.
-    expect(typeof paso.beat.datos.muestrasMedia[0].ranking).toBe('number');
+    // (mismo criterio que la media), no solo su valor. Bug v9 ("rankeado
+    // antes de debutar"): esta partida se arma a mano en 'juvenil'
+    // (etapaIndice:0) con el jugador recién creado — record en 0-0-0, sin
+    // debutar como profesional todavía —, así que el ranking real de esa
+    // muestra es `null` (ver rankingDelJugador, world.js), no un número.
+    expect(paso.beat.datos.muestrasMedia[0].ranking).toBeNull();
 
     // Al consumir el beat 'resumenAnio', lo próximo en la cola es la mejora
     // del año que recién arranca — nunca se pierde un beat real por el

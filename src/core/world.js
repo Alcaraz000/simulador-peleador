@@ -256,7 +256,45 @@ function bonusRecordSuavizado(bonusRecordCrudo, tope) {
   return tope * Math.tanh(bonusRecordCrudo / tope);
 }
 
+// Bug reportado (v9: "en juvenil aparece como #101 en la tabla; en amateur
+// salta a #81 sin haber peleado nunca — y el tablero dice 'Sin clasificar'
+// al mismo tiempo"): el ranking es DE PROFESIONALES (100 peleadores
+// activos, ver CANTIDAD_MUNDO en career.js); juvenil y amateur son etapas de
+// formación cuyas peleas nunca tocan `jugador.record` (van aparte, a
+// `recordAmateur` — ver aplicarResultado, offers.js, y el comentario grande
+// de ETAPAS en career.js). Antes de este fix, `rankingDelJugador` comparaba
+// la MEDIA del jugador contra la de los 100 activos SIN mirar si ya había
+// debutado como profesional: un jugador en juvenil con `record` en 0-0-0 ya
+// entraba a la tabla (último lugar, "#101" = 100 activos + él) solo por
+// tener una media (por baja que fuera) para comparar; en amateur, con la
+// media ya crecida por las cartas de mejora, ese mismo cálculo lo hacía
+// saltar a mitad de tabla (~#81) sin una sola pelea profesional jugada. El
+// tablero (bloqueHistorial, panel-peleador.js) ya mostraba "Sin clasificar"
+// en ese mismo estado, mirando exactamente esta condición (peleasTotales,
+// misma cuenta que `yaDebutoProfesional` acá abajo) — las dos pantallas se
+// contradecían.
+//
+// "Ya debutó" se define con el mismo criterio que esa pantalla: al menos una
+// pelea PROFESIONAL registrada (v+d+e > 0 en `jugador.record`). Un empate
+// cuenta como debut igual que una victoria o derrota (peleó, aunque no ganó
+// ni perdió) — la fórmula del bono de récord de más abajo solo usa v y d,
+// así que contar `e` acá no le da a nadie un empate gratis en el puntaje,
+// solo lo saca de "sin clasificar".
+function yaDebutoProfesional(jugador) {
+  const { v, d, e } = jugador.record;
+  return v + d + e > 0;
+}
+
+/**
+ * Puesto del jugador en el ranking de profesionales, o `null` si todavía no
+ * debutó (ver `yaDebutoProfesional`, arriba) — un peleador en juvenil o
+ * amateur no está rankeado, punto, sin importar cuán buena sea su media.
+ * Los llamadores que necesitan un número (offers.js, career.js) ya usan
+ * `jugador.ranking ?? valorPorDefecto` para ese caso, así que `null` viaja
+ * sin romper nada.
+ */
 export function rankingDelJugador(mundo, jugador) {
+  if (!yaDebutoProfesional(jugador)) return null;
   const activos = mundo.roster.filter((p) => !p.retirado);
   if (activos.length === 0) return 1;
   const miMedia = mediaDe(jugador);
@@ -285,6 +323,11 @@ function filaDe(peleador, esJugador) {
  * aparecen acá) con el jugador insertado en su puesto real, calculado con
  * `rankingDelJugador`. Pura y no muta ni `mundo` ni `jugador`: arma listas
  * nuevas en cada llamada.
+ *
+ * Bug reportado (v9): mientras el jugador no debutó como profesional,
+ * `rankingDelJugador` devuelve `null` (ver el comentario grande ahí) — acá
+ * eso significa NO insertarlo en la tabla en absoluto, para que coincida con
+ * el "Sin clasificar" del tablero en vez de mostrarlo rankeado.
  */
 export function tablaRanking(mundo, jugador) {
   const activos = [...mundo.roster]
@@ -293,7 +336,9 @@ export function tablaRanking(mundo, jugador) {
 
   const filas = activos.map((p) => filaDe(p, false));
   const miPuesto = rankingDelJugador(mundo, jugador);
-  filas.splice(clamp(miPuesto - 1, 0, filas.length), 0, filaDe(jugador, true));
+  if (miPuesto !== null) {
+    filas.splice(clamp(miPuesto - 1, 0, filas.length), 0, filaDe(jugador, true));
+  }
 
   return filas.map((fila, indice) => ({ ...fila, ranking: indice + 1 }));
 }
