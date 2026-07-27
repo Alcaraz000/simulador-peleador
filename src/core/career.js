@@ -1,7 +1,7 @@
 import { createRng } from './rng.js';
 import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './world.js';
 import { EDAD_INICIAL } from './fighter.js';
-import { repartirMejoras } from './cards.js';
+import { repartirMejoras, recordarCarta } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { CINTURONES } from './offers.js';
 import { intentosDePelea, permiteMarqueeEsteAnio, armarLotePeleas } from './tramite.js';
@@ -9,11 +9,14 @@ import { crearSparring } from './sparring.js';
 import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas,
 } from './news.js';
-import { recuperar, puedePelear } from './injuries.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
 import { semanasDeBloque, fechaDe } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
+import {
+  iniciarRegistroAnio, registrarMuestraMedia as registrarMuestraMediaEnRegistro,
+  registrarDecision as registrarDecisionEnRegistro, peleasDelAnio, anioTieneAlgoQueContar,
+} from './year-summary.js';
 
 // Pedido 1 (v6, "el ranking está muy pobre... debe de haber al menos 100
 // peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
@@ -402,6 +405,25 @@ export function crearPartida({ jugador, semilla }) {
     historialBeats: 0,
     terminada: false,
     legado: null,
+    // Bug v7 ("una carta me aparece constantemente, se habrá repetido 5 o 6
+    // veces seguidas" — ver el comentario grande de excluirRecientes,
+    // cards.js): memoria CORTA de los últimos ids mostrados por cada pool de
+    // "una sola carta elegida" (evento/redes/campamento — repartirMejoras NO
+    // entra: ofrece varias a la vez y ya se garantiza sin repetir ENTRE SÍ).
+    // Plana y serializable (arrays de strings): viaja en la partida, así el
+    // autoguardado la persiste y una carrera retomada sigue recordando qué
+    // vio hace un rato, no vuelve a arrancar en blanco.
+    memoriaCartas: { evento: [], redes: [], campamento: [] },
+    // Resumen de fin de año (pedido textual del usuario): `registroAnioActual`
+    // acumula la media y las decisiones del año que se está viviendo ahora
+    // mismo — ver el comentario grande de year-summary.js. `anioCerrado` es
+    // un dato SIEMPRE transitorio (lo pone avanzarBloque, lo consume
+    // siguienteBeat en el mismo golpe): nunca debería sobrevivir a un
+    // autoguardado, pero viaja en la partida (serializable, JSON-safe) para
+    // que una partida guardada justo en ese instante no pierda nada si algo
+    // interrumpe el ciclo.
+    registroAnioActual: iniciarRegistroAnio(1, jugador),
+    anioCerrado: null,
   };
 }
 
@@ -430,6 +452,28 @@ function clonarPartida(partida) {
     rivalidades: partida.rivalidades.map((r) => ({ ...r, h2h: { ...r.h2h }, hitos: [...r.hitos] })),
     noticias: [...partida.noticias],
     cola: [...partida.cola],
+    memoriaCartas: {
+      evento: [...(partida.memoriaCartas?.evento ?? [])],
+      redes: [...(partida.memoriaCartas?.redes ?? [])],
+      campamento: [...(partida.memoriaCartas?.campamento ?? [])],
+    },
+    // Resumen de fin de año: `?? null` (en vez de asumir que siempre existe)
+    // es la migración silenciosa para una partida guardada de un esquema
+    // anterior a esta ronda — sin el campo, `registrarDecision`/
+    // `registrarMuestraMedia` no hacen nada (ver el resguardo en
+    // year-summary.js) hasta que el próximo avanzarBloque abre un registro
+    // nuevo solo; nunca revienta.
+    registroAnioActual: clonarRegistroAnio(partida.registroAnioActual),
+    anioCerrado: clonarRegistroAnio(partida.anioCerrado ?? null),
+  };
+}
+
+function clonarRegistroAnio(registro) {
+  if (!registro) return null;
+  return {
+    ...registro,
+    muestrasMedia: [...registro.muestrasMedia],
+    decisiones: [...registro.decisiones],
   };
 }
 
@@ -443,13 +487,11 @@ export function avanzarBloque(partida) {
   nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
-  // los bloques, incluso mientras seguías lesionado — así que una lesión leve
-  // (1 bloque) quedaba borrada de la forma antes de que `recuperar()` (más
-  // abajo) te diera de alta. Mientras la lesión sigue activa AL ARRANCAR este
-  // bloque, el descanso pasivo se frena: la forma se queda baja de verdad. El
-  // bonus de curación de `recuperar()` (+10, en el bloque que te da de alta)
-  // no se toca: sigue siendo la recompensa de terminar la recuperación, no el
-  // descanso de rutina.
+  // los bloques, incluso mientras seguías lesionado. Mientras la lesión
+  // sigue activa AL ARRANCAR este bloque (el estado tal cual quedó al
+  // cierre del bloque anterior — la recuperación de ESTE bloque todavía no
+  // corrió, ver más abajo), el descanso pasivo se frena: la forma se queda
+  // baja de verdad.
   if (!nueva.jugador.estado.lesion) {
     nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
   }
@@ -460,8 +502,15 @@ export function avanzarBloque(partida) {
   nueva.jugador.atributos = crecimientoPorEdadJugador(nueva.jugador);
   nueva.jugador.atributos = declivePorEdadJugador(nueva.jugador);
 
-  const recuperacion = recuperar(nueva.jugador, { bloques: 1 });
-  nueva.jugador = recuperacion.peleador;
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad, evaluadas semana a semana, no una vez por bloque"): antes ACÁ se
+  // descontaban de un saque las 52 semanas del bloque entero, así que
+  // CUALQUIER lesión de 52 semanas o menos ya aparecía curada la primera vez
+  // que armarCola la revisaba — cero costo real. La recuperación ya no se
+  // toca en avanzarBloque: ahora se descuenta cupo por cupo, dentro de
+  // armarCola/armarLotePeleas (tramite.js), al ritmo real de cuántas semanas
+  // representa cada intento de pelea del año — así una lesión corta pierde
+  // solo los cupos que caen mientras sigue activa, no el bloque entero.
 
   const sponsor = cobrarSponsor(nueva.jugador, rng);
   if (sponsor) nueva.jugador = sponsor.jugador;
@@ -511,7 +560,46 @@ export function avanzarBloque(partida) {
   nueva.noticias = agregarNoticias(marcarLeidas(nueva.noticias), nuevas);
 
   nueva.rngEstado = rng.estado();
+
+  // Resumen de fin de año: acá es exactamente donde un año calendario
+  // termina y el próximo arranca (en este juego, un bloque = un año — ver
+  // ETAPAS, más abajo). El registro tal cual quedó (media + decisiones de
+  // todo lo que el jugador vivió en el año que se está cerrando: su cola ya
+  // estaba vacía, por eso se está armando un bloque nuevo) se guarda en
+  // `anioCerrado` — un dato transitorio que `siguienteBeat` consume en el
+  // mismo golpe para armar el beat 'resumenAnio' (si corresponde) y después
+  // limpia. `registroAnioActual` arranca de nuevo, con la MEDIA ya recalculada
+  // después del crecimiento/declive pasivo de este bloque (arriba).
+  nueva.anioCerrado = nueva.registroAnioActual;
+  nueva.registroAnioActual = iniciarRegistroAnio(nueva.semanaGlobal, nueva.jugador);
+
   return nueva;
+}
+
+/** Envoltorio a nivel partida de `registrarDecision` (year-summary.js): usa
+ * la semana actual de la partida. Lo llama main.js (y scripts/balance-sim.mjs)
+ * cada vez que el jugador elige una opción en una tarjeta (mejora/evento/
+ * redes/campamento) — nunca el núcleo por su cuenta, para no acoplar
+ * career.js a CADA punto donde eso pasa en la UI. */
+export function registrarDecision(partida, { tipo, titulo, opcion }) {
+  return {
+    ...partida,
+    registroAnioActual: registrarDecisionEnRegistro(partida.registroAnioActual, {
+      tipo, titulo, opcion, semana: partida.semanaGlobal,
+    }),
+  };
+}
+
+/** Envoltorio a nivel partida de `registrarMuestraMedia` (year-summary.js):
+ * usa el jugador y la semana actuales de la partida. Lo llama main.js en el
+ * único punto que YA centraliza "se acaba de aplicar un efecto sobre el
+ * jugador" (aplicarEfectoYSeguir) — así que cubre mejora/evento/redes/
+ * sparring/campamento de una sola vez, sin tener que tocar cada beat. */
+export function registrarMuestraMedia(partida) {
+  return {
+    ...partida,
+    registroAnioActual: registrarMuestraMediaEnRegistro(partida.registroAnioActual, partida.semanaGlobal, partida.jugador),
+  };
 }
 
 function armarCola(partida) {
@@ -550,79 +638,153 @@ function armarCola(partida) {
     cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: jugadorActual }) } });
   }
 
+  // Bug v7 ("una carta se repite tan seguido"): cada pool de "una sola carta
+  // elegida" lleva su propia memoria corta (memoriaCartas, ver el comentario
+  // grande en crearPartida) — se lee de `partida` (todavía no tocada por
+  // esta función) y se escribe de vuelta apenas se elige, así que si AMBOS
+  // pools disparan en el mismo bloque cada uno actualiza su propia lista sin
+  // pisar a la otra.
+  let memoriaEvento = partida.memoriaCartas?.evento ?? [];
+  let memoriaRedes = partida.memoriaCartas?.redes ?? [];
+
   if (rng.chance(etapa.probEvento)) {
     const categoria = rng.chance(0.5) ? 'vida' : 'evento';
-    cola.push({ tipo: 'evento', datos: { carta: elegirEvento(rng, { jugador: jugadorActual, etapa: tag, categoria }) } });
+    const carta = elegirEvento(rng, {
+      jugador: jugadorActual, etapa: tag, categoria, recientes: memoriaEvento,
+    });
+    memoriaEvento = recordarCarta(memoriaEvento, carta.id);
+    cola.push({ tipo: 'evento', datos: { carta } });
   }
 
   if (rng.chance(etapa.probRedes)) {
-    cola.push({ tipo: 'redes', datos: { carta: elegirCartaRedes(rng, { jugador: jugadorActual }) } });
+    const carta = elegirCartaRedes(rng, { jugador: jugadorActual, recientes: memoriaRedes });
+    memoriaRedes = recordarCarta(memoriaRedes, carta.id);
+    cola.push({ tipo: 'redes', datos: { carta } });
   }
 
-  if (puedePelear(jugadorActual)) {
-    // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
-    // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
-    // tramite.js — declina con la edad, sube si hay mucho en juego). En
-    // juvenil/amateur sigue siendo el viejo gate de un solo intento
-    // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
-    // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
-    // resuelve sola — ver el comentario grande de ETAPAS.
-    const esProfesional = etapa.id === 'profesional';
-    const intentos = esProfesional
-      ? intentosDePelea(rng, jugadorActual)
-      : (rng.chance(etapa.probPelea) ? 1 : 0);
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
+  // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
+  // tramite.js — declina con la edad, sube si hay mucho en juego). En
+  // juvenil/amateur sigue siendo el viejo gate de un solo intento
+  // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
+  // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
+  // resuelve sola — ver el comentario grande de ETAPAS.
+  //
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad"): el gate de lesión YA NO se revisa acá, de una sola vez para
+  // todo el año (ver `puedePelear`, injuries.js) — se mudó DENTRO de
+  // `armarLotePeleas` (tramite.js), cupo por cupo, así que armarLotePeleas
+  // se llama siempre que haya intentos, esté o no lesionado el jugador AL
+  // ARRANCAR el bloque.
+  const esProfesional = etapa.id === 'profesional';
+  const intentos = esProfesional
+    ? intentosDePelea(rng, jugadorActual)
+    : (rng.chance(etapa.probPelea) ? 1 : 0);
 
-    if (intentos > 0) {
-      const forzarTitulo = esProfesional
-        && jugadorActual.titulos.length === 0
-        && (jugadorActual.ranking ?? 99) <= 3;
-      // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
-      // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
-      // para el porqué: sin este freno, "jugando bien" convierte cada año
-      // que le queda de carrera en una defensa jugable más, reventando el
-      // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
-      // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
-      // de peleas profesionales totales no se toca) — se resuelven todos
-      // como trámite.
-      const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
+  if (intentos > 0) {
+    const forzarTitulo = esProfesional
+      && jugadorActual.titulos.length === 0
+      && (jugadorActual.ranking ?? 99) <= 3;
+    // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
+    // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
+    // para el porqué: sin este freno, "jugando bien" convierte cada año
+    // que le queda de carrera en una defensa jugable más, reventando el
+    // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
+    // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
+    // de peleas profesionales totales no se toca) — se resuelven todos
+    // como trámite.
+    const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
+    // Cuántas semanas de calendario representa CADA cupo (ver el comentario
+    // grande de armarLotePeleas, tramite.js): con más intentos en el año, el
+    // año se reparte en ventanas más chicas — una lesión corta puede caer
+    // entera dentro de una sola ventana y no costar nada; con pocos
+    // intentos (veterano), cada ventana es casi el año entero.
+    const semanasPorIntento = Math.round(semanasDeBloque(etapa.aniosPorBloque) / intentos);
 
-      const lote = armarLotePeleas(rng, {
-        jugador: jugadorActual,
-        mundo: partida.mundo,
-        etapa: tag,
-        rivalidades: rivalidadesActuales,
-        forzarTitulo,
-        intentos,
-        permiteJugable,
-        tono: tag,
+    const lote = armarLotePeleas(rng, {
+      jugador: jugadorActual,
+      mundo: partida.mundo,
+      etapa: tag,
+      rivalidades: rivalidadesActuales,
+      forzarTitulo,
+      intentos,
+      permiteJugable,
+      tono: tag,
+      semanasPorIntento,
+      // Resumen de fin de año: la fecha de cada pelea de trámite (ver el
+      // comentario grande en armarLotePeleas, tramite.js).
+      semanaGlobal: partida.semanaGlobal,
+    });
+
+    jugadorActual = lote.jugador;
+    rivalidadesActuales = lote.rivalidades;
+    // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
+    // año fue pasando" antes de llegar a la que de verdad importa.
+    //
+    // Pedidos 1/2 (v7): si el lote sacó un destacado (armarLotePeleas,
+    // tramite.js — a lo sumo uno por lote, ver PROB_DESTACADO_TRAMITE), su
+    // oferta todavía NO está resuelta (mismo criterio que `marqueeOferta`:
+    // se juega de verdad, acá con el minijuego en vez de la crónica
+    // completa) — se encola como su propio beat 'tramiteDestacado', que
+    // main.js resuelve con card+minijuego y recién ahí aplica el resultado.
+    // El resto del lote (si lo hay) NO se encola aparte: viaja DENTRO del
+    // mismo beat como `resumenResto` (recortar un "Seguir" de más que no
+    // aportaba nada — pedido del coordinador). Sin destacado, es la
+    // síntesis de siempre.
+    if (lote.destacadoOferta) {
+      cola.push({
+        tipo: 'tramiteDestacado',
+        datos: {
+          oferta: lote.destacadoOferta,
+          alMejorDe: lote.alMejorDeDestacado,
+          semanasPorIntento,
+          resumenResto: lote.beatTramite ? lote.beatTramite.datos : null,
+        },
       });
-
-      jugadorActual = lote.jugador;
-      rivalidadesActuales = lote.rivalidades;
-      // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
-      // año fue pasando" antes de llegar a la que de verdad importa.
-      if (lote.beatTramite) cola.push(lote.beatTramite);
-      if (lote.marqueeOferta) {
-        cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
-        ofertaPendiente = { oferta: lote.marqueeOferta };
-      }
-      // El ranking se recalcula ACÁ (no solo una vez por bloque en
-      // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
-      // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
-      // tiene que verlas reflejadas, no el ranking de antes de pelear.
-      if (lote.beatTramite) {
-        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
-      }
+    } else if (lote.beatTramite) {
+      cola.push(lote.beatTramite);
     }
-  } else {
-    // Le tocaba pelea pero está lesionado grave (ver puedePelear en
-    // injuries.js): en vez de no ofrecer nada en silencio, el juego avisa
-    // por qué no llegan ofertas.
-    cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
+    if (lote.marqueeOferta) {
+      cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
+      ofertaPendiente = { oferta: lote.marqueeOferta };
+    }
+    // El ranking se recalcula ACÁ (no solo una vez por bloque en
+    // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
+    // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
+    // tiene que verlas reflejadas, no el ranking de antes de pelear. El
+    // destacado (si lo hay) todavía no se resolvió, así que no participa acá
+    // — su resultado recalcula el ranking recién en el próximo bloque
+    // (avanzarBloque), igual que cualquier oferta jugable normal.
+    if (lote.beatTramite) {
+      jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
+    }
+    // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
+    // por seguir lesionado en su momento — ver `bloqueados`, tramite.js), el
+    // juego avisa por qué no llegó ninguna oferta. Si al menos uno se
+    // recuperó a tiempo y sí hubo pelea (jugable, trámite, o el destacado
+    // todavía pendiente de jugarse), no hace falta este aviso.
+    if (!lote.marqueeOferta && !lote.destacadoOferta && !lote.beatTramite && lote.bloqueados > 0) {
+      cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
+    }
+    // Cuántas ofertas le costó la lesión en total en la carrera (contador
+    // acumulado, mismo criterio que `lesionesSufridas` en main.js): la
+    // métrica real de si la regla "cualquier lesión bloquea" pesa de
+    // verdad — ver el informe de balance de esta ronda.
+    if (lote.bloqueados > 0) {
+      jugadorActual = {
+        ...jugadorActual,
+        ofertasPerdidasPorLesion: (jugadorActual.ofertasPerdidasPorLesion ?? 0) + lote.bloqueados,
+      };
+    }
   }
 
   return {
-    cola, rngEstado: rng.estado(), ofertaPendiente, jugador: jugadorActual, rivalidades: rivalidadesActuales,
+    cola,
+    rngEstado: rng.estado(),
+    ofertaPendiente,
+    jugador: jugadorActual,
+    rivalidades: rivalidadesActuales,
+    memoriaCartas: { evento: memoriaEvento, redes: memoriaRedes },
   };
 }
 
@@ -639,12 +801,17 @@ export function firmarPelea(partida, { oferta }) {
   const nueva = clonarPartida(partida);
   const rng = rngDe(nueva);
   const etapa = etapaActual(nueva);
-  const { beats, semanaObjetivo } = armarBeatsCampamento(rng, {
-    jugador: nueva.jugador, etapa: tagContenido(etapa.id, nueva.jugador), oferta, semanaInicial: nueva.semanaGlobal ?? 1,
+  const { beats, semanaObjetivo, recientes } = armarBeatsCampamento(rng, {
+    jugador: nueva.jugador,
+    etapa: tagContenido(etapa.id, nueva.jugador),
+    oferta,
+    semanaInicial: nueva.semanaGlobal ?? 1,
+    recientes: nueva.memoriaCartas?.campamento ?? [],
   });
   nueva.cola = [...beats, ...nueva.cola];
   nueva.proximaPelea = { oferta, semanaObjetivo };
   nueva.ofertaPendiente = null;
+  nueva.memoriaCartas = { ...nueva.memoriaCartas, campamento: recientes };
   nueva.rngEstado = rng.estado();
   return nueva;
 }
@@ -686,8 +853,33 @@ export function siguienteBeat(partida) {
       nueva.bloque = 1;
     }
     if (nueva.bloqueGlobal > 1) nueva = avanzarBloque(nueva);
+
+    // Resumen de fin de año (pedido textual del usuario): si avanzarBloque
+    // acaba de cerrar un año (siempre que bloqueGlobal>1, arriba) y ese año
+    // tuvo al menos una pelea (`anioTieneAlgoQueContar` — "un año sin peleas
+    // ni hitos no necesita ceremonia"), se arma su beat ACÁ, con los datos ya
+    // fotografiados: las peleas se leen del historial (nunca se duplican,
+    // ver peleasDelAnio/year-summary.js), las decisiones y muestras de media
+    // vienen tal cual quedaron en `anioCerrado`. Va AL FRENTE de la cola del
+    // bloque que arranca — antes que la mejora obligatoria — y `anioCerrado`
+    // se limpia ACÁ: es un dato puramente transitorio, nunca debe sobrevivir
+    // más de este golpe (ver el comentario grande en avanzarBloque).
+    let beatResumenAnio = null;
+    if (nueva.anioCerrado && anioTieneAlgoQueContar(nueva.anioCerrado, nueva.jugador)) {
+      beatResumenAnio = {
+        tipo: 'resumenAnio',
+        datos: {
+          anio: nueva.anioCerrado.anio,
+          muestrasMedia: nueva.anioCerrado.muestrasMedia,
+          decisiones: nueva.anioCerrado.decisiones,
+          peleas: peleasDelAnio(nueva.jugador, nueva.anioCerrado.anio),
+        },
+      };
+    }
+    nueva.anioCerrado = null;
+
     const armado = armarCola(nueva);
-    nueva.cola = armado.cola;
+    nueva.cola = beatResumenAnio ? [beatResumenAnio, ...armado.cola] : armado.cola;
     nueva.rngEstado = armado.rngEstado;
     nueva.ofertaPendiente = armado.ofertaPendiente;
     // v6: armarCola puede resolver una o varias peleas de trámite EN EL ACTO
@@ -695,6 +887,7 @@ export function siguienteBeat(partida) {
     // actualizados, antes de que el jugador vea ningún beat de este bloque.
     nueva.jugador = armado.jugador;
     nueva.rivalidades = armado.rivalidades;
+    nueva.memoriaCartas = { ...nueva.memoriaCartas, ...armado.memoriaCartas };
     nueva.bloque += 1;
     nueva.bloqueGlobal += 1;
   }

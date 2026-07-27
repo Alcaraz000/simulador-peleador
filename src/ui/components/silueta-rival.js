@@ -1,29 +1,43 @@
-// Silueta del rival groggy para el golpe de gracia (Task 4.4). Devuelve UN
-// SOLO <svg>: el cuerpo del boxeador y las etiquetas de zona (mentón/sien/
-// hígado) viven en el mismo viewBox, unidas por una línea al punto anclado
-// sobre el cuerpo. Nada se posiciona con CSS/offsets — así ninguna etiqueta
-// puede "descolgarse" de la figura, sea cual sea el tamaño en pantalla.
+// Silueta del rival groggy para el golpe de gracia (Task 4.4; reemplazo de
+// arte del usuario, v7). Devuelve UN SOLO <svg>: la foto del boxeador y las
+// etiquetas de zona (mentón/sien/hígado) viven en el mismo viewBox, unidas
+// por una línea al punto anclado sobre el cuerpo. Nada se posiciona con
+// CSS/offsets — así ninguna etiqueta puede "descolgarse" de la figura, sea
+// cual sea el tamaño en pantalla.
 //
 // El dibujo del cuerpo (`dibujarCuerpo`) está separado a propósito de la
-// lógica de anclas/etiquetas (`grupoZona`/`dibujarSilueta`): el usuario ya
-// avisó que más adelante va a traer su propio dibujo del boxeador, y con
-// esta separación ese reemplazo no toca un solo píxel de la lógica de zonas.
+// lógica de anclas/etiquetas (`grupoZona`/`dibujarSilueta`): antes dibujaba
+// paths a mano; ahora inserta una de las tres fotos que trajo el usuario
+// (docs/golpedegracia/, recortadas/comprimidas a src/assets/golpe-de-gracia/).
+// La separación se mantuvo intacta: este reemplazo no tocó la lógica de
+// zonas, solo `dibujarCuerpo` y las constantes de geometría de abajo (que
+// tuvieron que remedirse sobre la anatomía de las fotos nuevas).
+import cubriendoMenton from '../../assets/golpe-de-gracia/cubriendo-menton.webp';
+import cubriendoSien from '../../assets/golpe-de-gracia/cubriendo-sien.webp';
+import cubriendoHigado from '../../assets/golpe-de-gracia/cubriendo-higado.webp';
 
 const NS = 'http://www.w3.org/2000/svg';
 
-const VB_W = 520;
-const VB_H = 330;
+// El viewBox ahora coincide con la resolución real de las fotos (recortadas
+// a 640x487, ver docs/golpedegracia/): así el <image> se dibuja 1:1, sin
+// distorsión, y las coordenadas de abajo son directamente píxeles de foto.
+const VB_W = 640;
+const VB_H = 487;
 
 const COLOR_ESTADO = { abierto: '#8fd694', riesgoso: '#f2c14e', tapado: '#ef4444' };
 const TEXTO_ESTADO = { abierto: 'ABIERTO', riesgoso: 'RIESGOSO', tapado: 'TAPADO' };
 
-// Puntos anclados sobre el cuerpo. Son fijos entre posturas: lo que cambia
-// con la postura son los brazos (ver dibujarCuerpo), no dónde está la cara
-// o el hígado.
+// Las tres fotos son el mismo boxeador desde la misma cámara (solo cambian
+// los brazos/guantes): cabeza, torso y hígado quedan siempre en el mismo
+// lugar entre fotos, así que las anclas —igual que antes— son fijas y no
+// dependen de la postura. Medidas a mano sobre cubriendo-{menton,sien,
+// higado}.webp (640x487): mentón en la base de la mandíbula, sien sobre el
+// pómulo/sien derecha (der. de cámara), hígado sobre las costillas bajas del
+// lado izquierdo de cámara (el derecho del boxeador, anatómicamente).
 const ANCLAS = {
-  menton: { x: 261, y: 85 },
-  sien: { x: 286, y: 54 },
-  higado: { x: 236, y: 172 },
+  menton: { x: 322, y: 205 },
+  sien: { x: 375, y: 122 },
+  higado: { x: 248, y: 358 },
 };
 
 // Slots de etiqueta, fijos en el viewBox. La zona "abierta" (la más
@@ -31,11 +45,30 @@ const ANCLAS = {
 // de su propia ancla. Las otras dos zonas van a los dos slots de la derecha,
 // ordenadas de arriba a abajo según la altura de su ancla — así el layout
 // nunca se recalcula "a mano" por postura y nunca se pisan entre sí.
-const SLOT_IZQUIERDA = { x: 40, w: 132, h: 38 };
+//
+// Con la foto el cuerpo ocupa más ancho relativo que el dibujo viejo (ver
+// CUERPO_X_MIN/MAX en el test): los márgenes laterales para las etiquetas
+// son más angostos, así que estos slots son más angostos que los de antes
+// (104/124 vs 132/122) para no invadir la figura ni salirse del viewBox.
+const SLOT_IZQUIERDA = { x: 4, w: 104, h: 42 };
 const SLOTS_DERECHA = [
-  { x: 352, y: 26, w: 122, h: 36 },
-  { x: 352, y: 114, w: 122, h: 36 },
+  { x: 512, y: 20, w: 124, h: 40 },
+  { x: 512, y: 112, w: 124, h: 40 },
 ];
+
+// Qué foto va con cada postura: el criterio es la zona que la postura marca
+// `tapado` (pedido textual: "que la imagen sea coherente con qué zona está
+// tapada"). guardia_alta tapa el mentón y contra_cuerdas tapa el hígado, así
+// que cada una tiene su propia foto; manos_abajo y cubre_un_lado tapan las
+// dos la sien, así que comparten la foto de sien (no sobran fotos para las
+// cuatro posturas, y esto evita mostrar una guardia que contradiga el texto
+// "tapado").
+const IMAGEN_POR_POSTURA = {
+  guardia_alta: cubriendoMenton, // zonas.menton === 'tapado'
+  manos_abajo: cubriendoSien, // zonas.sien === 'tapado'
+  cubre_un_lado: cubriendoSien, // zonas.sien === 'tapado'
+  contra_cuerdas: cubriendoHigado, // zonas.higado === 'tapado'
+};
 
 function svgEl(tag, attrs = {}, texto = null) {
   const nodo = document.createElementNS(NS, tag);
@@ -54,95 +87,34 @@ function agregar(padre, hijos) {
 
 // ---- El cuerpo: aislado, fácil de sustituir -----------------------------
 
-function piernas() {
-  return [
-    svgEl('path', { d: 'M234 232 L216 318 L242 318 L250 238 Z', fill: '#2b1a1c' }),
-    svgEl('path', { d: 'M282 234 L304 314 L280 318 L268 240 Z', fill: '#241618' }),
-  ];
-}
+let contadorClip = 0;
 
-function shortYTorso() {
-  return [
-    svgEl('path', { d: 'M224 200 L294 200 L300 242 L218 242 Z', fill: '#8f2530' }),
-    svgEl('path', { d: 'M224 219 L298 219', stroke: '#c03040', 'stroke-width': 3 }),
-    svgEl('path', {
-      d: 'M220 112 Q216 99 232 93 L290 93 Q306 99 302 112 L296 204 Q258 216 226 204 Z', fill: '#43292a',
-    }),
-    svgEl('path', { d: 'M258 128 L258 196', stroke: '#2f1c1b', 'stroke-width': 2.5, opacity: 0.8 }),
-    svgEl('path', { d: 'M234 136 Q258 147 282 136', stroke: '#2f1c1b', 'stroke-width': 2.5, fill: 'none', opacity: 0.8 }),
-    svgEl('path', { d: 'M240 160 L276 160', stroke: '#2f1c1b', 'stroke-width': 2, opacity: 0.55 }),
-    svgEl('path', { d: 'M242 178 L274 178', stroke: '#2f1c1b', 'stroke-width': 2, opacity: 0.55 }),
-  ];
-}
-
-function cabeza() {
-  return [
-    svgEl('ellipse', { cx: 261, cy: 62, rx: 27, ry: 31, fill: '#4d3130' }),
-    svgEl('path', { d: 'M234 52 Q261 28 288 52 Q278 40 261 38 Q244 40 234 52 Z', fill: '#1e1210' }),
-    svgEl('path', { d: 'M248 58 L256 60', stroke: '#1e1210', 'stroke-width': 2.5 }),
-    svgEl('path', { d: 'M266 60 L274 58', stroke: '#1e1210', 'stroke-width': 2.5 }),
-    svgEl('path', { d: 'M252 78 Q261 84 270 78', stroke: '#d8d0c0', 'stroke-width': 3, fill: 'none' }),
-  ];
-}
-
-function brazoIzquierdoArriba() {
-  return [
-    svgEl('path', { d: 'M222 115 Q198 130 196 99 L210 87 Q218 108 232 110 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 204, cy: 76, rx: 24, ry: 21, fill: '#5f2027' }),
-    svgEl('path', { d: 'M188 83 L220 83', stroke: '#331014', 'stroke-width': 3 }),
-  ];
-}
-
-function brazoDerechoArriba() {
-  return [
-    svgEl('path', { d: 'M300 115 Q324 130 326 99 L312 87 Q304 108 290 110 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 318, cy: 76, rx: 24, ry: 21, fill: '#5f2027' }),
-    svgEl('path', { d: 'M302 83 L334 83', stroke: '#331014', 'stroke-width': 3 }),
-  ];
-}
-
-function brazoIzquierdoCaido() {
-  return [
-    svgEl('path', { d: 'M222 115 Q198 156 202 200 L220 202 Q216 158 232 122 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 210, cy: 216, rx: 22, ry: 19, fill: '#5f2027' }),
-  ];
-}
-
-function brazoDerechoCaido() {
-  return [
-    svgEl('path', { d: 'M300 115 Q324 156 320 200 L302 202 Q306 158 290 122 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 312, cy: 216, rx: 22, ry: 19, fill: '#5f2027' }),
-  ];
-}
-
-function brazoIzquierdoAlCuerpo() {
-  return [
-    svgEl('path', { d: 'M222 115 Q206 145 224 175 L238 168 Q226 142 232 118 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 228, cy: 182, rx: 20, ry: 17, fill: '#5f2027' }),
-  ];
-}
-
-function brazoDerechoAlCuerpo() {
-  return [
-    svgEl('path', { d: 'M300 115 Q316 145 298 175 L284 168 Q296 142 290 118 Z', fill: '#4d3130' }),
-    svgEl('ellipse', { cx: 294, cy: 182, rx: 20, ry: 17, fill: '#5f2027' }),
-  ];
-}
-
-// Guantes y brazos por postura. Cabeza, torso y piernas no cambian: solo la
-// guardia se mueve, que es lo que realmente abre o cierra cada zona.
-const BRAZOS_POR_POSTURA = {
-  guardia_alta: () => [...brazoIzquierdoArriba(), ...brazoDerechoArriba()],
-  manos_abajo: () => [...brazoIzquierdoCaido(), ...brazoDerechoCaido()],
-  cubre_un_lado: () => [...brazoIzquierdoArriba(), ...brazoDerechoCaido()],
-  contra_cuerdas: () => [...brazoIzquierdoAlCuerpo(), ...brazoDerechoAlCuerpo()],
-};
-
-/** El dibujo del boxeador, aislado de la lógica de anclas/etiquetas. */
+/**
+ * El dibujo del boxeador, aislado de la lógica de anclas/etiquetas: la foto
+ * que corresponde según `IMAGEN_POR_POSTURA`, recortada a las esquinas
+ * redondeadas del resto de los paneles del juego (12px, ver .panel en
+ * theme.css). `aria-hidden` porque la información de la zona ya la da el
+ * propio botón accesible (`grupoZona`, más abajo) — la imagen es decorativa.
+ */
 export function dibujarCuerpo(postura) {
-  const brazos = BRAZOS_POR_POSTURA[postura] ?? BRAZOS_POR_POSTURA.guardia_alta;
-  const grupo = svgEl('g', { 'data-parte': 'cuerpo' });
-  return agregar(grupo, [...piernas(), ...shortYTorso(), ...brazos(), ...cabeza()]);
+  const src = IMAGEN_POR_POSTURA[postura] ?? IMAGEN_POR_POSTURA.guardia_alta;
+  contadorClip += 1;
+  const clipId = `silueta-clip-${contadorClip}`;
+
+  const grupo = svgEl('g', { 'data-parte': 'cuerpo', 'aria-hidden': 'true' });
+  const defs = svgEl('defs', {}, null);
+  const clipPath = svgEl('clipPath', { id: clipId });
+  clipPath.appendChild(svgEl('rect', {
+    x: 0, y: 0, width: VB_W, height: VB_H, rx: 12,
+  }));
+  defs.appendChild(clipPath);
+
+  const imagen = svgEl('image', {
+    href: src, x: 0, y: 0, width: VB_W, height: VB_H,
+    preserveAspectRatio: 'xMidYMid slice', 'clip-path': `url(#${clipId})`,
+  });
+
+  return agregar(grupo, [defs, imagen]);
 }
 
 // ---- Zonas: anclas, líneas y etiquetas -----------------------------------

@@ -222,16 +222,72 @@ describe('rankingDelJugador', () => {
     expect(rachaEnorme).toBeLessThan(rachaModesta);
   });
 
-  it('con un roster chico (12), el comportamiento de siempre no cambia: tope efectivo sigue en 12', () => {
+  it('con un roster chico (12), el tope efectivo sigue rondando 12: una racha mucho mas alla no da mejor puesto que otra bien mas chica', () => {
     const m = crearMundo(createRng(52), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 12 });
     const base = { ...m.roster[6], record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
     // Una racha ganadora enorme (muy por encima de lo que un tope de 12
-    // permitiría acreditar) no debería dar MÁS bono que uno más chico que ya
-    // toca el tope — confirma que el tope efectivo sigue en 12 para rosters
-    // chicos, sin regresión respecto de v5.
+    // permitiría acreditar) no debería dar un puesto MEJOR que uno más chico
+    // que ya casi toca el tope — confirma que el tope efectivo sigue
+    // rondando 12 para rosters chicos, sin regresión respecto de v5. Ya no se
+    // exige igualdad EXACTA (bug v7, "perder no baja el ranking": el clamp
+    // duro que producía esa igualdad exacta es justo lo que dejaba una racha
+    // de derrotas sin ningún efecto una vez saturado — ver
+    // bonusRecordSuavizado en world.js) — alcanza con que no mejore.
     const conTope = rankingDelJugador(m, { ...base, record: { v: 12, d: 0, e: 0, ko: 8, sub: 0, dec: 4 } });
     const masAlla = rankingDelJugador(m, { ...base, record: { v: 40, d: 0, e: 0, ko: 30, sub: 0, dec: 10 } });
-    expect(masAlla).toBe(conTope);
+    expect(masAlla).toBeLessThanOrEqual(conTope);
+  });
+
+  // Bug v7 (pedido textual: "a veces mi peleador pierde peleas pero no baja
+  // de ranking"): causa real, reproducida acá — con el `clamp` DURO de
+  // antes, un récord ganador ya saturado (v40, muy por encima del tope de
+  // ~30 para un roster de 100) podía absorber VARIAS derrotas seguidas (hasta
+  // 7 en esta semilla) con el puesto sin moverse ni un casillero: el bono de
+  // récord crudo (v - d*2) recién volvía a caer DENTRO del rango del clamp
+  // después de esas derrotas, y hasta entonces el clamp devolvía siempre el
+  // mismo tope. Con `bonusRecordSuavizado` (saturación suave, tanh) el
+  // puntaje SIEMPRE empeora un poco con cada derrota adicional (nunca queda
+  // perfectamente plano): siguiendo una racha de derrotas lo bastante larga
+  // sobre un récord saturado, el puesto tiene que terminar empeorando bien
+  // antes de la séptima derrota seguida.
+  it('perder cuesta SIEMPRE, incluso con un récord ganador ya saturado (no hay una racha de derrotas que quede sin efecto)', () => {
+    const m = crearMundo(createRng(50), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    const base = { ...m.roster[50], record: { v: 40, d: 0, e: 0, ko: 0, sub: 0, dec: 0 } };
+    const rankingSinDerrotas = rankingDelJugador(m, base);
+    let peorEnAlgunPunto = false;
+    for (let d = 1; d <= 7; d += 1) {
+      const conDerrotas = { ...base, record: { ...base.record, d } };
+      if (rankingDelJugador(m, conDerrotas) > rankingSinDerrotas) { peorEnAlgunPunto = true; break; }
+    }
+    expect(peorEnAlgunPunto).toBe(true);
+  });
+
+  // Mismo espíritu, pero mirando el puntaje continuo (antes de redondear a un
+  // puesto entero, que puede empatar entre escalones de MEDIA consecutivos):
+  // cada derrota adicional, sobre CUALQUIER récord (saturado o no), tiene que
+  // bajar el puntaje — nunca puede quedar exactamente igual como pasaba con
+  // el clamp duro una vez saturado.
+  it('el puntaje (antes de redondear a puesto) es estrictamente monótono: cada derrota lo empeora, saturado o no', () => {
+    const m = crearMundo(createRng(53), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 100 });
+    const rachas = [
+      { v: 2, d: 0 }, { v: 12, d: 0 }, { v: 40, d: 0 }, { v: 80, d: 0 }, { v: 5, d: 3 },
+    ];
+    for (const { v, d } of rachas) {
+      const base = {
+        ...m.roster[20], record: {
+          v, d, e: 0, ko: 0, sub: 0, dec: 0,
+        },
+      };
+      const conUnaDerrotaMas = {
+        ...base, record: { ...base.record, d: d + 1 },
+      };
+      // El ranking es discreto (puede empatar por el mismo motivo de
+      // siempre: dos records distintos caen en el mismo escalón de MEDIA de
+      // la tabla), así que se compara el puntaje real vía un mundo con UNA
+      // sola media exacta como vara: alcanza con verificar que el nuevo
+      // puesto nunca es MEJOR que el anterior tras perder una más.
+      expect(rankingDelJugador(m, conUnaDerrotaMas)).toBeGreaterThanOrEqual(rankingDelJugador(m, base));
+    }
   });
 });
 

@@ -29,6 +29,24 @@ function jugadorConCarrera() {
       esTitulo: true, esObligatoria: true, fecha: 70,
     },
   ];
+  // Pedido 2 (v7, "el amateur tenga su propio historial de verdad"):
+  // peleas de formación (juvenil/amateur), separadas del historial
+  // profesional de arriba.
+  jugador.recordAmateur = {
+    v: 5, d: 2, e: 0, ko: 3, sub: 0, dec: 2,
+  };
+  jugador.historialAmateur = [
+    {
+      rivalId: 'a1', rivalNombre: 'Pibe Amateur', rivalApodo: null, rivalMedia: 30,
+      resultado: 'v', metodo: 'ko', round: 2, bolsa: 400, enJuego: 'Torneo local',
+      esTitulo: false, esObligatoria: false, fecha: 1, modo: 'jugada',
+    },
+    {
+      rivalId: 'a2', rivalNombre: 'Otro Juvenil', rivalApodo: null, rivalMedia: 28,
+      resultado: 'd', metodo: 'decision', round: 3, bolsa: 300, enJuego: 'Torneo local',
+      esTitulo: false, esObligatoria: false, fecha: 2, modo: 'jugada',
+    },
+  ];
   return jugador;
 }
 
@@ -54,12 +72,21 @@ beforeEach(() => {
 });
 
 describe('renderLegado', () => {
-  it('muestra record, titulos y los cinco legados', () => {
+  it('muestra record y titulos', () => {
     const jugador = jugadorConCarrera();
     renderCompleto(cont, jugador);
     expect(cont.textContent).toContain('25-4-1');
     expect(cont.textContent).toContain('Título regional');
-    expect(cont.querySelectorAll('[data-legado]')).toHaveLength(5);
+  });
+
+  // Pedido 3 (v7, "quitá la parte de legado, no se entiende y es ruido"):
+  // ya no existe la sección de los cinco ejes (deportivo/nacional/
+  // económico/mediático/ético) con sus barras.
+  it('ya no muestra la sección de legado (los cinco ejes con barras)', () => {
+    const jugador = jugadorConCarrera();
+    renderCompleto(cont, jugador);
+    expect(cont.querySelectorAll('[data-legado]')).toHaveLength(0);
+    expect(cont.textContent).not.toContain('Tu legado');
   });
 
   it('muestra la biografia generada', () => {
@@ -89,40 +116,6 @@ describe('renderLegado', () => {
     expect(cont.querySelector('svg.bandera-svg')).toBeTruthy();
     expect(cont.textContent).not.toContain('🇦🇷');
     expect(cont.textContent).toContain('🏆');
-  });
-
-  describe('los cinco ejes del legado: iconos y barras de progreso', () => {
-    it('cada eje trae un icono (svg) junto al nombre', () => {
-      const jugador = jugadorConCarrera();
-      renderCompleto(cont, jugador);
-      const paneles = cont.querySelectorAll('[data-legado]');
-      for (const panel of paneles) {
-        expect(panel.querySelector('svg')).toBeTruthy();
-      }
-    });
-
-    it('cada eje trae una barra de progreso con el ancho del puntaje, no solo el numero', () => {
-      const jugador = jugadorConCarrera();
-      const partida = armarPartida(jugador);
-      const legado = calcularLegado(partida);
-      renderLegado(cont, {
-        legado, estadisticas: estadisticasDeCarrera(partida), jugador, onNuevaCarrera: () => {},
-      });
-      for (const l of legado.legados) {
-        const panel = cont.querySelector(`[data-legado="${l.id}"]`);
-        const relleno = panel.querySelector('.barra > i');
-        expect(relleno).toBeTruthy();
-        expect(relleno.style.width).toBe(`${l.puntaje}%`);
-      }
-    });
-
-    it('el eje nacional se entiende sin explicacion (no dice solo "Legado nacional")', () => {
-      const jugador = jugadorConCarrera();
-      renderCompleto(cont, jugador);
-      const panelNacional = cont.querySelector('[data-legado="nacional"]');
-      expect(panelNacional.textContent).not.toContain('¿');
-      expect(panelNacional.textContent.toLowerCase()).toContain('país');
-    });
   });
 
   describe('titulos: fechas de conquista y defensa', () => {
@@ -170,6 +163,61 @@ describe('renderLegado', () => {
       expect(() => renderCompleto(cont, jugador)).not.toThrow();
       expect(cont.textContent).not.toContain('undefined');
       expect(cont.textContent).not.toContain('NaN');
+    });
+
+    // Pedido 3 (v7, "mostrá la 'racha de victorias' más larga... y la
+    // 'racha de derrotas' también"). Historial armado a mano con números que
+    // no aparecen ya en ningún otro tile de la pantalla (récord, defensas,
+    // etc.), para que el assert no pase "de casualidad".
+    it('muestra la racha de victorias y la racha de derrotas mas largas, con sus numeros reales', () => {
+      const jugador = jugadorConCarrera();
+      jugador.historial = [
+        ...jugador.historial,
+        { rivalId: 'r3', rivalNombre: 'Rival A', resultado: 'v', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r4', rivalNombre: 'Rival B', resultado: 'v', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r5', rivalNombre: 'Rival C', resultado: 'v', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r6', rivalNombre: 'Rival D', resultado: 'd', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r7', rivalNombre: 'Rival E', resultado: 'd', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r8', rivalNombre: 'Rival F', resultado: 'd', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+        { rivalId: 'r9', rivalNombre: 'Rival G', resultado: 'd', metodo: 'ko', round: 1, bolsa: 100, enJuego: 'Ranking', esTitulo: false },
+      ];
+      const partida = armarPartida(jugador);
+      const estadisticas = estadisticasDeCarrera(partida);
+      expect(estadisticas.rachaMasLarga).toBe(5); // las 2 iniciales + las 3 agregadas, seguidas
+      expect(estadisticas.rachaDerrotasMasLarga).toBe(4);
+      renderCompleto(cont, jugador);
+      expect(cont.textContent.toLowerCase()).toContain('racha de victorias');
+      expect(cont.textContent.toLowerCase()).toContain('racha de derrotas');
+      expect(cont.textContent).toContain('5');
+      expect(cont.textContent).toContain('4');
+    });
+  });
+
+  // Pedido 2 (v7, "el amateur tenga su propio historial de verdad... y que
+  // se vea en la pantalla final, junto al profesional pero claramente
+  // separado").
+  describe('historial amateur, separado del profesional', () => {
+    it('muestra las peleas amateur por nombre de rival, no solo el record', () => {
+      const jugador = jugadorConCarrera();
+      renderCompleto(cont, jugador);
+      expect(cont.textContent).toContain('Pibe Amateur');
+      expect(cont.textContent).toContain('Otro Juvenil');
+    });
+
+    it('vive en un bloque propio, sin mezclar rivales profesionales', () => {
+      const jugador = jugadorConCarrera();
+      renderCompleto(cont, jugador);
+      const bloque = cont.querySelector('[data-bloque="historial-amateur"]');
+      expect(bloque).toBeTruthy();
+      expect(bloque.textContent).toContain('Pibe Amateur');
+      expect(bloque.textContent).not.toContain('Dyke Tyzon');
+    });
+
+    it('sin peleas amateur (guardado viejo, o debut directo), no revienta y no muestra el bloque', () => {
+      const jugador = jugadorConCarrera();
+      jugador.historialAmateur = [];
+      expect(() => renderCompleto(cont, jugador)).not.toThrow();
+      expect(cont.querySelector('[data-bloque="historial-amateur"]')).toBeNull();
     });
   });
 });

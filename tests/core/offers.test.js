@@ -5,7 +5,7 @@ import { crearMundo } from '../../src/core/world.js';
 import {
   NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
   proximoCinturon, puedeDisputar, cinturonActual, opinionEntrenador, fraseEntrenador,
-  esPeleaImportante,
+  esPeleaImportante, PELEAS_MINIMAS_TITULO,
 } from '../../src/core/offers.js';
 
 function jugador(extra = {}) {
@@ -18,6 +18,19 @@ function jugador(extra = {}) {
   };
 }
 const mundo = () => crearMundo(createRng(1), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 10 });
+
+// v7 ("un debutante NO puede pelear por el título con 0 peleas"): la mayoría
+// de los tests de esta suite construyen un jugador de ranking altísimo a
+// mano, sin haber jugado una carrera real — así que, salvo que el propio
+// test esté probando el mínimo de peleas, hace falta darles un récord que ya
+// cumpla el mínimo del cinturón bajo prueba (ver PELEAS_MINIMAS_TITULO,
+// offers.js) para seguir aislando lo que cada test dice probar (ranking,
+// bolsa, etc.), no una interacción nueva con el gate de peleas.
+function conPeleas(v) {
+  return {
+    v, d: 0, e: 0, ko: 0, sub: 0, dec: 0,
+  };
+}
 
 describe('niveles', () => {
   it('el titulo paga mas que lo local', () => {
@@ -82,10 +95,23 @@ describe('generarOferta', () => {
 
   it('puede forzar una pelea de titulo', () => {
     const oferta = generarOferta(createRng(6), {
-      jugador: jugador(), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
+      jugador: jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional) }),
+      mundo: mundo(),
+      etapa: 'profesional',
+      forzarTitulo: true,
     });
     expect(oferta.esTitulo).toBe(true);
     expect(oferta.nivelPelea).toBe('titulo');
+  });
+
+  // v7: forzarTitulo se salta la CHANCE probabilística, nunca el mínimo de
+  // peleas — un debutante (0 peleas profesionales) no puede saltar la fila
+  // por más que su ranking ya alcance para el cinturón.
+  it('forzarTitulo no le sirve a un debutante con 0 peleas profesionales', () => {
+    const oferta = generarOferta(createRng(6), {
+      jugador: jugador({ record: conPeleas(0) }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
+    });
+    expect(oferta.esTitulo).toBe(false);
   });
 
   it('marca revancha si ya se cruzaron', () => {
@@ -269,12 +295,50 @@ describe('cinturones', () => {
     expect(proximoCinturon(jugador({ titulos: CINTURONES.map((c) => c.nombre) }))).toBeNull();
   });
 
-  it('puedeDisputar depende del ranking', () => {
+  it('puedeDisputar depende del ranking (con el minimo de peleas ya cumplido)', () => {
     const regional = CINTURONES[0];
-    expect(puedeDisputar(jugador({ ranking: 3 }), regional)).toBe(true);
+    const conMinimo = { record: conPeleas(PELEAS_MINIMAS_TITULO.regional) };
+    expect(puedeDisputar(jugador({ ranking: 3, ...conMinimo }), regional)).toBe(true);
     // Pedido 1 (v6, roster de 100): regional.rankingMax pasó de 8 a 20.
-    expect(puedeDisputar(jugador({ ranking: 45 }), regional)).toBe(false);
-    expect(puedeDisputar(jugador({ ranking: 1 }), null)).toBe(false);
+    expect(puedeDisputar(jugador({ ranking: 45, ...conMinimo }), regional)).toBe(false);
+    expect(puedeDisputar(jugador({ ranking: 1, ...conMinimo }), null)).toBe(false);
+  });
+
+  // v7 ("un debutante NO puede pelear por el título con 0 peleas"): el
+  // ranking solo no alcanza — hace falta el mínimo de peleas profesionales
+  // de PELEAS_MINIMAS_TITULO, escalonado por cinturón.
+  describe('puedeDisputar exige un minimo de peleas profesionales', () => {
+    it('con ranking de sobra pero 0 peleas, no puede disputar ningun cinturon', () => {
+      const debutante = jugador({ ranking: 1, record: conPeleas(0) });
+      for (const cinturon of CINTURONES) {
+        expect(puedeDisputar(debutante, cinturon)).toBe(false);
+      }
+    });
+
+    it('justo por debajo del minimo, todavia no puede', () => {
+      const regional = CINTURONES[0];
+      const casiListo = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional - 1) });
+      expect(puedeDisputar(casiListo, regional)).toBe(false);
+    });
+
+    it('en cuanto llega al minimo, puede (si el ranking tambien alcanza)', () => {
+      const regional = CINTURONES[0];
+      const listo = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
+      expect(puedeDisputar(listo, regional)).toBe(true);
+    });
+
+    it('el minimo esta escalonado: regional < nacional < mundial', () => {
+      expect(PELEAS_MINIMAS_TITULO.regional).toBeLessThan(PELEAS_MINIMAS_TITULO.nacional);
+      expect(PELEAS_MINIMAS_TITULO.nacional).toBeLessThan(PELEAS_MINIMAS_TITULO.mundial);
+    });
+
+    it('el mundial exige mas peleas que las que ya alcanzan para el regional', () => {
+      const regional = CINTURONES[0];
+      const mundial = CINTURONES[2];
+      const conMinimoRegional = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
+      expect(puedeDisputar(conMinimoRegional, regional)).toBe(true);
+      expect(puedeDisputar(conMinimoRegional, mundial)).toBe(false);
+    });
   });
 
   it('cinturonActual devuelve el mas alto que tiene puesto', () => {
@@ -286,7 +350,9 @@ describe('cinturones', () => {
     let conTitulo = 0;
     for (let s = 1; s <= 20; s++) {
       const oferta = generarOferta(createRng(s), {
-        jugador: jugador({ ranking: 2, fama: 50 }), mundo: mundo(), etapa: 'profesional',
+        jugador: jugador({ ranking: 2, fama: 50, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) }),
+        mundo: mundo(),
+        etapa: 'profesional',
       });
       if (oferta.esTitulo) conTitulo++;
     }
@@ -330,12 +396,18 @@ describe('cinturones', () => {
   it('un campeon que ya califica para el siguiente cinturon prioriza escalar por sobre defender', () => {
     // ranking 2 con solo el regional puesto: nacional pide ranking <= 10
     // (Pedido 1, v6: antes 5), asi que ya califica. Escalar tiene que
-    // ganarle a estancarse defendiendo el chico.
+    // ganarle a estancarse defendiendo el chico. Record con el minimo de
+    // peleas del NACIONAL (v7): ya defendió el regional un buen tiempo, así
+    // que el mínimo de peleas nunca es lo que decide acá — es el ranking.
     let ascensos = 0;
     let defensas = 0;
     for (let s = 1; s <= 40; s++) {
       const oferta = generarOferta(createRng(s), {
-        jugador: jugador({ ranking: 2, titulos: ['Cinturón regional'] }), mundo: mundo(), etapa: 'profesional',
+        jugador: jugador({
+          ranking: 2, titulos: ['Cinturón regional'], record: conPeleas(PELEAS_MINIMAS_TITULO.nacional),
+        }),
+        mundo: mundo(),
+        etapa: 'profesional',
       });
       if (oferta.esTitulo && !oferta.esObligatoria) ascensos++;
       if (oferta.esObligatoria) defensas++;
@@ -348,12 +420,22 @@ describe('cinturones', () => {
     // v6: el mayor, regional, pide <= 20), asi que esta oferta no puede ser
     // de titulo aunque no se fuerce.
     const comun = generarOferta(createRng(3), { jugador: jugador({ ranking: 45 }), mundo: mundo(), etapa: 'profesional' });
-    const titulo = generarOferta(createRng(3), { jugador: jugador({ ranking: 1 }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true });
+    const titulo = generarOferta(createRng(3), {
+      jugador: jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) }),
+      mundo: mundo(),
+      etapa: 'profesional',
+      forzarTitulo: true,
+    });
     expect(titulo.bolsa).toBeGreaterThan(comun.bolsa * 2);
   });
 
   it('la oferta de titulo nombra el cinturon en juego', () => {
-    const oferta = generarOferta(createRng(4), { jugador: jugador({ ranking: 1 }), mundo: mundo(), etapa: 'profesional', forzarTitulo: true });
+    const oferta = generarOferta(createRng(4), {
+      jugador: jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) }),
+      mundo: mundo(),
+      etapa: 'profesional',
+      forzarTitulo: true,
+    });
     expect(oferta.enJuego).toBe('Cinturón regional');
     expect(oferta.cinturonId).toBe('regional');
     expect(oferta.textoGancho.toLowerCase()).toContain('cinturón');
@@ -430,7 +512,10 @@ describe('fraseEntrenador', () => {
 
   it('en una pelea de titulo puede nombrar lo que esta en juego', () => {
     const oferta = generarOferta(createRng(6), {
-      jugador: jugador(), mundo: mundo(), etapa: 'profesional', forzarTitulo: true,
+      jugador: jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional) }),
+      mundo: mundo(),
+      etapa: 'profesional',
+      forzarTitulo: true,
     });
     expect(oferta.esTitulo).toBe(true);
     expect(oferta.fraseEntrenador.length).toBeGreaterThan(0);
@@ -583,6 +668,34 @@ describe('aplicarResultado', () => {
       resultado: { ganador: 'rival', metodo: 'ko', round: 4, texto: 'Perdió' },
     });
     expect(paso.jugador.titulos).not.toContain('Título regional');
+  });
+
+  // Pedido 1 (v7, "¿no debería perder el cinturón en esos casos?... debería
+  // poder recuperarlo"): perder una defensa no cierra la puerta — el
+  // cinturón perdido vuelve a ser el "próximo objetivo" (proximoCinturon),
+  // así que decidirNivel puede volver a ofrecerlo como pelea de título más
+  // adelante (ver el comentario grande de decidirNivel, más arriba en
+  // offers.js). Y, al seguir siendo esTitulo, esa revancha por el cinturón
+  // siempre es esPeleaImportante — nunca cae en el lote de trámite.
+  it('perder una defensa deja el cinturón disponible como próximo objetivo, listo para recuperarlo', () => {
+    const yo = jugador({ titulos: ['Cinturón regional'], record: conPeleas(8) });
+    const o = {
+      ...oferta(), esTitulo: true, esObligatoria: true, enJuego: 'Cinturón regional', cinturonId: 'regional',
+    };
+    const paso = aplicarResultado(yo, {
+      oferta: o, mundo: mundo(),
+      resultado: { ganador: 'rival', metodo: 'ko', round: 4, texto: 'Perdió' },
+    });
+    expect(paso.jugador.titulos).toEqual([]);
+    expect(cinturonActual(paso.jugador)).toBeNull();
+    // Sigue calificando (mismo récord/ranking de antes de la defensa): el
+    // próximo objetivo vuelve a ser el mismo cinturón que se le acaba de ir.
+    expect(proximoCinturon(paso.jugador)).toEqual(CINTURONES[0]);
+
+    const revancha = {
+      ...oferta(), esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional', nivel: 'titulo',
+    };
+    expect(esPeleaImportante(revancha)).toBe(true);
   });
 
   it('guarda la pelea en el historial', () => {

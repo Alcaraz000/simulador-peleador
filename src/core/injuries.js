@@ -1,20 +1,63 @@
 import { clamp } from './stats.js';
 
-// Duraciones recortadas (Sistema 1, corrección del coordinador: "cualquier
-// lesión bloquea las ofertas — medí el efecto colateral"): con
-// `puedePelear` bloqueando CUALQUIER lesión (no solo grave, ver más abajo),
-// hombro/rodilla/conmoción quedaban demasiado largas — se les recortó UN
-// bloque a las tres más largas (nunca el gate en sí: eso es lo que pidió el
-// usuario explícitamente). Ver el resultado medido, junto con el recorte de
-// frecuencia, en el comentario grande de PROB_BASE, un poco más abajo.
+// v7 (pedido del usuario, con una barrida de boxeo de por medio: "un corte de
+// ceja (2-6 semanas reales) cuesta medio año in-game; una mano fracturada
+// (2-3 meses), ~1,5 años; rodilla o conmoción, ~2,5 años"): el problema de
+// fondo era de GRANULARIDAD, no de balance — la recuperación se contaba en
+// `bloques` (career.js: ETAPAS.*.aniosPorBloque === 1 siempre, así que un
+// bloque son 52 semanas) y el mínimo no-cero posible ya eran meses. Ahora se
+// cuenta en SEMANAS (`semanas` acá, `semanasRestantes` en la lesión — ver
+// `recuperar`, más abajo), la misma unidad fina que ya usan `semanaGlobal`/
+// `fechaDe` (calendario.js), así que el tablero puede mostrarle al jugador
+// "6 semanas" en vez de "1 bloque" — una cifra que se entiende de un
+// vistazo, sin traducir.
+//
+// Los números de acá abajo son rangos reales de recuperación boxística
+// (leve: 2-6 semanas; moderada: 2-3 meses; grave: varios meses, con margen
+// para una lesión de las que de verdad asustan), elegidos siempre hacia el
+// extremo ALTO del rango real: el usuario pidió "creíble", no "el piso más
+// optimista".
+//
+// Corrección del coordinador (segunda vuelta de esta misma ronda): la
+// primera versión de este cambio contaba las semanas correctamente pero
+// seguía revisando `puedePelear` UNA sola vez por bloque, en avanzarBloque,
+// justo DESPUÉS de un salto instantáneo de 52 semanas — así que cualquier
+// lesión de 52 semanas o menos (todas las leves/moderadas) ya aparecía
+// curada la primera vez que se la miraba: cero ofertas perdidas, la cirugía
+// no cambiaba nada. El arreglo de fondo NO fue acá: fue mover el gate a
+// donde de verdad se juega cada oportunidad de pelea — ver el comentario
+// grande de `armarLotePeleas` en tramite.js. Cada CUPO de pelea del año
+// (`intentos`, tramite.js) representa una porción de esas 52 semanas, y si
+// el jugador sigue lesionado EN ESE MOMENTO puntual, ese cupo se pierde de
+// verdad (ni oferta ni trámite) — recién ahí, con el gate evaluado semana a
+// semana en vez de una vez al año, una lesión corta le cuesta al menos una
+// oportunidad real, y una larga (rodilla/conmoción) puede costarle varias, o
+// el año entero si el jugador tiene pocos cupos (veterano). Ahí es donde
+// pagar la cirugía (ver `curarConDinero`) cambia el resultado real de la
+// carrera, no solo el cosmético.
+//
+// Medido con `node scripts/balance-sim.mjs 400` ("creación real, jugando
+// bien") y con un script ad hoc sobre el jugador MÁS DÉBIL del proyecto
+// (media=45 fija, n=2500, mismo método que career-lesiones-reales.test.js):
+//   - Ofertas/cupos perdidos por lesión: avg=0.36 por carrera (creación
+//     real, jugador fuerte) | avg=0.65 por carrera (jugador más débil,
+//     44.2% de sus carreras pierden al menos una oferta por lesión). Ya no
+//     es cero: la regla "cualquier lesión activa bloquea la oferta" cuesta
+//     algo de verdad, sin volverse devastadora.
+//   - 3 cinturones: sigue en 100% (creación real, n=400) y 99.1% (jugador
+//     más débil, n=2500) — el piso de 85% del eje de cinturones aguanta con
+//     margen amplio, tanto en el test de 3000 semillas (career.test.js)
+//     como en el de lesiones reales sobre 2500 (career-lesiones-reales.test.js).
+//   - Minutos estimados (creación real, balance-sim): ~22.3 (objetivo ~20,
+//     mismo margen chico que ya tenía la ronda anterior).
 export const LESIONES = [
-  { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, bloques: 1, costo: 4000, modsForma: -8, texto: 'Te abrieron la ceja. Nada grave, pero molesta.' },
-  { id: 'nariz', nombre: 'Nariz rota', severidad: 1, bloques: 1, costo: 6000, modsForma: -10, texto: 'Nariz rota. Vas a respirar por la boca un tiempo.' },
-  { id: 'costillas', nombre: 'Costillas golpeadas', severidad: 2, bloques: 2, costo: 18000, modsForma: -18, texto: 'Costillas golpeadas: cada respiración te recuerda la pelea.' },
-  { id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloques: 2, costo: 22000, modsForma: -20, texto: 'Te fracturaste la mano. Yeso y paciencia.' },
-  { id: 'hombro', nombre: 'Hombro dislocado', severidad: 2, bloques: 2, costo: 28000, modsForma: -22, texto: 'Hombro dislocado. Kinesiología por un buen rato.' },
-  { id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloques: 3, costo: 60000, modsForma: -30, texto: 'Ligamentos de la rodilla. Esta es de las que asustan.' },
-  { id: 'conmocion', nombre: 'Conmoción', severidad: 3, bloques: 3, costo: 55000, modsForma: -28, texto: 'Conmoción cerebral. El médico fue tajante: descanso.' },
+  { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, semanas: 4, costo: 8000, modsForma: -8, texto: 'Te abrieron la ceja. Nada grave, pero molesta.' },
+  { id: 'nariz', nombre: 'Nariz rota', severidad: 1, semanas: 5, costo: 9000, modsForma: -10, texto: 'Nariz rota. Vas a respirar por la boca un tiempo.' },
+  { id: 'costillas', nombre: 'Costillas golpeadas', severidad: 2, semanas: 7, costo: 20000, modsForma: -18, texto: 'Costillas golpeadas: cada respiración te recuerda la pelea.' },
+  { id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanas: 10, costo: 26000, modsForma: -20, texto: 'Te fracturaste la mano. Yeso y paciencia.' },
+  { id: 'hombro', nombre: 'Hombro dislocado', severidad: 2, semanas: 12, costo: 30000, modsForma: -22, texto: 'Hombro dislocado. Kinesiología por un buen rato.' },
+  { id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, semanas: 64, costo: 85000, modsForma: -30, texto: 'Ligamentos de la rodilla. Esta es de las que asustan.' },
+  { id: 'conmocion', nombre: 'Conmoción', severidad: 3, semanas: 56, costo: 75000, modsForma: -28, texto: 'Conmoción cerebral. El médico fue tajante: descanso.' },
 ];
 
 // Probabilidad base recortada de 0.18 a 0.10 (contexto 'pelea'), mismo
@@ -22,9 +65,10 @@ export const LESIONES = [
 // cualquier severidad, la frecuencia vieja se comía demasiadas ofertas.
 // También se corrieron los PESOS de severidad (más abajo, en tirarLesion) de
 // 6/3/1 a 8/1/1: además de menos frecuente, cuando toca lesión ahora es
-// mucho más probable que sea la leve y rápida (1 bloque) que la moderada o
-// grave — moderada/grave siguen existiendo (y siguen doliendo cuando tocan),
-// pero ahora son la excepción de verdad, no un tercio de las lesiones.
+// mucho más probable que sea la leve y rápida (semanas, no meses) que la
+// moderada o grave — moderada/grave siguen existiendo (y siguen doliendo
+// cuando tocan), pero ahora son la excepción de verdad, no un tercio de las
+// lesiones.
 //
 // Medido sobre el jugador MÁS DÉBIL del proyecto (nuevaPartida en
 // tests/core/career-lesiones-reales.test.js: media=45 fija, sin
@@ -64,7 +108,7 @@ export function tirarLesion(rng, { peleador, contexto = 'pelea', danoRecibido = 
     id: elegida.id,
     nombre: elegida.nombre,
     severidad: elegida.severidad,
-    bloquesRestantes: elegida.bloques,
+    semanasRestantes: elegida.semanas,
     costo: elegida.costo,
     modsForma: elegida.modsForma,
     texto: elegida.texto,
@@ -84,18 +128,45 @@ export function aplicarLesion(peleador, lesion) {
   return nuevo;
 }
 
-export function recuperar(peleador, { bloques = 1 } = {}) {
+// `semanas` es cuánto tiempo de calendario de verdad pasó desde el último
+// chequeo. Quien llama en la práctica es `armarLotePeleas` (tramite.js), con
+// `semanasPorIntento` — una porción del bloque, no el bloque entero (ver el
+// comentario grande de LESIONES, arriba, para el porqué): el default de 1
+// acá solo es una red de seguridad para llamadores que no lo pasen.
+export function recuperar(peleador, { semanas = 1 } = {}) {
   if (!peleador.estado.lesion) return { peleador, curada: false };
   const nuevo = clonar(peleador);
-  const restantes = nuevo.estado.lesion.bloquesRestantes - bloques;
+  const restantes = nuevo.estado.lesion.semanasRestantes - semanas;
   if (restantes <= 0) {
     nuevo.estado.lesion = null;
     nuevo.estado.forma = clamp(nuevo.estado.forma + 10, 0, 100);
     return { peleador: nuevo, curada: true };
   }
-  nuevo.estado.lesion = { ...nuevo.estado.lesion, bloquesRestantes: restantes };
+  nuevo.estado.lesion = { ...nuevo.estado.lesion, semanasRestantes: restantes };
   return { peleador: nuevo, curada: false };
 }
+
+// v7 (pedido del usuario, textual: "se debe de poder pagar la cirugía para
+// reducir los tiempos de recuperación en un -90%"): antes esto curaba
+// SIEMPRE del todo, por un precio fijo — ahora reduce lo que falta de
+// recuperación al 10% (redondeado), lo mismo que pide el brief, ni más ni
+// menos. Con el gate de lesión evaluado cupo por cupo (ver el comentario
+// grande de LESIONES, arriba, y armarLotePeleas en tramite.js), pagar SÍ
+// cambia el resultado real de la carrera para cualquier severidad, no solo
+// las graves: una mano fracturada (10 semanas) que iba a costarle el cupo
+// de este momento puntual puede quedar en 1 semana tras la cirugía —
+// suficiente para no perderse el cupo SIGUIENTE del mismo bloque, si lo hay.
+// Cuanto más larga la lesión de base, más cupos reales le ahorra pagar.
+// Precios calibrados contra cuánto dinero tiene en el bolsillo un jugador
+// típico en el momento de lesionarse (medido con una corrida "creación
+// real, jugando bien": mínimo ≈US$130-150K, mediana ≈US$290K — ver el informe
+// de la ronda): las leves/moderadas quedan en la escala del STAFF más caro
+// (money.js, US$12-34K, sin quitarle sentido a esa referencia), pero las
+// graves —las que más cupos reales pueden costar— cuestan bastante más
+// (US$75-85K, escala de un LUJO como la mansión): caras de verdad, pero
+// alcanzables incluso para el jugador con menos plata en ese momento — que
+// paguen es una decisión que tiene que doler, no un trámite.
+const REDUCCION_CIRUGIA = 0.1;
 
 export function curarConDinero(peleador, lesion) {
   if (!lesion || peleador.dinero < lesion.costo) {
@@ -103,7 +174,12 @@ export function curarConDinero(peleador, lesion) {
   }
   const nuevo = clonar(peleador);
   nuevo.dinero -= lesion.costo;
-  nuevo.estado.lesion = null;
+  const restantes = Math.round((lesion.semanasRestantes ?? 0) * REDUCCION_CIRUGIA);
+  if (restantes <= 0) {
+    nuevo.estado.lesion = null;
+  } else {
+    nuevo.estado.lesion = { ...nuevo.estado.lesion, semanasRestantes: restantes };
+  }
   nuevo.estado.forma = clamp(nuevo.estado.forma + 15, 0, 100);
   return { peleador: nuevo, gasto: lesion.costo, ok: true };
 }

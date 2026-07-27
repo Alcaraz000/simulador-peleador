@@ -88,3 +88,64 @@ export const POOLS_TRAMITE = {
   profesional: TRAMITE_PROFESIONAL,
   veterano: TRAMITE_VETERANO,
 };
+
+// ===== Pedido 1 (v7): "que la pelea se anuncie antes" ======================
+// Aperturas cortas para la tarjeta de anuncio del combate de trámite
+// destacado (ver panel-tramite.js): la frase de tu entrenador sobre ESE
+// matchup puntual ya sale de `oferta.fraseEntrenador` (offers.js, la misma
+// que arma la oferta de una pelea grande) — acá solo hace falta una apertura
+// breve que le dé pie, variada para que no suene igual carrera tras carrera.
+export const ANUNCIO_TRAMITE = [
+  'Ya te consiguieron rival.',
+  'El mánager cerró la próxima fecha.',
+  'Nueva fecha en el calendario.',
+  'Ya hay rival para la próxima.',
+  'El teléfono sonó con una oferta más.',
+];
+
+// ===== Pedido 2 (v7): crónica del combate de trámite jugado con el
+// minijuego ==================================================================
+// La tabla marcador->resultado (resultadoDeMarcador, tramite.js): 'ko'
+// (perdedor en 0), 'unanime' (perdedor a mitad de camino, solo posible al
+// mejor de 5), 'dividida' (perdedor al margen más ajustado posible — 3-2 al
+// mejor de 5, o 2-1 al mejor de 3), cada una con su texto para la victoria
+// ('v') y la derrota ('d'). Marcador {rival} (mote del rival) y {marcador}
+// ("3-0", ya armado en main.js).
+export const RESULTADO_DESTACADO_TRAMITE = {
+  ko: {
+    v: [
+      'Lo sacaste con un {marcador} de punta a punta: {rival} no vio de dónde vino.',
+      '{marcador} y al piso. {rival} no tuvo margen para reaccionar.',
+      'Nocaut limpio, {marcador}. Una noche redonda contra {rival}.',
+    ],
+    d: [
+      '{rival} te encontró primero: {marcador} y las luces se apagaron antes de tiempo.',
+      'Perdiste por nocaut, {marcador}. {rival} no te dio ni un respiro.',
+      'Duro golpe: {marcador} en contra. {rival} te paró antes de la distancia.',
+    ],
+  },
+  unanime: {
+    v: [
+      'Ganaste claro, {marcador} en las planillas. {rival} nunca te discutió la pelea de verdad.',
+      'Decisión unánime a favor, {marcador}: manejaste el ritmo casi todo el combate.',
+      '{marcador}. Le ganaste el pulso a {rival} sin sobresaltos grandes.',
+    ],
+    d: [
+      'Perdiste por decisión unánime, {marcador}: {rival} te ganó el pulso esta vez.',
+      '{marcador} en contra. No alcanzó para convencer a las planillas.',
+      'Noche difícil: {rival} se llevó las tarjetas, {marcador}.',
+    ],
+  },
+  dividida: {
+    v: [
+      'La ganaste por muy poco, {marcador} dividido: {rival} la hizo pelear hasta el final.',
+      'Apretada de verdad: {marcador}. Podía haber salido para cualquier lado.',
+      '{marcador}, al límite. {rival} no te la regaló ni un segundo.',
+    ],
+    d: [
+      'La perdiste en el límite, {marcador} dividido: pudo haber salido para tu lado.',
+      'Se te escapó por poco: {marcador} en contra, ante {rival}.',
+      '{marcador}, ajustadísimo. No alcanzó, pero estuviste ahí.',
+    ],
+  },
+};

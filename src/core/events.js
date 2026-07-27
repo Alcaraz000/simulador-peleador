@@ -1,23 +1,37 @@
-import { aplicarCarta, resolverProbabilidad, formatearMods, elegirPorRareza } from './cards.js';
+import {
+  aplicarCarta, resolverProbabilidad, formatearMods, elegirPorRareza, conSalvaguardaDeCondiciones,
+  excluirRecientes,
+} from './cards.js';
 import { subirHeat } from './rivalry.js';
 import { clamp } from './stats.js';
 import { CARTAS_EVENTO } from '../content/cards-events.js';
 import { CARTAS_REDES } from '../content/cards-social.js';
 
-export function elegirEvento(rng, { jugador, etapa, categoria = null }) {
+// `recientes` (Bug v7, "una carta no puede repetirse tan seguido"): las
+// últimas cartas de ESTE pool que ya se mostraron (ver excluirRecientes,
+// cards.js) — career.js las lleva y las actualiza en `partida.memoriaCartas`.
+// Opcional (default `[]`) para no romper callers/tests que todavía no las
+// pasan: sin memoria, el comportamiento es el de siempre.
+export function elegirEvento(rng, { jugador, etapa, categoria = null, recientes = [] }) {
   const elegibles = CARTAS_EVENTO.filter(
     (c) => c.etapas.includes(etapa) && (categoria === null || c.categoria === categoria),
   );
-  const fuente = elegibles.length > 0 ? elegibles : CARTAS_EVENTO;
+  const base = elegibles.length > 0 ? elegibles : CARTAS_EVENTO;
+  // Sistema 3 (cards.js, "las tarjetas deben depender de la situación"): la
+  // salvaguarda ya se ocupa de que esto nunca deje `base` en cero.
+  const conCondiciones = conSalvaguardaDeCondiciones(base, jugador);
+  const fuente = excluirRecientes(conCondiciones, recientes);
   return elegirPorRareza(rng, fuente);
 }
 
-export function elegirCartaRedes(rng, { jugador, oferta = null }) {
+export function elegirCartaRedes(rng, { jugador, oferta = null, recientes = [] }) {
   if (oferta && rng.chance(0.5)) {
     const deSemana = CARTAS_REDES.find((c) => c.id === 'post_pelea_grande');
     if (deSemana) return deSemana;
   }
-  return elegirPorRareza(rng, CARTAS_REDES);
+  const conCondiciones = conSalvaguardaDeCondiciones(CARTAS_REDES, jugador);
+  const fuente = excluirRecientes(conCondiciones, recientes);
+  return elegirPorRareza(rng, fuente);
 }
 
 export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = [], rivalObjetivoId = null }) {

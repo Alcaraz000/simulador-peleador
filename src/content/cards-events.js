@@ -143,8 +143,13 @@ export const CARTAS_EVENTO = [
       { id: 'carrera', texto: 'Explicar que esto es ahora o nunca.', mods: { disciplinaPersonal: 5, moral: -8 } },
     ],
   },
+  // Sistema 3 (feedback del usuario, mismo criterio que 'doble_turno' de
+  // cards-improve.js): el texto asume una victoria reciente ("Después de
+  // ganar, la joda se estira") — incongruente si el jugador nunca peleó
+  // todavía o viene de perder. `resultadoReciente: 'victoria'` la limita a
+  // cuando esa premisa es cierta de verdad.
   {
-    id: 'vicio', categoria: 'vida', titulo: 'La noche larga', etapas: PRO, rareza: 'normal',
+    id: 'vicio', categoria: 'vida', titulo: 'La noche larga', etapas: PRO, rareza: 'normal', condiciones: { resultadoReciente: 'victoria' },
     texto: 'Después de ganar, la joda se estira. Mañana hay entrenamiento a las siete.',
     opciones: [
       { id: 'seguir', texto: 'Seguirla.', mods: { moral: 6, forma: -8, disciplinaPersonal: -5 } },
@@ -165,7 +170,15 @@ export const CARTAS_EVENTO = [
   // reescriba el resto de la carrera.
   {
     id: 'sparring_idolo', categoria: 'evento', titulo: 'El ídolo te llama al ring', etapas: SIEMPRE, rareza: 'legendaria',
-    texto: 'El campeón que mirabas por tele de pibe te invita a entrenar una semana en su campamento. No es algo que le pase a cualquiera.',
+    // Sistema 3 (feedback del usuario, mismo caso que 'doble_turno' en
+    // cards-improve.js): el texto original decía "el campeón que mirabas por
+    // tele DE PIBE", incongruente para un jugador de 15-17 (juvenil) que
+    // TODAVÍA es un pibe. Acá se reescribe en vez de restringir por edad
+    // (a diferencia de doble_turno): es la ÚNICA legendaria de 'evento' con
+    // etapas: SIEMPRE — sacarla de juvenil/amateur dejaría esa categoría sin
+    // ninguna legendaria elegible ahí, la misma regresión que ya se corrigió
+    // una vez (ver el comentario grande de Task 6.2, arriba en este archivo).
+    texto: 'El campeón que siempre admiraste te invita a entrenar una semana en su campamento. No es algo que le pase a cualquiera.',
     opciones: [
       { id: 'entrenar', texto: 'Meterte a full, aunque duela.', mods: { tecnica: 6, iq: 6, potencia: 4 } },
       { id: 'moderado', texto: 'Aprovechar sin quemarte.', mods: { tecnica: 4, iq: 4, forma: 6 } },
@@ -371,6 +384,142 @@ export const CARTAS_EVENTO = [
     opciones: [
       { id: 'mirar', texto: 'Sentarte un rato a mirarlas todas.', mods: { moral: 5, disciplinaPersonal: -2 } },
       { id: 'guardar', texto: 'Guardar la caja para otro día.', mods: {} },
+    ],
+  },
+
+  // --- Pedido 2 y 3 (v7, feedback del usuario: "las tarjetas de % son lo más
+  // divertido, sumá más" + "sumá más tarjetas de 2 opciones, no todo tiene
+  // que tener un resultado, alguna opción puede 'no hacer nada'") ----------
+  // Mismo patrón que las cartas de riesgo de más arriba (Task v3): opción
+  // segura sin mods ni efectos (no hace nada) contra una de azar. La gracia
+  // de este lote es la VARIEDAD de probabilidades — nada de 50/50 parejo,
+  // cada una tiene un sabor de apuesta distinto (90/10 es casi seguro, 55/45
+  // es una moneda cargada, etc.) — y que se reparten por TODAS las etapas,
+  // no solo profesional.
+  {
+    id: 'picado_de_barrio', categoria: 'vida', titulo: 'El picado antes del pesaje', etapas: JOVEN, rareza: 'normal',
+    texto: 'Te invitan a un picado en la canchita de tierra del barrio, justo el día antes de pesar para el torneo amateur. "Dale, dos toques y salís", te juran.',
+    opciones: [
+      { id: 'jugar', texto: 'Entrar a jugar un rato.', probabilidades: [
+        { peso: 65, mods: { moral: 4 }, texto: 'Un par de gambetas, te reíste con los pibes y volviste liviano de cabeza.' },
+        { peso: 35, mods: { forma: -10 }, texto: 'Un pisotón mal puesto y el tobillo se hincha como pelota. Al gimnasio, rengueando.' },
+      ] },
+      { id: 'mirar', texto: 'Mirar desde el alambrado, sin arriesgar nada.', mods: {} },
+    ],
+  },
+  {
+    id: 'prueba_de_nivel', categoria: 'evento', titulo: 'La prueba de nivel', etapas: ['juvenil'], rareza: 'rara',
+    texto: 'El profe te quiere foguear antes de tiempo: sparring fuerte contra los grandes de la categoría de arriba, "para que veas dónde estás parado".',
+    opciones: [
+      { id: 'subir', texto: 'Meterte con los grandes.', probabilidades: [
+        { peso: 55, mods: { iq: 4, tecnica: 3 }, texto: 'Te bancaste el ritmo. El profe te mira distinto desde hoy.' },
+        { peso: 45, mods: { forma: -14, moral: -6 }, texto: 'Te pasaron por arriba como si nada. Volvés a tu categoría con la cola entre las patas.' },
+      ] },
+      { id: 'quedarte', texto: 'Seguir en tu categoría, sin apuro.', mods: {} },
+    ],
+  },
+  {
+    id: 'flete_de_ultima', categoria: 'vida', titulo: 'El flete de última', etapas: JOVEN, rareza: 'normal',
+    texto: 'Se te hizo tarde para el sparring fuerte y no te alcanza ni para el boleto: un camión de reparto para justo al lado y el chofer te hace señas.',
+    opciones: [
+      { id: 'subirse', texto: 'Subirte a upa hasta el gimnasio.', probabilidades: [
+        { peso: 80, mods: { disciplinaPersonal: 2 }, texto: 'Llegaste diez minutos tarde nomás. El chofer resultó ser un capo.' },
+        { peso: 20, mods: {}, efectos: { dinero: -3000 }, texto: 'Apenas bajaste, notaste que te habían afanado unos mangos del bolsillo del buzo.' },
+      ] },
+      { id: 'caminar', texto: 'Caminar, aunque llegues tarde.', mods: {} },
+    ],
+  },
+  {
+    id: 'sparring_clandestino', categoria: 'evento', titulo: 'El sparring clandestino', etapas: ['amateur', 'profesional', 'veterano'], rareza: 'rara',
+    texto: 'En un gimnasio de mala muerte arman sparrings "por izquierda" para apostadores, sin comisión ni control médico. Pagan bien, en efectivo.',
+    opciones: [
+      { id: 'ir', texto: 'Ir y pelear por la plata en negro.', probabilidades: [
+        { peso: 60, mods: {}, efectos: { dinero: 22000 }, texto: 'Ganaste limpio y cobraste en el momento. Nadie hizo preguntas.' },
+        { peso: 40, mods: { forma: -16 }, texto: 'Te tocó uno más duro de lo prometido. Volvés a casa con la cara marcada y sin nada que mostrar.' },
+      ] },
+      { id: 'no_ir', texto: 'Ni loco: eso no vale la pena.', mods: {} },
+    ],
+  },
+  {
+    id: 'promesa_del_dt_rival', categoria: 'evento', titulo: 'La promesa del DT rival', etapas: PRO, rareza: 'normal',
+    texto: 'El entrenador de tu próximo rival te llama aparte, casi en secreto: te ofrece pasarte "un par de mañas" sobre su propio peleador, a cambio de nada raro, dice.',
+    opciones: [
+      { id: 'escuchar', texto: 'Escucharlo, aunque suene sospechoso.', probabilidades: [
+        { peso: 70, mods: { iq: 5, tecnica: 2 }, texto: 'El dato era real: encontraste un hueco de verdad en la guardia del rival.' },
+        { peso: 30, mods: { iq: -3 }, texto: 'Era todo humo para confundirte. Perdiste horas de video mirando algo que no sirve.' },
+      ] },
+      { id: 'cortar', texto: 'Cortar la charla ahí mismo.', mods: {} },
+    ],
+  },
+  {
+    id: 'bono_por_nocaut', categoria: 'evento', titulo: 'El bono por nocaut', etapas: PRO, rareza: 'normal',
+    texto: 'El promotor te desliza una cláusula extra en el contrato: bono grosso si ganás antes del límite. "Total, con tu pegada, es plata regalada", te dice.',
+    opciones: [
+      { id: 'firmar', texto: 'Firmar la cláusula.', probabilidades: [
+        { peso: 85, mods: {}, efectos: { dinero: 15000 }, texto: 'El promotor cumple sin chistar apenas se cierra el contrato.' },
+        { peso: 15, mods: {}, efectos: { dinero: -5000 }, texto: 'Letra chica: hay que pagar un "seguro" de la cláusula que nadie te explicó bien.' },
+      ] },
+      { id: 'no_firmar', texto: 'Dejar el contrato como estaba.', mods: {} },
+    ],
+  },
+  {
+    id: 'ventosas_del_masajista', categoria: 'vida', titulo: 'Las ventosas del masajista', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'El masajista del gimnasio jura por las ventosas: "sacan todo lo malo del músculo". Deja marcas moradas espantosas, pero él insiste que funciona.',
+    opciones: [
+      { id: 'probar', texto: 'Probarlas antes del entrenamiento fuerte.', probabilidades: [
+        { peso: 90, mods: { forma: 6 }, texto: 'Sea placebo o no, salís del gimnasio como nuevo.' },
+        { peso: 10, mods: { forma: -5 }, texto: 'Una marca te queda inflamada de más. Nada grave, pero molesta un par de días.' },
+      ] },
+      { id: 'pasar', texto: 'Pasar, gracias.', mods: {} },
+    ],
+  },
+  {
+    id: 'pronostico_del_curandero', categoria: 'vida', titulo: 'El pronóstico del curandero', etapas: SIEMPRE, rareza: 'rara',
+    texto: 'Un vecino "que sabe" te ofrece hacerte una limpia con hierbas antes de la próxima pelea, "para sacarte el ojo de encima". No cobra, solo pide que confíes.',
+    opciones: [
+      { id: 'dejarse', texto: 'Dejarte hacer la limpia, total no cuesta nada.', probabilidades: [
+        { peso: 58, mods: { moral: 7 }, texto: 'Salís convencido de que algo cambió. La cabeza, al menos, va tranquila.' },
+        { peso: 42, mods: { moral: -4 }, texto: 'Te da vergüenza ajena todo el ritual y salís peor de lo que entraste.' },
+      ] },
+      { id: 'rechazar', texto: 'Agradecer y decir que no.', mods: {} },
+    ],
+  },
+  {
+    id: 'desafio_en_redes', categoria: 'evento', titulo: 'El desafío en redes', etapas: ['amateur', 'profesional', 'veterano'], rareza: 'normal',
+    texto: 'Un influencer con más seguidores que técnica te reta a un sparring "amistoso" filmado para sus redes. La propuesta se viraliza antes de que contestes.',
+    opciones: [
+      { id: 'aceptar', texto: 'Aceptar el sparring filmado.', probabilidades: [
+        { peso: 68, mods: {}, efectos: { fama: 8 }, texto: 'Quedás como el profesional serio en medio del circo. Las vistas te suman a vos.' },
+        { peso: 32, mods: {}, efectos: { fama: -4 }, texto: 'El clip se edita para que el influencer quede mejor parado. Te tildan de "participar de un curro".' },
+      ] },
+      { id: 'ignorar', texto: 'No entrar en el juego.', mods: {} },
+    ],
+  },
+
+  // Dilemas puros (sin azar, Pedido 3): la otra mitad del pedido -- una
+  // opción hace algo con costo, la otra directamente no cambia nada.
+  {
+    id: 'turno_en_la_muela', categoria: 'vida', titulo: 'El turno con el dentista', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'Hace semanas que pediste hora para esa muela que duele cada vez que apretás los dientes en el ring. Justo hoy te la dan, a la misma hora del entrenamiento fuerte.',
+    opciones: [
+      { id: 'ir', texto: 'Ir al dentista y perderte la sesión.', mods: { forma: 3, disciplinaPersonal: -3 } },
+      { id: 'faltar', texto: 'Faltar al turno y entrenar igual.', mods: {} },
+    ],
+  },
+  {
+    id: 'clase_a_los_pibes', categoria: 'vida', titulo: 'Una clase para los pibes del barrio', etapas: SIEMPRE, rareza: 'normal',
+    texto: 'El club te pide una tarde para enseñarles lo básico a los chicos que recién arrancan. Sin paga, solo por las ganas.',
+    opciones: [
+      { id: 'dar_la_clase', texto: 'Dar la clase esa tarde.', mods: { moral: 6, disciplinaPersonal: -2 } },
+      { id: 'no_ir', texto: 'Decir que no llegás esta vez.', mods: {} },
+    ],
+  },
+  {
+    id: 'celular_nuevo', categoria: 'vida', titulo: 'El celular nuevo', etapas: PRO, rareza: 'normal',
+    texto: 'El tuyo ya apenas prende, pero el modelo nuevo sale una fortuna. Podrías darte el gusto, o aguantar un poco más.',
+    opciones: [
+      { id: 'comprarlo', texto: 'Comprarlo de una vez.', efectos: { dinero: -18000 }, mods: { moral: 5 } },
+      { id: 'aguantar', texto: 'Aguantar con el viejo un poco más.', mods: {} },
     ],
   },
 ];

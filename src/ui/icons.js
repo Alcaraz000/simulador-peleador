@@ -180,6 +180,10 @@ const PATHS = {
     'M7 22l-4-4 4-4',
     'M21 13v1a4 4 0 0 1-4 4H3',
   ],
+
+  // Resumen de fin de año (v7): tendencia ascendente (Feather/Lucide
+  // "trending-up") — el ícono de la cabecera del resumen.
+  grafico: ['M23 6 13.5 15.5 8.5 10.5 1 18', 'M17 6h6v6'],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

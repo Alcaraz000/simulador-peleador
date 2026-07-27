@@ -100,14 +100,28 @@ function jugarGanandoTodoConLesiones(partida, limite = 500) {
 // fija, sin origen/apodo optimizado — el peor caso, no el "jugando bien" de
 // balance-sim) es que las lesiones reales NO le pegan al objetivo central de
 // esta ronda: 30-40 peleas profesionales totales y ≥85% de tres cinturones.
-// Medido sobre 1500/2500 semillas respectivamente:
-//   peleas JUGABLES/carrera: avg≈6.25 | min=3 max=13 (el mismo tipo de
-//     número que career.test.js sin lesiones — la diferencia es chica: las
-//     lesiones reales casi no le pegan a esto porque la mayoría de los
-//     cupos de pelea ya eran trámite antes de que hubiera lesión posible).
-//   peleas PROFESIONALES TOTALES/carrera: avg≈34.3 | min=27 max=41 — nunca
+//
+// v7, corrección del coordinador ("las lesiones tienen que costar de
+// verdad, evaluadas semana a semana, no una vez por bloque" — ver el
+// comentario grande de LESIONES en injuries.js y de armarLotePeleas en
+// tramite.js): estos números están RECALCULADOS después de ese arreglo — los
+// de la ronda anterior (con el gate revisado una sola vez por bloque, así
+// que cualquier lesión de 52 semanas o menos curaba gratis) ya no describen
+// el sistema actual. Medido sobre 1500/2500 semillas respectivamente:
+//   peleas JUGABLES/carrera: avg≈6.07 | min=3 max=12 (el mismo tipo de
+//     número que career.test.js sin lesiones — la diferencia sigue siendo
+//     chica: la mayoría de los cupos de pelea ya eran trámite antes de que
+//     hubiera lesión posible).
+//   peleas PROFESIONALES TOTALES/carrera: avg≈33.9 | min=28 max=42 — nunca
 //     por debajo de 25 en 1500 semillas (piso duro).
-//   3 cinturones con lesiones reales: 99.2% sobre 2500 semillas.
+//   ofertas/cupos PERDIDOS por lesión (la métrica que de verdad dice si la
+//     regla pesa): avg≈0.64 por carrera, con el 44.2% de las carreras
+//     perdiendo al menos una — ya no es cero (antes del arreglo del
+//     coordinador, con el gate por bloque, esta métrica ni siquiera existía
+//     como tal: el equivalente más cercano, "años enteros en blanco", medía
+//     ~0.03-0.12 sobre "creación real", prácticamente cosmético).
+//   3 cinturones con lesiones reales: 99.1% sobre 2500 semillas — el piso de
+//     0.85 sigue con margen amplio pese al costo real.
 describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión bloquea)', () => {
   it('las peleas profesionales totales (jugables + trámite) se mantienen dentro de lo esperado incluso con lesiones reales aplicándose', () => {
     const total = 1500;
@@ -121,9 +135,9 @@ describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión blo
       if (peleasTotales < 20) debajoDelPisoDuro += 1;
     }
     const promedio = sumaTotales / total;
-    // Margen amplio sobre el ~34.3 medido, para no ser flaky pero seguir
-    // marcando una regresión real si las lesiones se vuelven más largas o
-    // frecuentes sin volver a medir.
+    // Margen amplio sobre el ~33.9 medido (v7, gate de lesión por cupo), para
+    // no ser flaky pero seguir marcando una regresión real si las lesiones
+    // se vuelven más largas o frecuentes sin volver a medir.
     expect(promedio).toBeGreaterThanOrEqual(28);
     expect(promedio).toBeLessThanOrEqual(40);
     // "Debajo de 25" no debería pasar casi nunca (medido: 0% sobre 1500
@@ -138,11 +152,12 @@ describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión blo
   // mejoras es 3, duro") cambió cuántas tiradas de rng consume cada reparto
   // de mejoras, así que corrió la secuencia entera para estas mismas
   // semillas. Con el rediseño de ritmo v6 (segunda vuelta: "no todas las
-  // peleas se juegan igual" + `permiteMarqueeEsteAnio`), la tasa real con
-  // lesiones reales sobre 2500 semillas es ~99.2% — muy por encima del piso
-  // de 0.85, con margen amplio de sobra. n=2500 se mantiene sin acercarse al
-  // costo de memoria que esta suite separó a propósito (ver el comentario
-  // grande al principio del archivo).
+  // peleas se juegan igual" + `permiteMarqueeEsteAnio`) y el gate de lesión
+  // por cupo de v7 (ver el comentario grande al principio del archivo), la
+  // tasa real con lesiones reales sobre 2500 semillas es ~99.1% — muy por
+  // encima del piso de 0.85, con margen amplio de sobra pese a que ahora las
+  // lesiones sí le cuestan ofertas de verdad. n=2500 se mantiene sin
+  // acercarse al costo de memoria que esta suite separó a propósito.
   it('sobre muchas semillas, los tres cinturones se mantienen por encima del 85% incluso con lesiones reales', () => {
     const total = 2500;
     let conLosTres = 0;

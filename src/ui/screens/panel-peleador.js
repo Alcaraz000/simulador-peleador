@@ -189,14 +189,45 @@ function filaAtributo(clave, { base, aporte }) {
 // ningún lado del tablero: las tarjetas los modifican igual que a los
 // atributos de combate (aplicarCarta reparte por los tres grupos, ver
 // cards.js) y el jugador leía "+10 Forma" en una tarjeta sin que ese número
-// apareciera en ninguna parte (queja del usuario). Fatiga y lesión quedan
-// afuera: ya tienen su lugar en otra parte del tablero (panel-avance.js) y
-// no hace falta duplicarlas acá.
+// apareciera en ninguna parte (queja del usuario). Fatiga queda afuera (no
+// tiene panel propio); lesión SÍ se muestra, pero aparte (ver bloqueLesion,
+// más abajo) — no es un número más de la grilla, trae su propio botón de
+// curar.
 const ESTADO_VISIBLE = ['menton', 'disciplinaPersonal', 'forma', 'moral'];
 
 function filaEstado(jugador, clave) {
   const valor = clave in jugador.especiales ? jugador.especiales[clave] : jugador.estado[clave];
   return filaAtributo(clave, { base: valor, aporte: 0 });
+}
+
+// Lesión + botón de curar (v7, Pedido 3: "sacá 'lo que viene ahora'"): vivía
+// en panel-avance.js, la pantalla intermedia que se mostraba ENTRE beats —
+// al borrar esa pantalla (el jugador ahora pasa derecho a la próxima
+// tarjeta) esta función se muda ACÁ, al panel de Estado (columna central,
+// siempre visible, sea cual sea el beat que esté mostrando la tarjeta de
+// abajo): curar una lesión no puede quedar escondida detrás de una pantalla
+// que ya no existe. Mismo comportamiento de siempre — nombre, semanas
+// restantes, costo, botón deshabilitado si no alcanza la plata — solo
+// cambia dónde vive.
+function bloqueLesion(jugador, onCurar) {
+  const lesion = jugador.estado.lesion;
+  if (!lesion) return null;
+  return el('div', { class: 'panel panel-lesion', style: 'display:flex;align-items:center;gap:10px' }, [
+    icono('alerta', { color: '#e05252' }),
+    el('div', { style: 'flex:1' }, [
+      el('div', { class: 'rojo', style: 'font-weight:800', text: lesion.nombre }),
+      el('div', {
+        class: 'etiqueta',
+        text: `Te quedan ${lesion.semanasRestantes} ${lesion.semanasRestantes === 1 ? 'semana' : 'semanas'} para recuperarte`,
+      }),
+    ]),
+    el('button', {
+      class: 'boton secundario', dataset: { accion: 'curar' },
+      disabled: jugador.dinero >= lesion.costo ? null : '',
+      style: 'width:auto;padding:10px 14px;flex:0 0 auto', onClick: onCurar,
+      text: `Curar · ${fmtDinero(lesion.costo)}`,
+    }),
+  ]);
 }
 
 // Atributos y Estado eran un solo panel (`bloqueAtributos`) antes de la
@@ -217,11 +248,14 @@ function bloqueAtributosSolo(jugador) {
   ]);
 }
 
-function bloqueEstadoSolo(jugador) {
-  return el('div', { class: 'panel' }, [
-    el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Estado' }),
-    el('div', { class: 'panel-peleador-atributos panel-peleador-atributos-estado' },
-      ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
+function bloqueEstadoSolo(jugador, onCurar) {
+  return el('div', { class: 'stack' }, [
+    el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Estado' }),
+      el('div', { class: 'panel-peleador-atributos panel-peleador-atributos-estado' },
+        ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
+    ]),
+    bloqueLesion(jugador, onCurar),
   ]);
 }
 
@@ -448,8 +482,8 @@ export function renderPanelAtributos(region, { jugador }) {
 // atributos de combate (mismo criterio que antes, cuando compartían un solo
 // panel: nunca mezclados, porque solo los de combate llevan aporte de
 // entrenador).
-export function renderPanelEstado(region, { jugador }) {
-  mount(region, bloqueEstadoSolo(jugador));
+export function renderPanelEstado(region, { jugador, onCurar = () => {} }) {
+  mount(region, bloqueEstadoSolo(jugador, onCurar));
 }
 
 // Columna derecha, junto al calendario: dinero y acceso a la tienda (mudados

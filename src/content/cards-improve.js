@@ -11,7 +11,17 @@ const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
 // distancia relativa con las legendarias, nunca la agranda, así que no
 // "aplana" su varianza.
 export const CARTAS_MEJORA = [
-  { id: 'doble_turno', titulo: 'Doble turno como cuando eras pibe', texto: 'Mañana y tarde en el gimnasio, sin chistar.', mods: { cardio: 5, fatiga: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
+  // Sistema 3 (feedback del usuario: "hay una acción que dice 'doble turno
+  // como cuando eras pibe' y mi personaje tiene 17 y es amateur, eso me
+  // lleva a lo siguiente: algunas tarjetas deben depender de la situación,
+  // edad..."): el título mira para atrás, a "cuando eras pibe" — no tiene
+  // sentido si el jugador TODAVÍA es un pibe (juvenil/amateur, 15-20 años).
+  // `condiciones: { edadMin: 21 }` la deja afuera de esas dos etapas por
+  // completo (edadDesde de 'profesional' en career.js) sin tocar el texto
+  // nostálgico, que ahora sí encaja: solo la ve un profesional mirando atrás.
+  {
+    id: 'doble_turno', titulo: 'Doble turno como cuando eras pibe', texto: 'Mañana y tarde en el gimnasio, sin chistar.', mods: { cardio: 5, fatiga: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', condiciones: { edadMin: 21 },
+  },
   { id: 'bolsa_pesada', titulo: 'La bolsa pesada hasta que duela', texto: 'Mil golpes por día. Los nudillos se acostumbran.', mods: { potencia: 5, velocidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'espejo', titulo: 'Horas frente al espejo', texto: 'Sombra, guardia, pie. Otra vez. Y otra.', mods: { tecnica: 5 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'sparring_duro', titulo: 'Sparring con uno más grande', texto: 'Te comés unas cuantas, pero aprendés a leer.', mods: { iq: 5, menton: 2, forma: -4 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },

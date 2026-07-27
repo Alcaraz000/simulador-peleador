@@ -43,6 +43,9 @@
 import { crearPeleador, mediaDe, repartirOrigenes } from '../src/core/fighter.js';
 import { crearPartida, siguienteBeat, firmarPelea } from '../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../src/core/offers.js';
+import {
+  resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
+} from '../src/core/tramite.js';
 import { aplicarCarta } from '../src/core/cards.js';
 import { resolverOpcion } from '../src/core/events.js';
 import { repartirApodos } from '../src/core/nicknames.js';
@@ -184,10 +187,17 @@ function accionesDePeleaJugable(rngSombra, { jugador, rival, disciplina, nivelPe
 // ganada de verdad (ni un paseo ni al límite), rng.int(10, 50) — el mismo
 // rango, mismo rng, para que la medición sea reproducible.
 function resolverPeleaDeCampamento(jugador, oferta, rival, {
-  rngLesion = null, rngSombra = null,
+  rngLesion = null, rngSombra = null, semanaGlobal = null,
 } = {}) {
+  // `semanaGlobal` (resumen de fin de año): mismo fix que main.js/tramite.js
+  // — sin esto, las peleas JUGABLES de esta simulación quedaban con
+  // `fecha: null`, y un año con SOLO una pelea jugable (sin trámite) se
+  // habría medido acá como "sin nada que contar" aunque en el juego real sí
+  // dispara el resumen (cerrarPelea, main.js, ya pasaba semanaGlobal desde
+  // antes de esta ronda). Necesario para que el conteo de resúmenes de año
+  // de este script sea representativo del juego real.
   const resultado = aplicarResultado(jugador, {
-    oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+    oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 }, semanaGlobal,
   });
   let nuevoJugador = resultado.jugador;
   if (rngLesion) {
@@ -223,7 +233,21 @@ function jugarCarrera(semilla, {
   let accionesJugadas = 0; // beats + las acciones de cada pelea jugable (negociación/careo/rounds/rincón/golpe)
   let peleasJugables = 0;
   let peleasTramite = 0;
+  // Pedidos 1/2 (v7): cuántos combates de trámite se jugaron con el
+  // minijuego (uno como mucho por lote/bloque, ver armarLotePeleas) y
+  // cuántas acciones EXTRA (más allá de la que ya contaba el beat en sí)
+  // costó jugarlos — la métrica real del impacto en el presupuesto de
+  // minutos de esta ronda.
+  let tramitesDestacados = 0;
+  let accionesTramiteDestacado = 0;
   let defensas = 0;
+  // Resumen de fin de año (pedido del usuario, esta ronda): cuántas veces
+  // apareció el beat 'resumenAnio' — cada uno cuenta como UNA acción más
+  // (leer el resumen y cerrarlo, igual que 'lesionSinOferta'/'peleasResueltas'
+  // ya se cuentan arriba con el `beats += 1; accionesJugadas += 1;` genérico
+  // del loop) — este contador es solo para reportar el impacto por separado,
+  // no cambia el cálculo de minutos.
+  let resumenesAnio = 0;
   let lesiones = 0; // cuántas veces se lesionó en total (solo con simularLesiones)
   let bloquesLesionado = 0; // cuántos beats 'lesionSinOferta' vio (proxy de bloques perdidos)
   let legendariasEnCarrera = 0; // solo cartas/eventos DURANTE la carrera (no creación)
@@ -246,7 +270,12 @@ function jugarCarrera(semilla, {
     beats += 1;
     accionesJugadas += 1;
 
-    if (beat.tipo === 'mejora') {
+    if (beat.tipo === 'resumenAnio') {
+      // Un click para cerrarlo (leer y "Seguir") — ya contado arriba, igual
+      // que cualquier otro beat de una sola pantalla. Nada que aplicar al
+      // jugador: es de solo lectura.
+      resumenesAnio += 1;
+    } else if (beat.tipo === 'mejora') {
       const cartas = beat.datos.cartas;
       const elegida = elegirMejor(cartas, (c) => puntajeMods(c.mods), { evitarLegendarias });
       if (elegida.rareza === 'legendaria') legendariasEnCarrera += 1;
@@ -267,6 +296,46 @@ function jugarCarrera(semilla, {
       // se cuenta para el informe. Cuenta como UN beat estructural (leer el
       // resumen), no una acción por cada pelea del lote.
       peleasTramite += beat.datos.resultados.length;
+    } else if (beat.tipo === 'tramiteDestacado') {
+      // Pedidos 1/2 (v7, "que se anuncie antes" + "que se juegue un poco",
+      // ~30% de los lotes con trámite — PROB_DESTACADO_TRAMITE, tramite.js):
+      // el destacado del lote se juega de verdad, ronda a ronda (corrección
+      // del coordinador: "el pick del jugador no puede ser cosmético") — se
+      // simula acá con el motor REAL (resolverRondaMinijuego, tramite.js),
+      // no con un número inventado, para medir el presupuesto de minutos de
+      // verdad. "Jugando bien" siempre elige la MISMA acción táctica
+      // ('tecnico'): en un ciclo de 3 simultáneo y sesgado solo por la
+      // media (nunca por lo que el jugador elige, ver el comentario grande
+      // de resolverRondaMinijuego), cuál de las tres se elija no cambia la
+      // distribución agregada de resultados — el ciclo es simétrico. El
+      // beat en sí YA sumó 1 acción arriba (la tarjeta + "Simular pelea",
+      // la primera pantalla del beat); acá se agregan las rondas que hizo
+      // falta jugar y el resultado final ("Seguir").
+      peleasTramite += 1;
+      const { oferta, alMejorDe } = beat.datos;
+      const necesarias = rondasParaGanar(alMejorDe);
+      let puntosJugador = 0;
+      let puntosRival = 0;
+      let rondasJugadas = 0;
+      while (puntosJugador < necesarias && puntosRival < necesarias) {
+        rondasJugadas += 1;
+        const { resultado } = resolverRondaMinijuego(rngCosmetico, {
+          jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: 'tecnico',
+        });
+        if (resultado === 'jugador') puntosJugador += 1; else puntosRival += 1;
+      }
+      const { metodo, ganador } = resultadoDeMarcador({ jugador: puntosJugador, rival: puntosRival }, alMejorDe);
+      const round = roundDeCierreMinijuego(rngCosmetico, { jugador: partida.jugador, oferta, metodo });
+      const resuelto = aplicarResultado(partida.jugador, {
+        oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: partida.semanaGlobal,
+      });
+      partida = { ...partida, jugador: resuelto.jugador };
+
+      const accionesDestacado = rondasJugadas /* rondas del minijuego */
+        + 1; /* resultado final + "Seguir" */
+      accionesJugadas += accionesDestacado;
+      accionesTramiteDestacado += accionesDestacado;
+      tramitesDestacados += 1;
     } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
       // No se puede simular el minijuego de reacción; se asume un desempeño
       // "bien" (velocidad +2 — bug v4: MS_BIEN no se exigía y el mod era de
@@ -280,6 +349,7 @@ function jugarCarrera(semilla, {
         const r = resolverPeleaDeCampamento(partida.jugador, beat.datos.oferta, rival, {
           rngLesion: simularLesiones ? rngCosmetico : null,
           rngSombra: rngCosmetico,
+          semanaGlobal: partida.semanaGlobal,
         });
         if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
         peleasJugables += 1;
@@ -300,6 +370,7 @@ function jugarCarrera(semilla, {
         const r = resolverPeleaDeCampamento(partida.jugador, oferta, rival, {
           rngLesion: simularLesiones ? rngCosmetico : null,
           rngSombra: rngCosmetico,
+          semanaGlobal: partida.semanaGlobal,
         });
         if (!teniaLesionAntes && r.jugador.estado.lesion) lesiones += 1;
         peleasJugables += 1;
@@ -331,10 +402,22 @@ function jugarCarrera(semilla, {
     accionesJugadas,
     peleasJugables,
     peleasTramite,
+    tramitesDestacados,
+    accionesTramiteDestacado,
+    resumenesAnio,
     peleasProfesionalesTotales,
     defensas,
     lesiones,
     bloquesLesionado,
+    // v7, corrección del coordinador ("las lesiones tienen que costar de
+    // verdad, evaluadas semana a semana"): cuántos CUPOS de pelea (no
+    // bloques enteros) se perdieron por seguir lesionado en el momento
+    // puntual de ese cupo — ver `ofertasPerdidasPorLesion` en career.js
+    // (armarCola) y `bloqueados` en armarLotePeleas (tramite.js). Es la
+    // métrica real de "cuánto cuesta" la regla "cualquier lesión activa
+    // bloquea la oferta", más fina que `bloquesLesionado` (que solo cuenta
+    // los años en los que TODOS los cupos se perdieron).
+    ofertasPerdidasPorLesion: partida.jugador.ofertasPerdidasPorLesion ?? 0,
     tresCinturones,
     mediaFinal,
     mediaAMitad,
@@ -350,6 +433,9 @@ function resumen(nombre, resultados) {
   const acciones = resultados.map((r) => r.accionesJugadas);
   const peleasJugables = resultados.map((r) => r.peleasJugables);
   const peleasProTotales = resultados.map((r) => r.peleasProfesionalesTotales);
+  const tramitesDestacados = resultados.map((r) => r.tramitesDestacados);
+  const accionesTramiteDestacado = resultados.map((r) => r.accionesTramiteDestacado);
+  const resumenesAnio = resultados.map((r) => r.resumenesAnio);
   const medias = resultados.map((r) => r.mediaFinal);
   const mediasAMitad = resultados.map((r) => r.mediaAMitad);
   const con3 = resultados.filter((r) => r.tresCinturones).length;
@@ -378,6 +464,17 @@ function resumen(nombre, resultados) {
   console.log(`  => minutos estimados (${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(acciones) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p50=${(percentil(acciones, 50) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p90=${(percentil(acciones, 90) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min`);
   console.log(`peleas JUGABLES/carrera: avg=${avg(peleasJugables).toFixed(2)} min=${Math.min(...peleasJugables)} max=${Math.max(...peleasJugables)}`);
   console.log(`peleas PROFESIONALES TOTALES (jugables+trámite)/carrera: avg=${avg(peleasProTotales).toFixed(2)} min=${Math.min(...peleasProTotales)} max=${Math.max(...peleasProTotales)} | dentro[30,40]=${((peleasProTotales.filter((x) => x >= 30 && x <= 40).length / n) * 100).toFixed(1)}%`);
+  // Pedidos 1/2 (v7): impacto del minijuego de trámite en el presupuesto de
+  // minutos — cuántos combates de trámite por carrera se juegan con tarjeta
+  // + minijuego (uno como mucho por lote), y cuántas ACCIONES EXTRA (más
+  // allá de la que ya contaba el beat) costó eso.
+  console.log(`trámites destacados (con minijuego)/carrera: avg=${avg(tramitesDestacados).toFixed(2)} | acciones EXTRA que sumó el minijuego/carrera: avg=${avg(accionesTramiteDestacado).toFixed(1)}`);
+  // Resumen de fin de año (pedido del usuario, esta ronda): solo aparece en
+  // años con al menos una pelea (peleasDelAnio.length>0 — ver
+  // anioTieneAlgoQueContar, year-summary.js), sobre 24 bloques/años posibles.
+  // Cada uno cuenta como 1 acción más (ya sumada arriba, en accionesJugadas):
+  // esta línea aísla el costo para que quede visible por separado.
+  console.log(`resúmenes de año mostrados/carrera (de 24 años posibles): avg=${avg(resumenesAnio).toFixed(2)} min=${Math.min(...resumenesAnio)} max=${Math.max(...resumenesAnio)} | minutos que suman (${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(resumenesAnio) * SEGUNDOS_POR_BEAT / 60).toFixed(2)} min`);
   console.log(`3 cinturones: ${con3}/${n} = ${((con3 / n) * 100).toFixed(2)}%`);
   console.log(`carreras sin ninguna defensa obligatoria: ${sinDefensas}/${n} = ${((sinDefensas / n) * 100).toFixed(2)}%`);
   console.log(`MEDIA a mitad de carrera (bloque ${MITAD_BLOQUE}/24, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
@@ -428,10 +525,15 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   const con3 = conLesiones.filter((r) => r.tresCinturones).length;
   const lesionesPromedio = avg(conLesiones.map((r) => r.lesiones));
   const bloquesLesionadoPromedio = avg(conLesiones.map((r) => r.bloquesLesionado));
+  // v7: `ofertasPerdidasPorLesion` es la métrica que de verdad responde "¿la
+  // regla existe?" — cuántos CUPOS de pelea puntuales se perdieron por seguir
+  // lesionado en ese momento (ver el comentario grande en jugarCarrera, más
+  // arriba), no solo cuántos AÑOS enteros quedaron en blanco.
+  const ofertasPerdidasPromedio = avg(conLesiones.map((r) => r.ofertasPerdidasPorLesion));
   console.log('\n=== Costo real de "cualquier lesión bloquea" (mismas semillas, creación real) ===');
   console.log(`peleas jugables/carrera: sin lesiones=${avg(peleasJugablesSinLesiones).toFixed(2)} | con lesiones reales=${avg(peleasJugablesConLesiones).toFixed(2)} | diferencia=${(avg(peleasJugablesSinLesiones) - avg(peleasJugablesConLesiones)).toFixed(2)}`);
   console.log(`3 cinturones con lesiones reales: ${con3}/${N} = ${((con3 / N) * 100).toFixed(2)}%`);
-  console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | beats "lesionSinOferta" vistos por carrera: avg=${bloquesLesionadoPromedio.toFixed(2)}`);
+  console.log(`lesiones sufridas por carrera: avg=${lesionesPromedio.toFixed(2)} | ofertas/cupos PERDIDOS por lesión: avg=${ofertasPerdidasPromedio.toFixed(2)} por carrera | años ENTEROS en blanco ("lesionSinOferta"): avg=${bloquesLesionadoPromedio.toFixed(2)}`);
 }
 
 // Comparación directa techo (promedio real) vs piso (mismas 500 semillas, sin
@@ -457,7 +559,17 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   console.log(`Peleas profesionales/carrera: avg=${avg(r.map((x) => x.peleasProfesionalesTotales)).toFixed(1)} (objetivo: 30-40)`);
   console.log(`Beats jugados (acciones con el mando)/carrera: avg=${avg(r.map((x) => x.accionesJugadas)).toFixed(1)}`);
   console.log(`Minutos estimados (supuesto: ${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min (objetivo: ~20 min)`);
+  // Resumen de fin de año (pedido del usuario, esta ronda): impacto aislado
+  // sobre el total de arriba — cuántos minutos de los `accionesJugadas` ya
+  // contados son el resumen (avg(resumenesAnio) acciones, 1 cada uno).
+  const resumenesAnioProm = avg(r.map((x) => x.resumenesAnio));
+  const minutosSinResumen = (avg(r.map((x) => x.accionesJugadas)) - resumenesAnioProm) * SEGUNDOS_POR_BEAT / 60;
+  const minutosConResumen = avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60;
+  console.log(`  de los cuales, resumen de fin de año: avg=${resumenesAnioProm.toFixed(2)} resúmenes/carrera (de 24 años) => minutos SIN resumen=${minutosSinResumen.toFixed(1)} min | CON resumen=${minutosConResumen.toFixed(1)} min`);
   console.log(`3 cinturones: ${((r.filter((x) => x.tresCinturones).length / r.length) * 100).toFixed(1)}% (objetivo: >=85%)`);
   console.log(`MEDIA a mitad de carrera: avg=${avg(r.map((x) => x.mediaAMitad)).toFixed(1)}`);
   console.log(`MEDIA final: avg=${avg(r.map((x) => x.mediaFinal)).toFixed(1)}`);
+  // Pedidos 1/2 (v7): cuánto de esos minutos es el minijuego de trámite.
+  const accionesExtraTramite = avg(r.map((x) => x.accionesTramiteDestacado));
+  console.log(`  de las cuales, acciones EXTRA del minijuego de trámite: avg=${accionesExtraTramite.toFixed(1)} (${(accionesExtraTramite * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min) sobre ${avg(r.map((x) => x.tramitesDestacados)).toFixed(1)} destacados/carrera`);
 }

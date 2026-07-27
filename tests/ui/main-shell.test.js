@@ -1,4 +1,4 @@
-// Verificación de punta a punta del cableado de main.js pedido en la Task
+﻿// Verificación de punta a punta del cableado de main.js pedido en la Task
 // 3.2: los beats mejora/evento/redes/sparring se montan en la región central
 // del shell con los tres paneles laterales dibujados, y ya no hay pantalla de
 // resultado (se reemplaza por el desenlace dentro de la misma región).
@@ -9,10 +9,16 @@
 // buscado, y esa partida (todavía CON ese beat pendiente) se guarda en un
 // storage falso: iniciar() la carga igual que cargaría cualquier partida
 // guardada de verdad.
+//
+// Pedido 3 (v7, "no quiero que se vea 'lo que viene ahora'"): `iniciar()`
+// sobre una partida guardada ya NO pasa por una pantalla intermedia con un
+// botón "Continuar" — muestra derecho el beat que estaba pendiente cuando se
+// guardó. Por eso estos tests ya no necesitan un paso previo de "continuar":
+// el beat buscado por `avanzarHasta` aparece apenas se llama a `iniciar()`.
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida, siguienteBeat } from '../../src/core/career.js';
-import { guardar } from '../../src/core/save.js';
+import { guardar, cargar } from '../../src/core/save.js';
 import { CLAVE_ACCESO } from '../../src/ui/screens/login.js';
 import { iniciar } from '../../src/main.js';
 
@@ -97,22 +103,9 @@ afterEach(() => {
   window.matchMedia = matchMediaOriginal;
 });
 
-function continuar() {
-  const boton = cont.querySelector('[data-accion="siguiente"]');
-  expect(boton).toBeTruthy();
-  boton.click();
-  // "Continuar" tira el dado (Task v3) antes de revelar la siguiente
-  // decisión: con prefers-reduced-motion resuelve en el momento (este avance
-  // es un no-op), pero los bloques que prueban temporizadores reales
-  // (motion sin reducir) necesitan pasar los 600-900ms de esa animación
-  // antes de que el próximo beat aparezca. 900ms cubre de sobra el máximo.
-  vi.advanceTimersByTime(900);
-}
-
 describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', () => {
-  it('mejora: el shell se monta con los 3 paneles y tarjetas de mejora; elegir aplica el efecto y vuelve derecho al estado ocioso, sin pantalla de resultado', () => {
+  it('mejora: el shell se monta con los 3 paneles y tarjetas de mejora; elegir aplica el efecto y pasa derecho a la próxima tarjeta, sin pantalla de resultado', () => {
     iniciar(cont, prepararPartidaGuardada('mejora'));
-    continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
@@ -126,20 +119,22 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta, .panel-decision-grilla-2 .tarjeta');
     expect(tarjetas.length).toBeGreaterThanOrEqual(2);
 
-    tarjetas[0].click();
+    const tarjetaElegida = tarjetas[0];
+    tarjetaElegida.click();
     vi.runAllTimers();
 
-    // Sin pantalla de resultado ni botón "Seguir" (pedido v3): se vuelve
-    // DIRECTO al estado ocioso, en la MISMA región central del MISMO shell —
-    // nunca se navegó a otra pantalla.
+    // Sin pantalla de resultado ni pantalla intermedia (Pedido 3, v7): se
+    // pasa DIRECTO a la próxima tarjeta de acción, en la MISMA región
+    // central del MISMO shell — nunca se navegó a otra pantalla, y el
+    // bloque de contenido ya no muestra la grilla de mejora que se acaba de
+    // resolver.
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(tarjetaElegida)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
   it('mejora con cantidad reducida (2 cartas): el texto dice "dos" y usa la grilla de 2 columnas (pedido del coordinador, v4)', () => {
     iniciar(cont, prepararPartidaGuardadaMejoraReducida(1));
-    continuar();
 
     expect(cont.textContent).toContain('El dado trajo dos mejoras. Elegí una.');
     expect(cont.textContent).not.toContain('trajo tres mejoras');
@@ -151,10 +146,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
-  it('evento sin azar: aplica directo y vuelve al estado ocioso, sin navegar a otra pantalla ni mostrar un desenlace', () => {
+  it('evento sin azar: aplica directo y pasa a la próxima tarjeta, sin navegar a otra pantalla ni mostrar un desenlace', () => {
     // semilla 2 -> carta "amigos", ninguna opcion tiene probabilidades
     // (verificado aparte con el catalogo real): ejercita el camino sin roll.
     // (Antes era la semilla 6: la Ronda v6 -roster de 100, Pedido 1- corrió
@@ -162,32 +157,31 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     // consume muchas más tiradas con 100 rivales que con 12-, así que 6 dejó
     // de llegar a esta carta puntual; 2 sí.)
     iniciar(cont, prepararPartidaGuardada('evento', 2));
-    continuar();
 
     const grilla = cont.querySelector('.panel-decision-grilla, .panel-decision-grilla-2');
     expect(grilla).toBeTruthy();
     const tarjetas = [...grilla.querySelectorAll('.tarjeta')];
     expect(tarjetas.length).toBeGreaterThanOrEqual(2);
 
-    tarjetas[0].click();
+    const tarjetaElegida = tarjetas[0];
+    tarjetaElegida.click();
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(tarjetaElegida)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
-  it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y vuelve al estado ocioso', () => {
-    // semilla 6 -> el PRIMER beat 'evento' de esta carrera es justo la carta
+  it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y pasa a la próxima tarjeta', () => {
+    // semilla 16 -> el PRIMER beat 'evento' de esta carrera es justo la carta
     // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
     // cards-events.js), cuya opción "aceptar" tiene probabilidades
-    // (verificado aparte): ejercita el camino con roll. (Antes era la
-    // semilla 18: la Ronda v6 -roster de 100, Pedido 1- corrió la secuencia
-    // de rng de toda la carrera desde el arranque -crearRoster consume
-    // muchas más tiradas con 100 rivales que con 12-, así que 18 dejó de
-    // llegar a esta carta puntual; 6 sí.)
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
-    continuar();
+    // (verificado aparte): ejercita el camino con roll. Esta semilla se
+    // reeligió dos veces por el mismo motivo (cualquier cambio de contenido
+    // que consuma rng en el camino corre la secuencia entera): primero 6->10
+    // (v7, "más parodias") y ahora 10->16 (cartas nuevas de condiciones
+    // situacionales, commits 7320e36/09ce595, ajenos a esta ronda).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
     // del rediseño (spec: "el tablero nunca desaparece"). Si el shell se
@@ -219,10 +213,11 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(resultado).toBeTruthy();
     expect(resultado.textContent).toMatch(/El barrio entero se entera|la lección aprendida/);
 
-    // Todavía no se aplicó el efecto ni se volvió al estado ocioso: la
+    // Todavía no se aplicó el efecto ni se pasó a la próxima tarjeta: la
     // tarjeta con el resultado se deja un momento a la vista (pausa de
-    // lectura) antes de seguir.
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeNull();
+    // lectura) antes de seguir — la propia tarjeta elegida sigue montada tal
+    // cual.
+    expect(cont.contains(tarjetaAzar)).toBe(true);
 
     vi.runAllTimers();
 
@@ -235,30 +230,35 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
     expect(cont.querySelectorAll('.shell')).toHaveLength(1);
 
-    // Sin pantalla de resultado: derecho al estado ocioso.
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    // Sin pantalla de resultado propia de ESTA carta: derecho a la próxima
+    // tarjeta de acción (Pedido 3, v7) — sea cual sea su forma (puede, de
+    // hecho, ser otro desenlace: un aviso, o el anuncio de un trámite).
+    expect(cont.contains(tarjetaAzar)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
   it('redes: se monta en el shell con 3 tarjetas y resolver una opcion no navega a otra pantalla', () => {
-    // semilla 3: la Ronda v6 (roster de 100, Pedido 1) corrió la secuencia
-    // de rng de toda la carrera desde el arranque (crearRoster consume
-    // muchas más tiradas con 100 rivales que con 12) — la semilla 2 usada
-    // antes dejó de llegar a un beat "redes" dentro de las 500 iteraciones
-    // de avanzarHasta; 3 sí (carta "post_barrio", 3 opciones).
-    iniciar(cont, prepararPartidaGuardada('redes', 3));
-    continuar();
+    // semilla 6: la corrección del coordinador ("el pick del jugador no
+    // puede ser cosmético") rehizo el minijuego de trámite entero —
+    // resolverRondaMinijuego consume otras tiradas de rng dentro de
+    // armarLotePeleas, así que corre la secuencia entera de la carrera de
+    // nuevo (mismo motivo que ya movió esta semilla varias veces antes) — la
+    // semilla 4 usada hasta acá dejó de llegar a un beat "redes" dentro de
+    // las 500 iteraciones de avanzarHasta; 6 sí (carta "post_rival", 3
+    // opciones).
+    iniciar(cont, prepararPartidaGuardada('redes', 6));
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     const tarjetas = cont.querySelectorAll('.panel-decision-grilla .tarjeta');
     expect(tarjetas).toHaveLength(3);
 
-    tarjetas[2].click();
+    const tarjetaElegida = tarjetas[2];
+    tarjetaElegida.click();
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(tarjetaElegida)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
   // Revisión del coordinador tras la Task 6.1: aceptar o rechazar una oferta
@@ -269,7 +269,6 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   // (negociación → careo → plan → pelea), que sigue intacta.
   it('oferta: la tarjeta de aceptar/rechazar vive en el centro del tablero (con calendario y peleador visibles); rechazar resuelve ahi mismo', () => {
     iniciar(cont, prepararPartidaGuardada('oferta'));
-    continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-derecha').textContent).toContain('Dinero');
@@ -279,53 +278,135 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
 
     const refIzquierda = cont.querySelector('.shell-izquierda');
     const refDerecha = cont.querySelector('.shell-derecha');
+    const contenidoAntes = cont.querySelector('[data-bloque="contenido"]');
 
     cont.querySelector('.shell-centro [data-accion="rechazar"]').click();
 
     // Rechazar resuelve DENTRO del mismo tablero (mismo nodo): nunca se
     // desmonta, a diferencia de lo que pasaba antes de esta revisión. Y
-    // (Task v3) sin pantalla de resultado: derecho al estado ocioso.
+    // (Pedido 3, v7) sin pantalla de resultado propia: derecho a la próxima
+    // tarjeta — el bloque de contenido se repintó de punta a punta.
     expect(cont.querySelector('.shell-izquierda')).toBe(refIzquierda);
     expect(cont.querySelector('.shell-derecha')).toBe(refDerecha);
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(contenidoAntes)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
-  // v6, segunda vuelta ("no todas las peleas se juegan igual"): la mayoría
-  // de las peleas de una carrera se resuelven solas — este beat es el
-  // resumen con sabor de ese lote (armarLotePeleas/resumenLote, tramite.js),
-  // ya aplicado al jugador ANTES de que este beat exista. Mismo layout que
-  // cualquier otro desenlace (título + texto + Seguir), con el detalle de
-  // cada combate como "deltas".
-  it('peleasResueltas: muestra el resumen de tramite (con detalle de cada combate) y Seguir vuelve al estado ocioso', () => {
-    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 1));
-    continuar();
+  // v6: el lote de trámite (cuando NO sacó destacado, ver tramiteDestacado
+  // más abajo) sigue siendo el resumen de siempre: título + texto + Seguir,
+  // sin ninguna tarjeta interactiva.
+  it('peleasResueltas: muestra el resumen de tramite (con detalle de cada combate) y Seguir pasa a la próxima tarjeta', () => {
+    iniciar(cont, prepararPartidaGuardada('peleasResueltas', 3));
 
-    expect(cont.querySelector('.shell')).toBeTruthy();
     const desenlace = cont.querySelector('.panel-decision-desenlace');
     expect(desenlace).toBeTruthy();
     expect(desenlace.textContent.length).toBeGreaterThan(0);
 
-    cont.querySelector('.panel-decision-desenlace .boton').click();
+    desenlace.querySelector('.boton').click();
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(desenlace)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+  });
+
+  // Pedidos 1 y 2 (v7, "que se anuncie antes" + "que se juegue un poco"): el
+  // destacado del lote de trámite (a lo sumo uno por lote, ver
+  // PROB_DESTACADO_TRAMITE en tramite.js) ya no aparece resuelto de la
+  // nada. Es su PROPIO beat ('tramiteDestacado', corrección del coordinador:
+  // antes vivía adentro de 'peleasResueltas' con un marcador precalculado —
+  // ahora cada ronda se juega de verdad, en el momento). Se juega en dos
+  // fases: la tarjeta del rival (con el anuncio del entrenador ya adentro —
+  // activa panel-proxima.js) -> minijuego (piedra/papel/tijera de boxeo,
+  // ronda a ronda de verdad) -> resultado, con Seguir pasando derecho a la
+  // próxima tarjeta (Pedido 3).
+  it('tramiteDestacado: muestra la tarjeta del destacado (con el anuncio adentro, activa próxima pelea), se juega el minijuego ronda a ronda de verdad y el resultado pasa a la próxima tarjeta', () => {
+    const storage = prepararPartidaGuardada('tramiteDestacado', 1);
+    iniciar(cont, storage);
+
+    // Fase 1: la tarjeta del rival, con la voz del entrenador, la bolsa y
+    // cuánto falta ya adentro — activa panel-proxima.js (columna derecha).
+    const boton = cont.querySelector('[data-accion="simular-pelea"]');
+    expect(boton).toBeTruthy();
+    expect(cont.querySelector('.cabecera-media')).toBeTruthy();
+    expect(cont.querySelector('.shell-derecha').textContent).not.toContain('Todavía no hay nada firmado');
+    boton.click();
+
+    // Fase 2: el minijuego — al mejor de 3 o de 5 (alMejorDeCuantos). Se
+    // juega hasta que aparezca el resultado final (mismo patrón que el
+    // drill de sparring más abajo en este archivo). Cada click resuelve una
+    // ronda DE VERDAD (resolverRondaMinijuego, con el rng de sesión) — no
+    // hay ningún marcador precalculado esperando a mostrarse.
+    let guardia = 0;
+    while (!cont.querySelector('.panel-decision-desenlace') && guardia < 10) {
+      const grilla = cont.querySelector('.panel-decision-grilla');
+      expect(grilla).toBeTruthy();
+      const tarjetas = grilla.querySelectorAll('.tarjeta');
+      expect(tarjetas).toHaveLength(3);
+      tarjetas[0].click();
+      guardia += 1;
+    }
+    expect(guardia).toBeLessThan(10);
+
+    // Fase 3: el resultado — Seguir pasa DIRECTO a la próxima tarjeta (sin
+    // pantalla intermedia, Pedido 3) y la próxima pelea ya se limpió.
+    const resultado = cont.querySelector('.panel-decision-desenlace');
+    expect(resultado.textContent.length).toBeGreaterThan(0);
+    expect(cont.querySelector('.shell-derecha').textContent).toContain('Todavía no hay nada firmado');
+
+    resultado.querySelector('.boton').click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.contains(resultado)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
+
+    // Resumen de fin de año (pedido del usuario): el destacado de trámite
+    // tiene que quedar fechado en el historial, igual que cualquier otra
+    // pelea — antes de este fix (main.js pasa `semanaGlobal` a
+    // aplicarResultado), quedaba con `fecha: null`, invisible para el filtro
+    // por año (peleasDelAnio, year-summary.js). Puede haber caído en
+    // `historial` (profesional) o `historialAmateur` (formación, si el
+    // destacado salió en juvenil/amateur — ambos casos son válidos, ver
+    // aplicarResultado en offers.js) — se busca en los dos.
+    const guardado = cargar(storage);
+    const ultima = guardado.jugador.historial.at(-1) ?? guardado.jugador.historialAmateur.at(-1);
+    expect(ultima).toBeTruthy();
+    expect(typeof ultima.fecha).toBe('number');
+  });
+
+  // Resumen de fin de año (pedido textual del usuario): al cerrar un año con
+  // al menos una pelea, aparece este beat ANTES que la mejora del año nuevo
+  // (ver siguienteBeat, career.js) — con el grafico de media, las decisiones
+  // tomadas y las peleas del año, y un solo "Seguir" que pasa derecho a la
+  // próxima tarjeta, sin pantalla intermedia (mismo criterio que el resto
+  // del tablero, Pedido 3 v7).
+  it('resumenAnio: muestra el resumen del año que cerró y "Seguir" pasa derecho a la próxima tarjeta', () => {
+    iniciar(cont, prepararPartidaGuardada('resumenAnio', 2));
+
+    expect(cont.querySelector('.grafico-media, .grafico-media-vacio')).toBeTruthy();
+    const boton = [...cont.querySelectorAll('button')].find((b) => b.textContent === 'Seguir');
+    expect(boton).toBeTruthy();
+    const contenidoAntes = cont.querySelector('[data-bloque="contenido"]');
+
+    boton.click();
+    vi.runAllTimers();
+
+    expect(cont.querySelector('.shell')).toBeTruthy();
+    expect(cont.contains(contenidoAntes)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
   it('sparring: se monta en el shell (grilla de paos) y terminar el drill aplica el resultado y vuelve al estado ocioso, sin pantalla aparte', () => {
-    // semilla 2: con el rebalance del campamento (Task v3), probSparring bajó
+    // semilla 3: con el rebalance del campamento (Task v3), probSparring bajó
     // fuerte (0 en profesional/veterano — el campamento ya lo garantiza en
     // cada pelea, ver campamento.js), así que un "sparring" suelto solo
-    // puede salir en los 6 bloques de juvenil/amateur. Sistema 2 (segunda
-    // ronda, corrección del coordinador): las opciones extra de
-    // repartirMejoras en esas mismas etapas (cards.js) consumen más tiradas
-    // de rng por bloque, así que corrieron la secuencia y la semilla 3 (que
-    // antes sí llegaba) dejó de encontrar un "sparring" dentro del límite de
-    // búsqueda — 2 sí lo encuentra.
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
-    continuar();
+    // puede salir en los 6 bloques de juvenil/amateur. v7 ("más parodias", 46
+    // en vez de 19) volvió a correr la secuencia de rng desde el arranque
+    // (crearRoster arranca con menos candidatos aleatorios cuando hay más
+    // parodias fijas para insertar) — la semilla 2 (que venía encontrando un
+    // "sparring") dejó de hacerlo dentro del límite de búsqueda; 3 sí.
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.grilla-paos')).toBeTruthy();
@@ -342,17 +423,17 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
 
     const terminar = cont.querySelector('[data-accion="terminar"]');
     expect(terminar).toBeTruthy();
+    const contenidoAntes = cont.querySelector('[data-bloque="contenido"]');
     terminar.click();
     vi.runAllTimers();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(contenidoAntes)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 
   it('ir a la ficha desde dentro de una decision descarta el shell, y volver lo reconstruye sin perder el beat pendiente', () => {
     iniciar(cont, prepararPartidaGuardada('mejora'));
-    continuar();
 
     // No se fija un número exacto de tarjetas (decidirCantidadMejoras reparte
     // 2 o 3, ver cards.js) — lo que este test verifica es la navegación a la
@@ -434,7 +515,6 @@ describe('main.js: "se cae la pelea" cancela de verdad la oferta pendiente (no s
 
   it('elegir la rama que cae la pelea saca la oferta de la cola de verdad (no solo del texto); el panel de la derecha nunca mostró al rival sin firmar', () => {
     iniciar(cont, partidaConOfertaYCartaDeRiesgo());
-    continuar();
 
     // Antes de elegir: la oferta todavía no se firmó (sigue sin decidir), así
     // que el panel de "próxima pelea" (columna derecha) sigue en el estado
@@ -471,14 +551,10 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('entrar a la Ficha durante el roll y dejar que el timer termine en segundo plano no borra la Ficha', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 6 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
+    // semilla 16 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
-    // roll; era la semilla 50 antes de la Ronda v6 -roster de 100, Pedido
-    // 1-, que corrió la secuencia de rng de toda la carrera desde el
-    // arranque -crearRoster consume muchas más tiradas con 100 rivales que
-    // con 12-).
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
-    continuar();
+    // roll — ver el comentario grande ahí).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
@@ -517,9 +593,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 6: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 6));
-    continuar();
+    // semilla 16: mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 16));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
@@ -530,12 +605,12 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
 
     cont.querySelector('[data-accion="cerrar"]').click();
 
-    // De vuelta en el tablero: directo al estado ocioso (no las 3 tarjetas
-    // de la carta de nuevo, ni ninguna pantalla de resultado).
+    // De vuelta en el tablero: directo a la próxima tarjeta (no las 3
+    // tarjetas de la carta de nuevo).
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.panel-decision-grilla')).toBeNull();
-    expect(cont.querySelector('.panel-decision-desenlace')).toBeNull();
-    expect(cont.querySelector('[data-accion="siguiente"]')).toBeTruthy();
+    expect(cont.contains(tarjetaAzar)).toBe(false);
+    expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 });
 
@@ -553,8 +628,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
     // semilla 3: mismo caso ya usado más arriba para llegar a un beat
     // "sparring" suelto (en profesional/veterano probSparring es 0 — el
     // campamento ya lo garantiza en cada pelea).
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
-    continuar();
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
 
     expect(cont.querySelector('.grilla-paos')).toBeTruthy();
     cont.querySelector('[data-accion="empezar"]').click();
@@ -582,8 +656,7 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
   // "Golpes" tiene que seguir en 0: el timer pendiente se corta ANTES de que
   // la Ficha reemplace la pantalla (abandonarSparringPendiente).
   it('el sparring no avanza solo en segundo plano mientras el jugador está en la Ficha', () => {
-    iniciar(cont, prepararPartidaGuardada('sparring', 2));
-    continuar();
+    iniciar(cont, prepararPartidaGuardada('sparring', 3));
 
     cont.querySelector('[data-accion="empezar"]').click();
     cont.querySelector('[data-accion="historial"]').click();
@@ -627,7 +700,6 @@ describe('main.js: la tienda abierta durante un beat refresca el panel de dinero
 
   it('comprar dentro del popup actualiza la plata detrás, sin cerrar el popup ni tocar el centro del shell ni el resto de la derecha', () => {
     iniciar(cont, partidaConBeatYPlata(200000));
-    continuar();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     const refCentro = cont.querySelector('.shell-centro');
@@ -665,7 +737,6 @@ describe('main.js: la tienda abierta durante un beat refresca el panel de dinero
 
   it('un item impagable dentro del popup no rompe nada y el panel de atrás sigue mostrando la misma plata', () => {
     iniciar(cont, partidaConBeatYPlata(0));
-    continuar();
 
     cont.querySelector('.shell-derecha [data-accion="tienda"]').click();
     const dineroAntes = cont.querySelector('.shell-derecha').textContent.match(/US\$\s?[\d.,]+[A-Z]?/)?.[0];

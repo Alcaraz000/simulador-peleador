@@ -4,6 +4,8 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import {
   decidirLargoCampamento, elegirCartaCampamento, armarBeatsCampamento, SEMANAS_POR_BEAT_CAMPAMENTO,
 } from '../../src/core/campamento.js';
+import { CARTAS_CAMPAMENTO } from '../../src/content/cards-camp.js';
+import { porcentajesDe } from '../../src/core/cards.js';
 
 const jugador = () => crearPeleador({
   nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
@@ -46,12 +48,20 @@ describe('decidirLargoCampamento', () => {
 });
 
 describe('elegirCartaCampamento', () => {
-  it('rellena el marcador {rival} con el apodo del rival en texto y opciones', () => {
-    const rng = createRng(1);
-    const oferta = { rivalApodo: 'El Zurdo', esTitulo: false };
-    const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta });
-    expect(carta.texto).not.toMatch(/\{rival\}/);
-    carta.opciones.forEach((o) => expect(o.texto).not.toMatch(/\{rival\}/));
+  it('rellena el marcador {rival} con el apodo del rival en titulo, texto y opciones', () => {
+    // Bug real (encontrado por tests/ui/barrida-jugador.test.js con una
+    // semilla nueva): "Estudiar a {rival}" (cards-camp.js) se mostraba con
+    // el marcador crudo en pantalla — `titulo` no pasaba por `rellenar`,
+    // solo `texto` y las opciones. Se recorren varias semillas para pisar
+    // esa carta en particular sin depender de que salga en la primera.
+    for (let s = 1; s <= 30; s += 1) {
+      const rng = createRng(s);
+      const oferta = { rivalApodo: 'El Zurdo', esTitulo: false };
+      const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta });
+      expect(carta.titulo).not.toMatch(/\{rival\}/);
+      expect(carta.texto).not.toMatch(/\{rival\}/);
+      carta.opciones.forEach((o) => expect(o.texto).not.toMatch(/\{rival\}/));
+    }
   });
 
   it('nunca elige una carta que no aplique a la etapa', () => {
@@ -62,13 +72,45 @@ describe('elegirCartaCampamento', () => {
     }
   });
 
-  it('cada carta trae exactamente dos opciones con mods', () => {
+  // La intención original de este test era "ninguna opción de campamento es
+  // un cascarón vacío que no hace nada" — hasta v7 eso se cumplía siempre
+  // vía `o.mods` porque el campamento nunca tenía azar. Pedido 2 (v7, "más
+  // tarjetas de %... también en el campamento") suma opciones con
+  // `probabilidades` (mismo mecanismo que evento/redes, resuelto por
+  // `resolverOpcion`): esas NO traen `mods` a nivel opción (el mod vive por
+  // rama, ver cards-camp.js), así que el chequeo tiene que aceptar cualquiera
+  // de los dos como "esta opción sí define un efecto".
+  it('cada carta trae exactamente dos opciones, y cada una define un efecto (mods fijos o probabilidades)', () => {
     for (let s = 1; s <= 50; s++) {
       const rng = createRng(s);
       const carta = elegirCartaCampamento(rng, { etapa: 'profesional', oferta: { rivalApodo: 'X', esTitulo: false } });
       expect(carta.opciones.length).toBe(2);
-      carta.opciones.forEach((o) => expect(o.mods).toBeTruthy());
+      carta.opciones.forEach((o) => expect(o.mods || o.probabilidades).toBeTruthy());
     }
+  });
+
+  // Pedido 2 (v7, "más tarjetas de %... también en el campamento"): antes de
+  // esta ronda CARTAS_CAMPAMENTO no tenía ninguna carta con azar.
+  describe('cartas de azar nuevas en el campamento (Pedido 2, v7)', () => {
+    const conAzar = () => CARTAS_CAMPAMENTO.filter((c) => c.opciones.some((o) => o.probabilidades));
+
+    it('hay al menos 2 cartas de campamento con alguna opción de azar', () => {
+      expect(conAzar().length).toBeGreaterThanOrEqual(2);
+    });
+
+    it('siguen el patrón arriesgar-o-no (la opción segura no tiene mods) y sus ramas suman 100%', () => {
+      for (const carta of conAzar()) {
+        expect(carta.opciones).toHaveLength(2);
+        const [conProb, sinProb] = carta.opciones[0].probabilidades
+          ? [carta.opciones[0], carta.opciones[1]]
+          : [carta.opciones[1], carta.opciones[0]];
+        expect(conProb.probabilidades).toBeTruthy();
+        expect(sinProb.probabilidades).toBeFalsy();
+        expect(Object.keys(sinProb.mods ?? {})).toHaveLength(0);
+        const pct = porcentajesDe(conProb);
+        expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+      }
+    });
   });
 });
 

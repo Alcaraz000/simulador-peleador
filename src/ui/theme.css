@@ -548,33 +548,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-peleador-atributo.destaque-positivo { animation: destaque-fila-positiva 0.9s ease; }
 .panel-peleador-atributo.destaque-negativo { animation: destaque-fila-negativa 0.9s ease; }
 
-/* Dado al tocar Continuar (v3): el gesto de transición entre beats. Gira y
-   "rebota" una vez, corto (750ms), sobre el propio botón. */
-@keyframes tirar-dado {
-  0%   { transform: rotate(0deg) scale(1); }
-  30%  { transform: rotate(150deg) scale(1.18); }
-  65%  { transform: rotate(260deg) scale(0.92); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-.boton-tirando-dado {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* El botón queda disabled mientras dura (evita un segundo click a mitad de
-   camino), pero el dado no se ve apagado como un botón inactivo común: es el
-   gesto de la carrera, tiene que verse vivo mientras gira. Selector con la
-   misma especificidad que `.boton:disabled` (una clase + :disabled) para
-   pisarlo de verdad, no solo por orden de declaración. */
-.boton.boton-tirando-dado:disabled {
-  opacity: 1;
-  cursor: default;
-}
-
-.boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
-
 /* Grilla real de 3 columnas (v4): izquierda (personaje/rincón/categoría) y
    derecha (calendario+dinero/fama+próxima/noticias) con un ancho cómodo para
    sus tarjetas; el centro (atributos/estado/decisión, "el corazón" del
@@ -1639,3 +1612,63 @@ input.creacion-control { cursor: text; }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Utilidad estándar: visible para lectores de pantalla, invisible en
+   pantalla. La usa el gráfico de media (grafico-media.js) para dar una
+   "vista de tabla" de respaldo a la línea del año — nunca la única fuente de
+   la información, solo el resguardo accesible. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Resumen de fin de año (v7, pedido textual del usuario). Vive en la región
+   central del tablero, como cualquier otro beat — sin animación de entrada
+   (a propósito: "un click, sin animaciones largas", para no gastar
+   presupuesto de minutos con 24 interrupciones posibles por carrera). */
+.resumen-anio-icono {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: rgba(242, 193, 78, 0.18);
+  color: var(--dorado);
+}
+
+.resumen-anio-seccion .etiqueta { margin-bottom: 2px; }
+
+.resumen-anio-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.resumen-anio-item-icono {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--superficie-alta);
+  color: var(--texto-medio);
+}
+
+/* Gráfico de media: ancho completo del panel que lo contiene, alto fijo
+   chico (es un vistazo, no un dashboard) — igual en PC y en celular, el SVG
+   escala por su propio viewBox (ver grafico-media.js). */
+.grafico-media { width: 100%; }
+.grafico-media-svg { display: block; width: 100%; height: auto; }
+.grafico-media-vacio { margin: 0; }

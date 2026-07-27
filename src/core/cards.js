@@ -32,6 +32,67 @@ function cartaAplica(carta, { etapa, disciplina, estado }) {
   return porEtapa && porDisciplina && porEstado;
 }
 
+// Sistema 3 (feedback del usuario: "una acción dice 'doble turno como cuando
+// eras pibe' y mi personaje tiene 17 y es amateur... algunas tarjetas deben
+// depender de la situación, edad, categoría, situación actual"): `carta.
+// condiciones` es un objeto OPCIONAL con campos también opcionales — para
+// sumar una condición nueva a una carta alcanza con escribir un campo, sin
+// tocar esta función ni la de quien reparte. Los campos soportados hoy:
+//   - edadMin / edadMax: rango de edad del jugador (inclusive).
+//   - campeon: true exige al menos un cinturón puesto, false exige NINGUNO.
+//   - famaMin / famaMax: rango de fama (0-100).
+//   - dineroMin / dineroMax: rango de plata en el bolsillo.
+//   - resultadoReciente: 'victoria' | 'derrota' | 'empate' — el resultado de
+//     la ÚLTIMA pelea PROFESIONAL (jugador.historial; en juvenil/amateur ese
+//     historial todavía está vacío — ver recordAmateur/historialAmateur en
+//     fighter.js/career.js — así que una carta con esta condición nunca
+//     aplica antes del debut profesional, algo correcto: no hay "la última
+//     pelea" todavía).
+// Este catálogo de campos es EXTENSIBLE (agregar un tipo de condición nuevo
+// sí toca esta función, una vez), pero USAR uno ya existente en una carta
+// nueva es puramente declarativo.
+function cumpleCondiciones(carta, jugador) {
+  const cond = carta.condiciones;
+  if (!cond || !jugador) return true;
+
+  if (cond.edadMin != null && jugador.edad < cond.edadMin) return false;
+  if (cond.edadMax != null && jugador.edad > cond.edadMax) return false;
+
+  if (cond.campeon != null) {
+    const esCampeon = (jugador.titulos?.length ?? 0) > 0;
+    if (cond.campeon !== esCampeon) return false;
+  }
+
+  if (cond.famaMin != null && (jugador.fama ?? 0) < cond.famaMin) return false;
+  if (cond.famaMax != null && (jugador.fama ?? 0) > cond.famaMax) return false;
+
+  if (cond.dineroMin != null && (jugador.dinero ?? 0) < cond.dineroMin) return false;
+  if (cond.dineroMax != null && (jugador.dinero ?? 0) > cond.dineroMax) return false;
+
+  if (cond.resultadoReciente != null) {
+    const CODIGO_RESULTADO = { victoria: 'v', derrota: 'd', empate: 'e' };
+    const historial = jugador.historial ?? [];
+    const ultimo = historial.length > 0 ? historial[historial.length - 1].resultado : null;
+    if (ultimo !== CODIGO_RESULTADO[cond.resultadoReciente]) return false;
+  }
+
+  return true;
+}
+
+// Salvaguarda (pedido explícito: "el filtrado no puede dejar el pool
+// vacío... si las condiciones son muy exigentes en algún momento de la
+// carrera, tiene que haber siempre cartas elegibles"): filtra `pool` por
+// `cumpleCondiciones`, pero si eso deja CERO cartas (puede pasar: nada te
+// impide, sin querer, escribir una carta cuyas condiciones ningún jugador de
+// esa etapa cumple nunca) devuelve `pool` tal cual, IGNORANDO las
+// condiciones situacionales — nunca una pantalla sin nada para elegir. Quien
+// llama ya filtró `pool` por etapa/disciplina/estado/categoría antes de
+// pasarlo acá, así que ese filtro de base sigue de pie en el fallback.
+export function conSalvaguardaDeCondiciones(pool, jugador) {
+  const filtrado = pool.filter((carta) => cumpleCondiciones(carta, jugador));
+  return filtrado.length > 0 ? filtrado : pool;
+}
+
 // Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.
 // El peso es por RAREZA, no por carta: si hay cinco cartas normales y una rara, la
 // rara sigue valiendo 25% en total (no 25% dividido entre cinco competidoras).
@@ -68,6 +129,46 @@ export function elegirPorRareza(rng, elegibles, pesos = PESOS_RAREZA) {
     return { valor: carta, peso };
   });
   return rng.weighted(entradas);
+}
+
+// Bug reportado (v7, "una acción me aparece constantemente, la de 'El video
+// antes de dormir', fácil se habrá repetido 5 o 6 veces seguidas"): la causa
+// real no es que el pool sea chico (CARTAS_CAMPAMENTO tiene 17 cartas
+// elegibles en cualquier etapa) sino que `elegirPorRareza` no tiene NINGUNA
+// memoria de qué se mostró hace un instante — cada tirada es 100%
+// independiente de la anterior, así que nada le impide a la MISMA carta
+// salir de nuevo enseguida (dentro del mismo campamento, o en el que sigue).
+// Con pocas decenas de tiradas por carrera y una carta memorable (ese título
+// en particular llama la atención), un par de repeticiones cercanas alcanzan
+// para sentirse como "esto sale todo el tiempo".
+//
+// `excluirRecientes`/`recordarCarta` son el arreglo genérico (lo usan
+// elegirEvento/elegirCartaRedes/elegirCartaCampamento, los tres pools que
+// muestran UNA sola carta elegida — a diferencia de repartirMejoras, que
+// ofrece varias en simultáneo y ya garantiza "sin repetir entre sí" con
+// sortearPorRareza): una memoria CORTA (últimas `ventana` cartas vistas de
+// ESE pool) que se excluye del sorteo. Nunca vacía el pool — si excluir deja
+// cero elegibles (pool chico + ventana grande, o casi todo recién visto), se
+// cae con gracia devolviendo el pool sin filtrar, mismo criterio que
+// `conSalvaguardaDeCondiciones` (ver más arriba): más vale una repetición
+// ocasional que una pantalla sin nada para mostrar.
+//
+// La memoria viaja en la partida (`partida.memoriaCartas`, career.js) como un
+// array de ids por pool — plano, serializable, sin referencias circulares —
+// así el autoguardado la persiste sin problema y una partida retomada desde
+// localStorage sigue recordando qué vio hace un rato.
+export const MEMORIA_CARTAS_VENTANA = 4;
+
+export function excluirRecientes(pool, recientes = []) {
+  if (!recientes || recientes.length === 0) return pool;
+  const filtrado = pool.filter((carta) => !recientes.includes(carta.id));
+  return filtrado.length > 0 ? filtrado : pool;
+}
+
+export function recordarCarta(recientes = [], id, ventana = MEMORIA_CARTAS_VENTANA) {
+  if (!id) return recientes;
+  const actualizada = [...recientes, id];
+  return actualizada.length > ventana ? actualizada.slice(actualizada.length - ventana) : actualizada;
 }
 
 // Sortea `total` elementos sin repetir de `elegibles`, respetando los pesos
@@ -245,7 +346,8 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
     + bonus.opcionesExtra + opcionesExtraEtapa;
   const pesos = pesosCompensados(cantidadBase, totalQueHubieraSalido);
   const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
-  const elegibles = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
+  const elegiblesBase = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
+  const elegibles = conSalvaguardaDeCondiciones(elegiblesBase, jugador);
   const elegidas = sortearPorRareza(rng, elegibles, cantidadBase, pesos);
 
   const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;

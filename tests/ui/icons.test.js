@@ -84,6 +84,15 @@ describe('set de íconos nuevo (creación v6: origen/estilo diferenciables)', ()
   });
 });
 
+// v7: cabecera del resumen de fin de año.
+describe('icono("grafico")', () => {
+  it('se dibuja como un <svg> con al menos un <path>', () => {
+    const svg = icono('grafico');
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+});
+
 describe('icono desconocido', () => {
   it('tira un error legible', () => {
     expect(() => icono('no-existe')).toThrow(/no-existe/);

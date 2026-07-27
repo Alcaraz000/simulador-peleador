@@ -13,11 +13,13 @@ function zonasDe(posturaId) {
 
 const POSTURA_IDS = Object.keys(POSTURAS);
 
-// El cuerpo (cabeza/torso/short/guantes) ocupa aproximadamente esta franja
-// horizontal en las cuatro posturas (ver dibujarCuerpo). Las etiquetas deben
-// quedar siempre afuera de esta franja para no taparlo.
-const CUERPO_X_MIN = 175;
-const CUERPO_X_MAX = 345;
+// El cuerpo (foto del boxeador) ocupa aproximadamente esta franja horizontal
+// en las tres fotos (medido a mano sobre cubriendo-{menton,sien,higado}.webp,
+// 640x487: el brazo/guante más ancho de las tres llega hasta x=145..495; acá
+// se deja margen extra). Las etiquetas deben quedar siempre afuera de esta
+// franja para no taparlo.
+const CUERPO_X_MIN = 112;
+const CUERPO_X_MAX = 508;
 
 function parseViewBox(svg) {
   const [x, y, w, h] = svg.getAttribute('viewBox').split(/\s+/).map(Number);
@@ -109,5 +111,33 @@ describe('dibujarSilueta', () => {
     svg.querySelector('[data-zona="menton"]').dispatchEvent(new Event('click', { bubbles: true }));
     svg.querySelector('[data-zona="sien"]').dispatchEvent(new Event('click', { bubbles: true }));
     expect(llamadas).toEqual(['menton', 'sien']);
+  });
+
+  // La foto que se muestra tiene que ser coherente con qué zona está
+  // `tapado` en esa postura (pedido textual v7): si el mentón está tapado,
+  // se ve al rival cubriéndose el mentón. Dos posturas (manos_abajo y
+  // cubre_un_lado) tapan la sien y comparten la misma foto — no hay una
+  // cuarta foto disponible, y ambas leen "sien: tapado".
+  describe('la foto del cuerpo es coherente con la zona tapada', () => {
+    it.each([
+      ['guardia_alta', 'menton'],
+      ['manos_abajo', 'sien'],
+      ['cubre_un_lado', 'sien'],
+      ['contra_cuerdas', 'higado'],
+    ])('postura %s usa la foto de "cubriendo-%s"', (posturaId, zonaTapada) => {
+      // Guarda contra un typo en el propio mapeo: confirma que esa zona
+      // realmente es la tapada según POSTURAS antes de exigir la foto.
+      expect(POSTURAS[posturaId].zonas[zonaTapada]).toBe('tapado');
+
+      const svg = dibujarSilueta({ postura: posturaId, zonas: zonasDe(posturaId), onElegirZona: () => {} });
+      const imagen = svg.querySelector('[data-parte="cuerpo"] image');
+      expect(imagen).toBeTruthy();
+      expect(imagen.getAttribute('href')).toMatch(new RegExp(`cubriendo-${zonaTapada}`, 'i'));
+    });
+  });
+
+  it('la imagen del cuerpo es decorativa (aria-hidden), la info ya la da cada zona', () => {
+    const svg = dibujarSilueta({ postura: 'guardia_alta', zonas: zonasDe('guardia_alta'), onElegirZona: () => {} });
+    expect(svg.querySelector('[data-parte="cuerpo"]').getAttribute('aria-hidden')).toBe('true');
   });
 });

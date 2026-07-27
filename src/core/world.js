@@ -224,14 +224,45 @@ const TOPE_BONUS_RECORD_MINIMO = 12;
  * nunca del piso de 12 que ya tenía el juego: una racha sostenida de verdad
  * (ganar mucho, o perder mucho) mueve el puesto en proporción al tamaño real
  * de la categoría, sea de 12 o de 100.
+ *
+ * Bug reportado (v7, "a veces mi peleador pierde peleas pero no baja de
+ * ranking"): con un `clamp` DURO, `bonusRecord` (crudo, sin recortar) puede
+ * irse bien lejos del `tope` — cualquier boxeador que juega bien acumula
+ * muchas más victorias que derrotas con el correr de la carrera (es LITERAL
+ * el objetivo de balance del juego, ver ETAPAS en career.js), así que hacia
+ * la mitad/final de una carrera exitosa el bono crudo satura de sobra el
+ * tope. Una vez saturado, el clamp devuelve el MISMO valor recortado
+ * (`tope`) pase lo que pase con más derrotas — así que hacían falta VARIAS
+ * derrotas seguidas (medido: hasta 7-8 en una racha típica de un campeón)
+ * antes de que el bono crudo volviera a caer DENTRO del rango y el puesto
+ * recién ahí empezara a moverse. Perder de verdad no costaba nada, muchas
+ * veces seguidas, justo al jugador que más lo iba a notar (el que viene
+ * ganando).
+ *
+ * `bonusRecordSuavizado` reemplaza el clamp duro por una saturación SUAVE
+ * (tanh): para valores chicos de `bonusRecord` (la mayoría de la carrera, muy
+ * por debajo del tope) se comporta casi idéntico al clamp de siempre —
+ * tanh(x) ≈ x para x chico —, así que no cambia el balance ya calibrado en el
+ * rango normal de juego. Pero a diferencia del clamp, tanh nunca es
+ * perfectamente plana: sigue creciendo (muy despacio) más allá del tope, así
+ * que CUALQUIER derrota adicional —por más saturado que esté el historial—
+ * mueve el puntaje un poco, nunca cero. Con suficientes derrotas seguidas
+ * eso siempre termina cruzando el próximo escalón de MEDIA de la tabla y el
+ * puesto se resiente — "perder cuesta", garantizado matemáticamente, no solo
+ * en el caso común.
  */
+function bonusRecordSuavizado(bonusRecordCrudo, tope) {
+  if (tope <= 0) return 0;
+  return tope * Math.tanh(bonusRecordCrudo / tope);
+}
+
 export function rankingDelJugador(mundo, jugador) {
   const activos = mundo.roster.filter((p) => !p.retirado);
   if (activos.length === 0) return 1;
   const miMedia = mediaDe(jugador);
-  const bonusRecord = jugador.record.v - jugador.record.d * 2;
+  const bonusRecordCrudo = jugador.record.v - jugador.record.d * 2;
   const tope = Math.max(TOPE_BONUS_RECORD_MINIMO, Math.round(activos.length * FRACCION_TOPE_BONUS_RECORD));
-  const puntaje = miMedia + clamp(bonusRecord, -tope, tope);
+  const puntaje = miMedia + bonusRecordSuavizado(bonusRecordCrudo, tope);
   const mejores = activos.filter((p) => mediaDe(p) > puntaje).length;
   return clamp(mejores + 1, 1, activos.length + 1);
 }

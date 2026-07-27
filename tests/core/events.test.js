@@ -4,6 +4,7 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import { CARTAS_REDES } from '../../src/content/cards-social.js';
 import { elegirEvento, elegirCartaRedes, resolverOpcion } from '../../src/core/events.js';
+import { porcentajesDe } from '../../src/core/cards.js';
 
 const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
 
@@ -121,6 +122,72 @@ describe('cartas de riesgo (Task v3)', () => {
       const pesos = opcion.probabilidades.map((r) => r.peso);
       expect(pesos.every((p) => p >= 0)).toBe(true);
       expect(pesos.some((p) => p > 0)).toBe(true);
+    }
+  });
+});
+
+// Pedido 2 (v7, feedback del usuario: "hay que sumar aún más tarjetas de
+// tipo '%'... son lo más divertido"): al menos 12 cartas NUEVAS (además de
+// las 13 que ya existían antes de esta ronda: 12 en CARTAS_EVENTO + 1 en
+// CARTAS_REDES, cubiertas por 'cartas de riesgo (Task v3)' arriba), con
+// probabilidades VARIADAS -- nunca todo 50/50 parejo. El mínimo de 12 es
+// GLOBAL (evento + redes + campamento, pedido textual: "repartidas entre
+// las etapas y también en el campamento"); las 2 nuevas de campamento se
+// cuentan acá para el total pero se verifican en detalle en
+// campamento.test.js (que es quien conoce CARTAS_CAMPAMENTO de cerca).
+describe('cartas de riesgo nuevas (Pedido 2, v7)', () => {
+  const IDS_PREEXISTENTES = new Set([
+    'dopaje', 'chantaje', 'entrenador', 'guantes_truchos', 'sustancia_de_ramon',
+    'entrenamiento_pesado', 'desafio_de_la_vereda', 'apuesta_del_bar',
+    'terapia_alternativa', 'plata_facil_del_representante', 'dato_del_ex_sparring',
+    'la_costilla_que_avisa', 'polemica_calculada',
+  ]);
+  // Cantidad de cartas de campamento con azar (verificadas de cerca en
+  // campamento.test.js): CARTAS_CAMPAMENTO no vive en este archivo, así que
+  // acá solo se suma el número al total global, no se importa el catálogo.
+  const NUEVAS_EN_CAMPAMENTO = 2;
+
+  const opcionesConProbabilidad = () => [
+    ...CARTAS_EVENTO.flatMap((c) => c.opciones.map((o) => ({ carta: c, opcion: o }))),
+    ...CARTAS_REDES.flatMap((c) => c.opciones.map((o) => ({ carta: c, opcion: o }))),
+  ].filter(({ opcion }) => opcion.probabilidades);
+
+  const nuevas = () => opcionesConProbabilidad().filter(({ carta }) => !IDS_PREEXISTENTES.has(carta.id));
+
+  it('hay al menos 12 cartas nuevas con alguna opción de azar (evento + redes + campamento)', () => {
+    const idsUnicos = new Set(nuevas().map(({ carta }) => carta.id));
+    expect(idsUnicos.size + NUEVAS_EN_CAMPAMENTO).toBeGreaterThanOrEqual(12);
+  });
+
+  it('las probabilidades son variadas: no todas las cartas nuevas son 50/50', () => {
+    const ratios = nuevas().map(({ opcion }) => porcentajesDe(opcion).join('/'));
+    expect(new Set(ratios).size).toBeGreaterThan(1);
+    expect(ratios.some((r) => r !== '50/50')).toBe(true);
+  });
+
+  it('cubren juvenil, amateur y profesional (no solo profesional, como el lote histórico)', () => {
+    const nuevasCartas = CARTAS_EVENTO.filter(
+      (c) => !IDS_PREEXISTENTES.has(c.id) && c.opciones.some((o) => o.probabilidades),
+    );
+    for (const etapa of ['juvenil', 'amateur', 'profesional']) {
+      expect(nuevasCartas.some((c) => c.etapas.includes(etapa)), `ninguna carta nueva con azar aplica en "${etapa}"`).toBe(true);
+    }
+  });
+
+  it('cada carta nueva de 2 opciones sigue el patrón arriesgar-o-no (la segura no tiene mods ni efectos)', () => {
+    for (const { carta, opcion } of nuevas()) {
+      if (carta.opciones.length !== 2) continue;
+      const segura = carta.opciones.find((o) => o.id !== opcion.id && !o.probabilidades);
+      expect(segura, `la carta "${carta.id}" no tiene una opción segura junto a "${opcion.id}"`).toBeTruthy();
+      expect(Object.keys(segura.mods ?? {})).toHaveLength(0);
+      expect(segura.efectos).toBeUndefined();
+    }
+  });
+
+  it('todas las ramas nuevas suman exactamente 100% via porcentajesDe', () => {
+    for (const { opcion } of nuevas()) {
+      const pct = porcentajesDe(opcion);
+      expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
     }
   });
 });

@@ -1,4 +1,4 @@
-// Task 6.1: el tablero (shell de 3 columnas) tiene que ser LA pantalla
+﻿// Task 6.1: el tablero (shell de 3 columnas) tiene que ser LA pantalla
 // principal, siempre — nunca renderDashboard (v1) entre beats. Estos tests
 // juegan la carrera por la UI REAL (happy-dom: mount/click de verdad), no a
 // nivel núcleo, y verifican la garantía central por IDENTIDAD DE NODO de las
@@ -99,15 +99,20 @@ function cerrarHitoSiHay() {
 
 function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
   cerrarHitoSiHay();
+
+  // El último beat de la carrera termina yendo directo al legado (pantalla
+  // completa, fin de carrera): se chequea PRIMERO que nada, porque esa
+  // pantalla puede haber quedado servida por el paso anterior (Pedido 3, v7:
+  // ya no hay un "Continuar" intermedio que revele nada — cada paso deja
+  // servido lo que sigue, incluido el legado).
+  if (cont.querySelector('[data-accion="nueva"]')) return 'legado';
   if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
 
-  const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
-  if (botonIdle) botonIdle.click();
-
-  // El último "Continuar" de la carrera no sirve un beat más: va directo al
-  // legado (pantalla completa, fin de carrera — decisión ya tomada, no se
-  // toca en esta task). El llamador corta el loop al ver esto.
-  if (cont.querySelector('[data-accion="nueva"]')) return 'legado';
+  // Pedido 2 (v7, minijuego de trámite): la tarjeta del rival, con el botón
+  // "Simular pelea" — se resuelve como su propio paso, antes que cualquier
+  // otro chequeo (no matchea ninguno de los de abajo).
+  const botonSimular = cont.querySelector('[data-accion="simular-pelea"]');
+  if (botonSimular) { botonSimular.click(); return 'tramite-simular'; }
 
   if (cont.querySelector('.grilla-paos')) {
     let guardia = 0;
@@ -137,6 +142,12 @@ function resolverUnPaso(cont, { aceptarOfertas, detenerEnOferta = false }) {
     if (seguirDesenlace) seguirDesenlace.click();
     return 'decision';
   }
+
+  // Resumen de fin de año (v7): pantalla propia (resumen-anio.js), no
+  // `renderDesenlace` — un solo botón "Seguir", escopado a `.resumen-anio`
+  // (mismo criterio que `.shell-centro [data-accion="aceptar"]` más abajo).
+  const seguirResumenAnio = cont.querySelector('.resumen-anio .boton');
+  if (seguirResumenAnio) { seguirResumenAnio.click(); return 'resumen-anio'; }
 
   // Aviso sin tarjeta previa (noticias / lesionSinOferta, Task 6.1): el
   // desenlace se pinta directo, sin pasar por una grilla.
@@ -279,12 +290,13 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.shell-izquierda')).toBeTruthy();
     expect(cont.querySelector('.shell-derecha')).toBeTruthy();
-    // El botón de avanzar la carrera vive en el CENTRO del shell, no en una
-    // pantalla aparte. La etapa actual (v4, grilla 3×3) es un bloque
-    // permanente de la columna izquierda, junto a categoría/ranking.
-    const boton = cont.querySelector('.shell-centro [data-accion="siguiente"]');
-    expect(boton).toBeTruthy();
-    expect(boton.textContent).toContain('Continuar');
+    // Pedido 3 (v7, "no quiero pantallas intermedias"): nada de un botón
+    // "Continuar" aparte — el primer beat de la carrera (mejora, siempre
+    // garantizado, ver el comentario grande de armarCola en career.js) ya
+    // se muestra derecho, como tarjeta de acción, en el centro del shell.
+    const grilla = cont.querySelector('.shell-centro .panel-decision-grilla, .shell-centro .panel-decision-grilla-2');
+    expect(grilla).toBeTruthy();
+    expect(grilla.querySelectorAll('.tarjeta').length).toBeGreaterThan(0);
     expect(cont.querySelector('.shell-izquierda').textContent.toUpperCase()).toContain('JUVENIL');
   });
 
@@ -316,9 +328,13 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
   it('la tarjeta de aceptar/rechazar la oferta vive en el centro del tablero, con el calendario y el peleador visibles', () => {
     iniciar(cont, prepararStorage(nuevaPartida(3)));
 
+    // 150, no 30: el destacado de trámite (Pedido 2, v7) ahora consume
+    // varios pasos de `resolverUnPaso` por sí solo (anuncio + tarjeta +
+    // hasta 5 rondas + resultado), así que hace falta más margen para
+    // llegar a una oferta jugable de verdad.
     let guardia = 0;
     let tipo = null;
-    while (tipo !== 'oferta' && guardia < 30) {
+    while (tipo !== 'oferta' && guardia < 150) {
       guardia += 1;
       tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
     }
@@ -337,7 +353,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     const partida = nuevaPartida(4);
     partida.jugador.dinero = 100000;
     partida.jugador.estado.lesion = {
-      id: 'mano', nombre: 'Mano fracturada', severidad: 2, bloquesRestantes: 2, costo: 22000, texto: 'x',
+      id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 2, costo: 22000, texto: 'x',
     };
     iniciar(cont, prepararStorage(partida));
 
@@ -355,10 +371,11 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     expect(cont.querySelector('.shell')).toBeTruthy();
   });
 
-  it('abrir la ficha desde el estado ocioso y volver reconstruye el tablero (con el boton Continuar), no queda en blanco', () => {
+  it('abrir la ficha desde una tarjeta de accion y volver reconstruye el tablero, sin perder esa tarjeta', () => {
     iniciar(cont, prepararStorage(nuevaPartida(2)));
 
-    expect(cont.querySelector('.shell-centro [data-accion="siguiente"]')).toBeTruthy();
+    const grillaAntes = cont.querySelector('.shell-centro .panel-decision-grilla, .shell-centro .panel-decision-grilla-2');
+    expect(grillaAntes).toBeTruthy();
 
     // Cambio 4 ("clickear el personaje ya no abre la ficha"): el click que
     // navega a la Ficha ahora es el del bloque de historial, no el de la
@@ -370,7 +387,8 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     cont.querySelector('[data-accion="cerrar"]').click();
 
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.shell-centro [data-accion="siguiente"]')).toBeTruthy();
+    const grillaDespues = cont.querySelector('.shell-centro .panel-decision-grilla, .shell-centro .panel-decision-grilla-2');
+    expect(grillaDespues).toBeTruthy();
   });
 
   // Pedido del coordinador al revisar esta task: confirmar que una partida
@@ -413,7 +431,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       iniciar(cont, prepararStorage(nuevaPartida(semilla)));
 
       let guardia = 0;
-      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 400) {
+      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 900) {
         guardia += 1;
         const tipo = resolverUnPaso(cont, { aceptarOfertas: true });
         expect(tipo).not.toBeNull();
@@ -437,7 +455,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
       let guardia = 0;
       let tipo = null;
-      while (tipo !== 'oferta' && guardia < 40) {
+      while (tipo !== 'oferta' && guardia < 150) {
         guardia += 1;
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }
@@ -454,7 +472,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
       let guardia = 0;
       let tipo = null;
-      while (tipo !== 'oferta' && guardia < 40) {
+      while (tipo !== 'oferta' && guardia < 150) {
         guardia += 1;
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }
@@ -475,7 +493,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
       let guardia = 0;
       let tipo = null;
-      while (tipo !== 'oferta' && guardia < 40) {
+      while (tipo !== 'oferta' && guardia < 150) {
         guardia += 1;
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }
@@ -500,7 +518,7 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
 
       let guardia = 0;
       let tipo = null;
-      while (tipo !== 'oferta' && guardia < 40) {
+      while (tipo !== 'oferta' && guardia < 150) {
         guardia += 1;
         tipo = resolverUnPaso(cont, { aceptarOfertas: false, detenerEnOferta: true });
       }

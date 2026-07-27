@@ -231,6 +231,19 @@ describe('ritmo de la carrera', () => {
   //   peleas PROFESIONALES TOTALES (jugables+trámite): avg≈34.7 | p10≈32 p90≈37
   //     — dentro de [30,40] en 99.5% de las 3000 semillas.
   //   3 cinturones: 99.3% | sin ninguna defensa obligatoria: 3.1%
+  //
+  // v7, resumen de fin de año (pedido textual del usuario): `siguienteBeat`
+  // ahora puede intercalar un beat MÁS, 'resumenAnio', al cerrar cualquier
+  // año que haya tenido al menos una pelea (ver anioTieneAlgoQueContar,
+  // year-summary.js) — "jugando bien" (jugarGanandoTodo, este test) gana casi
+  // siempre, así que casi todos los años profesionales (18 de 24) y varios de
+  // juvenil/amateur disparan el resumen: es un aumento esperado, no una
+  // regresión. Remedido sobre las mismas 1500 semillas con el resumen ya
+  // activo: avg≈91.8 (subió ~14.7 respecto del ~77.1 de antes, coherente con
+  // que la enorme mayoría de las carreras "jugando bien" llega a los tres
+  // cinturones y pelea casi todos los años). El costo en MINUTOS real (no
+  // solo en beats) está medido aparte con scripts/balance-sim.mjs — cada
+  // resumen es UN solo click, sin pantalla intermedia.
   it('sobre muchas semillas, el promedio de beats estructurales/carrera cae en el rango medido (jugadas de punta a punta, con campamento incluido)', () => {
     const total = 1500;
     const todos = [];
@@ -239,12 +252,13 @@ describe('ritmo de la carrera', () => {
     }
     const promedio = todos.reduce((a, b) => a + b, 0) / total;
 
-    // Banda amplia sobre el ~77.1 medido, para no ser flaky pero seguir
-    // marcando una regresión real si alguien recorta o infla el ritmo.
-    expect(promedio).toBeGreaterThanOrEqual(68);
-    expect(promedio).toBeLessThanOrEqual(86);
+    // Banda amplia sobre el ~91.8 medido (post resumen de fin de año), para
+    // no ser flaky pero seguir marcando una regresión real si alguien recorta
+    // o infla el ritmo.
+    expect(promedio).toBeGreaterThanOrEqual(82);
+    expect(promedio).toBeLessThanOrEqual(102);
 
-    const dentroDelRango = todos.filter((b) => b >= 45 && b <= 130).length;
+    const dentroDelRango = todos.filter((b) => b >= 55 && b <= 150).length;
     expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
@@ -271,7 +285,12 @@ describe('ritmo de la carrera', () => {
   });
 
   it('incluye peleas jugables, mejoras y eventos', () => {
-    const { beats } = jugarTodo(nuevaPartida(3));
+    // Semilla 1 (antes 3): el minijuego de trámite (Pedido 2, v7) suma
+    // tiradas de rng nuevas dentro de armarLotePeleas, así que corre la
+    // secuencia entera de la carrera de nuevo (mismo motivo que ya movió
+    // esta semilla varias veces antes) — la semilla 3 dejó de traer ningún
+    // 'evento'/'redes' en toda la carrera; 1 sí.
+    const { beats } = jugarTodo(nuevaPartida(1));
     const tipos = new Set(beats.map((b) => b.tipo));
     expect(tipos).toContain('mejora');
     expect(tipos).toContain('oferta');
@@ -420,41 +439,69 @@ describe('avanzarBloque', () => {
     expect(siguenNuevas).toHaveLength(0);
   });
 
-  it('recupera lesiones con el paso de los bloques', () => {
+  // v7, corrección del coordinador ("las lesiones tienen que costar de
+  // verdad, evaluadas semana a semana, no una vez por bloque"): la
+  // recuperación ya NO se descuenta acá, en avanzarBloque — se mudó al gate
+  // por cupo de armarLotePeleas (tramite.js), disparado dentro de
+  // armarCola/siguienteBeat (career.js). avanzarBloque solo, aislado, ya no
+  // toca `estado.lesion` para nada (ver el test siguiente para esa
+  // invariante) — para ver la recuperación de verdad hay que pasar por
+  // siguienteBeat, que corre avanzarBloque Y armarCola en el mismo golpe al
+  // cambiar de bloque.
+  it('avanzarBloque solo (sin pasar por armarCola) no toca la lesion', () => {
     const p = nuevaPartida();
-    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x' };
-    expect(avanzarBloque(p).jugador.estado.lesion).toBeNull();
+    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' };
+    const despues = avanzarBloque(p);
+    expect(despues.jugador.estado.lesion).not.toBeNull();
+    expect(despues.jugador.estado.lesion.semanasRestantes).toBe(4);
+  });
+
+  // Vía siguienteBeat (avanzarBloque + armarCola en el mismo golpe): una
+  // lesión corta cura apenas el primer cupo de pelea del bloque la
+  // encuentra activa (ver armarLotePeleas, tramite.js) — profesional
+  // siempre tiene al menos un cupo (intentosDePelea nunca da 0).
+  it('recupera lesiones con el paso de los bloques (via armarCola, tramite.js)', () => {
+    const p = nuevaPartida();
+    p.etapaIndice = 2; // profesional: intentosDePelea siempre da >=1 cupo
+    p.jugador.estado.lesion = { id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' };
+    const { partida: despues } = siguienteBeat(p);
+    expect(despues.jugador.estado.lesion).toBeNull();
   });
 
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
   // Parecería que no afecta en nada"): antes, la forma se recuperaba +5 TODOS
-  // los bloques sin importar si seguías lesionado, así que una lesión leve
-  // (1 bloque de duración) quedaba borrada de la forma antes incluso de que
-  // `recuperar()` te diera de alta. Ahora, mientras sigue activa la lesión,
-  // ese descanso pasivo se frena: la forma se queda baja de verdad hasta
-  // curarte.
-  it('mientras sigue lesionado, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
+  // los bloques sin importar si seguías lesionado. Mientras sigue activa la
+  // lesión AL ARRANCAR el bloque (el estado tal cual venía del bloque
+  // anterior — la recuperación de este bloque todavía no corrió, eso pasa
+  // recién en armarCola), ese descanso pasivo se frena: la forma se queda
+  // baja de verdad.
+  it('mientras sigue lesionado al arrancar el bloque, la forma NO se recupera sola (Sistema 1: el efecto tiene que pesar)', () => {
     const p = nuevaPartida();
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Rodilla', severidad: 3, bloquesRestantes: 3, costo: 1, texto: 'x',
+      id: 'rodilla', nombre: 'Rodilla', severidad: 3, semanasRestantes: 100, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.estado.lesion.bloquesRestantes).toBe(2);
     expect(despues.jugador.estado.forma).toBe(30);
   });
 
-  it('en el bloque en que termina de curarse, la forma sube por el bonus de curación (no por el descanso normal)', () => {
+  // Vía siguienteBeat: en cuanto el primer cupo del bloque encuentra la
+  // lesión curada (o la termina de curar), la forma sube por el bonus de
+  // curación de `recuperar()` (injuries.js) — no por el descanso pasivo
+  // normal (ese solo corre en avanzarBloque, y solo si YA no había lesión al
+  // arrancar el bloque).
+  it('en cuanto se cura (dentro de armarCola), la forma sube por el bonus de curación (no por el descanso normal)', () => {
     const p = nuevaPartida();
+    p.etapaIndice = 2;
     p.jugador.estado.lesion = {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     };
     p.jugador.estado.forma = 30;
-    const despues = avanzarBloque(p);
+    const { partida: despues } = siguienteBeat(p);
     expect(despues.jugador.estado.lesion).toBeNull();
     // +10 del bonus de curación (recuperar, injuries.js), SIN el +5 pasivo de
-    // un bloque sano (ese solo corre cuando no hay lesión activa al arrancar
-    // el bloque).
+    // un bloque sano (avanzarBloque lo frenó: al arrancar este bloque la
+    // lesión seguía activa).
     expect(despues.jugador.estado.forma).toBe(40);
   });
 
@@ -597,17 +644,16 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   it('si esta lesionado y le tocaba pelea, avisa en vez de quedarse callado', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2; // profesional: intentosDePelea siempre da >=1 cupo
-    // bloquesRestantes en 8, no en 4: con 12 iteraciones de siguienteBeat, el
-    // mínimo de beats por bloque en profesional (mientras sigue lesionado)
-    // es 2 (mejora + lesionSinOferta, siempre) — así que en el peor caso
-    // (sin ningún beat opcional) 12 iteraciones alcanzan para 6 bloques como
-    // mucho, nunca para los 8 que hacen falta para recuperarse. Con 4 el
-    // test dependía de que los beats opcionales (sparring/evento/redes, con
-    // rng) NO aparecieran demasiado seguido para esa semilla en particular;
-    // eso dejó de cumplirse cuando el fix de apodos duplicados del roster
-    // (Task 6.3) corrió la secuencia de rng.
+    // semanasRestantes en 400, no en un número chico: con 12 iteraciones de
+    // siguienteBeat, el mínimo de beats por bloque en profesional (mientras
+    // sigue lesionado) es 2 (mejora + lesionSinOferta, siempre) — así que en
+    // el peor caso (sin ningún beat opcional) 12 iteraciones alcanzan para 6
+    // bloques como mucho, y cada uno descuenta 52 semanas (ver ETAPAS): 6×52
+    // = 312. 400 deja margen de sobra para que la lesión siga activa en todo
+    // el loop, igual que antes hacía bloquesRestantes:8 contra un máximo de 6
+    // bloques.
     p.jugador.estado.lesion = {
-      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, bloquesRestantes: 8, costo: 60000, texto: 'x',
+      id: 'rodilla', nombre: 'Ligamentos de la rodilla', severidad: 3, semanasRestantes: 400, costo: 85000, texto: 'x',
     };
     let actual = p;
     const tipos = [];
@@ -618,6 +664,10 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
     }
     expect(tipos).not.toContain('oferta');
     expect(tipos).not.toContain('peleasResueltas');
+    // Pedidos 1/2 (v7): el destacado de trámite (beat 'tramiteDestacado')
+    // tampoco puede aparecer con la lesión activa — mismo gate que
+    // 'oferta'/'peleasResueltas', ver más arriba.
+    expect(tipos).not.toContain('tramiteDestacado');
     expect(tipos).toContain('lesionSinOferta');
   });
 
@@ -631,7 +681,11 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       actual = paso.partida;
       if (paso.beat) tipos.push(paso.beat.tipo);
     }
-    expect(tipos.includes('oferta') || tipos.includes('peleasResueltas')).toBe(true);
+    // Pedidos 1/2 (v7): un cupo de trámite puede resolverse en el momento
+    // (peleasResueltas) o aparecer como destacado sin resolver, para
+    // jugarse con el minijuego (tramiteDestacado) — cualquiera de las tres
+    // cuenta como "hubo actividad de pelea".
+    expect(tipos.includes('oferta') || tipos.includes('peleasResueltas') || tipos.includes('tramiteDestacado')).toBe(true);
     expect(tipos).not.toContain('lesionSinOferta');
   });
 
@@ -643,18 +697,17 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
   // armarCola (acá abajo, vía siguienteBeat) — no hay otro camino que pueda
   // saltarse el gate.
   it('con lesion leve o moderada, TAMBIÉN bloquea toda actividad de pelea (sin matices de severidad)', () => {
-    // bloquesRestantes en 8 con 12 iteraciones, mismo margen de seguridad que
-    // el test de la lesión grave (arriba): el mínimo de beats por bloque en
-    // profesional mientras sigue lesionado es 2 (mejora + lesionSinOferta),
-    // así que 12 iteraciones nunca alcanzan a agotar las 8 que hacen falta
-    // para curarse — sin este margen, una duración corta podía curarse a
-    // mitad del loop y hacer aparecer una oferta legítima (ya sano),
-    // arruinando el test.
+    // semanasRestantes en 400 con 12 iteraciones, mismo margen de seguridad
+    // que el test de la lesión grave (arriba): 12 iteraciones alcanzan para
+    // 6 bloques como mucho (2 beats mínimo por bloque mientras sigue
+    // lesionado), y 6×52=312 semanas — 400 nunca se agota en ese margen, sin
+    // depender de una duración "realista" de catálogo (acá lo que se prueba
+    // es el gate, no el número).
     for (const severidad of [1, 2]) {
       const p = nuevaPartida();
       p.etapaIndice = 2;
       p.jugador.estado.lesion = {
-        id: 'x', nombre: 'x', severidad, bloquesRestantes: 8, costo: 1, texto: 'x',
+        id: 'x', nombre: 'x', severidad, semanasRestantes: 400, costo: 1, texto: 'x',
       };
       let actual = p;
       const tipos = [];
@@ -665,25 +718,26 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
       }
       expect(tipos).not.toContain('oferta');
       expect(tipos).not.toContain('peleasResueltas');
+      expect(tipos).not.toContain('tramiteDestacado');
       expect(tipos).toContain('lesionSinOferta');
     }
   });
 
-  // No tiene que quedar trabado: en cuanto se cura (bloquesRestantes llega a
+  // No tiene que quedar trabado: en cuanto se cura (semanasRestantes llega a
   // 0 vía recuperar(), avanzarBloque), la actividad de pelea vuelve sola en
   // el próximo bloque, sin que el jugador tenga que hacer nada especial.
   it('en cuanto se cura, la actividad de pelea vuelve sin trabas', () => {
     const p = nuevaPartida();
     p.etapaIndice = 2;
     p.jugador.estado.lesion = {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, bloquesRestantes: 1, costo: 1, texto: 'x',
+      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
     };
     let actual = p;
     let vioPelea = false;
     for (let i = 0; i < 8 && !vioPelea; i++) {
       const paso = siguienteBeat(actual);
       actual = paso.partida;
-      if (paso.beat?.tipo === 'oferta' || paso.beat?.tipo === 'peleasResueltas') vioPelea = true;
+      if (paso.beat?.tipo === 'oferta' || paso.beat?.tipo === 'peleasResueltas' || paso.beat?.tipo === 'tramiteDestacado') vioPelea = true;
     }
     expect(actual.jugador.estado.lesion).toBeNull();
     expect(vioPelea).toBe(true);
@@ -697,8 +751,15 @@ describe('ofertas de pelea por carrera', () => {
   // offers.js). El total de peleas PROFESIONALES (jugables + trámite) es
   // otro eje — ver 'ritmo de la carrera' más arriba para el objetivo de
   // 30-40. Medido con jugarTodo (nunca acepta nada, pero eso no frena a las
-  // de trámite: se resuelven solas igual) sobre las semillas 1-10: entre 9 y
-  // 16 jugables por carrera.
+  // de trámite: se resuelven solas igual) sobre las semillas 1-10: entre 7 y
+  // 15 jugables por carrera (rango recalculado tras el minijuego de trámite,
+  // Pedido 2 v7 — `armarLotePeleas` consume tiradas de rng nuevas por lote
+  // de trámite, primero para decidir si el lote saca destacado
+  // (PROB_DESTACADO_TRAMITE) y después, si lo saca, para el propio
+  // minijuego cuando el jugador lo juega — así que corre la secuencia
+  // entera y cambia qué semillas caen en qué matchup puntual; el eje que de
+  // verdad importa, el de 30-40 profesionales sobre 3000 semillas, sigue
+  // intacto).
   const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   it('nunca caen por debajo de 5 peleas jugables en toda la carrera', () => {
@@ -709,11 +770,11 @@ describe('ofertas de pelea por carrera', () => {
     });
   });
 
-  it('tipicamente caen entre 8 y 18 peleas jugables por carrera', () => {
+  it('tipicamente caen entre 7 y 18 peleas jugables por carrera', () => {
     semillas.forEach((semilla) => {
       const { beats } = jugarTodo(nuevaPartida(semilla));
       const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
-      expect(ofertas).toBeGreaterThanOrEqual(8);
+      expect(ofertas).toBeGreaterThanOrEqual(7);
       expect(ofertas).toBeLessThanOrEqual(18);
     });
   });
@@ -830,13 +891,21 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   // armarLotePeleas en tramite.js) — así que hay que avanzar bloque a bloque
   // hasta encontrar uno que sí traiga una oferta pendiente, en vez de asumir
   // que el primero la tiene. `primerPaso` es el `siguienteBeat` inmediato
-  // después de arrancar ESE bloque (su primer beat, siempre 'mejora') — el
-  // mismo punto que antes probaban los tests de acá abajo.
+  // después de arrancar ESE bloque (su primer beat de CONTENIDO real,
+  // siempre 'mejora') — el mismo punto que antes probaban los tests de acá
+  // abajo.
+  //
+  // v7, resumen de fin de año: si el año que ESE bloque cierra tuvo alguna
+  // pelea, el primer beat que devuelve siguienteBeat puede ser 'resumenAnio'
+  // (antes que la mejora) — ver anioTieneAlgoQueContar, year-summary.js. Acá
+  // se lo consume como un beat más (no aporta nada a lo que este helper
+  // busca) para seguir devolviendo, siempre, el primer beat de contenido.
   function primerPasoConOfertaPendiente(semilla, { maxBloques = 60 } = {}) {
     let actual = nuevaPartida(semilla);
     actual.etapaIndice = 2;
     for (let i = 0; i < maxBloques; i += 1) {
-      const primerPaso = siguienteBeat(actual);
+      let primerPaso = siguienteBeat(actual);
+      if (primerPaso.beat?.tipo === 'resumenAnio') primerPaso = siguienteBeat(primerPaso.partida);
       if (primerPaso.partida.ofertaPendiente) return primerPaso;
       // Este bloque no trajo ninguna oferta jugable (fue trámite, o nada):
       // se agota el resto de su cola para pasar limpio al próximo bloque.
@@ -852,10 +921,11 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
     const primerPaso = primerPasoConOfertaPendiente(2);
 
-    // El primer beat de un bloque siempre es "mejora": si el bloque trae una
-    // oferta más adelante en la cola, ofertaPendiente ya tiene que
-    // reflejarla (para que cancelarProximaPelea pueda actuar), pero
-    // proximaPelea -lo único que lee el panel- tiene que seguir null: el
+    // El primer beat de CONTENIDO de un bloque siempre es "mejora" (puede
+    // haber un 'resumenAnio' antes, ya consumido por el helper de arriba):
+    // si el bloque trae una oferta más adelante en la cola, ofertaPendiente
+    // ya tiene que reflejarla (para que cancelarProximaPelea pueda actuar),
+    // pero proximaPelea -lo único que lee el panel- tiene que seguir null: el
     // jugador todavía no vio la oferta, mucho menos la aceptó.
     expect(primerPaso.beat.tipo).toBe('mejora');
     expect(primerPaso.partida.ofertaPendiente).not.toBeNull();
