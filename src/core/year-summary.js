@@ -24,39 +24,53 @@
 //
 // Todo puro, nada de rng, todo serializable a JSON — mismo contrato que el
 // resto de core/.
+//
+// v8 (pedido textual: "un gráfico nuevo, cómo escalaste en el ranking"): cada
+// muestra ahora también trae el puesto del jugador en ESE momento, con el
+// mismo criterio que la media (mismo evento, mismo punto en el tiempo — un
+// solo array, no dos, para no duplicar `semana` y mantener el guardado
+// liviano: un campo entero más por muestra, no una estructura paralela).
+// `mundo` es opcional (default `null`): partidas guardadas de un esquema
+// anterior a esta ronda, o algún llamador que todavía no tenga el mundo a
+// mano, siguen registrando la media sin romper — el ranking de esa muestra
+// queda en `null` en vez de reventar.
 import { fechaDe } from './calendario.js';
 import { mediaDe } from './fighter.js';
-import { ANIO_INICIAL } from './world.js';
+import { ANIO_INICIAL, rankingDelJugador } from './world.js';
 
 const DECIMAL = 10;
 function redondear(media) {
   return Math.round(media * DECIMAL) / DECIMAL;
 }
 
-function muestraDe(semanaGlobal, jugador) {
-  return { semana: semanaGlobal, media: redondear(mediaDe(jugador)) };
+function muestraDe(semanaGlobal, jugador, mundo) {
+  return {
+    semana: semanaGlobal,
+    media: redondear(mediaDe(jugador)),
+    ranking: mundo ? rankingDelJugador(mundo, jugador) : null,
+  };
 }
 
-/** Abre el registro de un año nuevo: una primera muestra (la media tal cual
- * arranca el año, después de crecimiento/declive pasivos) y sin decisiones
- * todavía. */
-export function iniciarRegistroAnio(semanaGlobal, jugador) {
+/** Abre el registro de un año nuevo: una primera muestra (la media/ranking
+ * tal cual arranca el año, después de crecimiento/declive pasivos) y sin
+ * decisiones todavía. */
+export function iniciarRegistroAnio(semanaGlobal, jugador, mundo = null) {
   return {
     anio: fechaDe(semanaGlobal, ANIO_INICIAL).anio,
-    muestrasMedia: [muestraDe(semanaGlobal, jugador)],
+    muestrasMedia: [muestraDe(semanaGlobal, jugador, mundo)],
     decisiones: [],
   };
 }
 
-/** Suma una muestra de media al registro del año en curso. No hace nada
- * (devuelve `registro` tal cual, incluso `null`) si no hay registro abierto —
- * red de seguridad para partidas guardadas de un esquema anterior a esta
- * ronda. */
-export function registrarMuestraMedia(registro, semanaGlobal, jugador) {
+/** Suma una muestra de media (y ranking, si hay `mundo`) al registro del año
+ * en curso. No hace nada (devuelve `registro` tal cual, incluso `null`) si no
+ * hay registro abierto — red de seguridad para partidas guardadas de un
+ * esquema anterior a esta ronda. */
+export function registrarMuestraMedia(registro, semanaGlobal, jugador, mundo = null) {
   if (!registro) return registro;
   return {
     ...registro,
-    muestrasMedia: [...registro.muestrasMedia, muestraDe(semanaGlobal, jugador)],
+    muestrasMedia: [...registro.muestrasMedia, muestraDe(semanaGlobal, jugador, mundo)],
   };
 }
 

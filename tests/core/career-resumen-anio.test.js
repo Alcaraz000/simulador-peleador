@@ -111,7 +111,7 @@ function partidaAPuntoDeCerrarAnio(overrides = {}) {
     etapaIndice: 0,
     cola: [],
     semanaGlobal,
-    registroAnioActual: iniciarRegistroAnio(semanaGlobal, p.jugador),
+    registroAnioActual: iniciarRegistroAnio(semanaGlobal, p.jugador, p.mundo),
     ...overrides,
   };
 }
@@ -134,6 +134,9 @@ describe('siguienteBeat: el resumen de fin de año aparece como su propio beat',
       { tipo: 'mejora', titulo: 'Mejora', opcion: 'Más potencia', semana: p.semanaGlobal },
     ]);
     expect(paso.beat.datos.muestrasMedia.length).toBeGreaterThanOrEqual(1);
+    // v8: cada muestra trae también el ranking del jugador en ese momento
+    // (mismo criterio que la media), no solo su valor.
+    expect(typeof paso.beat.datos.muestrasMedia[0].ranking).toBe('number');
 
     // Al consumir el beat 'resumenAnio', lo próximo en la cola es la mejora
     // del año que recién arranca — nunca se pierde un beat real por el
