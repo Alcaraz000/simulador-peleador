@@ -54,12 +54,32 @@ const GRIS_EJE = '#241416';
 const GRIS_TEXTO = '#957777';
 const TEXTO_CLARO = '#f1e2e2';
 
-const VB_W = 320;
-const VB_H = 150;
-const PAD_LEFT = 32;
-const PAD_RIGHT = 8;
-const PAD_TOP = 18;
-const PAD_BOTTOM = 30;
+// v10 (pedido textual: "se ven demasiado grandes los gráficos... achicá lo
+// que haga falta, los gráficos son lo que más sobra"): con `width:100%` fijo
+// por CSS (ver .grafico-media-svg, theme.css) el ALTO renderizado en pantalla
+// es `anchoDelModulo / (VB_W/VB_H)` — el viewBox de antes (320×150, casi
+// 2:1) hacía que un módulo central ancho (la columna del medio se lleva la
+// mayor parte del tablero) dibujara un gráfico altísimo. Achatar la relación
+// de aspecto a ~4:1 es lo que baja el alto a menos de la mitad sin
+// sacrificar "ocupa el ancho del módulo" (pedido que no se puede perder).
+//
+// OJO con pasarse de flaco: un primer intento acható esto mucho más (5:1) y
+// rompió la legibilidad del eje Y del Pedido 2 — el texto de las gridlines
+// (en unidades del viewBox) escala con el MISMO factor que todo el gráfico,
+// así que un alto útil más chico con la MISMA cantidad de marcas las deja
+// apenas separadas por menos que su propia altura de línea: se superponen.
+// El equilibrio real de este pedido está en el alto útil (`VB_H - PAD_TOP -
+// PAD_BOTTOM`) contra la cantidad de marcas del eje Y (ver `ticksEjeY` y
+// `MAX_TICKS_EJE_Y`, más abajo), no solo en el viewBox: por eso el achique
+// se hizo en varios pasos chicos en vez de uno solo agresivo, verificando
+// con Playwright real en cada paso, y el tamaño de fuente también baja uno
+// (ver más abajo).
+const VB_W = 340;
+const VB_H = 84;
+const PAD_LEFT = 30;
+const PAD_RIGHT = 6;
+const PAD_TOP = 11;
+const PAD_BOTTOM = 19;
 
 // Opacidad de la PROYECCIÓN (el tramo de línea que continúa el último valor
 // conocido hasta el borde del año, sin inventar un dato nuevo): bien por
@@ -120,21 +140,68 @@ function pasoLindo(rangoBruto, cantidadObjetivo) {
   return paso * magnitud;
 }
 
-// Ticks del eje Y a partir del rango REAL de los datos. Con el valor
-// completamente plano (todas las muestras iguales) no hay rango: se arma uno
-// artificial alrededor del valor único, para que la línea plana quede
-// centrada en la caja con aire arriba y abajo — nunca pegada a un borde.
-function ticksEjeY(valorMin, valorMax, cantidadObjetivo = 4) {
-  if (valorMax === valorMin) {
-    const paso = pasoLindo(Math.max(Math.abs(valorMin), 1) * 0.3, 1);
-    return [valorMin - paso, valorMin, valorMin + paso];
-  }
+// Techo de marcas del eje Y (v10): con el gráfico más bajo (Pedido 1) hay
+// menos alto útil para repartir — pasado este número, las etiquetas quedan
+// más juntas que su propia altura de línea y se pisan entre sí. Ver el
+// bucle de `ticksEjeY` más abajo: nunca se agregan marcas de más allá de
+// esto, sea cual sea el rango de datos.
+const MAX_TICKS_EJE_Y = 5;
+
+function ticksDeRango(valorMin, valorMax, cantidadObjetivo) {
   const paso = pasoLindo(valorMax - valorMin, cantidadObjetivo);
   const desde = Math.floor(valorMin / paso) * paso;
   const hasta = Math.ceil(valorMax / paso) * paso;
   const ticks = [];
   for (let v = desde; v <= hasta + paso / 1000; v += paso) {
     ticks.push(Math.round(v * 1000) / 1000);
+  }
+  return ticks;
+}
+
+// Ticks del eje Y a partir del rango REAL de los datos. Con el valor
+// completamente plano (todas las muestras iguales) no hay rango: se arma uno
+// artificial alrededor del valor único, para que la línea plana quede
+// centrada en la caja con aire arriba y abajo — nunca pegada a un borde.
+//
+// v10 (pedido textual: "los gráficos están demasiado simples, agregá más
+// datos en el eje Y" — el propio ejemplo que dio el usuario, "55/75/95" en
+// media y "#18/#13/#8" en ranking, es justo ESTE caso: una sola muestra real,
+// o todas iguales). Antes se armaba un único paso alrededor del valor con
+// `pasoLindo(...,1)`, así que SIEMPRE daba exactamente 3 marcas (min/valor/
+// max), sin importar cuántas se pidieran. Ahora reparte `cantidadObjetivo`
+// marcas (impar: el valor real queda siempre exactamente al medio) a paso
+// constante alrededor del valor — más contexto para leer una línea plana,
+// mismo criterio de "paso lindo" (1/2/5 × potencia de 10) que el resto del
+// eje.
+function ticksEjeY(valorMin, valorMax, cantidadObjetivo = 4) {
+  if (valorMax === valorMin) {
+    // Mismo margen "objetivo" de siempre (30% del valor, con un piso de 1
+    // para que un valor chico no dé un margen inservible) — lo único que
+    // cambia es que ahora se REPARTE en `mitad` pasos en vez de uno solo, así
+    // el rango visible del eje queda igual de angosto que antes (mismo
+    // "35/75/95" de siempre en el caso ×1), pero con más marcas adentro.
+    const mitad = Math.max(1, Math.floor((cantidadObjetivo + 1) / 2));
+    const margen = Math.max(Math.abs(valorMin), 1) * 0.3;
+    const paso = pasoLindo(margen, mitad);
+    const ticks = [];
+    for (let i = -mitad; i <= mitad; i += 1) {
+      ticks.push(Math.round((valorMin + i * paso) * 1000) / 1000);
+    }
+    return ticks;
+  }
+
+  // v10 (Pedido 1 y 2 en tensión: gráfico más bajo, pero con más marcas):
+  // `pasoLindo` apunta a `cantidadObjetivo` marcas pero puede pasarse bastante
+  // (un rango de 60 a 71, por ejemplo, termina con 7 marcas, no 4-5) — con
+  // menos alto útil que antes eso ya no entra sin pisarse. Si el resultado
+  // supera `MAX_TICKS_EJE_Y`, se vuelve a intentar con un objetivo más chico
+  // (menos subdivisiones, un paso más grande) hasta que entre. Nunca al
+  // revés: si el primer intento ya dio pocas marcas, se dejan tal cual.
+  let objetivo = cantidadObjetivo;
+  let ticks = ticksDeRango(valorMin, valorMax, objetivo);
+  while (ticks.length > MAX_TICKS_EJE_Y && objetivo > 2) {
+    objetivo -= 1;
+    ticks = ticksDeRango(valorMin, valorMax, objetivo);
   }
   return ticks;
 }
@@ -224,6 +291,18 @@ function construirGraficoLinea({
   // --- Eje Y: gridlines + valores (v9, pedido: "faltan el eje Y") --------
   // Recesivas (hairline, un tono apenas fuera de la superficie — ver la
   // skill dataviz): dan escala sin competir con la línea de datos.
+  //
+  // v10 (bug encontrado al achicar el gráfico, Pedido 1: con más marcas
+  // (Pedido 2) empaquetadas en menos alto útil, el valor del primer/último
+  // punto casi siempre CAE muy cerca de una de estas marcas — y ahí su
+  // etiqueta directa en negrita, ver más abajo, terminaba pisando el número
+  // de la gridline en el mismo lugar). En vez de separarlas a la fuerza (no
+  // hay buen lugar donde poner dos números al lado del mismo punto), se
+  // suprime el TEXTO de la gridline que quedaría pegado a una etiqueta
+  // directa — la línea de la marca se deja (sigue dando escala), solo el
+  // número se calla ahí porque el propio punto ya lo dice, más grande.
+  const UMBRAL_COLISION_ETIQUETA = 11;
+  const yEtiquetados = primero !== ultimo ? [primero.y, ultimo.y] : [];
   const grupoEjeY = svgEl('g', { 'aria-hidden': 'true' });
   ticks.forEach((tick) => {
     const y = yDe(tick);
@@ -236,12 +315,17 @@ function construirGraficoLinea({
       stroke: GRIS_EJE,
       'stroke-width': 1,
     }));
+    const chocaConEtiquetaDirecta = yEtiquetados.some((yPunto) => Math.abs(y - yPunto) < UMBRAL_COLISION_ETIQUETA);
+    if (chocaConEtiquetaDirecta) return;
     const etiqueta = svgEl('text', {
       x: (PAD_LEFT - 6).toFixed(1),
-      y: (y + 3).toFixed(1),
+      y: (y + 2.6).toFixed(1),
       'text-anchor': 'end',
       fill: GRIS_TEXTO,
-      'font-size': 9,
+      // v10: un paso más chico que antes (9 -> 8): con más marcas en el eje
+      // (Pedido 2) y un alto útil más chico (Pedido 1), el mismo tamaño de
+      // antes dejaba las etiquetas casi pegadas entre sí.
+      'font-size': 8,
     });
     etiqueta.textContent = formatoValor(tick);
     grupoEjeY.appendChild(etiqueta);
@@ -354,23 +438,33 @@ function construirGraficoLinea({
 
   // Etiquetado directo selectivo (nunca un número en cada punto): solo el
   // primero y el último — "de dónde a dónde" es la lectura que más importa
-  // en un vistazo rápido. Con un solo punto real, primero === último: una
-  // sola etiqueta, no dos superpuestas.
-  const etiquetaValor = (punto, arriba, anchor) => {
-    const texto = svgEl('text', {
-      x: punto.x.toFixed(1),
-      y: (arriba ? punto.y - 9 : punto.y + 18).toFixed(1),
-      'text-anchor': anchor,
-      fill: TEXTO_CLARO,
-      'font-size': 12,
-      'font-weight': 700,
-    });
-    return texto;
-  };
-  const textoPrimero = etiquetaValor(primero, primero.y > VB_H / 2, primero === ultimo ? 'middle' : 'start');
-  textoPrimero.textContent = formatoValor(primero.valor);
-  svg.appendChild(textoPrimero);
-  if (ultimo !== primero) {
+  // en un vistazo rápido.
+  //
+  // v10: con un solo punto real (línea 100% plana, `primero === ultimo`) se
+  // deja de dibujar esta etiqueta directa. No es un recorte porque falte
+  // lugar: es que pasa a ser REDUNDANTE con el propio eje Y — con un solo
+  // valor, `ticksEjeY` arma su rango artificial CENTRADO en ese valor (ver
+  // más arriba), así que el número ya aparece, letra por letra, como una de
+  // las marcas del eje — justo a la altura del punto, que además queda
+  // ENCIMA de esa misma gridline. Dibujar la etiqueta directa ahí también
+  // (pedido 1, gráficos más chicos: menos aire vertical entre marcas) los
+  // hacía competir por el mismo lugar y se superponían. La lista accesible
+  // de respaldo (más abajo) sigue trayendo el valor igual, por las dudas.
+  if (primero !== ultimo) {
+    const etiquetaValor = (punto, arriba, anchor) => {
+      const texto = svgEl('text', {
+        x: punto.x.toFixed(1),
+        y: (arriba ? punto.y - 8 : punto.y + 15).toFixed(1),
+        'text-anchor': anchor,
+        fill: TEXTO_CLARO,
+        'font-size': 10.5,
+        'font-weight': 700,
+      });
+      return texto;
+    };
+    const textoPrimero = etiquetaValor(primero, primero.y > VB_H / 2, 'start');
+    textoPrimero.textContent = formatoValor(primero.valor);
+    svg.appendChild(textoPrimero);
     const textoUltimo = etiquetaValor(ultimo, ultimo.y > VB_H / 2, 'end');
     textoUltimo.textContent = formatoValor(ultimo.valor);
     svg.appendChild(textoUltimo);

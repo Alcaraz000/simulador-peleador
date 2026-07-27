@@ -129,6 +129,29 @@ describe('renderResumenAnio', () => {
     expect(onContinuar).toHaveBeenCalledTimes(1);
   });
 
+  // v10 (Pedido 1: "el botón SEGUIR visible sin scrollear"): si el año no
+  // entra completo en el piso de la izquierda, `.resumen-anio-cuerpo` es lo
+  // único que scrollea (ver sincronizar-alturas.js) — la cabecera con el año
+  // y el botón "Seguir" tienen que quedar AFUERA de ese contenedor, nunca
+  // adentro, para no tener que scrollear para encontrarlos. Esto es
+  // estructural (dónde vive cada nodo en el DOM), no solo visual — un test
+  // de layout real no puede correr acá (happy-dom no calcula CSS), así que
+  // se verifica la garantía que sí depende de la estructura.
+  it('el botón Seguir y la cabecera del año viven AFUERA de resumen-anio-cuerpo (el scroll interno nunca se los lleva puestos)', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    const cuerpo = r.querySelector('.resumen-anio-cuerpo');
+    expect(cuerpo).toBeTruthy();
+    const boton = r.querySelector('button');
+    const h1 = r.querySelector('h1');
+    expect(cuerpo.contains(boton)).toBe(false);
+    expect(cuerpo.contains(h1)).toBe(false);
+    // Los gráficos y las secciones de decisiones/peleas, en cambio, SÍ viven
+    // adentro (son la parte que puede llegar a no entrar).
+    expect(cuerpo.querySelector('.grafico-media-svg')).toBeTruthy();
+    expect(cuerpo.querySelector('.resumen-anio-filas')).toBeTruthy();
+  });
+
   it('sin decisiones (defensivo), no revienta y no muestra la seccion', () => {
     const r = region();
     expect(() => renderResumenAnio(r, propsBase({ decisiones: [] }))).not.toThrow();

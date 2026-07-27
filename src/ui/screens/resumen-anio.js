@@ -110,9 +110,15 @@ function seccion(titulo, items) {
 // nota aparte — el propio eje Y del gráfico de ranking (grafico-media.js)
 // ahora dibuja sus valores en orden decreciente de arriba hacia abajo, así
 // que la inversión se lee sola, sin texto adicional.
+// v10 (Pedido 1: "se ven demasiado grandes los gráficos... achicá lo que
+// haga falta"): `resumen-anio-grafico-panel` (theme.css) pisa el padding
+// genérico de `.panel` con uno más chico — el gráfico en sí ya se acható en
+// grafico-media.js (viewBox más chato), esto recorta el AIRE alrededor
+// (padding + margen de la etiqueta) que antes era el mismo que cualquier
+// panel del tablero, pensado para contenido con más aire para dar.
 function bloqueGrafico(titulo, nodoGrafico) {
-  return el('div', { class: 'panel' }, [
-    el('span', { class: 'etiqueta', style: 'display:block;margin-bottom:4px', text: titulo }),
+  return el('div', { class: 'panel resumen-anio-grafico-panel' }, [
+    el('span', { class: 'etiqueta', style: 'display:block;margin-bottom:2px', text: titulo }),
     nodoGrafico,
   ]);
 }
@@ -131,23 +137,37 @@ function bloqueGrafico(titulo, nodoGrafico) {
 export function renderResumenAnio(region, {
   anio, muestrasMedia = [], decisiones = [], peleas = [], narrativa = '', onContinuar = () => {},
 }) {
-  const cuerpo = el('div', { class: 'stack resumen-anio' }, [
-    el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
-      el('div', { class: 'resumen-anio-icono' }, [icono('grafico', { tamano: 18 })]),
-      // v9 (feedback del usuario: "(Resumen del año) tiene que estar pegado
-      // al año, no flotando a la derecha"): esto YA vivía en una `fila` con
-      // gap chico — el bug real era que `.fila > *` (regla genérica,
-      // theme.css) le da `flex:1` a CUALQUIER hijo directo de una `.fila`,
-      // así que el h1 y la etiqueta se repartían el ancho disponible 50/50
-      // en vez de pegarse uno al otro (la etiqueta terminaba arrancando a
-      // mitad de camino del contenedor, lejos del año). Clase dedicada
-      // (`resumen-anio-cabecera-anio`, ver theme.css) que fija sus hijos en
-      // `flex:0 0 auto`: ambos miden su propio contenido, nunca más.
-      el('div', { class: 'resumen-anio-cabecera-anio' }, [
-        el('h1', { style: 'margin:0', text: String(anio) }),
-        el('span', { class: 'etiqueta', text: '(Resumen del año)' }),
-      ]),
+  // Pedido 1 (v10, "lo más bajo que puede estar el resumen es el piso del
+  // módulo de ranking [la columna izquierda]... si el contenido no entra,
+  // scroll interno, nunca estirar el módulo"): la cabecera (año) y el botón
+  // "Seguir" quedan SIEMPRE visibles, afuera de cualquier scroll — el año
+  // nunca deja de leerse, y el botón que cierra el resumen nunca hay que
+  // salir a buscarlo. Todo lo del medio (crónica + los dos gráficos +
+  // decisiones + peleas, que es lo que puede llegar a no entrar en un año
+  // cargado) vive en `.resumen-anio-cuerpo`, que main.js acota en altura
+  // (`limitarAlAltoDeIzquierda`, ui/sincronizar-alturas.js) al piso real de
+  // la columna izquierda — con scroll propio si no entra. El CSS ya trae un
+  // `max-height`/`overflow-y` de resguardo (theme.css) por si ese ajuste
+  // dinámico no llegara a correr (SSR, test, etc.): el criterio "nunca se
+  // estira" nunca depende solo del JS.
+  const encabezado = el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
+    el('div', { class: 'resumen-anio-icono' }, [icono('grafico', { tamano: 18 })]),
+    // v9 (feedback del usuario: "(Resumen del año) tiene que estar pegado
+    // al año, no flotando a la derecha"): esto YA vivía en una `fila` con
+    // gap chico — el bug real era que `.fila > *` (regla genérica,
+    // theme.css) le da `flex:1` a CUALQUIER hijo directo de una `.fila`,
+    // así que el h1 y la etiqueta se repartían el ancho disponible 50/50
+    // en vez de pegarse uno al otro (la etiqueta terminaba arrancando a
+    // mitad de camino del contenedor, lejos del año). Clase dedicada
+    // (`resumen-anio-cabecera-anio`, ver theme.css) que fija sus hijos en
+    // `flex:0 0 auto`: ambos miden su propio contenido, nunca más.
+    el('div', { class: 'resumen-anio-cabecera-anio' }, [
+      el('h1', { style: 'margin:0', text: String(anio) }),
+      el('span', { class: 'etiqueta', text: '(Resumen del año)' }),
     ]),
+  ]);
+
+  const cuerpoScroll = el('div', { class: 'stack resumen-anio-cuerpo' }, [
     narrativa ? el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
       el('div', { class: 'resumen-anio-icono resumen-anio-icono-chico' }, [icono('microfono', { tamano: 13 })]),
       el('p', { class: 'medio', style: 'margin:0;flex:1;min-width:0', text: narrativa }),
@@ -156,6 +176,11 @@ export function renderResumenAnio(region, {
     bloqueGrafico('Ranking', graficoRanking({ muestras: muestrasMedia, anio })),
     seccion('Decisiones', decisiones.map(itemDecision)),
     seccion('Peleas del año', peleas.map(itemPelea)),
+  ]);
+
+  const cuerpo = el('div', { class: 'stack resumen-anio' }, [
+    encabezado,
+    cuerpoScroll,
     el('button', {
       class: 'boton', type: 'button', text: 'Seguir', onClick: () => onContinuar(),
     }),
