@@ -18,7 +18,7 @@
 // rival y le pegan a atributos/forma/fatiga/moral: lo que hagas en el
 // campamento tiene que importar para la pelea.
 
-import { elegirPorRareza } from './cards.js';
+import { elegirPorRareza, conSalvaguardaDeCondiciones } from './cards.js';
 import { crearSparring } from './sparring.js';
 import { CARTAS_CAMPAMENTO } from '../content/cards-camp.js';
 
@@ -53,10 +53,16 @@ function rellenar(texto, oferta) {
   return texto.replace(/\{rival\}/g, oferta.rivalApodo ?? oferta.rivalNombre);
 }
 
-/** Elige una carta de campamento para esta etapa y ya la deja lista para mostrar (marcador {rival} relleno). */
-export function elegirCartaCampamento(rng, { etapa, oferta }) {
+/**
+ * Elige una carta de campamento para esta etapa y ya la deja lista para
+ * mostrar (marcador {rival} relleno). `jugador` es opcional (Sistema 3,
+ * cards.js): si no se pasa, `cumpleCondiciones` no filtra nada — así los
+ * callers/tests que todavía no lo pasan siguen funcionando tal cual.
+ */
+export function elegirCartaCampamento(rng, { etapa, oferta, jugador = null }) {
   const elegibles = CARTAS_CAMPAMENTO.filter((c) => c.etapas.includes(etapa));
-  const fuente = elegibles.length > 0 ? elegibles : CARTAS_CAMPAMENTO;
+  const base = elegibles.length > 0 ? elegibles : CARTAS_CAMPAMENTO;
+  const fuente = conSalvaguardaDeCondiciones(base, jugador);
   const carta = elegirPorRareza(rng, fuente);
   return {
     ...carta,
@@ -114,7 +120,7 @@ export function armarBeatsCampamento(rng, {
     return {
       tipo: 'campCarta',
       datos: {
-        carta: elegirCartaCampamento(rng, { etapa, oferta }), oferta, semanas: semanas[i], ultimo,
+        carta: elegirCartaCampamento(rng, { etapa, oferta, jugador }), oferta, semanas: semanas[i], ultimo,
       },
     };
   });

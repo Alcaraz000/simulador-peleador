@@ -1,4 +1,6 @@
-import { aplicarCarta, resolverProbabilidad, formatearMods, elegirPorRareza } from './cards.js';
+import {
+  aplicarCarta, resolverProbabilidad, formatearMods, elegirPorRareza, conSalvaguardaDeCondiciones,
+} from './cards.js';
 import { subirHeat } from './rivalry.js';
 import { clamp } from './stats.js';
 import { CARTAS_EVENTO } from '../content/cards-events.js';
@@ -8,7 +10,10 @@ export function elegirEvento(rng, { jugador, etapa, categoria = null }) {
   const elegibles = CARTAS_EVENTO.filter(
     (c) => c.etapas.includes(etapa) && (categoria === null || c.categoria === categoria),
   );
-  const fuente = elegibles.length > 0 ? elegibles : CARTAS_EVENTO;
+  const base = elegibles.length > 0 ? elegibles : CARTAS_EVENTO;
+  // Sistema 3 (cards.js, "las tarjetas deben depender de la situación"): la
+  // salvaguarda ya se ocupa de que esto nunca deje `base` en cero.
+  const fuente = conSalvaguardaDeCondiciones(base, jugador);
   return elegirPorRareza(rng, fuente);
 }
 
@@ -17,7 +22,8 @@ export function elegirCartaRedes(rng, { jugador, oferta = null }) {
     const deSemana = CARTAS_REDES.find((c) => c.id === 'post_pelea_grande');
     if (deSemana) return deSemana;
   }
-  return elegirPorRareza(rng, CARTAS_REDES);
+  const fuente = conSalvaguardaDeCondiciones(CARTAS_REDES, jugador);
+  return elegirPorRareza(rng, fuente);
 }
 
 export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = [], rivalObjetivoId = null }) {

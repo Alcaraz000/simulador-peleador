@@ -5,7 +5,7 @@ import { CARTAS_MEJORA } from '../../src/content/cards-improve.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import {
   formatearMods, repartirMejoras, aplicarCarta, resolverProbabilidad, porcentajesDe,
-  decidirCantidadMejoras, sortearPorRareza, elegirPorRareza,
+  decidirCantidadMejoras, sortearPorRareza, elegirPorRareza, conSalvaguardaDeCondiciones,
 } from '../../src/core/cards.js';
 
 const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
@@ -392,6 +392,152 @@ describe('repartirMejoras', () => {
         const cartas = repartirMejoras(createRng(semilla), { jugador: jugadorLesionado(), etapa: 'profesional' });
         for (const carta of cartas) expect(carta.estados ?? []).toContain('lesionado');
       }
+    });
+  });
+
+  // Sistema 3 (feedback del usuario: "una acción dice 'doble turno como
+  // cuando eras pibe' y mi personaje tiene 17 y es amateur... algunas
+  // tarjetas deben depender de la situación, edad, categoría, situación
+  // actual"): `carta.condiciones` es declarativo (edadMin/edadMax, campeon,
+  // famaMin/famaMax, dineroMin/dineroMax, resultadoReciente) y se filtra
+  // ADEMÁS de etapa/disciplina/estado, nunca en su lugar.
+  describe('condicionado por la situación del jugador (Sistema 3: edad/campeón/fama/dinero/resultado)', () => {
+    const catalogoSituacional = [
+      { id: 'base1', titulo: 'Base1', texto: 't', mods: { potencia: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'base2', titulo: 'Base2', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      {
+        id: 'para_veteranos', titulo: 'ParaVeteranos', texto: 't', mods: { iq: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMin: 30 },
+      },
+      {
+        id: 'para_pibes', titulo: 'ParaPibes', texto: 't', mods: { cardio: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMax: 20 },
+      },
+      {
+        id: 'para_campeones', titulo: 'ParaCampeones', texto: 't', mods: { menton: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: true },
+      },
+      {
+        id: 'para_no_campeones', titulo: 'ParaNoCampeones', texto: 't', mods: { disciplinaPersonal: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: false },
+      },
+      {
+        id: 'para_famosos', titulo: 'ParaFamosos', texto: 't', mods: { moral: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { famaMin: 50 },
+      },
+      {
+        id: 'para_ricos', titulo: 'ParaRicos', texto: 't', mods: { forma: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { dineroMin: 100000 },
+      },
+      {
+        id: 'post_victoria', titulo: 'PostVictoria', texto: 't', mods: { defensa: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { resultadoReciente: 'victoria' },
+      },
+      {
+        id: 'post_derrota', titulo: 'PostDerrota', texto: 't', mods: { tecnica: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { resultadoReciente: 'derrota' },
+      },
+    ];
+
+    it('edadMin/edadMax: cada carta solo aparece dentro de su rango de edad', () => {
+      const pibe = repartirMejoras(createRng(1), {
+        jugador: jugador({ edad: 17 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(pibe.some((c) => c.id === 'para_veteranos')).toBe(false);
+      expect(pibe.some((c) => c.id === 'para_pibes')).toBe(true);
+
+      const veterano = repartirMejoras(createRng(1), {
+        jugador: jugador({ edad: 33 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(veterano.some((c) => c.id === 'para_veteranos')).toBe(true);
+      expect(veterano.some((c) => c.id === 'para_pibes')).toBe(false);
+    });
+
+    it('campeon: true/false separa según si el jugador tiene al menos un cinturón', () => {
+      const sinCinturon = repartirMejoras(createRng(2), {
+        jugador: jugador({ titulos: [] }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(sinCinturon.some((c) => c.id === 'para_campeones')).toBe(false);
+      expect(sinCinturon.some((c) => c.id === 'para_no_campeones')).toBe(true);
+
+      const conCinturon = repartirMejoras(createRng(2), {
+        jugador: jugador({ titulos: ['Cinturón Mundial'] }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(conCinturon.some((c) => c.id === 'para_campeones')).toBe(true);
+      expect(conCinturon.some((c) => c.id === 'para_no_campeones')).toBe(false);
+    });
+
+    it('famaMin filtra por fama del jugador', () => {
+      const desconocido = repartirMejoras(createRng(3), {
+        jugador: jugador({ fama: 10 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(desconocido.some((c) => c.id === 'para_famosos')).toBe(false);
+
+      const famoso = repartirMejoras(createRng(3), {
+        jugador: jugador({ fama: 80 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(famoso.some((c) => c.id === 'para_famosos')).toBe(true);
+    });
+
+    it('dineroMin filtra por plata del jugador', () => {
+      const pobre = repartirMejoras(createRng(4), {
+        jugador: jugador({ dinero: 500 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(pobre.some((c) => c.id === 'para_ricos')).toBe(false);
+
+      const rico = repartirMejoras(createRng(4), {
+        jugador: jugador({ dinero: 500000 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(rico.some((c) => c.id === 'para_ricos')).toBe(true);
+    });
+
+    it('resultadoReciente lee la última pelea del historial profesional (vacío en juvenil/amateur, a propósito)', () => {
+      const sinHistorial = repartirMejoras(createRng(5), {
+        jugador: jugador({ historial: [] }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(sinHistorial.some((c) => c.id === 'post_victoria')).toBe(false);
+      expect(sinHistorial.some((c) => c.id === 'post_derrota')).toBe(false);
+
+      const ganador = repartirMejoras(createRng(5), {
+        jugador: jugador({ historial: [{ resultado: 'd' }, { resultado: 'v' }] }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(ganador.some((c) => c.id === 'post_victoria')).toBe(true);
+      expect(ganador.some((c) => c.id === 'post_derrota')).toBe(false);
+
+      const perdedor = repartirMejoras(createRng(5), {
+        jugador: jugador({ historial: [{ resultado: 'v' }, { resultado: 'd' }] }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
+      });
+      expect(perdedor.some((c) => c.id === 'post_derrota')).toBe(true);
+      expect(perdedor.some((c) => c.id === 'post_victoria')).toBe(false);
+    });
+
+    // Salvaguarda pedida explícitamente: el filtro situacional NUNCA puede
+    // dejar el pool en cero, sin importar cuán exigentes sean las
+    // condiciones combinadas en un momento puntual de la carrera.
+    it('salvaguarda: si NINGUNA carta del pool ya filtrado por etapa cumple las condiciones, se ignoran (nunca deja el pool vacío)', () => {
+      const catalogoImposible = [
+        { id: 'a', titulo: 'A', texto: 't', mods: { potencia: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMin: 200 } },
+        { id: 'b', titulo: 'B', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMin: 200 } },
+      ];
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugador(), etapa: 'profesional', cantidad: 2, catalogo: catalogoImposible,
+        });
+        expect(cartas).toHaveLength(2);
+      }
+    });
+
+    it('conSalvaguardaDeCondiciones: filtra normalmente cuando algo sobrevive', () => {
+      const pool = [
+        { id: 'x', condiciones: { edadMin: 200 } },
+        { id: 'y' },
+      ];
+      expect(conSalvaguardaDeCondiciones(pool, jugador()).map((c) => c.id)).toEqual(['y']);
+    });
+
+    it('conSalvaguardaDeCondiciones: si TODO queda afuera, devuelve el pool original tal cual', () => {
+      const pool = [
+        { id: 'x', condiciones: { edadMin: 200 } },
+        { id: 'z', condiciones: { edadMin: 300 } },
+      ];
+      expect(conSalvaguardaDeCondiciones(pool, jugador())).toEqual(pool);
+    });
+
+    it('sin jugador (undefined), no filtra nada (paso opcional en catálogos como campamento)', () => {
+      const pool = [{ id: 'x', condiciones: { edadMin: 200 } }];
+      expect(conSalvaguardaDeCondiciones(pool, null)).toEqual(pool);
     });
   });
 
