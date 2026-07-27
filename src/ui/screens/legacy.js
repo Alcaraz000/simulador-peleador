@@ -1,20 +1,6 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { bandera } from '../flags.js';
-import { icono } from '../icons.js';
-import { nombreConApodo } from '../../core/fighter.js';
-
-// Un ícono SVG por eje del legado (Task v3, pedido textual: "Faltan iconos
-// en la parte de legado"). 'nacional' no está acá: usa la bandera del
-// peleador (flags.js) en vez de un ícono de icons.js — tiene más sentido
-// para un eje que mide "cuánto representaste a tu país" y de paso refuerza
-// visualmente qué significa (el usuario preguntó textual "¿Legado nacional?
-// ¿Qué quiere decir eso?").
-const ICONO_LEGADO = {
-  deportivo: 'guante',
-  economico: 'billete',
-  mediatico: 'microfono',
-  etico: 'balanza',
-};
+import { nombreConApodo, recordAmateurTexto } from '../../core/fighter.js';
 
 function tile(nombre, valor, clase = '') {
   return el('div', { class: 'tile' }, [
@@ -59,28 +45,6 @@ function panelTitulos(titulosDetalle) {
   ]);
 }
 
-function filaLegado(l, jugador) {
-  const icon = l.id === 'nacional' ? bandera(jugador.nacionalidad, { ancho: 20 }) : icono(ICONO_LEGADO[l.id]);
-  return el('div', { class: 'panel', 'data-legado': l.id }, [
-    el('div', { style: 'display:flex;justify-content:space-between;align-items:center;gap:10px' }, [
-      el('div', { style: 'display:flex;align-items:center;gap:8px;min-width:0' }, [
-        icon,
-        el('div', {}, [
-          el('div', { style: 'font-weight:800', text: l.nombre }),
-          el('div', { class: 'etiqueta', text: l.texto }),
-        ]),
-      ]),
-      el('div', { style: 'text-align:right;flex-shrink:0' }, [
-        el('div', { class: 'dorado', style: 'font-weight:800', text: l.etiqueta }),
-        el('div', { class: 'etiqueta', text: `${l.puntaje}/100` }),
-      ]),
-    ]),
-    el('div', { class: 'barra dorada', style: 'margin-top:8px' }, [
-      el('i', { style: `width:${l.puntaje}%` }),
-    ]),
-  ]);
-}
-
 // Estadísticas de carrera, integradas de punta a punta en la pantalla de
 // legado (Task v3, pedido textual: "las estadísticas también deben estar
 // acá, no al clickear en el botón 'Ver estadísticas'"). Antes vivían en una
@@ -88,6 +52,15 @@ function filaLegado(l, jugador) {
 function bloqueEstadisticas(e) {
   return el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta', text: 'Los números de la carrera' }),
+    // Pedido 3 (v7, "mostrá la 'racha de victorias' más larga... y la
+    // 'racha de derrotas' también, porque son de los números que un
+    // boxeador recuerda"): fila propia de solo dos tiles (más peso visual
+    // que compartir fila con otros cuatro), arriba de todo el bloque de
+    // estadísticas.
+    el('div', { class: 'fila' }, [
+      tile('Racha de victorias', e.rachaMasLarga, 'verde'),
+      tile('Racha de derrotas', e.rachaDerrotasMasLarga, 'rojo'),
+    ]),
     el('div', { class: 'fila' }, [
       tile('Peleas', e.peleas),
       tile('Ganadas', e.victorias, 'verde'),
@@ -96,7 +69,6 @@ function bloqueEstadisticas(e) {
     ]),
     el('div', { class: 'fila' }, [
       tile('% KO', `${e.porcentajeKO}%`, 'dorado'),
-      tile('Mejor racha', e.rachaMasLarga),
       tile('Rounds', e.roundsPeleados),
       tile('Prom. rounds', e.promedioRoundPorPelea),
     ]),
@@ -112,6 +84,44 @@ function bloqueEstadisticas(e) {
         ? el('div', { class: 'medio', style: 'margin-top:6px', text: `El rival más duro que enfrentaste: ${nombreConApodo(e.rivalMasDuro)} (media ${e.rivalMasDuro.media}).` })
         : null,
     ]),
+  ]);
+}
+
+const METODOS = { ko: 'KO', tko: 'TKO', sumision: 'Sumisión', decision: 'Decisión', descalificacion: 'DQ' };
+
+// Pedido 2 (v7, "el amateur tenga su propio historial de verdad —las
+// peleas, no solo el récord— y que se vea en la pantalla final, junto al
+// profesional pero claramente separado"): mismo lenguaje visual que el
+// historial de la ficha (renderFicha, profile.js) — rival, método/round,
+// resultado coloreado — pero en su PROPIO panel (`data-bloque`
+// distinto), nunca mezclado con `panelTitulos`/`bloqueEstadisticas` de
+// arriba, que hablan solo de lo profesional.
+function filaPeleaAmateur(p, i) {
+  return el('div', {
+    class: 'panel', style: 'display:flex;justify-content:space-between;gap:8px',
+  }, [
+    el('div', {}, [
+      el('div', { style: 'font-weight:800', text: `${i + 1}. ${p.rivalNombre}` }),
+      el('div', { class: 'etiqueta', text: `${METODOS[p.metodo] ?? p.metodo} · round ${p.round}` }),
+    ]),
+    el('div', {
+      class: p.resultado === 'v' ? 'verde' : p.resultado === 'd' ? 'rojo' : 'sutil',
+      style: 'font-weight:800',
+      text: p.resultado === 'v' ? 'Ganó' : p.resultado === 'd' ? 'Perdió' : 'Empate',
+    }),
+  ]);
+}
+
+// Sin peleas amateur (guardado de antes de que existiera `historialAmateur`,
+// o un debut directo en tests) no hay bloque: nunca un panel vacío con solo
+// el título.
+function panelHistorialAmateur(jugador) {
+  const historial = jugador.historialAmateur ?? [];
+  if (historial.length === 0) return null;
+  return el('div', { class: 'panel', 'data-bloque': 'historial-amateur' }, [
+    el('div', { class: 'etiqueta', text: `Historial amateur · ${recordAmateurTexto(jugador)}` }),
+    el('div', { class: 'etiqueta', style: 'margin-top:2px', text: 'No cuenta para el ranking ni para el récord profesional.' }),
+    el('div', { class: 'stack', style: 'margin-top:8px' }, historial.map(filaPeleaAmateur)),
   ]);
 }
 
@@ -146,6 +156,7 @@ export function renderLegado(contenedor, {
     ]),
     panelTitulos(legado.titulosDetalle),
     bloqueEstadisticas(estadisticas),
+    panelHistorialAmateur(jugador),
     legado.archirrival ? el('div', { class: 'panel' }, [
       el('div', { class: 'etiqueta rojo', text: 'Archirrival' }),
       el('div', { style: 'font-weight:800', text: nombreConApodo(legado.archirrival) }),
@@ -159,8 +170,6 @@ export function renderLegado(contenedor, {
       el('div', { class: 'etiqueta dorado', text: 'Biografía' }),
       el('p', { text: legado.biografia }),
     ]),
-    el('div', { class: 'etiqueta', text: 'Tu legado' }),
-    ...legado.legados.map((l) => filaLegado(l, jugador)),
     el('button', { class: 'boton', 'data-accion': 'nueva', text: 'Nueva carrera', onClick: onNuevaCarrera }),
   ]));
 }
