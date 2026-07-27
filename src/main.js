@@ -838,11 +838,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // apareció una frase nueva Y leerla completa (los textos de rama son cortos,
   // pero de todos modos una oración entera). Subida a 2200ms: de sobra para
   // leer una frase corta con calma, sin que se sienta como una espera muerta.
-  // Presupuesto de minutos (medido con scripts/_count-rolls-temp.mjs, 300
-  // semillas "jugando bien"): ~3.2 rolls/carrera en promedio (máx. 9), así que
-  // el aumento de +1100ms suma ~3.5s por carrera en el peor caso típico —
-  // muy por debajo del margen de 1 minuto que el brief permite para este
-  // ajuste.
+  // Presupuesto de minutos (medido con un script puntual, no versionado, 300
+  // semillas "jugando bien" con el mismo criterio que balance-sim.mjs):
+  // ~3.2 rolls/carrera en promedio (máx. 9), así que el aumento de +1100ms
+  // suma ~3.5s por carrera en el caso típico — muy por debajo del margen de
+  // 1 minuto que el brief permite para este ajuste.
   const PAUSA_RESULTADO_MS = 2200;
 
   // Resuelve una opción (con o sin `probabilidades`) y, si tiene azar, corre
