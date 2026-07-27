@@ -548,33 +548,6 @@ h2 { font-size: 17px; font-weight: 800; }
 .panel-peleador-atributo.destaque-positivo { animation: destaque-fila-positiva 0.9s ease; }
 .panel-peleador-atributo.destaque-negativo { animation: destaque-fila-negativa 0.9s ease; }
 
-/* Dado al tocar Continuar (v3): el gesto de transición entre beats. Gira y
-   "rebota" una vez, corto (750ms), sobre el propio botón. */
-@keyframes tirar-dado {
-  0%   { transform: rotate(0deg) scale(1); }
-  30%  { transform: rotate(150deg) scale(1.18); }
-  65%  { transform: rotate(260deg) scale(0.92); }
-  100% { transform: rotate(360deg) scale(1); }
-}
-
-.boton-tirando-dado {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* El botón queda disabled mientras dura (evita un segundo click a mitad de
-   camino), pero el dado no se ve apagado como un botón inactivo común: es el
-   gesto de la carrera, tiene que verse vivo mientras gira. Selector con la
-   misma especificidad que `.boton:disabled` (una clase + :disabled) para
-   pisarlo de verdad, no solo por orden de declaración. */
-.boton.boton-tirando-dado:disabled {
-  opacity: 1;
-  cursor: default;
-}
-
-.boton-tirando-dado svg { animation: tirar-dado 0.75s ease; }
-
 /* Grilla real de 3 columnas (v4): izquierda (personaje/rincón/categoría) y
    derecha (calendario+dinero/fama+próxima/noticias) con un ancho cómodo para
    sus tarjetas; el centro (atributos/estado/decisión, "el corazón" del

@@ -20,6 +20,8 @@ import { calcularLegado } from './core/legacy.js';
 import { guardar, cargar, borrar } from './core/save.js';
 import { clamp } from './core/stats.js';
 import { estadisticasDeCarrera } from './core/stats-carrera.js';
+import { accionRivalDe } from './core/tramite.js';
+import { ANUNCIO_TRAMITE, RESULTADO_DESTACADO_TRAMITE } from './content/tramite-lines.js';
 import { el, fmtDinero } from './ui/dom.js';
 
 import { renderLogin } from './ui/screens/login.js';
@@ -40,12 +42,11 @@ import {
 import { renderPanelProxima } from './ui/screens/panel-proxima.js';
 import { renderPanelNoticias } from './ui/screens/panel-noticias.js';
 import { renderPanelDecision, renderDesenlace } from './ui/screens/panel-decision.js';
-import { renderPanelAvance } from './ui/screens/panel-avance.js';
+import { renderCardTramite, opcionesMinijuego, NOMBRE_ACCION } from './ui/screens/panel-tramite.js';
 import { renderCalendario } from './ui/screens/panel-calendario.js';
 import { renderRanking } from './ui/screens/ranking.js';
 import { animarRoll } from './ui/components/roll.js';
 import { animarAtributos, destacarAtributos } from './ui/components/animar-numero.js';
-import { animarDado } from './ui/components/dado.js';
 import { icono } from './ui/icons.js';
 
 export const VERSION = '0.1.0';
@@ -210,19 +211,6 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (cancelarRollPendiente) cancelarRollPendiente();
   }
 
-  // Mismo problema, mismo remedio, para el dado que se tira al tocar
-  // "Continuar" (Task v3): es cosmético y corto (600-900ms), pero si el
-  // jugador se va a la Ficha en pleno giro, el timer sigue corriendo en
-  // segundo plano igual que el del roll — sin cancelarlo, `siguiente()`
-  // terminaría disparando DESPUÉS de que la Ficha reemplazó `contenedor`,
-  // con el mismo riesgo de `asegurarShell()` reconstruyendo el tablero
-  // debajo suyo.
-  let cancelarDadoPendiente = null;
-
-  function abandonarDadoPendiente() {
-    if (cancelarDadoPendiente) cancelarDadoPendiente();
-  }
-
   // Misma familia de problema una vez más, ahora para la entrada escalonada
   // de noticias nuevas (Task v3, feedback del usuario: "que se vayan
   // sumando"): panel-noticias.js deja timers cortos (250-400ms entre una y
@@ -321,7 +309,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       el('div', { dataset: { bloque: 'contenido' } }),
     ]));
     renderPanelAtributos(shell.regiones.centro.querySelector('[data-bloque="atributos"]'), { jugador: partida.jugador });
-    renderPanelEstado(shell.regiones.centro.querySelector('[data-bloque="estado"]'), { jugador: partida.jugador });
+    // `onCurar` (Pedido 3, v7): el botón de curar una lesión vivía en la
+    // pantalla intermedia "Lo que viene ahora" (panel-avance.js, ya
+    // eliminada) — ahora vive acá, en el panel de Estado, siempre visible sin
+    // importar qué tarjeta esté mostrando el bloque de abajo.
+    renderPanelEstado(shell.regiones.centro.querySelector('[data-bloque="estado"]'), { jugador: partida.jugador, onCurar: curar });
 
     // `class:'stack'` (v3, feedback del usuario: "está muy pegada al módulo
     // de arriba del próximo combate"): antes este wrapper no tenía clase, así
@@ -394,83 +386,50 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     volverAlTablero();
   }
 
-  // El estado "entre beats": lo que ANTES mostraba renderDashboard (v1,
-  // pantalla completa) ahora es un panel más en el centro del MISMO tablero
-  // (Task 6.1 — el tablero es la pantalla principal, siempre). Extraída
-  // aparte de `irADashboard` (no un closure inline) para poder reusarla tal
-  // cual como `pintarCentro` cuando se cancela un roll o un dado pendientes
-  // (ver abandonarRollPendiente/abandonarDadoPendiente): asignar
-  // `pintarCentro = irADashboard` directo re-entraría en `centro()` (que ya
-  // estaría en medio de resolverse) — esto es la versión "solo pintar", sin
-  // el `persistir()` ni el `centro()` de alrededor.
-  function pintarPanelAvance() {
-    renderPanelAvance(centroContenido(), { partida, onSiguiente: siguienteConDado, onCurar: curar });
-  }
-
-  function irADashboard() {
+  // Pedido 3 (v7, "no quiero que se vea 'lo que viene ahora', debe pasar
+  // directo a la próxima tarjeta de acción"): la pantalla intermedia "entre
+  // beats" (panel-avance.js, con su botón "Continuar" + el dado de
+  // transición) se elimina del todo — nunca se pinta, ni por un instante. Al
+  // resolver una tarjeta (elegir una opción, rechazar una oferta, cerrar una
+  // negociación) el juego llama directo a `siguiente()`, que ya se encarga
+  // de pintar lo que sigue en la MISMA región central. `curar` (antes vivía
+  // en esa pantalla) se mudó al panel de Estado (siempre visible, ver
+  // montarTablero/renderPanelEstado) y ya NO avanza ningún beat — solo
+  // refresca el tablero con la lesión curada, dejando la tarjeta actual tal
+  // cual estaba.
+  function curar() {
+    const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
+    if (paso.ok) partida = { ...partida, jugador: paso.peleador };
     persistir();
-    centro(pintarPanelAvance);
+    volverAlTablero();
   }
 
   // Reemplaza a mostrarDesenlace/renderDesenlace para las decisiones (Task
   // v3, feedback del usuario): ya no hay pantalla de resultado con botón
-  // "Seguir" — se aplica el efecto y la carrera sigue derecho al estado
-  // ocioso (Continuar). Lo único que le avisa al jugador qué cambió es la
+  // "Seguir" — se aplica el efecto y la carrera sigue derecho a la próxima
+  // tarjeta (Pedido 3, v7: tampoco hay ya una pantalla intermedia "entre
+  // beats" en el medio). Lo único que le avisa al jugador qué cambió es la
   // animación de números + el resalte verde/rojo de SOLO las filas de
   // atributo que cambiaron (antes, `shell.destacar('izquierda')` hacía
   // brillar TODO el módulo izquierdo por cualquier cambio — queja textual).
   // Desde la grilla 3×3 (v4) los atributos/estado viven en la columna
   // CENTRAL, no en la izquierda — ver montarTablero.
   //
-  // El ORDEN importa: animar tiene que pasar DESPUÉS de irADashboard() (que
+  // El ORDEN importa: animar tiene que pasar DESPUÉS de `siguiente()` (que
   // llama a montarTablero(), y esa SIEMPRE repinta atributos/estado desde
   // cero — ver montarTablero). Animar ANTES se pierde en el mismo tick:
   // mount() no diffea, así que el segundo repintado deja huérfanos los nodos
   // que `animarAtributos`/`destacarAtributos` acababan de tocar, sin que el
-  // navegador llegue a pintar ese estado intermedio.
+  // navegador llegue a pintar ese estado intermedio. Si `siguiente()` cerró
+  // la carrera (`partida.terminada`), `contenedor` ya lo reemplazó
+  // `finDeCarrera()` con la pantalla de legado — animar ahí no tiene sentido
+  // (y `shellActual` quedó apuntando a un nodo que ya no está montado).
   function aplicarEfectoYSeguir({ jugador, rivalidades = partida.rivalidades, deltas = {} }) {
     partida = { ...partida, jugador, rivalidades };
-    irADashboard();
+    siguiente();
+    if (partida.terminada) return;
     animarAtributos(shellActual.regiones.centro, deltas);
     destacarAtributos(shellActual.regiones.centro, deltas);
-  }
-
-  // Al tocar "Continuar" se tira el dado (Task v3, pedido textual: "el juego
-  // se llama así por algo") antes de que aparezca la siguiente decisión.
-  // Mismo cuidado que con el roll de una carta: si el jugador se va a la
-  // Ficha en pleno giro, `cancelarDadoPendiente` resuelve YA la transición
-  // (nunca pinta nada — el tablero no está a la vista) en vez de dejar el
-  // timer terminar solo, en segundo plano, contra un `contenedor` que la
-  // Ficha ya reemplazó.
-  //
-  // El guard `dadoResuelto` evita un bug sutil: con prefers-reduced-motion
-  // (o si algún día `animarDado` resuelve síncrono por otro motivo),
-  // `onFin` corre DENTRO del propio `animarDado(...)`, antes de que esta
-  // función llegue a la línea de abajo — sin el guard, esa línea
-  // pisaría `cancelarDadoPendiente` con un cancelador VIEJO que dispararía
-  // `siguiente()` una segunda vez si el jugador entra a la Ficha más tarde
-  // (saltearía un beat entero de la carrera).
-  function siguienteConDado() {
-    const boton = centroContenido().querySelector('[data-accion="siguiente"]');
-    if (!boton) { siguiente(); return; }
-
-    let dadoResuelto = false;
-    const controladorDado = animarDado(boton, {
-      onFin: () => {
-        dadoResuelto = true;
-        cancelarDadoPendiente = null;
-        siguiente();
-      },
-    });
-    if (!dadoResuelto) {
-      cancelarDadoPendiente = () => { controladorDado.detener(); cancelarDadoPendiente = null; siguiente(); };
-    }
-  }
-
-  function curar() {
-    const paso = curarConDinero(partida.jugador, partida.jugador.estado.lesion);
-    if (paso.ok) partida = { ...partida, jugador: paso.peleador };
-    irADashboard();
   }
 
   // `abrirFicha`/`abrirTienda` reemplazan `contenedor` entero (ficha) o abren
@@ -483,7 +442,6 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // detrás, así que un roll terminando ahí no tiene el mismo problema.
   function abrirFicha(jugador, seccion = 'atributos') {
     abandonarRollPendiente();
-    abandonarDadoPendiente();
     abandonarNoticiasPendientes();
     abandonarSparringPendiente();
     renderFicha(contenedor, { jugador, seccion, onCerrar: volverAlTablero });
@@ -521,13 +479,23 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // muestra COMO OVERLAY sobre lo que se acaba de pintar (mismo patrón que
   // la tienda: el tablero sigue montado y visible detrás), nunca reemplaza
   // el beat real.
+  // `persistir()` vive ACÁ (no en cada llamador): es el único punto de
+  // entrada que de verdad avanza la carrera un beat, así que es el único
+  // lugar que hace falta para que el autoguardado quede siempre justo antes
+  // del próximo beat (todavía sin consumir) — mismo momento que antes
+  // guardaba `irADashboard()` (Pedido 3, v7: esa pantalla intermedia ya no
+  // existe, pero el momento del guardado es el mismo).
   function siguiente() {
+    persistir();
     const etapaAntes = etapaActual(partida).id;
     const paso = siguienteBeat(partida);
     partida = paso.partida;
     const hitoEtapa = hitoDeEtapa({ etapaAnteriorId: etapaAntes, etapaNueva: etapaActual(partida) });
     if (partida.terminada) return finDeCarrera();
-    if (!paso.beat) { irADashboard(); if (hitoEtapa) mostrarHito(hitoEtapa); return; }
+    // `!paso.beat` no debería poder pasar en la práctica (armarCola siempre
+    // deja al menos el beat 'mejora' en la cola de un bloque nuevo — ver el
+    // comentario grande de career.js): red de seguridad, no un estado real.
+    if (!paso.beat) { volverAlTablero(); if (hitoEtapa) mostrarHito(hitoEtapa); return; }
     jugarBeat(paso.beat);
     if (hitoEtapa) mostrarHito(hitoEtapa);
   }
@@ -542,7 +510,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     if (beat.tipo === 'oferta') return beatOferta(beat);
     if (beat.tipo === 'lesionSinOferta') return beatLesionSinOferta(beat);
     if (beat.tipo === 'peleasResueltas') return beatPeleasResueltas(beat);
-    return irADashboard();
+    return volverAlTablero();
   }
 
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): las peleas
@@ -550,26 +518,143 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // llegan acá RESUELTAS — career.js las aplicó al jugador dentro de
   // armarCola, antes de que este beat exista. Acá solo hay que mostrar el
   // resumen con sabor (titulo/texto ya armados por resumenLote) y un
-  // detalle corto de cada combate, mismo layout que cualquier otro
-  // desenlace (título + texto + Seguir).
+  // detalle corto de cada combate.
   const METODO_TEXTO_TRAMITE = {
     ko: 'KO', tko: 'TKO', decision: 'decisión', sumision: 'sumisión',
   };
 
-  function beatPeleasResueltas(beat) {
-    const { titulo, texto, resultados } = beat.datos;
-    const deltasTexto = resultados.map((r) => {
+  function deltasTextoTramite(resultados) {
+    return resultados.map((r) => {
       const rival = r.rivalApodo ?? r.rivalNombre;
       const veredicto = r.resultado === 'v' ? 'Ganaste' : r.resultado === 'e' ? 'Empataste' : 'Perdiste';
       const metodo = METODO_TEXTO_TRAMITE[r.metodo] ?? r.metodo;
       return `${veredicto} vs ${rival} (${metodo})`;
     });
-    centro(() => renderDesenlace(centroContenido(), {
-      titulo,
-      texto,
-      deltasTexto,
-      onContinuar: irADashboard,
-    }));
+  }
+
+  function textoFaltanSemanas(semanas) {
+    if (semanas <= 0) return 'Es esta semana';
+    return `Faltan ${semanas} ${semanas === 1 ? 'semana' : 'semanas'}`;
+  }
+
+  // Marcador con la perspectiva del JUGADOR siempre primero (ej. "0-3" si
+  // perdió 0 a 3) — mismo criterio que el récord del jugador en el resto del
+  // tablero, nunca "el marcador del que ganó" primero.
+  function textoMarcador(marcador) {
+    return `${marcador.jugador}-${marcador.rival}`;
+  }
+
+  function textoResultadoDestacado(entrada) {
+    const pool = RESULTADO_DESTACADO_TRAMITE[entrada.detalle]?.[entrada.resultado] ?? [];
+    if (pool.length === 0) return '';
+    const plantilla = rng.pick(pool);
+    const mote = entrada.rivalApodo ?? entrada.rivalNombre;
+    return plantilla.replace(/\{rival\}/g, mote).replace(/\{marcador\}/g, textoMarcador(entrada.marcador));
+  }
+
+  // Pedidos 1 y 2 (v7): un lote de trámite ya no aparece resuelto de la
+  // nada, de un saque. El PRIMER resultado del lote (si lo hay — ver
+  // armarLotePeleas, tramite.js) llega con `marcador`+`oferta` completos:
+  // ese es el que se "juega un poco" acá, en dos fases dentro del MISMO beat
+  // (tarjeta del rival, con el anuncio del entrenador ya adentro -> minijuego
+  // -> resultado), nunca una pantalla aparte. El resto del lote (si el año
+  // trajo más de un cupo de trámite) sigue narrado en la síntesis de
+  // siempre (resumenLote), como parte del resultado final — "además,
+  // tuviste otras N peleas esa temporada", nunca su propia tarjeta (ver el
+  // comentario grande en armarLotePeleas sobre el presupuesto de minutos).
+  function beatPeleasResueltas(beat) {
+    const {
+      titulo, texto, resultados, semanasPorIntento,
+    } = beat.datos;
+    const destacado = resultados[0];
+
+    // Red de seguridad: si por algún motivo el primer resultado no trae
+    // minijuego (no debería pasar nunca en la práctica: o el lote no sacó
+    // destacado esta vez — ver PROB_DESTACADO_TRAMITE, tramite.js — o de
+    // verdad no hay ninguno), cae al resumen de siempre, sin la tarjeta
+    // interactiva.
+    if (!destacado || !destacado.marcador) {
+      centro(() => renderDesenlace(centroContenido(), {
+        titulo,
+        texto,
+        deltasTexto: deltasTextoTramite(resultados),
+        onContinuar: () => siguiente(),
+      }));
+      return;
+    }
+
+    const { oferta, marcador } = destacado;
+    const rival = partida.mundo.roster.find((p) => p.id === destacado.rivalId) ?? null;
+    const hayResto = resultados.length > 1;
+
+    let fase = 'card';
+    let ronda = 0;
+    let ultimaRondaTexto = null;
+
+    function pintarTramite() {
+      if (fase === 'card') {
+        renderCardTramite(centroContenido(), {
+          oferta,
+          rival,
+          semanas: semanasPorIntento,
+          apertura: rng.pick(ANUNCIO_TRAMITE),
+          onSimular: () => { fase = 'minijuego'; pintarTramite(); },
+        });
+        return;
+      }
+      if (fase === 'minijuego') {
+        const puntosJugador = marcador.rondas.slice(0, ronda).filter((r) => r === 'jugador').length;
+        const puntosRival = ronda - puntosJugador;
+        renderPanelDecision(centroContenido(), {
+          titulo: `Ronda ${ronda + 1} de hasta ${marcador.rondas.length}`,
+          bajada: `Vos ${puntosJugador} - ${puntosRival} Rival`,
+          texto: ultimaRondaTexto ?? `Elegí cómo boxear esta ronda contra "${oferta.rivalApodo ?? oferta.rivalNombre}".`,
+          opciones: opcionesMinijuego(),
+          onElegir: (accionId) => {
+            // El resultado de ESTA ronda ya está decidido desde el núcleo
+            // (armarMarcador, tramite.js, pesado por la diferencia de
+            // media) — acá solo se deriva qué acción tuvo que jugar el
+            // rival para que ese resultado cierre con el ciclo (nunca al
+            // revés: el pick del jugador no cambia el marcador, solo la
+            // crónica de la ronda).
+            const gana = marcador.rondas[ronda] === 'jugador';
+            const accionRival = accionRivalDe(accionId, gana);
+            ultimaRondaTexto = `Elegiste "${NOMBRE_ACCION[accionId]}", el rival fue a "${NOMBRE_ACCION[accionRival]}" — ${gana ? 'ganaste' : 'perdiste'} la ronda.`;
+            ronda += 1;
+            if (ronda < marcador.rondas.length) { pintarTramite(); return; }
+            fase = 'resultado';
+            // La pelea ya se jugó: se limpia `proximaPelea` ANTES de
+            // repintar (mismo criterio que cerrarPelea con una pelea
+            // grande), así el panel de la derecha ya sale limpio en el
+            // mismo repintado — nunca con la cuenta regresiva vieja todavía
+            // puesta un instante. `centro()` (no un `pintarTramite()`
+            // suelto) es lo que dispara ESE repintado: a diferencia de las
+            // otras transiciones de fase (puramente locales), acá `partida`
+            // de verdad cambió.
+            partida = { ...partida, proximaPelea: null };
+            centro(pintarTramite);
+          },
+        });
+        return;
+      }
+      // fase === 'resultado': `proximaPelea` ya se limpió al entrar acá (ver
+      // arriba) — solo queda narrar el desenlace con la voz del juego.
+      const restoTexto = hayResto ? ` ${texto}` : '';
+      renderDesenlace(centroContenido(), {
+        titulo: destacado.resultado === 'v' ? 'Ganaste' : 'Perdiste',
+        texto: `${textoResultadoDestacado(destacado)}${restoTexto}`,
+        deltasTexto: [`Bolsa: ${fmtDinero(oferta.bolsa)}`, textoMarcador(marcador)],
+        onContinuar: () => siguiente(),
+      });
+    }
+
+    // Pedido 1: activa panel-proxima.js (columna derecha) con el rival, la
+    // bolsa y la cuenta regresiva ANTES de mostrar nada resuelto.
+    partida = {
+      ...partida,
+      proximaPelea: { oferta, semanaObjetivo: (partida.semanaGlobal ?? 1) + semanasPorIntento },
+    };
+    centro(pintarTramite);
   }
 
   // 'lesionSinOferta' es un beat simple (nada que jugar, solo un aviso) que
@@ -596,7 +681,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         ? `Nadie te ofrece pelear: seguís de baja por "${lesion.nombre.toLowerCase()}" — ${semanas} ${semanas === 1 ? 'semana' : 'semanas'} más para volver.`
         : 'Nadie te ofrece pelear mientras estás lesionado.',
       deltasTexto: [],
-      onContinuar: irADashboard,
+      onContinuar: () => siguiente(),
     }));
   }
 
@@ -627,10 +712,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   // Cuánto se deja el resultado de un roll fijo en la tarjeta antes de
-  // volver al estado ocioso: tiempo de sobra para leer una frase corta sin
-  // frenar el ritmo de la carrera al repetirse. No es una animación de
-  // movimiento (nada se mueve mientras tanto), así que no depende de
-  // prefers-reduced-motion como sí lo hacen animarRoll/animarDado.
+  // seguir: tiempo de sobra para leer una frase corta sin frenar el ritmo de
+  // la carrera al repetirse. No es una animación de movimiento (nada se
+  // mueve mientras tanto), así que no depende de prefers-reduced-motion como
+  // sí lo hace animarRoll.
   const PAUSA_RESULTADO_MS = 1100;
 
   // Resuelve una opción (con o sin `probabilidades`) y, si tiene azar, corre
@@ -871,7 +956,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         // muestra el panel) nunca llegó a setearse acá — solo la firma
         // (firmarPelea) la crea — así que no hace falta tocarla.
         partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
-        irADashboard();
+        siguiente();
       },
     }));
   }
@@ -913,7 +998,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           });
           partida = { ...partida, noticias: agregarNoticias(partida.noticias, [{ ...noticia, propia: true }]) };
         }
-        irADashboard();
+        // Firmar deja el campamento de preparación al frente de la cola
+        // (firmarPelea, career.js): `siguiente()` lo muestra derecho, sin la
+        // pantalla intermedia de antes (Pedido 3, v7).
+        siguiente();
       },
       // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
       // botón "tiene que estar siempre disponible", incluso con la
@@ -923,7 +1011,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
         partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
-        irADashboard();
+        siguiente();
       },
     });
     pintar();
@@ -1022,7 +1110,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           // moleste" es pedido explícito del usuario.
           if (resumen.hitos.length > 0) mostrarHito(resumen.hitos[0]);
         },
-        onContinuar: irADashboard,
+        // Pedido 3 (v7): sin pantalla intermedia entre el resumen de la
+        // pelea y lo próximo — "Continuar" pasa derecho a la siguiente
+        // tarjeta (mismo criterio que cualquier otro beat resuelto).
+        onContinuar: () => siguiente(),
       });
     }
 
@@ -1147,15 +1238,19 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     });
   }
 
+  // Pedido 3 (v7): retomar una partida guardada (o recién creada) ya no pasa
+  // por la pantalla intermedia — `siguiente()` muestra derecho lo que sigue
+  // en la cola (el mismo beat que estaba pendiente cuando se guardó, si lo
+  // había) o arma el próximo bloque si hace falta.
   function arrancar() {
-    if (partida && !partida.terminada) return irADashboard();
+    if (partida && !partida.terminada) return siguiente();
     if (partida && partida.terminada && partida.legado) return finDeCarrera();
     renderCreacion(contenedor, {
       onComenzar: (jugador) => {
         const semilla = Date.now();
         partida = crearPartida({ jugador, semilla });
         rng = createRng(semilla + 7777);
-        irADashboard();
+        siguiente();
       },
     });
   }

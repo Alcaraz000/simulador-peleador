@@ -1,4 +1,4 @@
-// Task 6.3 (v2): barrida final "con ojo de jugador". Juega carreras enteras
+﻿// Task 6.3 (v2): barrida final "con ojo de jugador". Juega carreras enteras
 // por la UI real (happy-dom: login -> creación -> tablero -> pipeline de
 // pelea -> legado), incluida la creación de personaje completa por sus 4
 // pasos (algo que tests/ui/tablero-persistente.test.js no cubre: ahí las
@@ -162,12 +162,16 @@ function jugarDesdeCareo(cont) {
 }
 
 function resolverUnPaso(cont, { aceptarOfertas }) {
+  // Pedido 3 (v7): sin pantalla intermedia — cada paso ya deja servido lo
+  // que sigue (incluido el legado, si la carrera terminó), sin un click de
+  // "Continuar" previo.
+  if (cont.querySelector('[data-accion="nueva"]')) return 'legado';
   if (hayPantallaDePelea(cont)) { jugarDesdeCareo(cont); return 'pelea'; }
 
-  const botonIdle = cont.querySelector('.shell-centro [data-accion="siguiente"]');
-  if (botonIdle) botonIdle.click();
-
-  if (cont.querySelector('[data-accion="nueva"]')) return 'legado';
+  // Pedido 2 (v7, minijuego de trámite): la tarjeta del rival, con "Simular
+  // pelea".
+  const botonSimular = cont.querySelector('[data-accion="simular-pelea"]');
+  if (botonSimular) { botonSimular.click(); return 'tramite-simular'; }
 
   if (cont.querySelector('.grilla-paos')) {
     let guardia = 0;
@@ -251,7 +255,7 @@ function jugarCarreraCompletaPorUI(cont, { semilla, estiloPreferido, aceptarOfer
 
     let guardia = 0;
     let ofertasVistas = 0;
-    while (!cont.querySelector('[data-accion="nueva"]') && guardia < 400) {
+    while (!cont.querySelector('[data-accion="nueva"]') && guardia < 900) {
       guardia += 1;
       let aceptar = aceptarOfertas;
       if (rechazarUnaDeCada > 0 && cont.querySelector('.shell-centro [data-accion="aceptar"]')) {
@@ -355,7 +359,7 @@ describe('barrida final: varias carreras completas por la UI real (Task 6.3)', (
       }
 
       let guardia = 0;
-      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 400) {
+      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 900) {
         guardia += 1;
         const tipo = resolverUnPaso(cont, { aceptarOfertas: true });
         if (tipo === null) {
@@ -434,7 +438,7 @@ describe('barrida ancha: muchas semillas por la UI real, camino rápido (Task 6.
       revisarTodo(cont, `ancha-${semilla}-inicio`);
 
       let guardia = 0;
-      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 400) {
+      while (!cont.querySelector('[data-accion="nueva"]') && guardia < 900) {
         guardia += 1;
         const tipo = resolverUnPaso(cont, { aceptarOfertas: true });
         if (tipo === null) {

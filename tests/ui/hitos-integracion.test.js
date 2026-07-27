@@ -64,17 +64,13 @@ afterEach(() => {
   document.body.innerHTML = '';
 });
 
-function continuar() {
-  const boton = cont.querySelector('[data-accion="siguiente"]');
-  expect(boton).toBeTruthy();
-  boton.click();
-  vi.advanceTimersByTime(900);
-}
-
 describe('Sistema 4: popup de "pasar de etapa" cableado de punta a punta', () => {
+  // Pedido 3 (v7): `iniciar()` sobre una partida guardada ya no pasa por una
+  // pantalla intermedia con un botón "Continuar" — retomarla (arrancar() ->
+  // siguiente()) ya dispara el cruce de etapa apenas se carga, así que el
+  // popup de hito aparece derecho, sin ningún click previo.
   it('al cruzar de juvenil a amateur, aparece un popup con el nombre de la nueva etapa', () => {
     iniciar(cont, prepararStorage(partidaAlBordeDeEtapa(1)));
-    continuar();
 
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
     expect(document.body.textContent).toContain('Amateur');
@@ -92,10 +88,9 @@ describe('Sistema 4: popup de "pasar de etapa" cableado de punta a punta', () =>
     expect(cont.querySelector('.shell')).toBeTruthy();
   });
 
-  it('un "Continuar" normal (sin cruzar de etapa) no abre ningun popup de hito', () => {
+  it('retomar una partida normal (sin cruzar de etapa) no abre ningun popup de hito', () => {
     const partida = crearPartida({ jugador: nuevoJugador(), semilla: 1 });
     iniciar(cont, prepararStorage(partida));
-    continuar();
 
     expect(document.querySelector('.popup-overlay')).toBeNull();
   });

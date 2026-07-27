@@ -209,6 +209,12 @@ export function resolverConMinijuego(rng, { jugador, oferta }) {
   return { resultado: { ganador, metodo, round, detalle }, marcador };
 }
 
+// Qué tan seguido un lote de trámite saca un destacado jugable con
+// card+minijuego (ver el comentario grande en `armarLotePeleas`, más abajo,
+// para el porqué del número): 0.3 deja ~6-7 destacados por carrera, medido
+// con scripts/balance-sim.mjs.
+const PROB_DESTACADO_TRAMITE = 0.3;
+
 const NUMERO = ['cero', 'una', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete'];
 const numero = (n) => NUMERO[n] ?? String(n);
 const capitalizar = (s) => (s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1));
@@ -346,16 +352,24 @@ export function armarLotePeleas(rng, {
   // sigue en cuanto se cura hereda esa chance, no se pierde para siempre.
   let primerCupoDisponible = true;
   // Pedido 1/2 (v7, "que se anuncie antes" + "que se juegue un poco"): DE
-  // TODO el lote, solo el primer combate que de verdad se resuelve como
+  // TODO el lote, a lo sumo el primer combate que de verdad se resuelve como
   // trámite (no marquee) se anuncia con el minijuego (armarMarcador,
   // resolverConMinijuego, arriba) — el resto, si el año trae más de un cupo
   // de trámite, se sigue resolviendo con el viejo resultado seco
-  // (resolverResultadoRapido). Bajarle el drama a "todos" hubiera reventado
-  // el presupuesto de minutos de la carrera entera (~30 trámite/carrera, ver
-  // el informe de balance) sin sumarle nada al eje central del juego — un
-  // solo destacado por bloque ya cumple "no aparece de la nada" y "se juega
-  // un poco" sin volver la partida una hora.
-  let esPrimerResultadoTramite = true;
+  // (resolverResultadoRapido).
+  //
+  // Y ni siquiera CADA lote saca uno: medido con scripts/balance-sim.mjs,
+  // "un destacado por cada lote que tenga trámite" salía a ~19 por carrera
+  // — con card+minijuego, ~112 acciones EXTRA por carrera (+~15 minutos),
+  // reventando por completo el presupuesto de ~20 (quedaba en ~36). Bajarlo
+  // a "a veces" (PROB_DESTACADO_TRAMITE) es la palanca que de verdad importa
+  // acá: sigue cumpliendo "no aparece de la nada" para los que SÍ salen
+  // destacados, sin convertir cada año de trámite en su propia mini-pelea.
+  // 0.3 deja ~6-7 destacados por carrera (sumado a las ~6 jugables de
+  // siempre, un total razonable de "peleas que se sienten" sin volver la
+  // partida una hora) — ver el informe de balance entregado con esta ronda.
+  const hayDestacadoEsteLote = rng.chance(PROB_DESTACADO_TRAMITE);
+  let esPrimerResultadoTramite = hayDestacadoEsteLote;
 
   for (let i = 0; i < intentos; i += 1) {
     const { bloqueado, jugador: jugadorTrasChequeo } = cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento);

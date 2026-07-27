@@ -59,8 +59,8 @@ function itemNoticia(n, { oculta }) {
  *   pasar uno propio, cada llamada arranca "en blanco" (útil para tests
  *   aislados de este panel).
  * @returns {{ detener: () => void }} - cancela los timers de entrada
- *   pendientes y deja todo visible ya (mismo patrón que animarRoll/animarDado
- *   en ui/components/): el llamador lo invoca si el jugador navega a otra
+ *   pendientes y deja todo visible ya (mismo patrón que animarRoll en
+ *   ui/components/): el llamador lo invoca si el jugador navega a otra
  *   pantalla mientras las noticias siguen entrando.
  */
 export function renderPanelNoticias(region, {

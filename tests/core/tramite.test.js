@@ -438,14 +438,20 @@ describe('resolverConMinijuego', () => {
 // año trae más de un cupo de trámite, no los trae (se resuelven en silencio,
 // sin la tarjeta interactiva — ver el comentario grande de armarLotePeleas).
 describe('armarLotePeleas y el destacado del minijuego (Pedido 1/2, v7)', () => {
-  it('el primer resultado trae marcador y oferta; los siguientes (si hay) no', () => {
+  // v7, ajuste de presupuesto de minutos (ver el comentario grande de
+  // PROB_DESTACADO_TRAMITE, tramite.js): NO todo lote saca un destacado —
+  // ~30% de las veces. El test busca un lote de al menos 2 resultados QUE
+  // además haya sacado el destacado (probá con varias semillas hasta
+  // encontrar ambas condiciones a la vez, ninguna de las dos garantizada
+  // sola).
+  it('cuando el lote saca destacado, el primer resultado trae marcador y oferta; los siguientes (si hay) no', () => {
     const yo = jugador({ edad: 21, ranking: 40 });
     let vioVarios = false;
-    for (let s = 1; s <= 80 && !vioVarios; s += 1) {
+    for (let s = 1; s <= 300 && !vioVarios; s += 1) {
       const lote = armarLotePeleas(createRng(s), {
         jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 3, permiteJugable: false, tono: 'profesional',
       });
-      if (lote.beatTramite && lote.beatTramite.datos.resultados.length >= 2) {
+      if (lote.beatTramite && lote.beatTramite.datos.resultados.length >= 2 && lote.beatTramite.datos.resultados[0].marcador) {
         vioVarios = true;
         const [primero, ...resto] = lote.beatTramite.datos.resultados;
         expect(primero.marcador).not.toBeNull();
@@ -457,6 +463,20 @@ describe('armarLotePeleas y el destacado del minijuego (Pedido 1/2, v7)', () => 
       }
     }
     expect(vioVarios).toBe(true);
+  });
+
+  it('a veces el lote NO saca ningun destacado (ninguno de los resultados trae marcador)', () => {
+    const yo = jugador({ edad: 21, ranking: 40 });
+    let vioSinDestacado = false;
+    for (let s = 1; s <= 60 && !vioSinDestacado; s += 1) {
+      const lote = armarLotePeleas(createRng(s), {
+        jugador: yo, mundo: mundo(), etapa: 'profesional', intentos: 2, permiteJugable: false, tono: 'profesional',
+      });
+      if (lote.beatTramite && lote.beatTramite.datos.resultados.every((r) => r.marcador === null)) {
+        vioSinDestacado = true;
+      }
+    }
+    expect(vioSinDestacado).toBe(true);
   });
 
   it('el beat de tramite trae semanasPorIntento (para el anuncio/cuenta regresiva del destacado)', () => {
