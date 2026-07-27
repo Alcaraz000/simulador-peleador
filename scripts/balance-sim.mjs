@@ -41,7 +41,9 @@
 // Uso: node scripts/balance-sim.mjs [n]   (n = semillas por variante, def 500)
 
 import { crearPeleador, mediaDe, repartirOrigenes } from '../src/core/fighter.js';
-import { crearPartida, siguienteBeat, firmarPelea } from '../src/core/career.js';
+import {
+  crearPartida, siguienteBeat, firmarPelea, registrarDecision,
+} from '../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../src/core/offers.js';
 import {
   resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
@@ -279,12 +281,22 @@ function jugarCarrera(semilla, {
       const cartas = beat.datos.cartas;
       const elegida = elegirMejor(cartas, (c) => puntajeMods(c.mods), { evitarLegendarias });
       if (elegida.rareza === 'legendaria') legendariasEnCarrera += 1;
+      // Resumen de fin de año (v12): mismo criterio que beatMejora en
+      // main.js — la mejora es la ÚNICA decisión garantizada en todos los
+      // bloques, así que sin este registro el conteo de resumenesAnio de
+      // este script quedaría MUY por debajo del juego real (donde el
+      // jugador SIEMPRE la registra) — subestimaría cuánto sube la
+      // frecuencia con el filtro relajado (anioTieneAlgoQueContar,
+      // year-summary.js: "peleas O decisiones").
+      partida = registrarDecision(partida, { tipo: 'mejora', titulo: 'Mejora', opcion: elegida.titulo });
       const aplicado = aplicarCarta(partida.jugador, elegida);
       partida = { ...partida, jugador: aplicado.jugador };
     } else if (beat.tipo === 'evento' || beat.tipo === 'redes') {
       const carta = beat.datos.carta;
       const opcion = elegirMejorOpcion(carta);
       if (carta.rareza === 'legendaria') legendariasEnCarrera += 1;
+      // Resumen de fin de año (v12): mismo criterio que beatCarta en main.js.
+      partida = registrarDecision(partida, { tipo: beat.tipo, titulo: carta.titulo, opcion: opcion.texto ?? '' });
       const rivalObjetivoId = partida.mundo.roster[0]?.id ?? null;
       const resuelto = resolverOpcion(rngCosmetico, {
         jugador: partida.jugador, carta, opcionId: opcion.id,
@@ -360,6 +372,8 @@ function jugarCarrera(semilla, {
     } else if (beat.tipo === 'campCarta') {
       const { carta, oferta, ultimo } = beat.datos;
       const opcion = elegirMejorOpcion(carta);
+      // Resumen de fin de año (v12): mismo criterio que beatCampCarta en main.js.
+      partida = registrarDecision(partida, { tipo: 'campamento', titulo: carta.titulo, opcion: opcion.texto ?? '' });
       const resuelto = resolverOpcion(rngCosmetico, {
         jugador: partida.jugador, carta, opcionId: opcion.id, rivalidades: partida.rivalidades,
       });
