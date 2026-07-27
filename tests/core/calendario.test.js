@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
-  fechaDe, semanasDeBloque, semanasHastaPelea, SEMANAS_POR_ANIO,
+  fechaDe, semanasDeBloque, semanasHastaPelea, SEMANAS_POR_ANIO, mesesDelAnio,
 } from '../../src/core/calendario.js';
 
 describe('fechaDe', () => {
@@ -52,6 +52,45 @@ describe('semanasDeBloque', () => {
   it('traduce años por bloque a semanas, redondeando', () => {
     expect(semanasDeBloque(1)).toBe(52);
     expect(semanasDeBloque(1.3)).toBe(Math.round(1.3 * 52));
+  });
+});
+
+describe('mesesDelAnio', () => {
+  // Pensado para el eje X del gráfico de fin de año (grafico-media.js, pedido
+  // textual: "el gráfico va de enero a diciembre, siempre") — da la
+  // semanaGlobal en la que arranca cada uno de los 12 meses de UN año
+  // calendario dado, sin que la UI tenga que reimplementar el reparto de 52
+  // semanas en 12 meses (LIMITES_MES, ya privado acá).
+  it('devuelve los 12 meses en orden, de Enero a Diciembre', () => {
+    const meses = mesesDelAnio(2026, 2026);
+    expect(meses).toHaveLength(12);
+    expect(meses.map((m) => m.nombreMes)).toEqual([
+      'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+      'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
+    ]);
+  });
+
+  it('el mes N arranca en la semanaGlobal que fechaDe reconoce como ese mismo mes', () => {
+    const meses = mesesDelAnio(2026, 2026);
+    meses.forEach((m) => {
+      const f = fechaDe(m.semanaGlobal, 2026);
+      expect(f.anio).toBe(2026);
+      expect(f.nombreMes).toBe(m.nombreMes);
+      expect(f.semanaDelMes).toBe(1); // arranca el mes, primera semana
+    });
+  });
+
+  it('el primer mes (Enero) arranca en la primera semanaGlobal del año', () => {
+    const meses = mesesDelAnio(2027, 2026);
+    // 2027 es el 2do año desde 2026: arranca en la semana 53.
+    expect(meses[0].semanaGlobal).toBe(SEMANAS_POR_ANIO + 1);
+  });
+
+  it('cada mes arranca en una semanaGlobal mayor que el anterior (monotónico)', () => {
+    const meses = mesesDelAnio(2030, 2026);
+    for (let i = 1; i < meses.length; i += 1) {
+      expect(meses[i].semanaGlobal).toBeGreaterThan(meses[i - 1].semanaGlobal);
+    }
   });
 });
 
