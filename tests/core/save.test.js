@@ -84,6 +84,37 @@ describe('serializar / deserializar', () => {
     const texto = serializar(partida);
     expect(() => deserializar(texto)).not.toThrow();
   });
+
+  // v13 (Bloque 1, simplificación y progresión): de seis atributos + cinco
+  // estados a cuatro. Una partida guardada con el esquema viejo NO se puede
+  // migrar (sus números no significan lo mismo: 50 de "potencia" no es
+  // comparable a 50 de "fuerza") — tiene que caer en carrera nueva, sin
+  // excepción y sin pantalla en blanco.
+  it('una partida con el esquema viejo se descarta sin romper', () => {
+    const viejo = JSON.stringify({ version: 1, jugador: { atributos: { potencia: 50, iq: 40 } } });
+    const storage = { getItem: () => viejo, setItem: () => {}, removeItem: () => {} };
+    expect(() => cargar(storage)).not.toThrow();
+    expect(cargar(storage)).toBeNull();
+  });
+
+  // Mismo caso que arriba pero apuntado directo a deserializar, con la
+  // versión YA actualizada: aunque alguna vez coincida el numero de
+  // version, la forma de jugador.atributos (las cuatro claves nuevas, ni
+  // una más ni una menos) es lo que de verdad decide si la partida es
+  // migrable.
+  it('rechaza una partida con la version al dia pero atributos del esquema viejo', () => {
+    const partida = partidaDePrueba();
+    const conAtributosViejos = {
+      ...JSON.parse(serializar(partida)),
+      jugador: {
+        ...partida.jugador,
+        atributos: {
+          potencia: 50, velocidad: 50, tecnica: 50, defensa: 50, cardio: 50, iq: 50, grappling: 1,
+        },
+      },
+    };
+    expect(() => deserializar(JSON.stringify(conAtributosViejos))).toThrow(/esquema|atributos/i);
+  });
 });
 
 describe('guardar / cargar', () => {
