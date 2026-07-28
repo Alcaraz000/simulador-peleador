@@ -41,7 +41,6 @@ function cartaAplica(carta, { etapa, disciplina, estado }) {
 // tocar esta función ni la de quien reparte. Los campos soportados hoy:
 //   - edadMin / edadMax: rango de edad del jugador (inclusive).
 //   - campeon: true exige al menos un cinturón puesto, false exige NINGUNO.
-//   - famaMin / famaMax: rango de fama (0-100).
 //   - dineroMin / dineroMax: rango de plata en el bolsillo.
 //   - resultadoReciente: 'victoria' | 'derrota' | 'empate' — el resultado de
 //     la ÚLTIMA pelea PROFESIONAL (jugador.historial; en juvenil/amateur ese
@@ -49,6 +48,8 @@ function cartaAplica(carta, { etapa, disciplina, estado }) {
 //     fighter.js/career.js — así que una carta con esta condición nunca
 //     aplica antes del debut profesional, algo correcto: no hay "la última
 //     pelea" todavía).
+// v13 (simplificación): la fama se va del juego, así que `famaMin`/`famaMax`
+// dejaron de ser condiciones soportadas — ningún catálogo nuevo debe usarlas.
 // Este catálogo de campos es EXTENSIBLE (agregar un tipo de condición nuevo
 // sí toca esta función, una vez), pero USAR uno ya existente en una carta
 // nueva es puramente declarativo.
@@ -63,9 +64,6 @@ function cumpleCondiciones(carta, jugador) {
     const esCampeon = (jugador.titulos?.length ?? 0) > 0;
     if (cond.campeon !== esCampeon) return false;
   }
-
-  if (cond.famaMin != null && (jugador.fama ?? 0) < cond.famaMin) return false;
-  if (cond.famaMax != null && (jugador.fama ?? 0) > cond.famaMax) return false;
 
   if (cond.dineroMin != null && (jugador.dinero ?? 0) < cond.dineroMin) return false;
   if (cond.dineroMax != null && (jugador.dinero ?? 0) > cond.dineroMax) return false;
