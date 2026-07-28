@@ -52,18 +52,18 @@ describe('crearEntrenadorDe', () => {
     const ficha = crearEntrenadorDe('tecnico');
     expect(Object.keys(ficha).sort()).toEqual(['aporte', 'escuela', 'frase', 'iniciales', 'nombre']);
     expect(ficha.nombre).toBe('El Profesor Aldana');
-    expect(ficha.aporte).toEqual({ tecnica: 6, iq: 2 });
+    expect(ficha.aporte).toEqual({ defensa: 6, agilidad: 2 });
   });
 });
 
 describe('bonusDelEntrenador', () => {
   it('devuelve el aporte del entrenador ya adjunto al jugador', () => {
     const jugador = crearPeleador({ ...base, estilo: 'tecnico' });
-    expect(bonusDelEntrenador(jugador)).toEqual({ tecnica: 6, iq: 2 });
+    expect(bonusDelEntrenador(jugador)).toEqual({ defensa: 6, agilidad: 2 });
   });
 
   it('da un objeto vacio si el jugador no tiene entrenador adjunto', () => {
-    const sinEntrenador = { atributos: { tecnica: 40 } };
+    const sinEntrenador = { atributos: { defensa: 40 } };
     expect(bonusDelEntrenador(sinEntrenador)).toEqual({});
   });
 
@@ -78,9 +78,9 @@ describe('atributosConEntrenador', () => {
   it('separa base (sin el entrenador) y aporte; base + aporte = el atributo efectivo', () => {
     const jugador = crearPeleador({ ...base, estilo: 'tecnico' });
     const conEntrenador = atributosConEntrenador(jugador);
-    expect(conEntrenador.tecnica.aporte).toBe(6);
-    expect(conEntrenador.iq.aporte).toBe(2);
-    expect(conEntrenador.potencia.aporte).toBe(0);
+    expect(conEntrenador.defensa.aporte).toBe(6);
+    expect(conEntrenador.agilidad.aporte).toBe(2);
+    expect(conEntrenador.fuerza.aporte).toBe(0);
     for (const [clave, { base, aporte }] of Object.entries(conEntrenador)) {
       expect(base + aporte).toBe(jugador.atributos[clave]);
     }
@@ -95,35 +95,31 @@ describe('atributosConEntrenador', () => {
 });
 
 describe('el aporte del entrenador esta horneado en jugador.atributos (bug de la v1: no repetirlo)', () => {
+  // v13: crearPeleador ya no arranca de una base plana (repartirAtributosIniciales
+  // reparte un desvío desigual con rng, Task 1.2) — así que estos tests ya no
+  // pueden comparar contra un número absoluto hardcodeado. En cambio, comparan
+  // el peleador CON entrenador contra el mismo peleador SIN entrenador
+  // (cambiarEntrenador(jugador, null) resta el aporte tal cual): si el aporte
+  // fuera un overlay que nadie suma de verdad (el bug reportado), sacar el
+  // entrenador no cambiaría nada.
   it('jugador.atributos ya incluye el aporte del entrenador, no hace falta sumarlo aparte', () => {
-    // Nota: `base` (arriba) no trae `apodoId`, asi que el apodo es solo texto
-    // decorativo acá y no aporta mods (comportamiento legacy sin apodoId).
-    //
-    // El estilo 'noqueador' no toca defensa en sus propios mods ni en los del
-    // origen 'barrio': si defensa baja de todos modos, solo puede venir del
-    // entrenador (Rubén "Tanque" Ferro sí la toca).
     const jugador = crearPeleador({ ...base, estilo: 'noqueador' });
     const coach = jugador.entrenador;
-    expect(coach.aporte).toEqual({ potencia: 5, cardio: 2, defensa: -1 });
+    expect(coach.aporte).toEqual({ fuerza: 5, cardio: 2, defensa: -1 });
 
-    // baseAtributos(disciplina, 55) arranca los seis atributos en 55; el
-    // estilo 'noqueador' aporta potencia+7, cardio-4; el origen 'barrio'
-    // aporta potencia+3. Sumado SIN el entrenador: potencia = 55+7+3 = 65,
-    // defensa = 55 (nadie más la toca). Con el entrenador horneado, tiene
-    // que ser potencia 65+5=70 y defensa 55-1=54 — si el aporte fuera un
-    // overlay que nadie suma (el bug reportado), estos números seguirían
-    // en 65 y 55.
-    expect(jugador.atributos.potencia).toBe(70);
-    expect(jugador.atributos.defensa).toBe(54);
+    const sinEntrenador = cambiarEntrenador(jugador, null);
+    expect(jugador.atributos.fuerza - sinEntrenador.atributos.fuerza).toBe(5);
+    expect(jugador.atributos.cardio - sinEntrenador.atributos.cardio).toBe(2);
+    expect(jugador.atributos.defensa - sinEntrenador.atributos.defensa).toBe(-1);
   });
 
   it('un estilo con entrenador de aporte grande (legendario) tambien lo hornea', () => {
-    // Sin entrenador, 'contragolpeador' (tecnica+6) + 'barrio' (tecnica-3)
-    // sobre una base de 55 da tecnica = 55+6-3 = 58. Con Nicolino Lecho
-    // (tecnica+8) horneado, tiene que dar 66, no 58.
     const conCoachFuerte = crearPeleador({ ...base, estilo: 'contragolpeador' });
-    expect(conCoachFuerte.entrenador.aporte.tecnica).toBe(8);
-    expect(conCoachFuerte.atributos.tecnica).toBe(66);
+    expect(conCoachFuerte.entrenador.aporte).toEqual({ defensa: 8, agilidad: 10 });
+
+    const sinEntrenador = cambiarEntrenador(conCoachFuerte, null);
+    expect(conCoachFuerte.atributos.defensa - sinEntrenador.atributos.defensa).toBe(8);
+    expect(conCoachFuerte.atributos.agilidad - sinEntrenador.atributos.agilidad).toBe(10);
   });
 });
 
@@ -137,13 +133,13 @@ describe('cambiarEntrenador', () => {
 
     expect(JSON.stringify(jugador)).toBe(antes); // no mutó el original
 
-    // tecnica: el 'tecnico' (Profesor Aldana) aportaba +6; al irse, se resta.
-    expect(actualizado.atributos.tecnica).toBe(jugador.atributos.tecnica - 6);
-    // iq: aportaba +2 el viejo, el nuevo no toca iq.
-    expect(actualizado.atributos.iq).toBe(jugador.atributos.iq - 2);
-    // cardio y defensa: el nuevo (Don Casimiro) suma +5 y +3 que el viejo no daba.
+    // defensa: el 'tecnico' (Profesor Aldana) aportaba +6; al irse, se resta.
+    // El nuevo (Don Casimiro) suma +3 de defensa, así que el neto es -6+3=-3.
+    expect(actualizado.atributos.defensa).toBe(jugador.atributos.defensa - 6 + 3);
+    // agilidad: aportaba +2 el viejo, el nuevo no toca agilidad.
+    expect(actualizado.atributos.agilidad).toBe(jugador.atributos.agilidad - 2);
+    // cardio: el nuevo (Don Casimiro) suma +5 que el viejo no daba.
     expect(actualizado.atributos.cardio).toBe(jugador.atributos.cardio + 5);
-    expect(actualizado.atributos.defensa).toBe(jugador.atributos.defensa + 3);
 
     expect(actualizado.entrenador).toBe(nuevoEntrenador);
   });
@@ -152,14 +148,14 @@ describe('cambiarEntrenador', () => {
     const jugador = crearPeleador({ ...base, estilo: 'noqueador' });
     const actualizado = cambiarEntrenador(jugador, crearEntrenadorDe('contragolpeador'));
     const info = atributosConEntrenador(actualizado);
-    expect(info.tecnica.aporte).toBe(8);
-    expect(info.tecnica.base + info.tecnica.aporte).toBe(actualizado.atributos.tecnica);
+    expect(info.defensa.aporte).toBe(8);
+    expect(info.defensa.base + info.defensa.aporte).toBe(actualizado.atributos.defensa);
   });
 
   it('quedarse sin entrenador (null) resta el aporte viejo y no suma nada nuevo', () => {
     const jugador = crearPeleador({ ...base, estilo: 'tecnico' });
     const sinEntrenador = cambiarEntrenador(jugador, null);
-    expect(sinEntrenador.atributos.tecnica).toBe(jugador.atributos.tecnica - 6);
+    expect(sinEntrenador.atributos.defensa).toBe(jugador.atributos.defensa - 6);
     expect(sinEntrenador.entrenador).toBeNull();
   });
 });

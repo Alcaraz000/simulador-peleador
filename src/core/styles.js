@@ -21,6 +21,10 @@ import { sortearPorRareza } from './cards.js';
  * clasico contra el otro. Mismo criterio para cualquier par sin relación
  * declarada explícitamente en `fuerteContra`/`debilContra`.
  */
+// v13 (simplificación a cuatro atributos): potencia/velocidad/técnica/IQ/
+// mentón se funden en fuerza/agilidad/defensa/cardio. `fuerteContra`/
+// `debilContra` no se tocan: el ciclo de ventajas no depende de los mods,
+// solo de esas relaciones declaradas — así que sigue cerrado tal cual estaba.
 export const ESTILOS = {
   noqueador: {
     id: 'noqueador',
@@ -28,7 +32,7 @@ export const ESTILOS = {
     descripcion: 'Una mano y se termina. Peligroso temprano, se funde tarde.',
     disciplinas: ['boxeo'],
     rareza: 'normal',
-    mods: { potencia: 7, menton: 2, cardio: -4, tecnica: -3 },
+    mods: { fuerza: 7, defensa: -1, cardio: -4 },
     fuerteContra: ['menton'],
     debilContra: ['tecnico', 'contragolpeador'],
   },
@@ -38,7 +42,7 @@ export const ESTILOS = {
     descripcion: 'Preciso y escurridizo. Gana por puntos y desgaste.',
     disciplinas: ['boxeo'],
     rareza: 'normal',
-    mods: { tecnica: 6, defensa: 4, velocidad: 2, potencia: -5, menton: -2 },
+    mods: { defensa: 8, agilidad: 2, fuerza: -5 },
     fuerteContra: ['noqueador'],
     debilContra: ['menton', 'zurdo_cruzado'],
   },
@@ -48,7 +52,7 @@ export const ESTILOS = {
     descripcion: 'Aguanta todo y quiebra al rival en rounds largos.',
     disciplinas: ['boxeo'],
     rareza: 'normal',
-    mods: { menton: 9, cardio: 5, velocidad: -4, tecnica: -3 },
+    mods: { defensa: 6, cardio: 5, agilidad: -4 },
     fuerteContra: ['tecnico', 'contragolpeador'],
     debilContra: ['noqueador'],
   },
@@ -60,7 +64,7 @@ export const ESTILOS = {
     descripcion: 'Espera el error ajeno y lo cobra caro. Al que se abre de más, lo cierra en el momento.',
     disciplinas: ['boxeo'],
     rareza: 'legendaria',
-    mods: { potencia: -4, cardio: -3, velocidad: 5, tecnica: 6, iq: 6 },
+    mods: { fuerza: -4, cardio: -3, agilidad: 11, defensa: 6 },
     fuerteContra: ['noqueador', 'rustico'],
     debilContra: ['menton'],
   },
@@ -72,7 +76,7 @@ export const ESTILOS = {
     disciplinas: ['boxeo'],
     rareza: 'normal',
     mods: {
-      velocidad: 6, defensa: 4, cardio: 2, potencia: -5, menton: -3,
+      agilidad: 6, defensa: 1, cardio: 2, fuerza: -5,
     },
     fuerteContra: ['presionador'],
     debilContra: ['rustico'],
@@ -84,7 +88,7 @@ export const ESTILOS = {
     disciplinas: ['boxeo'],
     rareza: 'normal',
     mods: {
-      potencia: 5, cardio: 6, defensa: -5, tecnica: -3,
+      fuerza: 5, cardio: 6, defensa: -8,
     },
     fuerteContra: ['zurdo_cruzado'],
     debilContra: ['volante'],
@@ -98,7 +102,7 @@ export const ESTILOS = {
     disciplinas: ['boxeo'],
     rareza: 'rara',
     mods: {
-      tecnica: 6, velocidad: 5, iq: 3, cardio: -3, menton: -3,
+      defensa: 3, agilidad: 8, cardio: -3,
     },
     fuerteContra: ['tecnico'],
     debilContra: ['presionador'],
@@ -112,7 +116,7 @@ export const ESTILOS = {
     disciplinas: ['boxeo'],
     rareza: 'rara',
     mods: {
-      potencia: 6, menton: 5, tecnica: -6, iq: -4,
+      fuerza: 6, defensa: -1, agilidad: -4,
     },
     fuerteContra: ['volante'],
     debilContra: ['contragolpeador'],

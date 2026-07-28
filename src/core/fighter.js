@@ -16,19 +16,19 @@ export const CATEGORIAS = {
 };
 
 // Pool de orígenes (Paso 2 de la creación): rareza + efectos distintos.
-// Los normales quedan como en la v1 (sin tocarles los mods); se suman dos
-// normales, dos raros y un legendario nuevos. Las legendarias no se
-// nerfean: son raras (5% en repartirOrigenes) y pegan fuerte cuando tocan.
+// v13 (simplificación a cuatro atributos): los mods se reescribieron sobre
+// fuerza/defensa/cardio/agilidad. Las legendarias no se nerfean: son raras
+// (5% en repartirOrigenes) y pegan fuerte cuando tocan.
 export const ORIGENES = [
-  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', rareza: 'normal', mods: { potencia: 3, menton: 3, tecnica: -3 } },
-  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', rareza: 'normal', mods: { tecnica: 4, disciplinaPersonal: 5, potencia: -2 } },
-  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', rareza: 'normal', mods: { iq: 5, tecnica: 2, menton: -2 } },
-  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', rareza: 'normal', mods: { cardio: 4, disciplinaPersonal: 3, iq: -3 } },
-  { id: 'amateur_de_toda_la_vida', nombre: 'Amateur de toda la vida', descripcion: 'Torneos federados desde los diez años: subiste a un cuadrilátero antes que a un colectivo solo.', rareza: 'normal', mods: { tecnica: 3, iq: 2, potencia: -2 } },
-  { id: 'videos_viejos', nombre: 'VHS y madrugadas', descripcion: 'Aprendiste mirando peleas grabadas mil veces, cuadro por cuadro.', rareza: 'normal', mods: { tecnica: 3, defensa: 2, cardio: -2 } },
-  { id: 'sangre_importada', nombre: 'Sangre importada', descripcion: 'Un familiar boxeó afuera y te dejó mañas que acá nadie enseña.', rareza: 'rara', mods: { tecnica: 4, velocidad: 3, disciplinaPersonal: -3 } },
-  { id: 'becado_desde_pibe', nombre: 'Becado desde pibe', descripcion: 'Un sponsor te becó temprano: nutrición y material que la mayoría ni sueña.', rareza: 'rara', mods: { cardio: 4, potencia: 3, iq: -2 } },
-  { id: 'sangre_de_campeon', nombre: 'Sangre de campeón', descripcion: 'Tu apellido ya es un cinturón colgado en la pared del gimnasio. Ahora te toca a vos.', rareza: 'legendaria', mods: { tecnica: 5, potencia: 4, iq: 4, cardio: -3 } },
+  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', rareza: 'normal', mods: { fuerza: 4, defensa: -2 } },
+  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', rareza: 'normal', mods: { defensa: 4, cardio: 3, fuerza: -2 } },
+  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', rareza: 'normal', mods: { agilidad: 6, defensa: -2 } },
+  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', rareza: 'normal', mods: { cardio: 6, agilidad: -2 } },
+  { id: 'amateur_de_toda_la_vida', nombre: 'Amateur de toda la vida', descripcion: 'Torneos federados desde los diez años: subiste a un cuadrilátero antes que a un colectivo solo.', rareza: 'normal', mods: { defensa: 3, agilidad: 2, fuerza: -2 } },
+  { id: 'videos_viejos', nombre: 'VHS y madrugadas', descripcion: 'Aprendiste mirando peleas grabadas mil veces, cuadro por cuadro.', rareza: 'normal', mods: { defensa: 5, cardio: -2 } },
+  { id: 'sangre_importada', nombre: 'Sangre importada', descripcion: 'Un familiar boxeó afuera y te dejó mañas que acá nadie enseña.', rareza: 'rara', mods: { defensa: 4, agilidad: 3, cardio: -2 } },
+  { id: 'becado_desde_pibe', nombre: 'Becado desde pibe', descripcion: 'Un sponsor te becó temprano: nutrición y material que la mayoría ni sueña.', rareza: 'rara', mods: { cardio: 4, fuerza: 3, agilidad: -2 } },
+  { id: 'sangre_de_campeon', nombre: 'Sangre de campeón', descripcion: 'Tu apellido ya es un cinturón colgado en la pared del gimnasio. Ahora te toca a vos.', rareza: 'legendaria', mods: { defensa: 5, fuerza: 4, agilidad: 4, cardio: -3 } },
 ];
 
 /**
