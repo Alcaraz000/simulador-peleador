@@ -295,10 +295,14 @@ export function resolverGolpeDeGracia(pelea, { zonaElegida, precision, aTiempo }
   const zona = ZONAS_GOLPE[zonaElegida] ?? ZONAS_GOLPE.higado;
   const acerto = zonaElegida === zonaAbierta;
 
-  const potencia = nueva.snapshot.jugador.atributos.potencia;
-  const mentonRival = nueva.snapshot.rival.especiales.menton;
+  // v13: la FUERZA del que pega contra la DEFENSA del que la recibe — defensa
+  // absorbió al mentón, así que "este tipo aguanta" vive ahí. Ojo con el
+  // nombre: `ZONAS_GOLPE.menton` sigue existiendo, pero es la parte del
+  // cuerpo a la que apuntás, no el atributo que desapareció.
+  const fuerza = nueva.snapshot.jugador.atributos.fuerza;
+  const defensaRival = nueva.snapshot.rival.atributos.defensa;
   const base = clamp(precision, 0, 1) * (acerto ? 1 : 0.35) * (1 - zona.dificultad * 0.4);
-  const probKo = clamp(base * 1.5 + (potencia - mentonRival) / 300, 0, 0.97);
+  const probKo = clamp(base * 1.5 + (fuerza - defensaRival) / 300, 0, 0.97);
 
   const dano = Math.round(zona.danoBase * clamp(precision, 0, 1) * (acerto ? 1 : 0.4));
   nueva.aguante.rival = clamp(nueva.aguante.rival - dano, 0, 100);
