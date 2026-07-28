@@ -36,8 +36,13 @@ function puntajeEconomico(jugador) {
   return clamp(Math.round(Math.log10(Math.max(1, jugador.dinero)) * 12 + porLujos * 4), 0, 100);
 }
 
+// v13: sin fama, "cuánto se habló de vos" se arma con lo que de verdad da
+// que hablar — cinturones, defensas y nocauts.
 function puntajeMediatico(jugador) {
-  return clamp(Math.round(jugador.fama * 0.85 + jugador.titulos.length * 5), 0, 100);
+  const titulos = (jugador.titulos?.length ?? 0) * 18;
+  const defensas = (jugador.defensas ?? 0) * 6;
+  const nocauts = (jugador.record?.ko ?? 0) * 3;
+  return clamp(Math.round(titulos + defensas + nocauts), 0, 100);
 }
 
 function puntajeEtico(jugador) {
@@ -205,7 +210,7 @@ export function calcularLegado(partida) {
       id: 'mediatico',
       nombre: 'Legado mediático',
       puntaje: mediatico,
-      texto: 'Cuánto se habló de vos: fama acumulada y cinturones que dieron que hablar.',
+      texto: 'Cuánto se habló de vos: cinturones, defensas y nocauts que dieron que hablar.',
     },
     {
       id: 'etico',

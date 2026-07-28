@@ -64,9 +64,6 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
   if (typeof efectos.dinero === 'number') {
     nuevo = { ...nuevo, dinero: Math.max(0, nuevo.dinero + efectos.dinero) };
   }
-  if (typeof efectos.fama === 'number') {
-    nuevo = { ...nuevo, fama: clamp(nuevo.fama + efectos.fama, 0, 100) };
-  }
 
   let nuevasRivalidades = rivalidades;
   if (efectos.heatRival && rivalObjetivoId) {
@@ -76,7 +73,6 @@ export function resolverOpcion(rng, { jugador, carta, opcionId, rivalidades = []
   const deltasTexto = formatearMods(paso.deltas);
   const extras = [];
   if (efectos.dinero) extras.push(`${efectos.dinero > 0 ? '+' : '-'}US$ ${Math.abs(efectos.dinero).toLocaleString('es-AR')}`);
-  if (efectos.fama) extras.push(`${efectos.fama > 0 ? '+' : ''}${efectos.fama} Fama`);
 
   return {
     jugador: nuevo,

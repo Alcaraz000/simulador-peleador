@@ -96,7 +96,11 @@ export function castigoAcumulado(jugador) {
     else if (porNocaut) castigo += 0.5;
     castigo += pelea.caidasSufridas ?? 0;
   }
-  return castigo;
+  // El psicólogo deportivo (money.js) cumple lo que promete: "las malas
+  // noches pesan menos". Con la moral eliminada (v13) su efecto vivía en un
+  // número que dejó de existir, así que pasó a amortiguar el castigo que
+  // adelanta el declive — la misma idea, sobre la mecánica que quedó.
+  return tieneStaff(jugador, 'psicologo') ? castigo * 0.65 : castigo;
 }
 
 // Cuántos años de castigo hacen falta para adelantar el declive un año.
@@ -641,17 +645,10 @@ export function avanzarBloque(partida) {
   const inicioBloqueActual = nueva.semanaInicioBloque ?? semanaAntes;
   nueva.semanaGlobal = inicioBloqueActual + semanasDeBloque(etapa.aniosPorBloque);
   nueva.semanaInicioBloque = nueva.semanaGlobal;
-  nueva.jugador.estado.fatiga = clamp(nueva.jugador.estado.fatiga - 25, 0, 100);
-  // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
-  // Parecería que no afecta en nada"): este +5 pasivo de forma corría TODOS
-  // los bloques, incluso mientras seguías lesionado. Mientras la lesión
-  // sigue activa AL ARRANCAR este bloque (el estado tal cual quedó al
-  // cierre del bloque anterior — la recuperación de ESTE bloque todavía no
-  // corrió, ver más abajo), el descanso pasivo se frena: la forma se queda
-  // baja de verdad.
-  if (!nueva.jugador.estado.lesion) {
-    nueva.jugador.estado.forma = clamp(nueva.jugador.estado.forma + 5, 0, 100);
-  }
+  // v13: acá se descontaba fatiga y se sumaba forma entre bloques. Los dos
+  // dejaron de ser estados del peleador — la fatiga nace y muere dentro de
+  // cada pelea (fight.js) y la forma no existe más. Lo único que sigue
+  // viviendo en `estado` es la lesión, que se recupera más abajo.
   // Crecimiento pasivo primero (Pedido 4): nunca se solapan (uno termina en
   // EDAD_FIN_CRECIMIENTO, el otro arranca recién en EDAD_DECLIVE_JUGADOR,
   // más tarde), pero el orden importa igual para que la edad ya incrementada

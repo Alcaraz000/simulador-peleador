@@ -173,7 +173,6 @@ export function crearPeleador(opciones) {
     // `oferta.nivelPelea === 'amateur'`.
     recordAmateur: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     dinero: 0,
-    fama: 0,
     titulos: [],
     defensas: 0,
     // Defensas exitosas del cinturón que tiene puesto AHORA MISMO, por id de

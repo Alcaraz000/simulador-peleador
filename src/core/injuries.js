@@ -121,10 +121,10 @@ function clonar(peleador) {
 
 export function aplicarLesion(peleador, lesion) {
   const nuevo = clonar(peleador);
-  const catalogo = LESIONES.find((l) => l.id === lesion.id);
-  const modsForma = lesion.modsForma ?? catalogo?.modsForma ?? -10;
+  // v13: la lesión ya no baja "forma" (ese estado no existe más). Lo que
+  // cuesta una lesión es el tiempo que te deja afuera y el castigo que mete
+  // en la pelea si igual subís (factorEfectividad, más abajo).
   nuevo.estado.lesion = { ...lesion };
-  nuevo.estado.forma = clamp(nuevo.estado.forma + modsForma, 0, 100);
   return nuevo;
 }
 
@@ -139,7 +139,6 @@ export function recuperar(peleador, { semanas = 1 } = {}) {
   const restantes = nuevo.estado.lesion.semanasRestantes - semanas;
   if (restantes <= 0) {
     nuevo.estado.lesion = null;
-    nuevo.estado.forma = clamp(nuevo.estado.forma + 10, 0, 100);
     return { peleador: nuevo, curada: true };
   }
   nuevo.estado.lesion = { ...nuevo.estado.lesion, semanasRestantes: restantes };
@@ -180,7 +179,6 @@ export function curarConDinero(peleador, lesion) {
   } else {
     nuevo.estado.lesion = { ...nuevo.estado.lesion, semanasRestantes: restantes };
   }
-  nuevo.estado.forma = clamp(nuevo.estado.forma + 15, 0, 100);
   return { peleador: nuevo, gasto: lesion.costo, ok: true };
 }
 

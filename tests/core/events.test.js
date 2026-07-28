@@ -171,9 +171,15 @@ describe('catalogo de redes', () => {
   it('tiene al menos una carta de redes legendaria, potente de verdad', () => {
     const legendarias = CARTAS_REDES.filter((c) => c.rareza === 'legendaria');
     expect(legendarias.length).toBeGreaterThanOrEqual(1);
+    // v13: la fama se eliminó, así que "potente de verdad" se mide en las
+    // monedas que quedaron — plata o atributos. Lo que el test protege sigue
+    // siendo lo mismo: una legendaria nunca se nerfea.
     for (const carta of legendarias) {
-      const famaMaxima = Math.max(...carta.opciones.map((o) => o.efectos?.fama ?? 0));
-      expect(famaMaxima).toBeGreaterThanOrEqual(10);
+      const impacto = Math.max(...carta.opciones.map((o) => Math.max(
+        (o.efectos?.dinero ?? 0) / 1000,
+        Object.values(o.mods ?? {}).reduce((a, b) => a + Math.max(0, b), 0),
+      )));
+      expect(impacto).toBeGreaterThanOrEqual(8);
     }
   });
 });

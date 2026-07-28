@@ -6,17 +6,17 @@ import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
 
 export const NIVELES = {
-  local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4, famaBase: 2 },
-  regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1, famaBase: 4 },
+  local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4 },
+  regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1 },
   // `nivelPelea: 'eliminatoria'` (Pedido 4, barrida de experto en boxeo): antes
   // era 'profesional' a secas, así que se peleaba a 8 rounds — la misma
   // distancia que una regional de trámite. Es la pelea que define el ascenso
   // al puesto de retador: en el boxeo real, un final eliminator se juega a
   // distancia de campeonato, no a la de una cartelera cualquiera (ver
   // roundsPorNivel en disciplines.js, ahora con su propia entrada).
-  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8, famaBase: 7 },
-  titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4, famaBase: 15 },
-  defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2, famaBase: 10 },
+  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8 },
+  titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4 },
+  defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2 },
 };
 
 /**
@@ -35,9 +35,9 @@ export const NIVELES = {
  * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, defensasObligatorias: 3 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, defensasObligatorias: 4 },
 ];
 
 // v7 (pedido textual del usuario: "un debutante NO puede pelear por el
@@ -119,14 +119,13 @@ export function evaluarRiesgo(jugador, rival) {
 // no, si cree que NO se puede ganar, si cree que hay pocas chances...)".
 // Pura y determinista (nada de rng: el criterio siempre da lo mismo para los
 // mismos números, así el jugador puede aprender a leerlo). Compara tu media
-// con la del rival y castiga el puntaje si llegás golpeado (forma baja,
-// fatiga alta, lesión) — exactamente los mismos datos que ya evalúa
-// `evaluarRiesgo`, pero acá se traduce a una opinión hablada, no a un chip.
+// con la del rival y castiga el puntaje si llegás golpeado — exactamente los
+// mismos datos que ya evalúa `evaluarRiesgo`, pero acá se traduce a una
+// opinión hablada, no a un chip. v13: forma y fatiga dejaron de existir como
+// estados, así que lo único que queda para "llegás golpeado" es la lesión.
 function ventajaPercibida(jugador, oferta) {
   const estado = jugador.estado ?? {};
   let ventaja = mediaDe(jugador) - oferta.rivalMedia;
-  if ((estado.forma ?? 60) < 40) ventaja -= 8;
-  if ((estado.fatiga ?? 0) > 60) ventaja -= 8;
   if (estado.lesion) ventaja -= 15;
   return ventaja;
 }
@@ -342,7 +341,7 @@ export function generarOferta(rng, {
   const multiplicadorCinturon = cinturon ? cinturon.multiplicador : 1;
   const bolsaBase = Math.round(
     BOLSA_BASE * nivel.multiplicadorBolsa * multiplicadorCinturon
-    * (1 + jugador.fama / 60) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
+    * (1 + (jugador.titulos?.length ?? 0) * 0.35) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
   );
   // El manager (money.js) promete "bolsas más gordas" además de bajar el
   // riesgo de negociación (ver REDUCCION_MANAGER en negotiation.js).
@@ -400,7 +399,6 @@ export function generarOferta(rng, {
     // puede cruzarlo). Lo usa `esPeleaImportante` (más abajo).
     esArchirrival: Boolean(archirrival && archirrival.rivalId === rival.id),
     cinturonId: cinturon ? cinturon.id : null,
-    famaBase: nivel.famaBase + (cinturon ? cinturon.famaExtra : 0),
     // Solo tiene sentido en una defensa: cuántas defensas exitosas hacen falta
     // para consolidarse en ese cinturón (ver CINTURONES). Se usa para mostrarle
     // al jugador su progreso ("defensa 2 de 3") antes de la pelea.
@@ -466,10 +464,12 @@ function clonarJugador(jugador) {
   };
 }
 
+// v13: rechazar costaba fama, que ya no existe. El costo real es el que
+// siempre estuvo: la pelea que no diste no suma récord ni ranking, y una
+// obligatoria rechazada te puede costar el cinturón (lo maneja la comisión,
+// más arriba). No hace falta un número aparte para castigarlo.
 export function rechazarOferta(jugador, oferta) {
   const nuevo = clonarJugador(jugador);
-  const costo = oferta.esObligatoria ? 12 : 4;
-  nuevo.fama = clamp(nuevo.fama - costo, 0, 100);
   const texto = oferta.esObligatoria
     ? `Rechazaste una defensa obligatoria. La comisión te la va a hacer pagar.`
     : `Le dijiste que no a ${oferta.rivalApodo}. Algunos dicen que le escapaste.`;
@@ -520,14 +520,10 @@ export function aplicarResultado(jugador, {
 
   nuevo.dinero += oferta.bolsa;
 
-  const famaDelta = gano ? oferta.famaBase : empate ? Math.round(oferta.famaBase / 3) : -Math.round(oferta.famaBase / 2);
-  nuevo.fama = clamp(nuevo.fama + famaDelta, 0, 100);
-  // El psicólogo deportivo (money.js) promete que "la mala racha te dura
-  // menos": amortigua el golpe de moral de una derrota (no toca el envión de
-  // ganar ni el empate).
-  const tienePsicologo = (jugador.staff ?? []).includes('psicologo');
-  const golpeDerrota = tienePsicologo ? -6 : -12;
-  nuevo.estado.moral = clamp(nuevo.estado.moral + (gano ? 10 : empate ? 0 : golpeDerrota), 0, 100);
+  // v13: acá se movía la moral tras cada pelea. La moral dejó de existir
+  // como estado — el impacto de ganar o perder se siente en el ranking, en
+  // las ofertas que llegan y en el castigo acumulado que adelanta el declive
+  // (career.js), no en un número aparte.
 
   if (!esAmateur && oferta.esTitulo) {
     if (gano) {
