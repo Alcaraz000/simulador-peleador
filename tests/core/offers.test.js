@@ -81,10 +81,19 @@ describe('generarOferta', () => {
     expect(pro.bolsa).toBeGreaterThan(am.bolsa);
   });
 
-  it('mas fama, mas bolsa', () => {
-    const pobre = generarOferta(createRng(5), { jugador: jugador({ fama: 0 }), mundo: mundo(), etapa: 'profesional' });
-    const famoso = generarOferta(createRng(5), { jugador: jugador({ fama: 90 }), mundo: mundo(), etapa: 'profesional' });
-    expect(famoso.bolsa).toBeGreaterThan(pobre.bolsa);
+  // v13: la bolsa ya no escala con fama (eliminada) sino con los cinturones
+  // puestos (jugador.titulos.length). Los títulos de acá abajo no coinciden
+  // con ningún nombre real de CINTURONES a propósito: así no disparan
+  // cinturonActual/proximoCinturon (que sí cambiarían el nivel de la
+  // oferta) y el test queda aislado en lo que de verdad quiere probar.
+  it('mas cinturones puestos, mas bolsa', () => {
+    const sinTitulos = generarOferta(createRng(5), { jugador: jugador({ titulos: [] }), mundo: mundo(), etapa: 'profesional' });
+    const campeon = generarOferta(createRng(5), {
+      jugador: jugador({ titulos: ['Título honorífico', 'Cinturón de exhibición'] }),
+      mundo: mundo(),
+      etapa: 'profesional',
+    });
+    expect(campeon.bolsa).toBeGreaterThan(sinTitulos.bolsa);
   });
 
   it('con manager, la bolsa es mas gorda a igualdad de todo lo demas', () => {
@@ -544,11 +553,14 @@ describe('evaluarRiesgo', () => {
 });
 
 describe('rechazarOferta', () => {
-  it('cuesta fama y devuelve un texto', () => {
-    const yo = jugador({ fama: 30 });
+  // v13: rechazar ya no cuesta fama (eliminada) — el costo real (una pelea
+  // menos en el récord/ranking, o el cinturón en juego si era obligatoria)
+  // ya lo maneja quien llama, no un número acá. Lo único que queda por
+  // verificar de esta función es que sigue devolviendo su texto.
+  it('devuelve un texto', () => {
+    const yo = jugador();
     const oferta = generarOferta(createRng(10), { jugador: yo, mundo: mundo(), etapa: 'profesional' });
     const paso = rechazarOferta(yo, oferta);
-    expect(paso.jugador.fama).toBeLessThan(30);
     expect(paso.texto).toBeTruthy();
   });
 
@@ -562,8 +574,8 @@ describe('rechazarOferta', () => {
 describe('aplicarResultado', () => {
   const oferta = () => generarOferta(createRng(12), { jugador: jugador(), mundo: mundo(), etapa: 'profesional' });
 
-  it('ganar suma victoria, bolsa y fama', () => {
-    const yo = jugador({ fama: 10, dinero: 0 });
+  it('ganar suma victoria y paga la bolsa', () => {
+    const yo = jugador({ dinero: 0 });
     const o = oferta();
     const paso = aplicarResultado(yo, {
       oferta: o, mundo: mundo(),
@@ -572,7 +584,6 @@ describe('aplicarResultado', () => {
     expect(paso.jugador.record.v).toBe(1);
     expect(paso.jugador.record.ko).toBe(1);
     expect(paso.jugador.dinero).toBe(o.bolsa);
-    expect(paso.jugador.fama).toBeGreaterThan(10);
   });
 
   it('perder suma derrota pero igual paga la bolsa', () => {
@@ -642,24 +653,12 @@ describe('aplicarResultado', () => {
     expect(paso.jugador.defensas).toBe(1);
   });
 
-  it('con psicologo, la derrota golpea menos la moral', () => {
-    const sinPsicologo = aplicarResultado(jugador({ estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } }), {
-      oferta: oferta(), mundo: mundo(),
-      resultado: { ganador: 'rival', metodo: 'ko', round: 3, texto: 'Perdió' },
-    });
-    const conPsicologo = aplicarResultado(
-      jugador({ staff: ['psicologo'], estado: { forma: 60, fatiga: 10, moral: 60, lesion: null } }),
-      {
-        oferta: oferta(), mundo: mundo(),
-        resultado: { ganador: 'rival', metodo: 'ko', round: 3, texto: 'Perdió' },
-      },
-    );
-    const caidaSinPsicologo = 60 - sinPsicologo.jugador.estado.moral;
-    const caidaConPsicologo = 60 - conPsicologo.jugador.estado.moral;
-    expect(caidaConPsicologo).toBeLessThan(caidaSinPsicologo);
-    expect(caidaConPsicologo).toBeGreaterThan(0);
-  });
-
+  // v13: la moral dejó de existir como estado (ver el comentario de más
+  // arriba en aplicarResultado, offers.js: "acá se movía la moral tras cada
+  // pelea") y el amortiguador del psicólogo sobre esa caída se borró junto
+  // con ella, sin reemplazo — no queda ninguna mecánica que este test pueda
+  // seguir probando. Ver el informe de esta ronda: el ítem 'psicologo'
+  // (money.js) quedó sin ningún efecto real en el código.
   it('perder el titulo lo saca de la lista', () => {
     const yo = jugador({ titulos: ['Título regional'] });
     const o = { ...oferta(), esTitulo: true, enJuego: 'Título regional' };
