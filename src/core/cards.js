@@ -2,6 +2,7 @@ import {
   ATRIBUTOS, ETIQUETAS, aplicarModificadores,
 } from './stats.js';
 import { bonusCartas } from './money.js';
+import { rendimientoDeMejora } from './talento.js';
 import { CARTAS_MEJORA } from '../content/cards-improve.js';
 
 export function formatearMods(mods) {
@@ -373,9 +374,15 @@ export function aplicarCarta(jugador, carta) {
     estado: { ...jugador.estado },
   };
 
+  // El talento (v13) multiplica lo que RINDE una mejora: a un peleador que
+  // aprende rápido la misma carta le da más. Solo se aplica a los mods
+  // POSITIVOS — que el talento te salvara de tus propias malas decisiones
+  // sería raro, y encima haría que un crack no pudiera arruinarse nunca.
+  const rendimiento = rendimientoDeMejora(jugador, jugador.edad);
   const paraAtributos = {};
   for (const [clave, valor] of Object.entries(carta.mods)) {
-    if (clave in nuevo.atributos) paraAtributos[clave] = valor;
+    if (!(clave in nuevo.atributos)) continue;
+    paraAtributos[clave] = valor > 0 ? Math.max(1, Math.round(valor * rendimiento)) : valor;
   }
 
   const a = aplicarModificadores(nuevo.atributos, paraAtributos);

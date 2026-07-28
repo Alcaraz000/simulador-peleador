@@ -6,6 +6,7 @@ import { ESTILOS, estilosDisponibles } from './styles.js';
 import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, NOMBRES_POR_PAIS, GIMNASIOS } from '../content/names.js';
 import { crearEntrenadorDe } from './coach.js';
 import { NICKNAMES } from '../content/nicknames.js';
+import { sortearTalento } from './talento.js';
 import { sortearPorRareza } from './cards.js';
 import { createRng } from './rng.js';
 
@@ -129,17 +130,13 @@ export function crearPeleador(opciones) {
   const entrenador = crearEntrenadorDe(estilo);
 
   let atributos = repartirAtributosIniciales(rng, media);
-  let especiales = { disciplinaPersonal: 40, menton: 40 };
 
   for (const mods of [est.mods, orig.mods, nick?.mods ?? {}, entrenador?.aporte ?? {}]) {
     const soloAtributos = {};
-    const soloEspeciales = {};
     for (const [clave, valor] of Object.entries(mods)) {
       if (clave in atributos) soloAtributos[clave] = valor;
-      else if (clave in especiales) soloEspeciales[clave] = valor;
     }
     atributos = aplicarModificadores(atributos, soloAtributos).resultado;
-    especiales = aplicarModificadores(especiales, soloEspeciales).resultado;
   }
 
   const cat = CATEGORIAS[categoria];
@@ -158,8 +155,13 @@ export function crearPeleador(opciones) {
     origen,
     edad,
     atributos,
-    especiales,
     entrenador,
+    // Talento (v13): cuánto le rinde entrenar y cuándo llega a su mejor
+    // momento. Es la palanca principal de rejugabilidad — dos peleadores con
+    // la misma media inicial pueden tener carreras completamente distintas.
+    // NUNCA se muestra como número: el jugador lo intuye por lo que le dice
+    // el entrenador y por lo que ve arriba del ring.
+    talento: sortearTalento(rng),
     estado: crearEstado(),
     record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     // Récord AMATEUR (v6, "las peleas amateur no cuentan ni en el ranking ni

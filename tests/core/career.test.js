@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
   ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea, cancelarProximaPelea,
+  edadDeDeclive,
   faseFisicaJugador,
 } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
@@ -362,17 +363,17 @@ describe('faseFisicaJugador', () => {
     expect(faseFisicaJugador(conEdad(31)).id).toBe('prime');
   });
 
-  it('pasado el umbral suave (32), esta en declive', () => {
-    expect(faseFisicaJugador(conEdad(33)).id).toBe('declive');
+  it('pasado el umbral suave (34), esta en declive', () => {
+    expect(faseFisicaJugador(conEdad(35)).id).toBe('declive');
   });
 
-  it('pasado el umbral duro (36), el declive es mas marcado', () => {
-    expect(faseFisicaJugador(conEdad(37)).id).toBe('declive_duro');
+  it('pasado el umbral duro (38), el declive es mas marcado', () => {
+    expect(faseFisicaJugador(conEdad(39)).id).toBe('declive_duro');
   });
 
   it('el preparador corre los umbrales de fase, igual que los del declive real', () => {
-    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).not.toBe('declive');
-    expect(faseFisicaJugador(conEdad(33, { staff: ['preparador'] })).id).toBe('prime');
+    expect(faseFisicaJugador(conEdad(35, { staff: ['preparador'] })).id).not.toBe('declive');
+    expect(faseFisicaJugador(conEdad(35, { staff: ['preparador'] })).id).toBe('prime');
   });
 
   it('toda fase trae una etiqueta legible', () => {
@@ -538,10 +539,10 @@ describe('avanzarBloque', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1;
     p.jugador.edad = 20;
-    const velAntes = p.jugador.atributos.velocidad;
+    const agiAntes = p.jugador.atributos.agilidad;
     const cardioAntes = p.jugador.atributos.cardio;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.atributos.velocidad).toBeGreaterThan(velAntes);
+    expect(despues.jugador.atributos.agilidad).toBeGreaterThan(agiAntes);
     expect(despues.jugador.atributos.cardio).toBeGreaterThan(cardioAntes);
   });
 
@@ -572,11 +573,11 @@ describe('avanzarBloque', () => {
   it('con preparador contratado, el declive igual llega mas tarde en la carrera', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1;
-    p.jugador.edad = 34;
+    p.jugador.edad = 36;
     p.jugador.staff = ['preparador'];
-    const velAntes = p.jugador.atributos.velocidad;
+    const agiAntes = p.jugador.atributos.agilidad;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+    expect(despues.jugador.atributos.agilidad).toBeLessThan(agiAntes);
   });
 
   // Sistema 2 (feedback del usuario, segunda vez: "se supone que hay una
@@ -587,19 +588,19 @@ describe('avanzarBloque', () => {
   // "veterano" (ver ETAPAS, edadDesde: 36 — "Cada pelea puede ser la
   // última"): ahí el declive se agrava Y empieza a tocar también la potencia,
   // no solo piernas y pulmón.
-  it('a partir de los 36 (arranca la etapa "veterano") el declive se agrava y empieza a pegarle tambien a la potencia', () => {
+  it('en el escalon duro el declive se agrava y empieza a pegarle tambien a la fuerza', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1; // amateur: 1 año por bloque, numero redondo
-    p.jugador.edad = 35;
-    const potAntes = p.jugador.atributos.potencia;
-    const velAntes = p.jugador.atributos.velocidad;
+    p.jugador.edad = 37;
+    const fuerzaAntes = p.jugador.atributos.fuerza;
+    const velAntes = p.jugador.atributos.agilidad;
     const cardioAntes = p.jugador.atributos.cardio;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.edad).toBe(36);
-    expect(potAntes - despues.jugador.atributos.potencia).toBe(1);
+    expect(despues.jugador.edad).toBe(38);
+    expect(fuerzaAntes - despues.jugador.atributos.fuerza).toBe(1);
     // Más marcado que el escalón suave (-2 velocidad/-1 cardio, ver el test
     // "a partir de los 32...", arriba): acá se siente más.
-    expect(velAntes - despues.jugador.atributos.velocidad).toBe(3);
+    expect(velAntes - despues.jugador.atributos.agilidad).toBe(3);
     expect(cardioAntes - despues.jugador.atributos.cardio).toBe(2);
   });
 
@@ -1118,5 +1119,42 @@ describe('el año del mundo sigue al calendario', () => {
     const aniosDelJugador = partida.jugador.edad - inicial.jugador.edad;
     // Tolerancia de un año: el calendario redondea semanas a años enteros.
     expect(Math.abs(aniosDelMundo - aniosDelJugador)).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---- Declive por edad y castigo (v13) ----------------------------------
+describe('el declive empieza a los 34 y el castigo lo adelanta', () => {
+  function peleadorCon(historial) {
+    const p = crearPeleador({
+      nombre: 'Ortiz', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 50, esJugador: true,
+    });
+    return { ...p, historial, staff: [] };
+  }
+
+  it('sin castigo, el declive empieza a los 34', () => {
+    expect(edadDeDeclive(peleadorCon([]))).toBe(34);
+  });
+
+  it('los nocauts sufridos lo adelantan', () => {
+    const golpeado = peleadorCon(Array.from({ length: 6 }, () => ({ resultado: 'd', metodo: 'ko' })));
+    expect(edadDeDeclive(golpeado)).toBeLessThan(34);
+  });
+
+  it('las derrotas por puntos NO lo adelantan: perder parejo no te envejece', () => {
+    const porPuntos = peleadorCon(Array.from({ length: 6 }, () => ({ resultado: 'd', metodo: 'decision' })));
+    expect(edadDeDeclive(porPuntos)).toBe(34);
+  });
+
+  it('las caidas sufridas tambien suman castigo, aunque hayas ganado', () => {
+    const ganandoPeroCastigado = peleadorCon(
+      Array.from({ length: 5 }, () => ({ resultado: 'v', metodo: 'decision', caidasSufridas: 2 })),
+    );
+    expect(edadDeDeclive(ganandoPeroCastigado)).toBeLessThan(34);
+  });
+
+  it('el castigo tiene un tope: nunca adelanta el declive mas alla de lo razonable', () => {
+    const destruido = peleadorCon(Array.from({ length: 60 }, () => ({ resultado: 'd', metodo: 'ko', caidasSufridas: 3 })));
+    expect(edadDeDeclive(destruido)).toBeGreaterThanOrEqual(29);
   });
 });

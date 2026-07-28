@@ -1,4 +1,6 @@
 import { ENTRENADORES } from '../content/coaches.js';
+import { SENALES_TALENTO, DECISIONES_ANTES_DE_OPINAR } from '../content/senales-talento.js';
+import { lecturaDeTalento } from './talento.js';
 import { aplicarModificadores } from './stats.js';
 
 /** Entrada cruda del catálogo (con `mods`) asociada a un estilo, o null. */
@@ -76,4 +78,24 @@ export function cambiarEntrenador(jugador, nuevoEntrenador) {
   const atributos = aplicarModificadores(sinAporteViejo, sumar).resultado;
 
   return { ...jugador, atributos, entrenador: nuevoEntrenador ?? null };
+}
+
+// ---- Señales de talento (v13) ------------------------------------------
+
+/**
+ * La frase con la que el entrenador deja intuir el talento del peleador.
+ * Devuelve `null` mientras no haya con qué opinar (menos de
+ * DECISIONES_ANTES_DE_OPINAR decisiones tomadas): cantar el talento en el
+ * minuto uno le sacaría toda la gracia al descubrimiento.
+ *
+ * Determinista, sin rng: dos partidas idénticas dan la misma señal, y no
+ * consume tiradas de la secuencia compartida (correrla descalibraría el
+ * ritmo de toda la carrera — ver el comentario de ETAPAS en career.js).
+ *
+ * NUNCA devuelve un número: el jugador lo intuye, no lo lee.
+ */
+export function senalDeTalento(jugador, decisionesTomadas = 0) {
+  if (decisionesTomadas < DECISIONES_ANTES_DE_OPINAR) return null;
+  const familia = SENALES_TALENTO[lecturaDeTalento(jugador)] ?? SENALES_TALENTO.normal;
+  return familia[decisionesTomadas % familia.length];
 }

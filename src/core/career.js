@@ -53,8 +53,8 @@ export const CANTIDAD_MUNDO = 100;
 // la carrera). Es el PISO de la progresión, no el motor: las cartas de
 // mejora (con su rareza y su suerte legendaria) siguen siendo lo que separa
 // una carrera con suerte de una sin ella — ver CRECIMIENTO_MAX_POR_BLOQUE.
-export const EDAD_DECLIVE_JUGADOR = 32;
-const EDAD_DECLIVE_DURO_JUGADOR = 36;
+export const EDAD_DECLIVE_JUGADOR = 34;
+const EDAD_DECLIVE_DURO_JUGADOR = 38;
 const DEMORA_DECLIVE_PREPARADOR = 3;
 const PERDIDA_VELOCIDAD_DECLIVE = 2;
 const PERDIDA_CARDIO_DECLIVE = 1;
@@ -79,11 +79,48 @@ const EDAD_FIN_CRECIMIENTO = 27;
 // verdad coincidan siempre: sin preparador, el prime dura de los 27 a los 31.
 const MARGEN_PRIME = EDAD_DECLIVE_JUGADOR - EDAD_FIN_CRECIMIENTO;
 
-function umbralesDeclive(jugador) {
+// Cuánto castigo se comió el peleador arriba del ring. Cuentan los nocauts
+// sufridos y las caídas — NO las derrotas por puntos: un tipo que perdió
+// cuatro peleas parejas llega entero a los 35, y uno que ganó todas pero
+// comiendo manos, no. Es lo que de verdad envejece a un boxeador.
+//
+// Determinista y sin rng: correr la secuencia de azar descalibraría el ritmo
+// de toda la carrera (ver el comentario grande de ETAPAS, más abajo).
+export function castigoAcumulado(jugador) {
+  const historial = jugador.historial ?? [];
+  let castigo = 0;
+  for (const pelea of historial) {
+    const perdio = pelea.resultado === 'd';
+    const porNocaut = pelea.metodo === 'ko' || pelea.metodo === 'tko';
+    if (perdio && porNocaut) castigo += 2;
+    else if (porNocaut) castigo += 0.5;
+    castigo += pelea.caidasSufridas ?? 0;
+  }
+  return castigo;
+}
+
+// Cuántos años de castigo hacen falta para adelantar el declive un año.
+const CASTIGO_POR_ANIO_ADELANTADO = 3;
+const ADELANTO_MAXIMO_POR_CASTIGO = 5;
+
+/**
+ * A qué edad empieza a caer este peleador. Base 34 (spec v13), adelantada
+ * por el castigo acumulado y demorada por el preparador físico.
+ */
+export function edadDeDeclive(jugador) {
   const demora = tieneStaff(jugador, 'preparador') ? DEMORA_DECLIVE_PREPARADOR : 0;
+  const adelanto = Math.min(
+    ADELANTO_MAXIMO_POR_CASTIGO,
+    Math.floor(castigoAcumulado(jugador) / CASTIGO_POR_ANIO_ADELANTADO),
+  );
+  return EDAD_DECLIVE_JUGADOR + demora - adelanto;
+}
+
+function umbralesDeclive(jugador) {
+  const suave = edadDeDeclive(jugador);
   return {
-    suave: EDAD_DECLIVE_JUGADOR + demora,
-    duro: EDAD_DECLIVE_DURO_JUGADOR + demora,
+    suave,
+    duro: suave + (EDAD_DECLIVE_DURO_JUGADOR - EDAD_DECLIVE_JUGADOR),
   };
 }
 
@@ -151,7 +188,7 @@ const CRECIMIENTO_MAX_POR_BLOQUE = 3;
 // media). Crecen todos parejo: una versión más simple que separar "físico"
 // de "técnico" por edad, y ya alcanza para que la MEDIA suba sola de forma
 // sentida.
-const ATRIBUTOS_CON_CRECIMIENTO = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
+const ATRIBUTOS_CON_CRECIMIENTO = ['fuerza', 'defensa', 'cardio', 'agilidad'];
 
 // Pedido 4 (v6, TERCERA vez: "quiero que por año los atributos también vayan
 // subiendo, sin acciones de por medio, hasta llegar al prime"): crecimiento
@@ -179,21 +216,23 @@ function crecimientoPorEdadJugador(jugador) {
   return atributos;
 }
 
+// Lo primero que se van son las piernas y el aire (agilidad y cardio); la
+// mano tarda más en irse. En el escalón duro cae todo, fuerza incluida.
 function declivePorEdadJugador(jugador) {
   const { suave, duro } = umbralesDeclive(jugador);
   if (jugador.edad < suave) return jugador.atributos;
   if (jugador.edad < duro) {
     return {
       ...jugador.atributos,
-      velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
+      agilidad: clamp(jugador.atributos.agilidad - PERDIDA_VELOCIDAD_DECLIVE, 1, 99),
       cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE, 1, 99),
     };
   }
   return {
     ...jugador.atributos,
-    velocidad: clamp(jugador.atributos.velocidad - PERDIDA_VELOCIDAD_DECLIVE_DURO, 1, 99),
+    agilidad: clamp(jugador.atributos.agilidad - PERDIDA_VELOCIDAD_DECLIVE_DURO, 1, 99),
     cardio: clamp(jugador.atributos.cardio - PERDIDA_CARDIO_DECLIVE_DURO, 1, 99),
-    potencia: clamp(jugador.atributos.potencia - PERDIDA_POTENCIA_DECLIVE_DURO, 1, 99),
+    fuerza: clamp(jugador.atributos.fuerza - PERDIDA_POTENCIA_DECLIVE_DURO, 1, 99),
   };
 }
 
