@@ -57,9 +57,21 @@ describe('calcularLegado', () => {
     expect(puntaje(rico)).toBeGreaterThan(puntaje(pobre));
   });
 
-  it('la fama sube el legado mediatico', () => {
-    const puntaje = (fama) => calcularLegado(partida({ fama })).legados.find((l) => l.id === 'mediatico').puntaje;
-    expect(puntaje(95)).toBeGreaterThan(puntaje(5));
+  // v13: el legado mediático ya no sale de la fama (eliminada) — sale de
+  // cinturones, defensas y nocauts (ver puntajeMediatico, legacy.js). Un
+  // campeón con varias defensas y nocauts da mucho más que hablar que un
+  // debutante sin nada en el récord.
+  it('los cinturones, las defensas y los nocauts suben el legado mediatico', () => {
+    const puntaje = (p) => calcularLegado(p).legados.find((l) => l.id === 'mediatico').puntaje;
+    const desconocido = partida();
+    const campeon = partida({
+      titulos: ['Cinturón mundial'],
+      defensas: 4,
+      record: {
+        v: 20, d: 2, e: 0, ko: 12, sub: 0, dec: 6,
+      },
+    });
+    expect(puntaje(campeon)).toBeGreaterThan(puntaje(desconocido));
   });
 
   it('la disciplina personal sube el legado etico', () => {
