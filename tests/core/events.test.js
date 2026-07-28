@@ -272,7 +272,7 @@ describe('resolverOpcion', () => {
     id: 'test', categoria: 'evento', titulo: 'T', texto: 't', etapas: ['profesional'],
     opciones: [
       { id: 'directo', texto: 'Directo', mods: { cardio: 5 } },
-      { id: 'plata', texto: 'Plata', efectos: { dinero: 5000, fama: 3 } },
+      { id: 'plata', texto: 'Plata', efectos: { dinero: 5000 } },
       { id: 'riesgo', texto: 'Riesgo', probabilidades: [
         { peso: 1, mods: { defensa: 5 }, texto: 'Salió bien.' },
         { peso: 1, mods: { defensa: -5 }, texto: 'Salió mal.' },
@@ -283,8 +283,8 @@ describe('resolverOpcion', () => {
         { peso: 1, mods: { agilidad: -2 } },
       ] },
       { id: 'apuesta', texto: 'Apuesta', probabilidades: [
-        { peso: 0, mods: { agilidad: 2 }, texto: 'Salió bien.', efectos: { fama: 4 } },
-        { peso: 1, mods: {}, texto: 'Se cayó la pelea.', efectos: { fama: -8 }, caePelea: true },
+        { peso: 0, mods: { agilidad: 2 }, texto: 'Salió bien.', efectos: { dinero: 400 } },
+        { peso: 1, mods: {}, texto: 'Se cayó la pelea.', efectos: { dinero: -800 }, caePelea: true },
       ] },
     ],
   };
@@ -296,11 +296,10 @@ describe('resolverOpcion', () => {
     expect(paso.deltasTexto).toContain('+5 Cardio');
   });
 
-  it('aplica efectos de dinero y fama', () => {
-    const yo = jugador({ dinero: 100, fama: 10 });
+  it('aplica el efecto de dinero de la opcion', () => {
+    const yo = jugador({ dinero: 100 });
     const paso = resolverOpcion(createRng(6), { jugador: yo, carta, opcionId: 'plata' });
     expect(paso.jugador.dinero).toBe(5100);
-    expect(paso.jugador.fama).toBe(13);
   });
 
   it('resuelve las opciones con probabilidad', () => {
@@ -316,15 +315,6 @@ describe('resolverOpcion', () => {
       rivalidades: [], rivalObjetivoId: 'riv_1',
     });
     expect(paso.rivalidades.find((r) => r.rivalId === 'riv_1').heat).toBeGreaterThan(0);
-  });
-
-  it('la fama nunca sale del rango 0-100', () => {
-    const cartaExtrema = {
-      ...carta,
-      opciones: [{ id: 'boom', texto: 'x', efectos: { fama: 999 } }],
-    };
-    const paso = resolverOpcion(createRng(9), { jugador: jugador({ fama: 90 }), carta: cartaExtrema, opcionId: 'boom' });
-    expect(paso.jugador.fama).toBe(100);
   });
 
   it('el dinero nunca queda negativo', () => {
@@ -373,15 +363,18 @@ describe('resolverOpcion', () => {
   });
 
   // Task v3 ("cartas nuevas con azar"): una rama de `probabilidades` puede
-  // traer su propio `efectos` (dinero/fama, distinto según qué rama salió) y
+  // traer su propio `efectos` (dinero, distinto según qué rama salió) y
   // `caePelea` (la consecuencia "se te cae la pelea" tiene que ser real).
+  // v13: el efecto de ejemplo de estos dos tests pasó de fama (eliminada) a
+  // dinero — la intención (el efecto de la rama ganadora se aplica y el de
+  // la otra rama no) sigue exactamente igual.
   describe('efectos por rama y caePelea', () => {
     it('con peso 1 en la rama mala, aplica el efectos de ESA rama (no el de la opcion, que no tiene) y expone caePelea', () => {
-      const yo = jugador({ fama: 50 });
+      const yo = jugador({ dinero: 5000 });
       const paso = resolverOpcion(createRng(1), { jugador: yo, carta, opcionId: 'apuesta' });
-      expect(paso.jugador.fama).toBe(42);
+      expect(paso.jugador.dinero).toBe(4200);
       expect(paso.caePelea).toBe(true);
-      expect(paso.deltasTexto).toContain('-8 Fama');
+      expect(paso.deltasTexto).toContain('-US$ 800');
     });
 
     it('una opcion sin probabilidades nunca cae la pelea', () => {
@@ -394,14 +387,14 @@ describe('resolverOpcion', () => {
         ...carta,
         opciones: [
           { id: 'segura', texto: 'Segura', probabilidades: [
-            { peso: 1, mods: {}, texto: 'ok', efectos: { fama: 3 } },
-            { peso: 0, mods: {}, texto: 'no sale nunca', efectos: { fama: -50 }, caePelea: true },
+            { peso: 1, mods: {}, texto: 'ok', efectos: { dinero: 300 } },
+            { peso: 0, mods: {}, texto: 'no sale nunca', efectos: { dinero: -5000 }, caePelea: true },
           ] },
         ],
       };
-      const yo = jugador({ fama: 10 });
+      const yo = jugador({ dinero: 1000 });
       const paso = resolverOpcion(createRng(2), { jugador: yo, carta: cartaCargada, opcionId: 'segura' });
-      expect(paso.jugador.fama).toBe(13);
+      expect(paso.jugador.dinero).toBe(1300);
       expect(paso.caePelea).toBe(false);
     });
   });
