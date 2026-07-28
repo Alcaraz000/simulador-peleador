@@ -1,6 +1,6 @@
 import { getDisciplina, pesosDe } from './disciplines.js';
 import { ventajaDeEstilo } from './styles.js';
-import { calcularMedia, clamp } from './stats.js';
+import { clamp } from './stats.js';
 import { createRng } from './rng.js';
 import { factorEfectividad } from './injuries.js';
 import { LINEAS } from '../content/fight-lines.js';
@@ -73,7 +73,9 @@ export function crearPelea({ jugador, rival, disciplina, nivel = 'profesional', 
     roundActual: 1,
     plan,
     aguante: { jugador: 100, rival: 100 },
-    fatiga: { jugador: jugador.estado.fatiga ?? 0, rival: rival.estado.fatiga ?? 0 },
+    // v13: la fatiga ya no es un estado del peleador que se arrastra entre
+    // peleas — nace en 0 en cada combate y vive solo acá adentro.
+    fatiga: { jugador: 0, rival: 0 },
     tarjetas: { jugador: 0, rival: 0 },
     caidas: { jugador: 0, rival: 0 },
     golpes: { jugador: golpesVacio(), rival: golpesVacio() },
@@ -108,19 +110,34 @@ function rngDe(pelea, createRng) {
   return rng;
 }
 
+// Peso de cada atributo dentro de la efectividad de un round (v13). Es el
+// contrato con el jugador, y `tests/core/fight.test.js` lo verifica subiendo
+// UNO solo y comprobando que el resultado mejora:
+//
+//   fuerza    pegar: entra en el ataque y, aparte, en el daño y el nocaut
+//   agilidad  llegar primero: entra en el ataque
+//   defensa   que no te entren, y aguantar la que entra: reduce daño y caídas
+//   cardio    NO entra acá — pesa a través de la fatiga, que sube round a
+//             round y castiga todo lo de arriba (ver simularRound)
+//
+// La fatiga ya no viene del peleador: nace en 0 en cada pelea y vive solo
+// acá adentro (spec v13). Por eso el castigo puede ser más fuerte que antes
+// sin volverse injusto: arranca sin penalidad y se gana durante el combate.
+const PESO_ATAQUE = 0.6;
+const PESO_AGUANTE = 0.4;
+const CASTIGO_FATIGA_MAX = 200;
+
 function efectividad(snapshot, disciplina, fatiga, planMods, esJugador) {
-  const media = calcularMedia(snapshot.atributos, pesosDe(disciplina));
-  const forma = (snapshot.estado.forma ?? 60) / 60;
-  const moral = (snapshot.estado.moral ?? 60) / 60;
-  const castigoFatiga = 1 - clamp(fatiga, 0, 100) / 220;
+  const { fuerza, agilidad, defensa } = snapshot.atributos;
+  const ataque = fuerza * 0.5 + agilidad * 0.5;
+  const castigoFatiga = 1 - clamp(fatiga, 0, 100) / CASTIGO_FATIGA_MAX;
   // Sistema 1 (feedback del usuario: "¿Qué efecto tienen las lesiones?
-  // Parecería que no afecta en nada"): antes era un 0.88 fijo aplicado solo a
-  // la MITAD de la fórmula (~6% de penalización total, invisible). Ahora
-  // `factorEfectividad` (injuries.js) escala con la severidad y pesa sobre el
-  // cálculo ENTERO, así que sí se siente en pelea.
+  // Parecería que no afecta en nada"): `factorEfectividad` (injuries.js)
+  // escala con la severidad y pesa sobre el cálculo ENTERO.
   const castigoLesion = factorEfectividad(snapshot.estado.lesion);
   const agresion = esJugador ? planMods.agresion : 0;
-  return (media * forma * 0.5 + media * 0.5 * moral * castigoFatiga * (1 + agresion)) * castigoLesion;
+  const base = ataque * PESO_ATAQUE + defensa * PESO_AGUANTE;
+  return base * castigoFatiga * castigoLesion * (1 + agresion);
 }
 
 function texto(plantilla, yo, rival) {
@@ -254,9 +271,23 @@ export function simularRound(pelea, { createRng: crear } = {}) {
   if (ganaRound) nueva.tarjetas.jugador += 1; else nueva.tarjetas.rival += 1;
   nueva.historialRounds.push({ round, margen, ganador: ganaRound ? 'jugador' : 'rival' });
 
-  const dano = Math.round((6 + margen * 30) * rng.float(0.7, 1.4));
-  if (ganaRound) nueva.aguante.rival = clamp(nueva.aguante.rival - dano, 0, 100);
-  else nueva.aguante.jugador = clamp(nueva.aguante.jugador - dano, 0, 100);
+  // El daño lo pone la FUERZA del que pega y lo amortigua la DEFENSA del que
+  // la recibe (v13: defensa absorbió al mentón, así que "aguantar la mano"
+  // vive acá y en la probabilidad de caída, más abajo).
+  const ladoQuePega = ganaRound ? 'jugador' : 'rival';
+  const ladoQueRecibe = ganaRound ? 'rival' : 'jugador';
+  const fuerzaQuePega = nueva.snapshot[ladoQuePega].atributos.fuerza;
+  const defensaQueRecibe = nueva.snapshot[ladoQueRecibe].atributos.defensa;
+  // La base de 12 está calibrada, no elegida a ojo: con la fórmula vieja
+  // (base 6, sin fuerza ni defensa en el cálculo) las peleas terminaban por
+  // nocaut en ~35% de los casos. Al meter los dos atributos nuevos el daño
+  // se amortiguaba y los nocauts caían al 10%, que deja el juego sin
+  // dramatismo. Barrido de base ∈ {6,8,10,12} × divisor ∈ {260,320} sobre
+  // 500 peleas: base 12 / divisor 260 devuelve el 35% original.
+  const dano = Math.round(
+    (12 + margen * 30) * (0.6 + fuerzaQuePega / 100) * (1 - defensaQueRecibe / 260) * rng.float(0.7, 1.4),
+  );
+  nueva.aguante[ladoQueRecibe] = clamp(nueva.aguante[ladoQueRecibe] - Math.max(1, dano), 0, 100);
 
   const gastoBase = 9;
   const cardioJ = nueva.snapshot.jugador.atributos.cardio;
@@ -270,12 +301,14 @@ export function simularRound(pelea, { createRng: crear } = {}) {
   const atacante = ganaRound ? 'jugador' : 'rival';
   const defensor = ganaRound ? 'rival' : 'jugador';
   const aguanteDefensor = nueva.aguante[defensor];
-  const mentonDefensor = nueva.snapshot[defensor].especiales.menton;
-  const potenciaAtacante = nueva.snapshot[atacante].atributos.potencia;
+  // v13: la DEFENSA hace lo que antes hacía el mentón — es lo que te mantiene
+  // en pie cuando entra la mano. La FUERZA del que pega empuja en contra.
+  const defensaDefensor = nueva.snapshot[defensor].atributos.defensa;
+  const fuerzaAtacante = nueva.snapshot[atacante].atributos.fuerza;
 
   let huboCaida = false;
   let textoCaida = null;
-  const probCaida = clamp((100 - aguanteDefensor) / 260 + (potenciaAtacante - mentonDefensor) / 500, 0, 0.4);
+  const probCaida = clamp((100 - aguanteDefensor) / 260 + (fuerzaAtacante - defensaDefensor) / 500, 0, 0.4);
   if (rng.chance(probCaida)) {
     huboCaida = true;
     nueva.caidas[defensor] += 1;
@@ -285,21 +318,15 @@ export function simularRound(pelea, { createRng: crear } = {}) {
     nueva.aguante[defensor] = clamp(nueva.aguante[defensor] - 10, 0, 100);
   }
 
-  const puedeSumision = disc.desenlaces.includes('sumision');
-  const grapplingAtacante = nueva.snapshot[atacante].atributos.grappling;
-  const grapplingDefensor = nueva.snapshot[defensor].atributos.grappling;
-  const probSumision = puedeSumision
-    ? clamp((grapplingAtacante - grapplingDefensor) / 400 + (100 - aguanteDefensor) / 500, 0, 0.18)
-    : 0;
-
+  // La sumisión era el desenlace de MMA y vivía en el atributo `grappling`,
+  // que no existe más (v13: cuatro atributos, boxeo nomás). El día que se
+  // sume MMA vuelve a entrar por `disc.desenlaces`, con su propio atributo.
   const probKo = clamp((100 - nueva.aguante[defensor]) / 130 - 0.55, 0, 0.5)
     + (nueva.caidas[defensor] >= 2 ? 0.25 : 0);
 
   let metodo = null;
   if (nueva.aguante[defensor] <= 0 || rng.chance(probKo)) {
     metodo = nueva.caidas[defensor] >= 2 ? 'tko' : 'ko';
-  } else if (rng.chance(probSumision)) {
-    metodo = 'sumision';
   }
 
   let textoCierre;

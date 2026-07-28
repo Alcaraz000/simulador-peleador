@@ -1,5 +1,5 @@
 import {
-  ATRIBUTOS, ETIQUETAS, aplicarModificadores, LIMITES_ESTADO,
+  ATRIBUTOS, ETIQUETAS, aplicarModificadores,
 } from './stats.js';
 import { bonusCartas } from './money.js';
 import { CARTAS_MEJORA } from '../content/cards-improve.js';
@@ -362,32 +362,26 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
   });
 }
 
+// v13: los mods de una carta van SOLO a los cuatro atributos. Ya no hay
+// `especiales` (mentón, disciplina personal) ni estados numéricos (forma,
+// moral, fatiga) que repartir — desaparecieron con la simplificación, y un
+// mod que apunte a una clave inexistente simplemente no se aplica.
 export function aplicarCarta(jugador, carta) {
   const nuevo = {
     ...jugador,
     atributos: { ...jugador.atributos },
-    especiales: { ...jugador.especiales },
     estado: { ...jugador.estado },
   };
 
   const paraAtributos = {};
-  const paraEspeciales = {};
-  const paraEstado = {};
   for (const [clave, valor] of Object.entries(carta.mods)) {
     if (clave in nuevo.atributos) paraAtributos[clave] = valor;
-    else if (clave in nuevo.especiales) paraEspeciales[clave] = valor;
-    else if (clave in nuevo.estado) paraEstado[clave] = valor;
   }
 
   const a = aplicarModificadores(nuevo.atributos, paraAtributos);
-  const e = aplicarModificadores(nuevo.especiales, paraEspeciales);
-  const s = aplicarModificadores(nuevo.estado, paraEstado, LIMITES_ESTADO);
   nuevo.atributos = a.resultado;
-  nuevo.especiales = e.resultado;
-  nuevo.estado = s.resultado;
 
-  const deltas = { ...a.deltas, ...e.deltas, ...s.deltas };
-  return { jugador: nuevo, deltas, texto: formatearMods(deltas).join(' · ') };
+  return { jugador: nuevo, deltas: a.deltas, texto: formatearMods(a.deltas).join(' · ') };
 }
 
 // `indice` es la posición de la rama ganadora DENTRO de `opcion.probabilidades`
