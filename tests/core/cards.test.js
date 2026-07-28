@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
+import { ATRIBUTOS } from '../../src/core/stats.js';
 import { CARTAS_MEJORA } from '../../src/content/cards-improve.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import {
@@ -10,6 +11,17 @@ import {
 
 const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
 const SIEMPRE = ['juvenil', 'amateur', 'profesional', 'veterano'];
+// v13: la simplificación se llevó estos seis atributos/estados. Ninguna
+// carta puede volver a nombrarlos en sus `mods` — quedaron fundidos en los
+// cuatro de ATRIBUTOS o, en el caso de fatiga/forma/moral, desaparecieron
+// del tablero por completo.
+const ATRIBUTOS_ELIMINADOS = ['forma', 'moral', 'menton', 'disciplinaPersonal', 'fatiga', 'potencia', 'velocidad', 'tecnica', 'iq', 'grappling'];
+
+// Máximo razonable para un mod positivo según rareza, en tests de contrato
+// sobre catálogos enteros: "efecto típico +3/+4, legendaria hasta +8" (spec
+// 2026-07-28). Da margen (una rara puede llegar a 6) sin permitir que una
+// normal o rara se cuele cerca del techo legendario.
+const TOPE_POSITIVO_POR_RAREZA = { normal: 4, rara: 6, legendaria: 8 };
 
 function jugador(extra = {}) {
   return {
@@ -17,13 +29,19 @@ function jugador(extra = {}) {
       nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
       estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 55, esJugador: true,
     }),
+    // Talento neutro: rendimientoDeMejora da exactamente 1 sin talento (ver
+    // talento.js), así los tests de acá abajo comparan deltas crudos contra
+    // los mods de la carta sin que el multiplicador aleatorio se meta en el medio.
+    talento: null,
     ...extra,
   };
 }
 
+// Tests de contrato sobre TODO el catálogo (no carta por carta): valen para
+// cualquier carta que se sume después, sin tocar el test.
 describe('catalogo de mejoras', () => {
-  it('tiene al menos catorce cartas con id unico', () => {
-    expect(CARTAS_MEJORA.length).toBeGreaterThanOrEqual(14);
+  it('tiene al menos treinta cartas con id unico', () => {
+    expect(CARTAS_MEJORA.length).toBeGreaterThanOrEqual(30);
     const ids = CARTAS_MEJORA.map((c) => c.id);
     expect(new Set(ids).size).toBe(ids.length);
   });
@@ -36,9 +54,12 @@ describe('catalogo de mejoras', () => {
     }
   });
 
-  it('ninguna carta de la v1 toca el grappling', () => {
+  it('ningun mods apunta a un atributo que no existe (ni a los seis eliminados en la simplificacion)', () => {
     for (const carta of CARTAS_MEJORA) {
-      expect('grappling' in carta.mods).toBe(false);
+      for (const clave of Object.keys(carta.mods)) {
+        expect(ATRIBUTOS).toContain(clave);
+        expect(ATRIBUTOS_ELIMINADOS).not.toContain(clave);
+      }
     }
   });
 
@@ -53,31 +74,56 @@ describe('catalogo de mejoras', () => {
     expect(normales.length).toBeGreaterThan(CARTAS_MEJORA.length / 2);
   });
 
-  it('tiene entre 2 y 3 legendarias, potentes de verdad', () => {
+  it('los efectos positivos caen dentro del tope de su rareza (normal <=4, rara <=6, legendaria <=8)', () => {
+    for (const carta of CARTAS_MEJORA) {
+      const tope = TOPE_POSITIVO_POR_RAREZA[carta.rareza] ?? TOPE_POSITIVO_POR_RAREZA.normal;
+      for (const valor of Object.values(carta.mods)) {
+        if (valor > 0) expect(valor).toBeLessThanOrEqual(tope);
+      }
+    }
+  });
+
+  it('las legendarias no vienen nerfeadas: suman al menos 8 de positivos', () => {
     const legendarias = CARTAS_MEJORA.filter((c) => c.rareza === 'legendaria');
     expect(legendarias.length).toBeGreaterThanOrEqual(2);
-    expect(legendarias.length).toBeLessThanOrEqual(3);
+    expect(legendarias.length).toBeLessThanOrEqual(4);
     for (const carta of legendarias) {
       const sumaPositivos = Object.values(carta.mods).filter((v) => v > 0).reduce((a, b) => a + b, 0);
       expect(sumaPositivos).toBeGreaterThanOrEqual(8);
+    }
+  });
+
+  it('hay varias cartas de recuperacion para cuando el jugador esta lesionado', () => {
+    const deRecuperacion = CARTAS_MEJORA.filter((c) => (c.estados ?? []).includes('lesionado'));
+    expect(deRecuperacion.length).toBeGreaterThanOrEqual(5);
+    for (const carta of deRecuperacion) {
+      expect(carta.titulo.length).toBeGreaterThan(0);
+      expect(carta.texto.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('ninguna condicion usa fama (famaMin/famaMax): se fue con la simplificacion', () => {
+    for (const carta of CARTAS_MEJORA) {
+      expect(carta.condiciones?.famaMin).toBeUndefined();
+      expect(carta.condiciones?.famaMax).toBeUndefined();
     }
   });
 });
 
 describe('formatearMods', () => {
   it('escribe los modificadores con signo y nombre largo', () => {
-    expect(formatearMods({ velocidad: 3 })).toEqual(['+3 Velocidad']);
-    expect(formatearMods({ potencia: -2 })).toEqual(['-2 Potencia']);
+    expect(formatearMods({ agilidad: 3 })).toEqual(['+3 Agilidad']);
+    expect(formatearMods({ fuerza: -2 })).toEqual(['-2 Fuerza']);
   });
 
   it('lista varios en orden de aparicion', () => {
-    expect(formatearMods({ cardio: 5, potencia: -3 })).toEqual(['+5 Cardio', '-3 Potencia']);
+    expect(formatearMods({ cardio: 5, fuerza: -3 })).toEqual(['+5 Cardio', '-3 Fuerza']);
   });
 
-  it('usa nombre legible tambien para forma, fatiga y moral (no el id crudo)', () => {
-    expect(formatearMods({ forma: 6 })).toEqual(['+6 Forma']);
-    expect(formatearMods({ fatiga: -4 })).toEqual(['-4 Fatiga']);
-    expect(formatearMods({ moral: 10 })).toEqual(['+10 Moral']);
+  it('usa nombre legible para los cuatro atributos', () => {
+    expect(formatearMods({ defensa: 6 })).toEqual(['+6 Defensa']);
+    expect(formatearMods({ cardio: -4 })).toEqual(['-4 Cardio']);
+    expect(formatearMods({ agilidad: 10 })).toEqual(['+10 Agilidad']);
   });
 });
 
@@ -252,28 +298,28 @@ describe('repartirMejoras', () => {
     // aísla el bonus de verdad, sin el ruido de que el POOL elegible cambie
     // de una etapa a otra (varias cartas reales son solo de ciertas etapas).
     const catalogoUnaCarta = [
-      { id: 'unica', titulo: 'Única', texto: 't', mods: { potencia: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'unica', titulo: 'Única', texto: 't', mods: { fuerza: 4 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
     ];
 
     it('en juvenil, la MISMA carta sale con un mod mayor que en profesional', () => {
       const juvenil = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
       const profesional = repartirMejoras(createRng(10), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
-      expect(juvenil[0].mods.potencia).toBeGreaterThan(profesional[0].mods.potencia);
-      expect(profesional[0].mods.potencia).toBe(4); // profesional: sin bonus, el valor de la carta tal cual
+      expect(juvenil[0].mods.fuerza).toBeGreaterThan(profesional[0].mods.fuerza);
+      expect(profesional[0].mods.fuerza).toBe(4); // profesional: sin bonus, el valor de la carta tal cual
     });
 
     it('en amateur tambien hay bonus, pero menor que en juvenil', () => {
       const juvenil = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoUnaCarta });
       const amateur = repartirMejoras(createRng(11), { jugador: jugador(), etapa: 'amateur', catalogo: catalogoUnaCarta });
-      expect(amateur[0].mods.potencia).toBeGreaterThan(4);
-      expect(juvenil[0].mods.potencia).toBeGreaterThan(amateur[0].mods.potencia);
+      expect(amateur[0].mods.fuerza).toBeGreaterThan(4);
+      expect(juvenil[0].mods.fuerza).toBeGreaterThan(amateur[0].mods.fuerza);
     });
 
     it('en profesional y veterano no hay bonus de etapa (el comportamiento de siempre)', () => {
       const profesional = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'profesional', catalogo: catalogoUnaCarta });
       const veterano = repartirMejoras(createRng(12), { jugador: jugador(), etapa: 'veterano', catalogo: catalogoUnaCarta });
-      expect(profesional[0].mods.potencia).toBe(4);
-      expect(veterano[0].mods.potencia).toBe(4);
+      expect(profesional[0].mods.fuerza).toBe(4);
+      expect(veterano[0].mods.fuerza).toBe(4);
     });
 
     it('el bonus de etapa se suma al del entrenador, no lo reemplaza', () => {
@@ -281,15 +327,15 @@ describe('repartirMejoras', () => {
       const etapaYEntrenador = repartirMejoras(createRng(13), {
         jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoUnaCarta,
       });
-      expect(etapaYEntrenador[0].mods.potencia).toBeGreaterThan(soloEtapa[0].mods.potencia);
+      expect(etapaYEntrenador[0].mods.fuerza).toBeGreaterThan(soloEtapa[0].mods.fuerza);
     });
 
     it('los mods negativos nunca se tocan con el bonus de etapa', () => {
       const catalogoNegativo = [
-        { id: 'mixta', titulo: 'Mixta', texto: 't', mods: { potencia: 4, velocidad: -2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+        { id: 'mixta', titulo: 'Mixta', texto: 't', mods: { fuerza: 4, agilidad: -2 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
       ];
       const juvenil = repartirMejoras(createRng(14), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoNegativo });
-      expect(juvenil[0].mods.velocidad).toBe(-2);
+      expect(juvenil[0].mods.agilidad).toBe(-2);
     });
 
     // Pedido explícito y repetido del usuario: "no aplanes la varianza de
@@ -301,20 +347,20 @@ describe('repartirMejoras', () => {
     // nunca más, nunca menos.
     it('las cartas legendarias NO reciben el bonus de etapa temprana (no aplanar su varianza)', () => {
       const catalogoLegendaria = [
-        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { fuerza: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
       ];
       const juvenil = repartirMejoras(createRng(15), { jugador: jugador(), etapa: 'juvenil', catalogo: catalogoLegendaria });
-      expect(juvenil[0].mods.potencia).toBe(8);
+      expect(juvenil[0].mods.fuerza).toBe(8);
     });
 
     it('el entrenador SÍ sigue mejorando las legendarias (solo el bonus de etapa las excluye)', () => {
       const catalogoLegendaria = [
-        { id: 'legend', titulo: 'Legend', texto: 't', mods: { potencia: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+        { id: 'legend', titulo: 'Legend', texto: 't', mods: { fuerza: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
       ];
       const conEntrenador = repartirMejoras(createRng(16), {
         jugador: jugador({ staff: ['entrenador'] }), etapa: 'juvenil', catalogo: catalogoLegendaria,
       });
-      expect(conEntrenador[0].mods.potencia).toBeGreaterThan(8);
+      expect(conEntrenador[0].mods.fuerza).toBeGreaterThan(8);
     });
   });
 
@@ -411,35 +457,33 @@ describe('repartirMejoras', () => {
   // cuando eras pibe' y mi personaje tiene 17 y es amateur... algunas
   // tarjetas deben depender de la situación, edad, categoría, situación
   // actual"): `carta.condiciones` es declarativo (edadMin/edadMax, campeon,
-  // famaMin/famaMax, dineroMin/dineroMax, resultadoReciente) y se filtra
-  // ADEMÁS de etapa/disciplina/estado, nunca en su lugar.
-  describe('condicionado por la situación del jugador (Sistema 3: edad/campeón/fama/dinero/resultado)', () => {
+  // dineroMin/dineroMax, resultadoReciente) y se filtra ADEMÁS de
+  // etapa/disciplina/estado, nunca en su lugar. v13: la fama se va del juego,
+  // así que famaMin/famaMax dejaron de ser condiciones soportadas.
+  describe('condicionado por la situación del jugador (Sistema 3: edad/campeón/dinero/resultado)', () => {
     const catalogoSituacional = [
-      { id: 'base1', titulo: 'Base1', texto: 't', mods: { potencia: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
-      { id: 'base2', titulo: 'Base2', texto: 't', mods: { velocidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'base1', titulo: 'Base1', texto: 't', mods: { fuerza: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      { id: 'base2', titulo: 'Base2', texto: 't', mods: { agilidad: 1 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
       {
-        id: 'para_veteranos', titulo: 'ParaVeteranos', texto: 't', mods: { iq: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMin: 30 },
+        id: 'para_veteranos', titulo: 'ParaVeteranos', texto: 't', mods: { agilidad: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMin: 30 },
       },
       {
         id: 'para_pibes', titulo: 'ParaPibes', texto: 't', mods: { cardio: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { edadMax: 20 },
       },
       {
-        id: 'para_campeones', titulo: 'ParaCampeones', texto: 't', mods: { menton: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: true },
+        id: 'para_campeones', titulo: 'ParaCampeones', texto: 't', mods: { defensa: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: true },
       },
       {
-        id: 'para_no_campeones', titulo: 'ParaNoCampeones', texto: 't', mods: { disciplinaPersonal: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: false },
+        id: 'para_no_campeones', titulo: 'ParaNoCampeones', texto: 't', mods: { cardio: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { campeon: false },
       },
       {
-        id: 'para_famosos', titulo: 'ParaFamosos', texto: 't', mods: { moral: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { famaMin: 50 },
-      },
-      {
-        id: 'para_ricos', titulo: 'ParaRicos', texto: 't', mods: { forma: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { dineroMin: 100000 },
+        id: 'para_ricos', titulo: 'ParaRicos', texto: 't', mods: { defensa: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { dineroMin: 100000 },
       },
       {
         id: 'post_victoria', titulo: 'PostVictoria', texto: 't', mods: { defensa: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { resultadoReciente: 'victoria' },
       },
       {
-        id: 'post_derrota', titulo: 'PostDerrota', texto: 't', mods: { tecnica: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { resultadoReciente: 'derrota' },
+        id: 'post_derrota', titulo: 'PostDerrota', texto: 't', mods: { fuerza: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal', condiciones: { resultadoReciente: 'derrota' },
       },
     ];
 
@@ -469,18 +513,6 @@ describe('repartirMejoras', () => {
       });
       expect(conCinturon.some((c) => c.id === 'para_campeones')).toBe(true);
       expect(conCinturon.some((c) => c.id === 'para_no_campeones')).toBe(false);
-    });
-
-    it('famaMin filtra por fama del jugador', () => {
-      const desconocido = repartirMejoras(createRng(3), {
-        jugador: jugador({ fama: 10 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
-      });
-      expect(desconocido.some((c) => c.id === 'para_famosos')).toBe(false);
-
-      const famoso = repartirMejoras(createRng(3), {
-        jugador: jugador({ fama: 80 }), etapa: 'profesional', cantidad: catalogoSituacional.length, catalogo: catalogoSituacional,
-      });
-      expect(famoso.some((c) => c.id === 'para_famosos')).toBe(true);
     });
 
     it('dineroMin filtra por plata del jugador', () => {
@@ -635,32 +667,38 @@ describe('repartirMejoras', () => {
 describe('aplicarCarta', () => {
   it('sube el atributo y devuelve el delta', () => {
     const yo = jugador();
-    const antes = yo.atributos.velocidad;
-    const paso = aplicarCarta(yo, { id: 'x', titulo: 'T', texto: 't', mods: { velocidad: 3 } });
-    expect(paso.jugador.atributos.velocidad).toBe(antes + 3);
-    expect(paso.deltas.velocidad).toBe(3);
+    const antes = yo.atributos.agilidad;
+    const paso = aplicarCarta(yo, { id: 'x', titulo: 'T', texto: 't', mods: { agilidad: 3 } });
+    expect(paso.jugador.atributos.agilidad).toBe(antes + 3);
+    expect(paso.deltas.agilidad).toBe(3);
   });
 
-  it('reparte a especiales y a estado', () => {
+  it('reparte sobre varios de los cuatro atributos a la vez', () => {
     const yo = jugador();
     const paso = aplicarCarta(yo, {
-      id: 'x', titulo: 'T', texto: 't', mods: { disciplinaPersonal: 4, forma: 6, menton: 2 },
+      id: 'x', titulo: 'T', texto: 't', mods: { fuerza: 4, defensa: 2 },
     });
-    expect(paso.jugador.especiales.disciplinaPersonal).toBe(yo.especiales.disciplinaPersonal + 4);
-    expect(paso.jugador.especiales.menton).toBe(yo.especiales.menton + 2);
-    expect(paso.jugador.estado.forma).toBe(yo.estado.forma + 6);
+    expect(paso.jugador.atributos.fuerza).toBe(yo.atributos.fuerza + 4);
+    expect(paso.jugador.atributos.defensa).toBe(yo.atributos.defensa + 2);
+  });
+
+  it('un mod que apunta a una clave que no existe no rompe nada y simplemente no se aplica', () => {
+    const yo = jugador();
+    const paso = aplicarCarta(yo, { id: 'x', titulo: 'T', texto: 't', mods: { potencia: 5, cardio: 2 } });
+    expect(paso.jugador.atributos.cardio).toBe(yo.atributos.cardio + 2);
+    expect(paso.jugador.atributos.potencia).toBeUndefined();
   });
 
   it('no muta el jugador original', () => {
     const yo = jugador();
     const antes = JSON.stringify(yo);
-    aplicarCarta(yo, { id: 'x', titulo: 'T', texto: 't', mods: { velocidad: 3 } });
+    aplicarCarta(yo, { id: 'x', titulo: 'T', texto: 't', mods: { agilidad: 3 } });
     expect(JSON.stringify(yo)).toBe(antes);
   });
 
   it('devuelve un texto con los cambios', () => {
-    const paso = aplicarCarta(jugador(), { id: 'x', titulo: 'T', texto: 't', mods: { velocidad: 3 } });
-    expect(paso.texto).toContain('Velocidad');
+    const paso = aplicarCarta(jugador(), { id: 'x', titulo: 'T', texto: 't', mods: { agilidad: 3 } });
+    expect(paso.texto).toContain('Agilidad');
   });
 });
 
