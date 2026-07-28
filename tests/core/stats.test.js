@@ -1,36 +1,48 @@
 import { describe, it, expect } from 'vitest';
 import {
   ATRIBUTOS, ETIQUETAS, crearAtributos, crearEstado, clamp,
-  calcularMedia, aplicarModificadores, etiquetaEstado,
+  aplicarModificadores, LIMITES_ATRIBUTO,
   RANGOS_MEDIA, rangoDeMedia,
 } from '../../src/core/stats.js';
 
 describe('atributos', () => {
-  it('define los siete atributos', () => {
-    expect(ATRIBUTOS).toEqual(['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq', 'grappling']);
+  it('define exactamente los cuatro atributos', () => {
+    expect(ATRIBUTOS).toEqual(['fuerza', 'defensa', 'cardio', 'agilidad']);
   });
 
-  it('tiene etiqueta corta y larga para cada atributo y especial', () => {
-    for (const clave of [...ATRIBUTOS, 'disciplinaPersonal', 'menton']) {
+  it('el estado ya no lleva forma, moral ni fatiga: solo la lesión', () => {
+    expect(crearEstado()).toEqual({ lesion: null });
+  });
+
+  it('tiene etiqueta corta y larga para cada uno de los cuatro atributos, y nada más', () => {
+    expect(Object.keys(ETIQUETAS).sort()).toEqual([...ATRIBUTOS].sort());
+    for (const clave of ATRIBUTOS) {
       expect(ETIQUETAS[clave].corta).toBeTruthy();
       expect(ETIQUETAS[clave].larga).toBeTruthy();
     }
   });
 
   it('crearAtributos arranca en 40 y acepta overrides', () => {
-    const a = crearAtributos({ potencia: 70 });
-    expect(a.potencia).toBe(70);
+    const a = crearAtributos({ fuerza: 70 });
+    expect(a.fuerza).toBe(70);
     expect(a.cardio).toBe(40);
   });
 
   it('crearAtributos clampea entre 1 y 99', () => {
-    const a = crearAtributos({ potencia: 200, cardio: -5 });
-    expect(a.potencia).toBe(99);
+    const a = crearAtributos({ fuerza: 200, cardio: -5 });
+    expect(a.fuerza).toBe(99);
     expect(a.cardio).toBe(1);
   });
 
-  it('crearEstado arranca con valores sanos y sin lesion', () => {
-    expect(crearEstado()).toEqual({ forma: 60, fatiga: 10, moral: 60, lesion: null });
+  it('crearAtributos no produce ninguna clave fuera de los cuatro atributos', () => {
+    const a = crearAtributos({ fuerza: 50, potencia: 90, menton: 80 });
+    expect(Object.keys(a).sort()).toEqual([...ATRIBUTOS].sort());
+  });
+});
+
+describe('LIMITES_ATRIBUTO', () => {
+  it('va de 1 a 99', () => {
+    expect(LIMITES_ATRIBUTO).toEqual({ min: 1, max: 99 });
   });
 });
 
@@ -42,40 +54,20 @@ describe('clamp', () => {
   });
 });
 
-describe('calcularMedia', () => {
-  it('promedia segun los pesos y devuelve entero', () => {
-    const atributos = crearAtributos({ potencia: 80, velocidad: 60 });
-    const media = calcularMedia(atributos, { potencia: 0.5, velocidad: 0.5 });
-    expect(media).toBe(70);
-  });
-
-  it('ignora atributos sin peso', () => {
-    const atributos = crearAtributos({ potencia: 80, grappling: 99 });
-    expect(calcularMedia(atributos, { potencia: 1 })).toBe(80);
-  });
-});
-
 describe('aplicarModificadores', () => {
   it('suma modificadores sin mutar el original', () => {
-    const base = crearAtributos({ potencia: 50 });
-    const { resultado, deltas } = aplicarModificadores(base, { potencia: 3 });
-    expect(base.potencia).toBe(50);
-    expect(resultado.potencia).toBe(53);
-    expect(deltas.potencia).toBe(3);
+    const base = crearAtributos({ fuerza: 50 });
+    const { resultado, deltas } = aplicarModificadores(base, { fuerza: 3 });
+    expect(base.fuerza).toBe(50);
+    expect(resultado.fuerza).toBe(53);
+    expect(deltas.fuerza).toBe(3);
   });
 
   it('clampea atributos en 99 y reporta el delta real', () => {
-    const base = crearAtributos({ potencia: 98 });
-    const { resultado, deltas } = aplicarModificadores(base, { potencia: 5 });
-    expect(resultado.potencia).toBe(99);
-    expect(deltas.potencia).toBe(1);
-  });
-
-  it('clampea estado entre 0 y 100', () => {
-    const estado = crearEstado();
-    const { resultado } = aplicarModificadores(estado, { forma: 999, fatiga: -999 }, { min: 0, max: 100 });
-    expect(resultado.forma).toBe(100);
-    expect(resultado.fatiga).toBe(0);
+    const base = crearAtributos({ fuerza: 98 });
+    const { resultado, deltas } = aplicarModificadores(base, { fuerza: 5 });
+    expect(resultado.fuerza).toBe(99);
+    expect(deltas.fuerza).toBe(1);
   });
 
   it('ignora claves que no existen en el objetivo', () => {
@@ -83,18 +75,11 @@ describe('aplicarModificadores', () => {
     const { resultado } = aplicarModificadores(base, { inventado: 10 });
     expect(resultado.inventado).toBeUndefined();
   });
-});
 
-describe('etiquetaEstado', () => {
-  it('describe la forma en palabras', () => {
-    expect(etiquetaEstado('forma', 90)).toBe('EN PUNTO');
-    expect(etiquetaEstado('forma', 55)).toBe('NORMAL');
-    expect(etiquetaEstado('forma', 20)).toBe('OXIDADO');
-  });
-
-  it('describe la fatiga al reves que la forma', () => {
-    expect(etiquetaEstado('fatiga', 85)).toBe('FUNDIDO');
-    expect(etiquetaEstado('fatiga', 15)).toBe('ENTERO');
+  it('acepta límites custom (por ejemplo, para un objeto que no sea atributos)', () => {
+    const objetivo = { valor: 50 };
+    const { resultado } = aplicarModificadores(objetivo, { valor: 999 }, { min: 0, max: 100 });
+    expect(resultado.valor).toBe(100);
   });
 });
 

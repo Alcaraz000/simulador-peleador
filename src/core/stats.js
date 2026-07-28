@@ -1,22 +1,13 @@
-export const ATRIBUTOS = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq', 'grappling'];
+export const ATRIBUTOS = ['fuerza', 'defensa', 'cardio', 'agilidad'];
 
 export const ETIQUETAS = {
-  potencia: { corta: 'POT', larga: 'Potencia' },
-  velocidad: { corta: 'VEL', larga: 'Velocidad' },
-  tecnica: { corta: 'TÉC', larga: 'Técnica' },
+  fuerza: { corta: 'FUE', larga: 'Fuerza' },
   defensa: { corta: 'DEF', larga: 'Defensa' },
   cardio: { corta: 'CAR', larga: 'Cardio' },
-  iq: { corta: 'IQ', larga: 'IQ de pelea' },
-  grappling: { corta: 'GRA', larga: 'Grappling' },
-  disciplinaPersonal: { corta: 'DIS', larga: 'Disciplina' },
-  menton: { corta: 'MEN', larga: 'Mentón' },
-  forma: { corta: 'FOR', larga: 'Forma' },
-  fatiga: { corta: 'FAT', larga: 'Fatiga' },
-  moral: { corta: 'MOR', larga: 'Moral' },
+  agilidad: { corta: 'AGI', larga: 'Agilidad' },
 };
 
 export const LIMITES_ATRIBUTO = { min: 1, max: 99 };
-export const LIMITES_ESTADO = { min: 0, max: 100 };
 
 export function clamp(valor, min, max) {
   return Math.min(max, Math.max(min, valor));
@@ -31,20 +22,13 @@ export function crearAtributos(valores = {}) {
   return salida;
 }
 
+// Simplificación (v13): de seis atributos + cinco estados (mentón, disciplina
+// personal, forma, moral, fatiga) a cuatro atributos y nada más. Los cinco
+// estados desaparecen del tablero; solo sobrevive la lesión. La fatiga sigue
+// existiendo, pero ya no vive acá: nace en 0 dentro de cada pelea (fight.js,
+// Bloque 2) y no sale nunca al peleador.
 export function crearEstado() {
-  return { forma: 60, fatiga: 10, moral: 60, lesion: null };
-}
-
-export function calcularMedia(atributos, pesos) {
-  let suma = 0;
-  let pesoTotal = 0;
-  for (const [clave, peso] of Object.entries(pesos)) {
-    if (typeof atributos[clave] !== 'number' || peso <= 0) continue;
-    suma += atributos[clave] * peso;
-    pesoTotal += peso;
-  }
-  if (pesoTotal === 0) return 0;
-  return Math.round(suma / pesoTotal);
+  return { lesion: null };
 }
 
 export function aplicarModificadores(objetivo, mods, limites = LIMITES_ATRIBUTO) {
@@ -58,21 +42,6 @@ export function aplicarModificadores(objetivo, mods, limites = LIMITES_ATRIBUTO)
     if (despues !== antes) deltas[clave] = despues - antes;
   }
   return { resultado, deltas };
-}
-
-const ESCALAS = {
-  forma: [[80, 'EN PUNTO'], [40, 'NORMAL'], [0, 'OXIDADO']],
-  moral: [[80, 'ENCENDIDO'], [40, 'ESTABLE'], [0, 'BAJONEADO']],
-  fatiga: [[80, 'FUNDIDO'], [50, 'CANSADO'], [25, 'LIVIANO'], [0, 'ENTERO']],
-};
-
-export function etiquetaEstado(nombre, valor) {
-  const escala = ESCALAS[nombre];
-  if (!escala) return String(valor);
-  for (const [umbral, etiqueta] of escala) {
-    if (valor >= umbral) return etiqueta;
-  }
-  return escala[escala.length - 1][1];
 }
 
 // Rangos visuales de MEDIA (tablero, v2): el cuadrado de MEDIA se colorea
