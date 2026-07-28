@@ -486,31 +486,14 @@ describe('avanzarBloque', () => {
     expect(despues.jugador.estado.forma).toBe(30);
   });
 
-  // Vía siguienteBeat: en cuanto el primer cupo del bloque encuentra la
-  // lesión curada (o la termina de curar), la forma sube por el bonus de
-  // curación de `recuperar()` (injuries.js) — no por el descanso pasivo
-  // normal (ese solo corre en avanzarBloque, y solo si YA no había lesión al
-  // arrancar el bloque).
-  it('en cuanto se cura (dentro de armarCola), la forma sube por el bonus de curación (no por el descanso normal)', () => {
-    const p = nuevaPartida();
-    p.etapaIndice = 2;
-    p.jugador.estado.lesion = {
-      id: 'ceja', nombre: 'Ceja', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x',
-    };
-    p.jugador.estado.forma = 30;
-    const { partida: despues } = siguienteBeat(p);
-    expect(despues.jugador.estado.lesion).toBeNull();
-    // +10 del bonus de curación (recuperar, injuries.js), SIN el +5 pasivo de
-    // un bloque sano (avanzarBloque lo frenó: al arrancar este bloque la
-    // lesión seguía activa).
-    expect(despues.jugador.estado.forma).toBe(40);
-  });
-
-  it('sin lesion, la forma sigue subiendo de a poco cada bloque como siempre', () => {
-    const p = nuevaPartida();
-    p.jugador.estado.forma = 30;
-    expect(avanzarBloque(p).jugador.estado.forma).toBe(35);
-  });
+  // v13: acá vivían dos tests de "forma" — uno cubría el bonus de curación
+  // de `recuperar()` (dentro de armarCola), el otro el +5 pasivo por bloque
+  // sano de `avanzarBloque`. La forma dejó de existir como estado del
+  // peleador (ver el comentario de más arriba, "acá se descontaba fatiga y
+  // se sumaba forma entre bloques"), así que no queda nada que esos dos
+  // tests puedan seguir midiendo — la recuperación de la lesión en sí ya
+  // está cubierta por el test de arriba ("recupera lesiones con el paso de
+  // los bloques").
 
   it('no muta la partida original', () => {
     const p = nuevaPartida();
