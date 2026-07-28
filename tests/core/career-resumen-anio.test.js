@@ -164,7 +164,7 @@ describe('registrarDecision / registrarMuestraMedia (envoltorio a nivel partida)
     const p = nuevaPartida();
     const masFuerte = {
       ...p,
-      jugador: { ...p.jugador, atributos: { ...p.jugador.atributos, potencia: p.jugador.atributos.potencia + 30 } },
+      jugador: { ...p.jugador, atributos: { ...p.jugador.atributos, fuerza: p.jugador.atributos.fuerza + 30 } },
     };
     const conMuestra = registrarMuestraMedia(masFuerte);
     expect(conMuestra.registroAnioActual.muestrasMedia).toHaveLength(2);

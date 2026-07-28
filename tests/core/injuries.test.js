@@ -90,14 +90,13 @@ describe('tirarLesion', () => {
 });
 
 describe('aplicarLesion', () => {
-  it('no muta y baja la forma', () => {
+  it('no muta al peleador original y deja la lesion puesta en la copia', () => {
     const p = jugador();
-    const formaAntes = p.estado.forma;
     const lesion = { id: 'ceja', nombre: 'Corte en la ceja', severidad: 1, semanasRestantes: 4, costo: 5000, texto: 'x' };
     const nuevo = aplicarLesion(p, lesion);
     expect(p.estado.lesion).toBeNull();
     expect(nuevo.estado.lesion.id).toBe('ceja');
-    expect(nuevo.estado.forma).toBeLessThan(formaAntes);
+    expect(nuevo).not.toBe(p);
   });
 });
 

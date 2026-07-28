@@ -519,15 +519,15 @@ describe('avanzarBloque', () => {
     expect(JSON.stringify(p)).toBe(antes);
   });
 
-  it('a partir de los 32 años el jugador empieza a perder velocidad y cardio', () => {
+  it('a partir de los 34 años el jugador empieza a perder agilidad y cardio', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1; // amateur: 1 año por bloque, asi el numero da redondo
-    p.jugador.edad = 31;
-    const velAntes = p.jugador.atributos.velocidad;
+    p.jugador.edad = 33;
+    const agiAntes = p.jugador.atributos.agilidad;
     const cardioAntes = p.jugador.atributos.cardio;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.edad).toBe(32);
-    expect(despues.jugador.atributos.velocidad).toBeLessThan(velAntes);
+    expect(despues.jugador.edad).toBe(34);
+    expect(despues.jugador.atributos.agilidad).toBeLessThan(agiAntes);
     expect(despues.jugador.atributos.cardio).toBeLessThan(cardioAntes);
   });
 
@@ -552,10 +552,10 @@ describe('avanzarBloque', () => {
     const p = nuevaPartida();
     p.etapaIndice = 1;
     p.jugador.edad = 29;
-    const velAntes = p.jugador.atributos.velocidad;
+    const agiAntes = p.jugador.atributos.agilidad;
     const cardioAntes = p.jugador.atributos.cardio;
     const despues = avanzarBloque(p);
-    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+    expect(despues.jugador.atributos.agilidad).toBe(agiAntes);
     expect(despues.jugador.atributos.cardio).toBe(cardioAntes);
   });
 
@@ -564,10 +564,10 @@ describe('avanzarBloque', () => {
     p.etapaIndice = 1;
     p.jugador.edad = 31;
     p.jugador.staff = ['preparador'];
-    const velAntes = p.jugador.atributos.velocidad;
+    const agiAntes = p.jugador.atributos.agilidad;
     const despues = avanzarBloque(p);
     expect(despues.jugador.edad).toBe(32);
-    expect(despues.jugador.atributos.velocidad).toBe(velAntes);
+    expect(despues.jugador.atributos.agilidad).toBe(agiAntes);
   });
 
   it('con preparador contratado, el declive igual llega mas tarde en la carrera', () => {
@@ -609,12 +609,12 @@ describe('avanzarBloque', () => {
     p.etapaIndice = 1;
     p.jugador.edad = 35;
     p.jugador.staff = ['preparador'];
-    const potAntes = p.jugador.atributos.potencia;
+    const fuerzaAntes = p.jugador.atributos.fuerza;
     const despues = avanzarBloque(p);
     // Con preparador el umbral duro se corre a los 39: a los 36 recién
-    // arranca el escalón SUAVE (si es que llegó), la potencia todavía no se
+    // arranca el escalón SUAVE (si es que llegó), la fuerza todavía no se
     // toca.
-    expect(despues.jugador.atributos.potencia).toBe(potAntes);
+    expect(despues.jugador.atributos.fuerza).toBe(fuerzaAntes);
   });
 
   it('mientras el jugador tiene el cinturon mundial puesto, el mundo no le anuncia un nuevo campeon', () => {

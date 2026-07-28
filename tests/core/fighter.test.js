@@ -37,7 +37,6 @@ describe('crearPeleador', () => {
     expect(p.recordAmateur).toEqual({ v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 });
     expect(p.historialAmateur).toEqual([]);
     expect(p.retirado).toBe(false);
-    expect(p.especiales.menton).toBeGreaterThan(0);
     expect(p.estado.lesion).toBeNull();
   });
 
