@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import {
   CATEGORIAS, ORIGENES, crearPeleador, peleadorAleatorio, mediaDe, recordTexto, repartirOrigenes,
-  nombreConApodo, apodoParaMostrar,
+  nombreConApodo, apodoParaMostrar, repartirAtributosIniciales,
 } from '../../src/core/fighter.js';
 import { ESTILOS } from '../../src/core/styles.js';
 import { NACIONALIDADES, NOMBRES_POR_PAIS } from '../../src/content/names.js';
+import { ATRIBUTOS } from '../../src/core/stats.js';
 
 const base = {
   nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR',
@@ -46,11 +47,15 @@ describe('crearPeleador', () => {
     expect(a.id).not.toBe(b.id);
   });
 
-  it('aplica los modificadores del estilo', () => {
+  // v13 (Bloque 1): ESTILOS todavía trae mods con nombres de atributos viejos
+  // (potencia, tecnica) — se convierten recién en el Bloque 4. Acá solo
+  // importa que aplicar esos mods (que hoy no calzan con ninguna clave) no
+  // rompa nada y el peleador quede con exactamente los cuatro atributos.
+  it('aplica los modificadores del estilo sin romper la forma de los atributos', () => {
     const noqueador = crearPeleador({ ...base, estilo: 'noqueador' });
     const tecnico = crearPeleador({ ...base, estilo: 'tecnico' });
-    expect(noqueador.atributos.potencia).toBeGreaterThan(tecnico.atributos.potencia);
-    expect(tecnico.atributos.tecnica).toBeGreaterThan(noqueador.atributos.tecnica);
+    expect(Object.keys(noqueador.atributos).sort()).toEqual([...ATRIBUTOS].sort());
+    expect(Object.keys(tecnico.atributos).sort()).toEqual([...ATRIBUTOS].sort());
   });
 
   it('aplica los modificadores del origen', () => {
@@ -66,9 +71,12 @@ describe('crearPeleador', () => {
     expect(() => crearPeleador({ ...base, categoria: 'pesado' })).toThrow(/pesado/);
   });
 
-  it('en boxeo el grappling queda en el minimo', () => {
+  // v13: grappling deja de ser un atributo separado (se fundió en los
+  // cuatro nuevos) — el peleador nunca debe traer esa clave.
+  it('ya no existe un atributo grappling', () => {
     const p = crearPeleador(base);
-    expect(p.atributos.grappling).toBe(1);
+    expect(p.atributos.grappling).toBeUndefined();
+    expect(Object.keys(p.atributos).sort()).toEqual([...ATRIBUTOS].sort());
   });
 
   it('acepta las seis nacionalidades y guarda el codigo', () => {
@@ -114,10 +122,12 @@ describe('crearPeleador con apodoId (catalogo de apodos con mods)', () => {
     expect(p.apodoId).toBe('relampago');
   });
 
-  it('aplica los mods del apodo', () => {
-    const sinApodo = crearPeleador({ ...base, estilo: 'tecnico' });
+  // v13 (Bloque 1): NICKNAMES todavía trae mods con nombres de atributos
+  // viejos (potencia) — se convierten en el Bloque 4. Acá solo importa que
+  // aplicar el apodo no rompa la forma del peleador.
+  it('aplica los mods del apodo sin romper la forma de los atributos', () => {
     const conApodo = crearPeleador({ ...base, estilo: 'tecnico', apodo: undefined, apodoId: 'dinamita' });
-    expect(conApodo.atributos.potencia).toBeGreaterThan(sinApodo.atributos.potencia);
+    expect(Object.keys(conApodo.atributos).sort()).toEqual([...ATRIBUTOS].sort());
   });
 
   it('un apodoId desconocido tira error', () => {
@@ -243,6 +253,30 @@ describe('mediaDe', () => {
     expect(Number.isInteger(media)).toBe(true);
     expect(media).toBeGreaterThan(0);
     expect(media).toBeLessThanOrEqual(99);
+  });
+
+  it('la media es el promedio simple de los cuatro atributos', () => {
+    const p = crearPeleador({ ...base, apellido: 'Ortiz' });
+    p.atributos = { fuerza: 40, defensa: 50, cardio: 60, agilidad: 70 };
+    expect(mediaDe(p)).toBe(55);
+  });
+});
+
+describe('repartirAtributosIniciales', () => {
+  it('reparte desigual: dos peleadores con la misma media tienen perfiles distintos', () => {
+    const a = repartirAtributosIniciales(createRng(1), 40);
+    const b = repartirAtributosIniciales(createRng(2), 40);
+    const spread = (x) => Math.max(...Object.values(x)) - Math.min(...Object.values(x));
+    expect(spread(a)).toBeGreaterThan(8);
+    expect(JSON.stringify(a)).not.toBe(JSON.stringify(b));
+  });
+
+  it('respeta la media objetivo dentro de un punto', () => {
+    for (let s = 1; s <= 30; s += 1) {
+      const at = repartirAtributosIniciales(createRng(s), 42);
+      const media = Math.round(Object.values(at).reduce((x, y) => x + y, 0) / 4);
+      expect(Math.abs(media - 42)).toBeLessThanOrEqual(1);
+    }
   });
 });
 

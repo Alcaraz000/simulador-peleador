@@ -1,10 +1,13 @@
-import { crearAtributos, crearEstado, calcularMedia, aplicarModificadores, clamp } from './stats.js';
-import { getDisciplina, pesosDe } from './disciplines.js';
+import {
+  ATRIBUTOS, crearAtributos, crearEstado, aplicarModificadores,
+} from './stats.js';
+import { getDisciplina } from './disciplines.js';
 import { ESTILOS, estilosDisponibles } from './styles.js';
 import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, NOMBRES_POR_PAIS, GIMNASIOS } from '../content/names.js';
 import { crearEntrenadorDe } from './coach.js';
 import { NICKNAMES } from '../content/nicknames.js';
 import { sortearPorRareza } from './cards.js';
+import { createRng } from './rng.js';
 
 export const CATEGORIAS = {
   pluma: { id: 'pluma', nombre: 'Peso pluma', pesoMin: 55, pesoMax: 57, alturaMedia: 170 },
@@ -45,13 +48,38 @@ function nuevoId(prefijo = 'ftr') {
   return `${prefijo}_${Date.now().toString(36)}_${contadorId}`;
 }
 
-function baseAtributos(disciplina, mediaObjetivo) {
-  const nivel = clamp(Math.round(mediaObjetivo), 1, 99);
+// Cuánta variación (en puntos, antes de recentrar la suma en 0) recibe cada
+// atributo al repartir el nivel inicial de un peleador. Calibrado a mano
+// (Task 1.2) para que, con la misma media objetivo, dos peleadores salgan
+// con perfiles bien distintos (ej.: 55 de fuerza y 28 de cardio) sin que la
+// media objetivo se corra más de un punto entero.
+const DESVIO_ATRIBUTO_INICIAL = 22;
+
+/**
+ * Reparte los cuatro atributos alrededor de `mediaObjetivo`, DESIGUAL: ya no
+ * arranca parejo (v13). Es la primera de las cuatro palancas de rejugabilidad
+ * de la spec ("el reparto inicial"): un peleador puede salir con 55 de
+ * fuerza y 28 de cardio, y esa asimetría obliga a elegir si tapar el agujero
+ * o potenciar lo que ya tiene.
+ *
+ * Cada atributo recibe un desvío = promedio de dos tiradas uniformes (más
+ * campana que una sola uniforme, para que lo típico sea "desigual pero no
+ * extremo"). Los cuatro desvíos se recentran para sumar 0 antes de
+ * aplicarlos, así el promedio de los cuatro atributos resultantes queda
+ * dentro de un punto de `mediaObjetivo` (crearAtributos redondea y clampea
+ * cada uno por separado: ahí puede colarse hasta 1 punto de resto).
+ */
+export function repartirAtributosIniciales(rng, mediaObjetivo) {
+  const desvios = ATRIBUTOS.map(() => {
+    const a = rng.float(-1, 1);
+    const b = rng.float(-1, 1);
+    return ((a + b) / 2) * DESVIO_ATRIBUTO_INICIAL;
+  });
+  const promedioDesvio = desvios.reduce((suma, d) => suma + d, 0) / desvios.length;
   const valores = {};
-  for (const clave of ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq']) {
-    valores[clave] = nivel;
-  }
-  valores.grappling = getDisciplina(disciplina).usaGrappling ? nivel : 1;
+  ATRIBUTOS.forEach((clave, indice) => {
+    valores[clave] = mediaObjetivo + (desvios[indice] - promedioDesvio);
+  });
   return crearAtributos(valores);
 }
 
@@ -65,10 +93,19 @@ export function crearPeleador(opciones) {
     mano = 'derecha', altura, alcance, origen = 'barrio',
     esJugador = false, edad = EDAD_INICIAL, media = 40,
     gimnasio = GIMNASIOS[0], personalidad = 'respetuoso',
+    // Todo el azar de acá adentro (el reparto inicial desigual, más abajo)
+    // pasa por este rng — nunca por Math.random(). Sin uno explícito
+    // (llamadas legacy, ~20 archivos de test, la creación del jugador en
+    // create.js) cae a una semilla fija: determinista, sin sorpresas, hasta
+    // que el Bloque 5/7 haga viajar un rng de verdad por esos caminos.
+    rng = createRng(1),
   } = opciones;
 
   if (!CATEGORIAS[categoria]) throw new Error(`Categoría desconocida: ${categoria}`);
-  const disc = getDisciplina(disciplina);
+  // Solo valida que la disciplina exista (tira si no) — el reparto de
+  // atributos ya no depende de ella (grappling dejó de ser un atributo
+  // separado, se fundió en los cuatro nuevos).
+  getDisciplina(disciplina);
   const est = ESTILOS[estilo];
   if (!est) throw new Error(`Estilo desconocido: ${estilo}`);
   if (!est.disciplinas.includes(disciplina)) {
@@ -91,7 +128,7 @@ export function crearPeleador(opciones) {
   // número que de verdad pelea (media, ranking, ofertas) ya lo incluye.
   const entrenador = crearEntrenadorDe(estilo);
 
-  let atributos = baseAtributos(disciplina, media);
+  let atributos = repartirAtributosIniciales(rng, media);
   let especiales = { disciplinaPersonal: 40, menton: 40 };
 
   for (const mods of [est.mods, orig.mods, nick?.mods ?? {}, entrenador?.aporte ?? {}]) {
@@ -104,8 +141,6 @@ export function crearPeleador(opciones) {
     atributos = aplicarModificadores(atributos, soloAtributos).resultado;
     especiales = aplicarModificadores(especiales, soloEspeciales).resultado;
   }
-
-  if (!disc.usaGrappling) atributos.grappling = 1;
 
   const cat = CATEGORIAS[categoria];
   return {
@@ -184,12 +219,21 @@ export function peleadorAleatorio(rng, opciones = {}) {
     media: opciones.media ?? rng.int(40, 70),
     gimnasio: opciones.gimnasio ?? rng.pick(GIMNASIOS),
     personalidad: opciones.personalidad ?? 'respetuoso',
+    // Los NPC también necesitan el reparto inicial desigual (Task 1.2): se
+    // arma con el mismo rng con semilla que ya viaja por roster.js, no con
+    // uno nuevo — así el roster entero sigue siendo determinista con la
+    // semilla de la partida.
+    rng,
     esJugador: false,
   });
 }
 
+// v13: la media es el promedio simple de los cuatro atributos, redondeado.
+// Deja de usar pesos por disciplina (calcularMedia, stats.js, ya no existe):
+// esa es la aritmética que hace que "+4 en un atributo = +1 de media exacto".
 export function mediaDe(peleador) {
-  return calcularMedia(peleador.atributos, pesosDe(peleador.disciplina));
+  const suma = ATRIBUTOS.reduce((acc, clave) => acc + peleador.atributos[clave], 0);
+  return Math.round(suma / ATRIBUTOS.length);
 }
 
 function textoDeRecord(record) {
