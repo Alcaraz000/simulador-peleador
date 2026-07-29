@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
-import { CINTURONES, PELEAS_MINIMAS_TITULO } from '../../src/core/offers.js';
+import { PELEAS_MINIMAS_TITULO } from '../../src/core/offers.js';
 import {
-  intentosDePelea, resumenLote, armarLotePeleas, permiteMarqueeEsteAnio,
+  intentosDePelea, resumenLote, armarLotePeleas,
   ACCIONES_MINIJUEGO, accionRivalDe, resolverRondaMinijuego, alMejorDeCuantos,
   resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
 } from '../../src/core/tramite.js';
@@ -21,38 +21,69 @@ function jugador(extra = {}) {
 
 const mundo = () => crearMundo(createRng(1), { disciplina: 'boxeo', categoria: 'pluma', cantidad: 40 });
 
-describe('intentosDePelea (v6, frecuencia por edad)', () => {
-  function promedioA(edad, n = 400) {
+// Task 5.2 (v13, "el ritmo"): peleas por MOMENTO de la carrera, no por edad
+// continua — la tabla de la spec: joven 2-3, prime sin cinturón 2, campeón 1
+// (siempre importante), veterano sin cinturón 1-2, veterano y campeón 1.
+describe('intentosDePelea (v13, peleas por momento de la carrera)', () => {
+  function promedioA(jugadorFn, n = 400) {
     const rng = createRng(1);
     let total = 0;
-    for (let i = 0; i < n; i += 1) total += intentosDePelea(rng, jugador({ edad }));
+    for (let i = 0; i < n; i += 1) total += intentosDePelea(rng, jugadorFn());
     return total / n;
   }
 
-  it('un peleador joven pelea mas seguido que uno mayor', () => {
-    const joven = promedioA(21);
-    const mayor = promedioA(38);
-    expect(joven).toBeGreaterThan(mayor);
+  it('joven (2-3) pelea mas seguido que prime sin cinturon (2)', () => {
+    const joven = promedioA(() => jugador({ edad: 22, titulos: [] }));
+    const prime = promedioA(() => jugador({ edad: 30, titulos: [] }));
+    expect(joven).toBeGreaterThan(prime);
+  });
+
+  it('joven (2-3): nunca menos de 2 ni mas de 3', () => {
+    const rng = createRng(3);
+    for (let i = 0; i < 200; i += 1) {
+      const n = intentosDePelea(rng, jugador({ edad: 21 + (i % 6), titulos: [] }));
+      expect(n).toBeGreaterThanOrEqual(2);
+      expect(n).toBeLessThanOrEqual(3);
+    }
+  });
+
+  it('prime, sin cinturon: siempre exactamente 2', () => {
+    const rng = createRng(4);
+    for (let i = 0; i < 100; i += 1) {
+      expect(intentosDePelea(rng, jugador({ edad: 27 + (i % 7), titulos: [] }))).toBe(2);
+    }
+  });
+
+  it('campeon (con al menos un cinturon): siempre exactamente 1, sea cual sea la edad', () => {
+    const rng = createRng(5);
+    for (const edad of [22, 27, 30, 34, 38]) {
+      for (let i = 0; i < 40; i += 1) {
+        expect(intentosDePelea(rng, jugador({ edad, titulos: ['Cinturón regional'] }))).toBe(1);
+      }
+    }
+  });
+
+  it('veterano, sin cinturon: entre 1 y 2', () => {
+    const rng = createRng(6);
+    for (let i = 0; i < 200; i += 1) {
+      const n = intentosDePelea(rng, jugador({ edad: 34 + (i % 6), titulos: [] }));
+      expect(n).toBeGreaterThanOrEqual(1);
+      expect(n).toBeLessThanOrEqual(2);
+    }
+  });
+
+  it('veterano Y campeon: sigue siendo exactamente 1 (el titulo manda, no la edad)', () => {
+    const rng = createRng(7);
+    for (let i = 0; i < 60; i += 1) {
+      expect(intentosDePelea(rng, jugador({ edad: 36, titulos: ['Cinturón mundial'] }))).toBe(1);
+    }
   });
 
   it('nunca da menos de un intento (siempre hay al menos una chance de pelea)', () => {
     const rng = createRng(3);
     for (let i = 0; i < 200; i += 1) {
-      expect(intentosDePelea(rng, jugador({ edad: 21 + (i % 20) }))).toBeGreaterThanOrEqual(1);
+      expect(intentosDePelea(rng, jugador({ edad: 21 + (i % 20), titulos: [] }))).toBeGreaterThanOrEqual(1);
     }
-  });
-
-  it('con un cinturon puesto (mucho en juego), el promedio no baja', () => {
-    const rng1 = createRng(5);
-    const rng2 = createRng(5);
-    let sinTitulo = 0;
-    let conTitulo = 0;
-    const n = 300;
-    for (let i = 0; i < n; i += 1) {
-      sinTitulo += intentosDePelea(rng1, jugador({ edad: 34, ranking: 30 }));
-      conTitulo += intentosDePelea(rng2, jugador({ edad: 34, ranking: 2, titulos: ['Cinturón regional'] }));
-    }
-    expect(conTitulo / n).toBeGreaterThanOrEqual(sinTitulo / n);
   });
 });
 
@@ -559,26 +590,8 @@ describe('armarLotePeleas y el destacado del minijuego (Pedidos 1/2, v7)', () =>
   });
 });
 
-describe('permiteMarqueeEsteAnio (v6, freno del campeon indiscutido)', () => {
-  it('sin los tres cinturones, siempre permite una pelea jugable', () => {
-    const rng = createRng(1);
-    const yo = jugador({ titulos: ['Cinturón regional', 'Cinturón nacional'] });
-    for (let i = 0; i < 100; i += 1) {
-      expect(permiteMarqueeEsteAnio(rng, yo)).toBe(true);
-    }
-  });
-
-  it('con los tres cinturones, la mayoria de los anios NO permite una pelea jugable', () => {
-    const rng = createRng(2);
-    const yo = jugador({ titulos: CINTURONES.map((c) => c.nombre) });
-    let permitidos = 0;
-    const n = 300;
-    for (let i = 0; i < n; i += 1) {
-      if (permiteMarqueeEsteAnio(rng, yo)) permitidos += 1;
-    }
-    // No es NUNCA (el campeón a veces igual arriesga el cinturón), pero sí
-    // una minoría clara.
-    expect(permitidos).toBeGreaterThan(0);
-    expect(permitidos / n).toBeLessThan(0.4);
-  });
-});
+// Task 5.2 retira `permiteMarqueeEsteAnio`: el freno viejo ("el campeón
+// indiscutido descansa el 80% de los años") ya no hace falta — un campeón
+// (ver `intentosDePelea`, arriba) ya tiene un único cupo por año, y ese cupo
+// SIEMPRE es importante. La cobertura de "todas importantes" vive en
+// career.test.js (armarCola vía siguienteBeat, donde se arma el beat real).
