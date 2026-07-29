@@ -7,7 +7,6 @@ export const DISCIPLINAS = {
     id: 'boxeo',
     nombre: 'Boxeo',
     usaGrappling: false,
-    pesos: { potencia: 0.20, velocidad: 0.18, tecnica: 0.20, defensa: 0.17, cardio: 0.13, iq: 0.12 },
     desenlaces: ['ko', 'tko', 'decision', 'descalificacion'],
     // `eliminatoria` (Pedido 4, barrida de experto en boxeo): la pelea que
     // define quién pasa a disputar el título se juega a la misma distancia
@@ -25,6 +24,6 @@ export function getDisciplina(id) {
   return disciplina;
 }
 
-export function pesosDe(id) {
-  return getDisciplina(id).pesos;
-}
+// v13: `pesosDe` desapareció con los pesos por atributo — la media pasó a ser
+// el promedio simple de los cuatro (mediaDe, fighter.js), que es justamente
+// lo que hace que "+4 en un atributo = +1 de media" sea cierto y legible.

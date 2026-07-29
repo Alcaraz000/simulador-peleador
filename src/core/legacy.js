@@ -45,9 +45,16 @@ function puntajeMediatico(jugador) {
   return clamp(Math.round(titulos + defensas + nocauts), 0, 100);
 }
 
+// v13: se armaba con `disciplinaPersonal` y `moral`, que dejaron de existir
+// (y con el `?? 40` quedaba igual para todos). Ahora sale de cómo hiciste las
+// cosas: pelear seguido y ganar limpio suma; que te descalifiquen, resta.
 function puntajeEtico(jugador) {
-  const disciplina = jugador.especiales?.disciplinaPersonal ?? 40;
-  return clamp(Math.round(disciplina * 0.9 + (jugador.estado?.moral ?? 50) * 0.2), 0, 100);
+  const record = jugador.record ?? { v: 0, d: 0, e: 0 };
+  const peleas = record.v + record.d + record.e;
+  const porTrayectoria = Math.min(60, peleas * 2);
+  const porDecisiones = Math.min(25, (record.dec ?? 0) * 2);
+  const porDefensas = Math.min(15, (jugador.defensas ?? 0) * 5);
+  return clamp(Math.round(porTrayectoria + porDecisiones + porDefensas), 0, 100);
 }
 
 function puntajeNacional(jugador, deportivo, mediatico) {

@@ -74,13 +74,18 @@ describe('calcularLegado', () => {
     expect(puntaje(campeon)).toBeGreaterThan(puntaje(desconocido));
   });
 
-  it('la disciplina personal sube el legado etico', () => {
-    const alto = partida();
-    alto.jugador.especiales = { ...alto.jugador.especiales, disciplinaPersonal: 95 };
-    const bajo = partida();
-    bajo.jugador.especiales = { ...bajo.jugador.especiales, disciplinaPersonal: 10 };
+  // v13: el eje ético salía de `disciplinaPersonal` y `moral`, que ya no
+  // existen. Ahora sale de la trayectoria: pelear seguido, ganar por
+  // decisión y defender cinturones.
+  it('una carrera larga y con defensas sube el legado etico', () => {
+    const largo = partida();
+    largo.jugador.record = { v: 25, d: 3, e: 1, ko: 8, sub: 0, dec: 17 };
+    largo.jugador.defensas = 3;
+    const corto = partida();
+    corto.jugador.record = { v: 2, d: 1, e: 0, ko: 1, sub: 0, dec: 1 };
+    corto.jugador.defensas = 0;
     const puntaje = (p) => calcularLegado(p).legados.find((l) => l.id === 'etico').puntaje;
-    expect(puntaje(alto)).toBeGreaterThan(puntaje(bajo));
+    expect(puntaje(largo)).toBeGreaterThan(puntaje(corto));
   });
 
   it('cada legado trae etiqueta y texto', () => {

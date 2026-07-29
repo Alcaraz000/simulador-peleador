@@ -72,14 +72,14 @@ export function resultadoSparring(sparring, jugador) {
   if (ratio >= 0.9 && promedio <= MS_PERFECTO) {
     return {
       nivel: 'perfecto',
-      mods: { velocidad: 3, forma: 4 },
+      mods: { agilidad: 4 },
       texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. El entrenador casi sonríe.`,
     };
   }
   if (ratio >= 0.5 && promedio <= MS_BIEN) {
     return {
       nivel: 'bien',
-      mods: { velocidad: 2 },
+      mods: { agilidad: 2 },
       texto: `Buena sesión: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. Todavía te falta filo.`,
     };
   }

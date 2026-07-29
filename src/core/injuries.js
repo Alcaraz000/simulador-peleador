@@ -94,7 +94,11 @@ const PROB_BASE = { pelea: 0.1, entrenamiento: 0.05 };
 export function tirarLesion(rng, { peleador, contexto = 'pelea', danoRecibido = 0 }) {
   const base = PROB_BASE[contexto] ?? 0.05;
   const porDano = clamp(danoRecibido, 0, 100) / 400;
-  const proteccion = (peleador.especiales?.disciplinaPersonal ?? 40) / 500;
+  // v13: antes miraba `especiales.disciplinaPersonal`, que ya no existe —
+  // el `?? 40` lo dejaba clavado en un valor fijo, así que la protección era
+  // la misma para todos. Ahora sale de la DEFENSA: el que se cuida arriba
+  // del ring se lesiona menos.
+  const proteccion = (peleador.atributos?.defensa ?? 40) / 500;
   const staffProtege = (peleador.staff ?? []).includes('kinesiologo') ? 0.06 : 0;
   const prob = clamp(base + porDano - proteccion - staffProtege, 0.01, 0.6);
   if (!rng.chance(prob)) return null;

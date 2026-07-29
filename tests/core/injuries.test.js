@@ -65,12 +65,15 @@ describe('tirarLesion', () => {
     expect(contar(95)).toBeGreaterThan(contar(10));
   });
 
-  it('la disciplina personal alta protege', () => {
-    const contar = (disciplinaPersonal) => {
+  // v13: lo que te protege de lesionarte es la DEFENSA — el que se cuida
+  // arriba del ring se rompe menos. Antes miraba `disciplinaPersonal`, que
+  // dejó de existir (y con el `?? 40` daba lo mismo para todos).
+  it('mas defensa protege de lesionarse', () => {
+    const contar = (defensa) => {
       let n = 0;
       for (let s = 1; s <= 100; s++) {
         const p = jugador();
-        p.especiales = { ...p.especiales, disciplinaPersonal };
+        p.atributos = { ...p.atributos, defensa };
         if (tirarLesion(createRng(s), { peleador: p, contexto: 'pelea', danoRecibido: 70 })) n++;
       }
       return n;

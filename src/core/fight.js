@@ -1,4 +1,4 @@
-import { getDisciplina, pesosDe } from './disciplines.js';
+import { getDisciplina } from './disciplines.js';
 import { ventajaDeEstilo } from './styles.js';
 import { clamp } from './stats.js';
 import { createRng } from './rng.js';
