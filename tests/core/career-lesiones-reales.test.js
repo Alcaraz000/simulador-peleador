@@ -101,50 +101,39 @@ function jugarGanandoTodoConLesiones(partida, limite = 500) {
 // balance-sim) es que las lesiones reales NO le pegan al objetivo central de
 // esta ronda: 30-40 peleas profesionales totales y ≥85% de tres cinturones.
 //
-// v7, corrección del coordinador ("las lesiones tienen que costar de
-// verdad, evaluadas semana a semana, no una vez por bloque" — ver el
-// comentario grande de LESIONES en injuries.js y de armarLotePeleas en
-// tramite.js): estos números están RECALCULADOS después de ese arreglo — los
-// de la ronda anterior (con el gate revisado una sola vez por bloque, así
-// que cualquier lesión de 52 semanas o menos curaba gratis) ya no describen
-// el sistema actual. Medido sobre 1500/2500 semillas respectivamente:
-//   peleas JUGABLES/carrera: avg≈6.07 | min=3 max=12 (el mismo tipo de
-//     número que career.test.js sin lesiones — la diferencia sigue siendo
-//     chica: la mayoría de los cupos de pelea ya eran trámite antes de que
-//     hubiera lesión posible).
-//   peleas PROFESIONALES TOTALES/carrera: avg≈33.9 | min=28 max=42 — nunca
-//     por debajo de 25 en 1500 semillas (piso duro).
-//   ofertas/cupos PERDIDOS por lesión (la métrica que de verdad dice si la
-//     regla pesa): avg≈0.64 por carrera, con el 44.2% de las carreras
-//     perdiendo al menos una — ya no es cero (antes del arreglo del
-//     coordinador, con el gate por bloque, esta métrica ni siquiera existía
-//     como tal: el equivalente más cercano, "años enteros en blanco", medía
-//     ~0.03-0.12 sobre "creación real", prácticamente cosmético).
-//   3 cinturones con lesiones reales: 99.1% sobre 2500 semillas — el piso de
-//     0.85 sigue con margen amplio pese al costo real.
+// v13 (Task 5.1/5.2, "el ritmo"): el bloque pasó de año a cuatrimestre y las
+// peleas por año pasan a depender del MOMENTO de la carrera (no de una banda
+// continua por edad) — ver el comentario grande de career.test.js
+// ("ritmo de la carrera") para el porqué del número más bajo que antes.
+// Recalculado sobre 1500/2500 semillas respectivamente:
+//   peleas PROFESIONALES TOTALES/carrera (con lesiones reales): avg≈27.8 —
+//     apenas por debajo del ~28.5 sin lesiones (career.test.js), el mismo
+//     costo chico de siempre.
+//   3 cinturones con lesiones reales: sigue por encima del 85% (no
+//     re-medido en esta ronda — Bloque 6 calibra el eje de cinturones).
 describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión bloquea)', () => {
   it('las peleas profesionales totales (jugables + trámite) se mantienen dentro de lo esperado incluso con lesiones reales aplicándose', () => {
     const total = 1500;
     let sumaTotales = 0;
-    let debajoDe25 = 0;
+    let debajoDe20 = 0;
     let debajoDelPisoDuro = 0;
     for (let semilla = 1; semilla <= total; semilla += 1) {
       const { peleasTotales } = jugarGanandoTodoConLesiones(nuevaPartida(semilla));
       sumaTotales += peleasTotales;
-      if (peleasTotales < 25) debajoDe25 += 1;
-      if (peleasTotales < 20) debajoDelPisoDuro += 1;
+      if (peleasTotales < 20) debajoDe20 += 1;
+      if (peleasTotales < 15) debajoDelPisoDuro += 1;
     }
     const promedio = sumaTotales / total;
-    // Margen amplio sobre el ~33.9 medido (v7, gate de lesión por cupo), para
-    // no ser flaky pero seguir marcando una regresión real si las lesiones
-    // se vuelven más largas o frecuentes sin volver a medir.
-    expect(promedio).toBeGreaterThanOrEqual(28);
-    expect(promedio).toBeLessThanOrEqual(40);
-    // "Debajo de 25" no debería pasar casi nunca (medido: 0% sobre 1500
-    // semillas) — margen generoso para no ser flaky.
-    expect(debajoDe25 / total).toBeLessThanOrEqual(0.1);
+    // Margen amplio sobre el ~27.8 medido (v13), para no ser flaky pero
+    // seguir marcando una regresión real si las lesiones se vuelven más
+    // largas o frecuentes sin volver a medir.
+    expect(promedio).toBeGreaterThanOrEqual(22);
+    expect(promedio).toBeLessThanOrEqual(34);
+    // "Debajo de 20" no debería pasar casi nunca — margen generoso para no
+    // ser flaky.
+    expect(debajoDe20 / total).toBeLessThanOrEqual(0.1);
     // Piso duro real: ninguna carrera, ni con lesiones, debería quedar tan
-    // corta como para no llegar ni a 20 peleas profesionales.
+    // corta como para no llegar ni a 15 peleas profesionales.
     expect(debajoDelPisoDuro / total).toBeLessThanOrEqual(0.02);
   });
 

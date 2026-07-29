@@ -4,14 +4,13 @@ import { EDAD_INICIAL } from './fighter.js';
 import { repartirMejoras, recordarCarta } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
 import { CINTURONES } from './offers.js';
-import { intentosDePelea, permiteMarqueeEsteAnio, armarLotePeleas } from './tramite.js';
-import { crearSparring } from './sparring.js';
+import { intentosDePelea, armarLotePeleas } from './tramite.js';
 import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas, recortarSucesos,
 } from './news.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
-import { semanasDeBloque, fechaDe } from './calendario.js';
+import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
   iniciarRegistroAnio, registrarMuestraMedia as registrarMuestraMediaEnRegistro,
@@ -240,149 +239,161 @@ function declivePorEdadJugador(jugador) {
   };
 }
 
-// ===== RONDA v6 — SEGUNDA VUELTA (pedido de fondo): "no todas las peleas se
-// juegan igual" ==============================================================
+// ===== v13 (Bloque 5, "el ritmo") — tres decisiones al año ==================
 //
-// La frase que gobierna esta ronda, textual del usuario: "este juego NO es
-// un simulador, son partidas cortas, 20 min máximo" — y a la vez "un
-// peleador debe tener entre 30 y 40 peleas en toda su carrera profesional".
-// Esas dos cosas NO entraban juntas mientras cada pelea (oferta, negociación,
-// careo, campamento de 3-5 beats, crónica ronda a ronda, golpe de gracia) se
-// jugara completa: 30-40 peleas jugadas de punta a punta son varias HORAS,
-// no minutos.
+// La spec (docs/superpowers/specs/2026-07-28-simplificacion-y-progresion.md)
+// reemplaza el viejo ritmo probabilístico por bloque (cada bloque = un año,
+// con probEvento/probRedes/probSparring tirando de forma independiente) por
+// un ritmo ANCLADO AL CALENDARIO: la carrera sigue yendo de los 15 a los 39,
+// arranca en enero, y cada año trae EXACTAMENTE tres decisiones — una cada
+// cuatro meses (enero, mayo, septiembre). Son 72 en la carrera completa.
 //
-// La solución (decisión de diseño central de esta ronda, ver `esPeleaImportante`
-// en offers.js y `armarLotePeleas`/`resumenLote` en tramite.js): NO TODAS LAS
-// PELEAS SE JUEGAN IGUAL.
-//   - Las peleas que IMPORTAN se juegan completas: título (disputarlo o
-//     defenderlo), revancha, tu archirrival, y la eliminatoria que define tu
-//     ascenso al puesto de retador. Ver `esPeleaImportante` — se probó
-//     sumar un quinto criterio ("riesgo alto": un rival claramente mejor) y
-//     se descartó: el matchmaking normal ya sesga hacia arriba, así que
-//     disparaba en casi cualquier matchup temprano y volvía "jugable" la
-//     mitad de los años de la carrera sin sumarle nada al eje de cinturones.
-//     Los cuatro criterios que quedaron son, literalmente, los del brief.
-//   - Las peleas de TRÁMITE se resuelven solas: sin careo, sin campamento,
-//     sin ronda a ronda — un resultado calculado (mismo criterio que el
-//     combate NPC-vs-NPC de `avanzarMundo`, world.js) y un resumen con sabor
-//     ("Tres peleas en el año: 3-0, dos por nocaut"), nunca un renglón de
-//     log. Ver `armarLotePeleas`/`resumenLote` (tramite.js) y el beat
-//     'peleasResueltas' (main.js).
-// El RÉCORD que se muestra suma TODAS: el jugador llega a 35-2 como un
-// boxeador de verdad, aunque solo haya jugado con el mando ocho o diez veces.
+// Un "bloque" deja de ser un año y pasa a ser un CUATRIMESTRE: `ETAPAS.*.
+// bloques` se triplica (3 años -> 9 bloques; 18 años -> 54 bloques, 72 en
+// total) y `aniosPorBloque` desaparece — ya no hace falta, ver más abajo.
 //
-// Un freno extra hizo falta para que la cuenta cerrara: un "jugando bien"
-// que corona los tres cinturones a mitad de carrera pasaba el resto (a veces
-// 8-10 años más) defendiendo el mundial año a año SIN EXCEPCIÓN — cada
-// defensa es esTitulo, así que cada uno de esos años se volvía una pelea
-// jugable más, sin sumarle nada al eje de cinturones (ya resuelto). Ver
-// `permiteMarqueeEsteAnio` (tramite.js): un campeón indiscutido, la mayoría
-// de los años, elige no arriesgar nada — los cupos de pelea de ese año
-// siguen existiendo (la cuenta de peleas profesionales no se toca), pero se
-// resuelven todos como trámite.
+// Cada bloque arma EXACTAMENTE una decisión (mejora/evento/redes, elegida por
+// peso — ver `elegirTipoDecision`/`PESOS_DECISION`), siempre la primera cosa
+// que se agrega a la cola. Las PELEAS del año (Task 5.2, `intentosDePelea` en
+// tramite.js) se siguen procesando UNA vez por año, no una vez por bloque:
+// solo el bloque de ENERO (`esInicioDeAnio`, más abajo) arma el lote de
+// peleas del año — mayo y septiembre son bloques "livianos", solo traen su
+// decisión. Esto preserva exactamente la cadencia vieja de peleas (que ya
+// era anual) sin triplicarla por accidente.
 //
-// Pedido 2 (v6, "las peleas amateur no cuentan ni en el ranking ni en el
-// historial"): juvenil/amateur dejan de generar el beat 'oferta' del todo —
-// TODA pelea de esas dos etapas es de formación, se resuelve sola (ver
-// `armarLotePeleas` con `permiteJugable:false`) y va a `recordAmateur`/
-// `historialAmateur` (fighter.js/offers.js), nunca a `record`/`historial`.
-// El día del debut profesional el récord real arranca en 0-0, como en la
-// vida real — y de yapa, el ranking deja de mostrarse durante la etapa
-// amateur SOLO (panel-peleador.js ya lo resolvía gratis: muestra "Sin
-// clasificar" mientras `record` esté en 0 peleas).
+// LA TRAMPA DEL DRIFT (por la que preguntó el coordinador): antes,
+// `avanzarBloque` sumaba `semanasDeBloque(etapa.aniosPorBloque)` sobre
+// `semanaInicioBloque` — con `aniosPorBloque` siempre entero (1), la suma
+// nunca perdía ni ganaba semanas. Si acá se hiciera lo mismo con un
+// cuatrimestre (52/3 ≈ 17.33, redondeado a 17), TRES bloques de 17 semanas
+// suman 51, no 52 — un año perdería una semana cada vez, y en 24 años el
+// calendario derivaría casi medio año. La solución: `avanzarBloque` (el
+// bloque de enero, "pesado": envejece, mueve el mundo, aplica crecimiento/
+// declive) sigue sumando exactamente `SEMANAS_POR_ANIO` (52, entero, sin
+// redondeo) sobre `semanaInicioBloque` — IDÉNTICO a como sumaba antes. Los
+// bloques livianos (mayo/septiembre, `avanzarTrimestre`) no encadenan sumas
+// entre sí: los dos apuntan al MISMO ancla (`semanaInicioBloque`, el enero
+// de ESTE año, que `avanzarTrimestre` nunca toca) más un offset fijo y EXACTO
+// (`SEMANAS_A_MAYO`/`SEMANAS_A_SEPTIEMBRE`, derivados una sola vez de
+// `mesesDelAnio` — el mismo reparto de 52 semanas en 12 meses que ya usa
+// `fechaDe`). Sin sumas encadenadas de por medio, no hay redondeo que
+// acumular: mayo y septiembre caen siempre en su mes exacto, año tras año,
+// por construcción — no por casualidad de la semilla.
 //
-// Pedido 3 (v6, "'Veterano' no es una categoría nueva... el peleador sigue
-// siendo profesional"): ETAPAS pasa de CUATRO entradas a TRES — profesional
-// dura de punta a punta de la carrera pro (debut a los 21, hasta el retiro).
-// El tablero muestra "Profesional" siempre, del debut al retiro (ver
-// bloqueEtapa, panel-peleador.js, que ahora usa `fraseDeEtapa` en vez de
-// `etapa.frase` directo). "Veterano" sigue existiendo como ETIQUETA DE
-// SABOR (ver `tagContenido`, arriba): el tono de las cartas/eventos/
-// campamento y de las peleas de trámite cambia a partir de
-// EDAD_DECLIVE_DURO_JUGADOR (36 — la misma edad en la que el cuerpo empieza
-// a fallar de verdad), pero la mecánica de la carrera no distingue nada.
+// Se mantiene intacto lo que ya funcionaba de la ronda v6/v7 ("no todas las
+// peleas se juegan igual"): las peleas que IMPORTAN (título, revancha,
+// archirrival, eliminatoria — ver `esPeleaImportante`, offers.js) se juegan
+// completas; el resto es trámite y se resuelve solo, en lote (ver
+// `armarLotePeleas`/`resumenLote`, tramite.js). El RÉCORD suma todas. Las
+// etapas juvenil/amateur siguen sin generar el beat 'oferta': toda pelea de
+// formación es trámite, y va a `recordAmateur`/`historialAmateur`, nunca a
+// `record`/`historial` — el debut profesional arranca en 0-0.
 //
-// Pedido 4 (v6, "de joven se pelea más seguido... un pibe de 21 pelea cuatro
-// o cinco veces al año; un campeón de 34 pelea dos, y son todas grandes"):
-// `probPelea` (un número fijo por etapa) no alcanza para esto — un año de
-// carrera profesional ahora puede traer VARIOS cupos de pelea, no uno solo.
-// `intentosDePelea` (tramite.js) decide cuántos según la edad (bandas que
-// declinan de 3 a los 21-22 hasta 1 pasados los 33) y sube el techo si hay
-// mucho en juego (cinturón puesto, o ranking que ya califica para el
-// próximo). La enorme mayoría de esos cupos, sobre todo de joven, van a ser
-// trámite — exactamente lo que hace que "pelear varias veces al año" y
-// "30-40 peleas en TODA la carrera" convivan sin reventar el presupuesto de
-// minutos.
+// Lo que SÍ cambia respecto de v6/v7 (Task 5.2, ver tramite.js): la
+// frecuencia de pelea profesional deja de ser una banda continua por edad y
+// pasa a ser por MOMENTO de la carrera (joven/prime/campeón/veterano), con
+// una regla de diseño explícita: un campeón pelea una vez al año, pero esa
+// pelea SIEMPRE es importante — "al que le va bien no puede tocarle jugar
+// menos". El viejo freno `permiteMarqueeEsteAnio` (que hacía descansar al
+// campeón indiscutido el 80% de los años) ya no hace falta: con un único
+// cupo por año, la frecuencia YA es el techo.
 //
-// Con esto, `ETAPAS.profesional` deja de tener `probPelea` (reemplazado por
-// `intentosDePelea`, edad-dependiente) y pasa de 11 bloques × 1.3 años +
-// veterano (3 × 1.3) a UNA sola entrada de 18 bloques × 1 año — mismo rango
-// de edad de cierre (~39), granularidad más fina (1 año por bloque, para que
-// la frecuencia por edad tenga sentido bloque a bloque).
+// Task 5.3 ("la tarjeta previa a la pelea"): antes de una pelea de trámite,
+// el entrenador te avisa contra quién vas (beat 'charlaEntrenador' — no es de
+// acción, solo información); antes de una importante, la tarjeta es aceptar
+// o rechazar (beat 'oferta', sin cambios). Nunca al revés: ver
+// `elegirTipoDecision`/el armado del lote de peleas, más abajo.
 //
-// LOS NÚMEROS MEDIDOS — dos metodologías, ambas sobre "jugando bien" (acepta
-// y gana toda oferta jugable; las de trámite se resuelven solas):
-//
-// scripts/_tune.mjs (3000 semillas, jugador fijo, SIN cartas de mejora — el
-// mismo método que el test 'progresión de cinturones' de career.test.js):
-//   3 cinturones: 99.3% | sin ninguna defensa obligatoria: 3.1%
-//   peleas profesionales totales/carrera: avg=34.7 | p10=32 p90=37 |
-//     dentro de [30,40] en 99.5% de las 3000 semillas.
-//   peleas JUGABLES/carrera (careo+campamento+ronda a ronda): avg=6.4
-//   beats estructurales/carrera: avg=77.1
-//
-// scripts/balance-sim.mjs (300 semillas, "creación real" — SÍ aplica cartas
-// de mejora/evento, la MEDIA sube de verdad; además corre el motor de pelea
-// real -sombra- para medir cuántas rondas/decisiones tiene cada pelea
-// jugable, no una estimación):
-//   3 cinturones: 100% | sin ninguna defensa obligatoria: 11.7%
-//   peleas profesionales totales/carrera: avg=36.4 (dentro de [30,40] en 97%)
-//   peleas JUGABLES/carrera: avg=5.9
-//   ACCIONES JUGADAS/carrera (beats estructurales + negociación/careo/
-//     rounds/rincón/golpe de cada pelea jugable — lo que el jugador
-//     realmente resuelve con el mando): avg=158.4
-//   => minutos estimados, con el supuesto de 8 segundos por acción (ver
-//     SEGUNDOS_POR_BEAT, balance-sim.mjs — el propio juego está diseñado
-//     para ese ritmo: textos cortos, ventana del golpe de gracia de 3.2s):
-//     avg=21.1 minutos.
-//
-// Los tres objetivos de ritmo, con lo medido:
-//   - 30-40 peleas PROFESIONALES por carrera: CUMPLIDO (avg 34.7-36.4).
-//   - ~20 minutos de partida: CUMPLIDO con margen chico (avg 21.1 min, con
-//     el supuesto de 8s/acción declarado arriba).
-//   - ≥85% de carreras bien jugadas consiguen los tres cinturones: CUMPLIDO
-//     con margen amplio (99.3-100%, no negociable, sigue siendo la
-//     condición de victoria).
-// "Sin ninguna defensa obligatoria" sube de ~3.1% a ~11.7% entre ambas
-// medidas — es el costo esperado de `permiteMarqueeEsteAnio`: con cartas de
-// mejora (balance-sim), la MEDIA sube más rápido, los tres cinturones se
-// coronan antes, y quedan más años de "campeón indiscutido que elige
-// descansar" en los que ninguna defensa llega a jugarse. Sigue lejos de
-// cualquier lectura de "nunca aparece una defensa" (~9 de cada 10 carreras
-// SÍ ven una) y no es la métrica que el brief pidió proteger como
-// no-negociable (esa es el eje de cinturones, arriba).
+// Los números de esta ronda (peleas/año, decisiones/año, meses) se miden con
+// `scripts/balance-sim.mjs` — el objetivo viejo de cinturones (≥85% consigue
+// los tres) queda reemplazado por el nuevo eje de rejugabilidad, que calibra
+// el Bloque 6 (no esta ronda).
+const BLOQUES_POR_ANIO = 3;
+
 export const ETAPAS = [
   {
-    id: 'juvenil', nombre: 'Juvenil', bloques: 3, aniosPorBloque: 1, edadDesde: 15,
-    probPelea: 0.18, probEvento: 0.15, probRedes: 0, probSparring: 0.08,
+    id: 'juvenil', nombre: 'Juvenil', bloques: 3 * BLOQUES_POR_ANIO, edadDesde: 15,
+    probPelea: 0.18,
     frase: 'Nadie sabe quién sos. Todavía.',
   },
   {
-    id: 'amateur', nombre: 'Amateur', bloques: 3, aniosPorBloque: 1, edadDesde: 18,
-    probPelea: 0.4, probEvento: 0.12, probRedes: 0.06, probSparring: 0.04,
+    id: 'amateur', nombre: 'Amateur', bloques: 3 * BLOQUES_POR_ANIO, edadDesde: 18,
+    probPelea: 0.4,
     frase: 'El ascenso no consagra ídolos. Ganate el salto.',
   },
   {
     // v6, segunda vuelta: profesional pasa a ser la ÚNICA etapa desde el
     // debut hasta el retiro — "veterano" ya no es una etapa mecánica (ver el
     // comentario grande de arriba y `tagContenido`). `probPelea` desaparece:
-    // la frecuencia de pelea ahora depende de la edad, ver `intentosDePelea`
-    // (tramite.js), llamada desde `armarCola` más abajo.
-    id: 'profesional', nombre: 'Profesional', bloques: 18, aniosPorBloque: 1, edadDesde: 21,
-    probEvento: 0.03, probRedes: 0.02, probSparring: 0,
+    // la frecuencia de pelea ahora depende del MOMENTO de la carrera, ver
+    // `intentosDePelea` (tramite.js), llamada desde `armarCola` más abajo.
+    id: 'profesional', nombre: 'Profesional', bloques: 18 * BLOQUES_POR_ANIO, edadDesde: 21,
     frase: 'Acá se cobra y se sangra. Bienvenido.',
   },
 ];
+
+// Cuántos bloques (cuatrimestres) pasaron desde el arranque de la carrera:
+// enero de cada año es el primero de los tres (bloqueGlobal ≡ 1 mod 3) — ahí,
+// y solo ahí, se procesa el lote de peleas del año y corre el bloque
+// "pesado" (avanzarBloque: envejece, mueve el mundo, crecimiento/declive).
+// Mayo y septiembre (los otros dos) son "livianos": solo traen su decisión.
+function esInicioDeAnio(bloqueGlobal) {
+  return (bloqueGlobal - 1) % BLOQUES_POR_ANIO === 0;
+}
+
+// Offsets EXACTOS (en semanas, desde el enero de este año) a los que caen
+// mayo y septiembre — derivados una sola vez del mismo reparto de 52 semanas
+// en 12 meses que ya usa `fechaDe` (calendario.js: `mesesDelAnio(0, 0)` da el
+// año "cero" tal cual, sin desplazar nada). Sin esto, sumar cuatrimestres
+// aproximados (52/3, redondeado) derivaría el calendario — ver el comentario
+// grande de arriba.
+const SEMANAS_A_MAYO = mesesDelAnio(0, 0)[4].semanaGlobal - 1;
+const SEMANAS_A_SEPTIEMBRE = mesesDelAnio(0, 0)[8].semanaGlobal - 1;
+
+// Qué tipo de decisión trae cada bloque (Task 5.1): SIEMPRE una, nunca cero
+// ni dos. La mejora (progresión de atributos) es la ampliamente mayoritaria
+// —es la que de verdad mueve la media, ver la spec— con evento/redes de vez
+// en cuando para variar el sabor. 'redes' no tiene sentido en juvenil (un
+// pibe de 15 sin carrera todavía) y por eso pesa 0 ahí. `tagContenido` puede
+// devolver 'veterano' (etiqueta de sabor, no una etapa real): cae al mismo
+// reparto que profesional.
+const PESOS_DECISION = {
+  juvenil: { mejora: 0.82, evento: 0.18, redes: 0 },
+  amateur: { mejora: 0.76, evento: 0.16, redes: 0.08 },
+  profesional: { mejora: 0.78, evento: 0.14, redes: 0.08 },
+};
+
+function elegirTipoDecision(rng, tag) {
+  const pesos = PESOS_DECISION[tag] ?? PESOS_DECISION.profesional;
+  return rng.weighted([
+    { valor: 'mejora', peso: pesos.mejora },
+    { valor: 'evento', peso: pesos.evento },
+    { valor: 'redes', peso: pesos.redes },
+  ]);
+}
+
+// Task 5.3 ("la tarjeta previa a la pelea"): cuando el lote del año se
+// resuelve entero como trámite (sin marquee ni destacado — ver más abajo),
+// antes no había NINGÚN aviso previo, solo el resumen posterior
+// ("Tres peleas en el año: 3-0..."). Esta charla lo tapa: el entrenador te
+// dice contra quién vas, sin ceremonia ("no es de acción" — un solo
+// "Seguir"). Al menos 8 variantes, voz de crónica de box, rioplatense.
+const CHARLA_ENTRENADOR = [
+  'El profe te tira la posta antes de subir a entrenar: "Esta vuelta te toca {rival}."',
+  '"Ya está, cerramos el cartel" —dice el entrenador—. "{rival} es el que te tocó."',
+  'El equipo ya armó el video: estudiaron a {rival} de arriba a abajo, sin apuro.',
+  '"Nada del otro mundo, pero hacé las cosas bien" —te dice el profe, ficha de {rival} en mano.',
+  'El mánager confirma el cartel: enfrente vas a tener a {rival}.',
+  '"Cumplí y no te compliques" —repite el entrenador. El rival de turno: {rival}.',
+  'Te avisan en el gimnasio, sin vueltas: esta vez cruzás guantes con {rival}.',
+  '"Rutina, nada más" —dice el profe, mirando la ficha de {rival} de reojo.',
+  'El entrenador te palmea la espalda: "Uno más para la lista. {rival} no debería darte problemas."',
+  '"Otra noche de trabajo" —resume el profe—. Enfrente, {rival}.',
+];
+
+function textoCharlaEntrenador(rng, rival) {
+  return rng.pick(CHARLA_ENTRENADOR).replace(/\{rival\}/g, rival);
+}
 
 export function etapaActual(partida) {
   return ETAPAS[Math.min(partida.etapaIndice, ETAPAS.length - 1)];
@@ -609,12 +620,16 @@ function cerrarAniosCruzados({
   };
 }
 
+// El bloque "pesado": corre UNA vez por año, siempre en el bloque de enero
+// (ver `esInicioDeAnio`) — envejece al jugador un año entero, mueve el mundo,
+// aplica crecimiento/declive pasivo y cobra sponsor. Los otros dos bloques
+// del año (mayo, septiembre) usan `avanzarTrimestre` (más abajo): no tocan
+// nada de esto, solo corren el calendario hasta su propio mes.
 export function avanzarBloque(partida) {
   const nueva = clonarPartida(partida);
   const rng = rngDe(nueva);
-  const etapa = etapaActual(nueva);
 
-  nueva.jugador.edad += etapa.aniosPorBloque;
+  nueva.jugador.edad += 1;
   // Resumen de fin de año: se guarda la semana ANTES de este salto (ver
   // `cerrarAniosCruzados`, más abajo, que compara las dos puntas para saber
   // cuántos años calendario cruzó este bloque — nunca asume que un bloque es
@@ -623,14 +638,16 @@ export function avanzarBloque(partida) {
   // Calendario (v12, "que el resumen aparezca en cada enero" — causa real
   // medida DESPUÉS de arreglar el cruce de años: los primeros resúmenes
   // caían en enero, pero después se corrían a marzo, junio, octubre...): el
-  // próximo bloque NO arranca `semanasDeBloque` semanas después de donde
+  // próximo enero NO arranca `SEMANAS_POR_ANIO` semanas después de donde
   // ESTÁ `semanaGlobal` ahora mismo — arranca esa cantidad de semanas
-  // después de donde ARRANCÓ este bloque (`semanaInicioBloque`). Si un
-  // campamento (siguienteBeat) ya adelantó `semanaGlobal` DENTRO de este
-  // bloque preparando una pelea, esas semanas son PARTE del año de este
-  // bloque, no un agregado extra: sumarlas de nuevo acá (como hacía antes)
-  // corría el calendario hacia adelante para siempre, sin que ningún bloque
-  // futuro lo recuperara jamás.
+  // después de donde ARRANCÓ el enero de ESTE año (`semanaInicioBloque`). Si
+  // un campamento (siguienteBeat) ya adelantó `semanaGlobal` DENTRO de este
+  // año preparando una pelea, esas semanas son PARTE del año en curso, no un
+  // agregado extra: sumarlas de nuevo acá (como hacía antes) corría el
+  // calendario hacia adelante para siempre, sin que ningún bloque futuro lo
+  // recuperara jamás — la misma trampa de la que avisó el coordinador para
+  // esta ronda (ver el comentario grande de ETAPAS, arriba, sobre por qué
+  // los cuatrimestres no se suman entre sí).
   //
   // Bug encontrado en revisión de código: `?? 1` (en vez de `?? semanaAntes`)
   // rompía la migración de una partida guardada ANTES de este fix (esquema
@@ -643,7 +660,7 @@ export function avanzarBloque(partida) {
   // IDÉNTICO al comportamiento de antes de este fix (sumar sobre la semana
   // actual) — nunca revienta ni retrocede.
   const inicioBloqueActual = nueva.semanaInicioBloque ?? semanaAntes;
-  nueva.semanaGlobal = inicioBloqueActual + semanasDeBloque(etapa.aniosPorBloque);
+  nueva.semanaGlobal = inicioBloqueActual + SEMANAS_POR_ANIO;
   nueva.semanaInicioBloque = nueva.semanaGlobal;
   // v13: acá se descontaba fatiga y se sumaba forma entre bloques. Los dos
   // dejaron de ser estados del peleador — la fatiga nace y muere dentro de
@@ -670,11 +687,11 @@ export function avanzarBloque(partida) {
   if (sponsor) nueva.jugador = sponsor.jugador;
 
   const paso = avanzarMundo(nueva.mundo, rng, {
-    aniosPasados: Math.round(etapa.aniosPorBloque),
+    aniosPasados: 1,
     jugadorEsCampeon: nueva.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL),
-    // El año lo manda el calendario, no el conteo del mundo: los bloques duran
-    // 1 a 1.3 años y acumular enteros dejaba al mundo ~4 años atrás del
-    // tablero y de la edad del jugador al final de la carrera.
+    // El año lo manda el calendario, no el conteo del mundo: `avanzarBloque`
+    // corre una vez por año (ver `esInicioDeAnio`), pero el año calendario
+    // real sale de `semanaGlobal`, no de contar cuántas veces se llamó.
     anio: fechaDe(nueva.semanaGlobal, ANIO_INICIAL).anio,
   });
   nueva.mundo = paso.mundo;
@@ -723,15 +740,49 @@ export function avanzarBloque(partida) {
   // Resumen de fin de año (v12: el disparador es el cruce de año calendario,
   // no el fin del bloque en sí — ver el comentario grande de
   // `cerrarAniosCruzados`, arriba). `semanaAntes`/`nueva.semanaGlobal` son
-  // las dos puntas del salto que este bloque acaba de dar: casi siempre es
-  // exactamente un año (aniosPorBloque=1 en las tres ETAPAS de hoy), pero la
-  // función no lo asume — si llegara a cruzar más de uno, cierra cada año
-  // por separado, ninguno se pierde. Los beats ya armados y filtrados
+  // las dos puntas del salto que este bloque acaba de dar: siempre
+  // exactamente un año (SEMANAS_POR_ANIO, arriba), pero la función no lo
+  // asume — si llegara a cruzar más de uno, cierra cada año por separado,
+  // ninguno se pierde. Los beats ya armados y filtrados
   // (`anioTieneAlgoQueContar`) quedan en `beatsResumenAnio` — un dato
   // transitorio que `siguienteBeat` consume en el mismo golpe (los prepende
   // a la cola del bloque nuevo) y después limpia. `registroAnioActual` queda
   // reabierto para el año que arranca, con la MEDIA ya recalculada después
   // del crecimiento/declive pasivo de este bloque (arriba).
+  const cierre = cerrarAniosCruzados({
+    semanaAntes,
+    semanaDespues: nueva.semanaGlobal,
+    registroAnioActual: nueva.registroAnioActual,
+    jugador: nueva.jugador,
+    mundo: nueva.mundo,
+  });
+  nueva.registroAnioActual = cierre.registroAnioActual;
+  nueva.beatsResumenAnio = [...nueva.beatsResumenAnio, ...cierre.beatsResumen];
+
+  return nueva;
+}
+
+// El bloque "liviano": mayo y septiembre. No envejece a nadie, no mueve el
+// mundo, no cobra sponsor — solo corre el calendario hasta su propio mes,
+// siempre anclado al MISMO enero (`semanaInicioBloque`, el que dejó el
+// último `avanzarBloque`; esta función nunca lo toca, así que mayo y
+// septiembre del mismo año siempre miden desde el mismo punto). `slot` es 1
+// (mayo) o 2 (septiembre) — lo decide `siguienteBeat` a partir de
+// `bloqueGlobal`, ver más abajo.
+//
+// `Math.max` (nunca retroceder) es una red de seguridad, no algo que se
+// espere disparar en la práctica: un campamento (el único que avanza
+// semanaGlobal dentro del año) solo puede arrancar en el bloque de enero, y
+// el más largo posible (5 beats × 3 semanas = 15) termina bien antes de que
+// llegue mayo (17 semanas después de enero) — ver el comentario grande de
+// ETAPAS.
+function avanzarTrimestre(partida, slot) {
+  const nueva = clonarPartida(partida);
+  const semanaAntes = nueva.semanaGlobal ?? 1;
+  const inicioDeAnio = nueva.semanaInicioBloque ?? semanaAntes;
+  const offset = slot === 1 ? SEMANAS_A_MAYO : SEMANAS_A_SEPTIEMBRE;
+  nueva.semanaGlobal = Math.max(semanaAntes, inicioDeAnio + offset);
+
   const cierre = cerrarAniosCruzados({
     semanaAntes,
     semanaDespues: nueva.semanaGlobal,
@@ -796,157 +847,180 @@ function armarCola(partida) {
   let jugadorActual = partida.jugador;
   let rivalidadesActuales = partida.rivalidades;
 
-  // Mejora garantizada en TODOS los bloques (Task v3, "progresión"): un
-  // intento anterior la salteaba en el bloque que seguía a una pelea firmada
-  // (el campamento ya trae sus propias cartas), pero eso castigaba justo al
-  // jugador que más pelea — menos cartas de mejora, no más. La progresión de
-  // MEDIA tiene que sentirse pase lo que pase con el calendario de peleas.
-  cola.push({
-    tipo: 'mejora',
-    datos: { cartas: repartirMejoras(rng, { jugador: jugadorActual, etapa: tag }) },
-  });
-
-  if (rng.chance(etapa.probSparring)) {
-    cola.push({ tipo: 'sparring', datos: { sparring: crearSparring(rng, { jugador: jugadorActual }) } });
-  }
-
-  // Bug v7 ("una carta se repite tan seguido"): cada pool de "una sola carta
-  // elegida" lleva su propia memoria corta (memoriaCartas, ver el comentario
-  // grande en crearPartida) — se lee de `partida` (todavía no tocada por
-  // esta función) y se escribe de vuelta apenas se elige, así que si AMBOS
-  // pools disparan en el mismo bloque cada uno actualiza su propia lista sin
-  // pisar a la otra.
+  // Task 5.1: LA decisión del cuatrimestre — siempre exactamente una, elegida
+  // por peso entre mejora/evento/redes (ver PESOS_DECISION, arriba). Ya no es
+  // "mejora garantizada + evento/redes opcionales encima" (eso era lo que
+  // rompía el "exactamente 3 por año": algunos bloques daban 1 decisión,
+  // otros 2 o 3). Siempre PRIMERO en la cola: si este mismo bloque también
+  // trae una oferta de pelea (más abajo, solo en el bloque de enero), la
+  // decisión se resuelve ANTES de que un campamento firmado llegue a mover
+  // `semanaGlobal` — así su `semana` registrada (ver registrarDecision,
+  // main.js) siempre cae en el mes exacto de este bloque (enero/mayo/
+  // septiembre), nunca corrida por una preparación en curso.
   let memoriaEvento = partida.memoriaCartas?.evento ?? [];
   let memoriaRedes = partida.memoriaCartas?.redes ?? [];
 
-  if (rng.chance(etapa.probEvento)) {
+  const tipoDecision = elegirTipoDecision(rng, tag);
+  if (tipoDecision === 'mejora') {
+    cola.push({
+      tipo: 'mejora',
+      datos: { cartas: repartirMejoras(rng, { jugador: jugadorActual, etapa: tag }) },
+    });
+  } else if (tipoDecision === 'evento') {
+    // Bug v7 ("una carta se repite tan seguido"): cada pool de "una sola
+    // carta elegida" lleva su propia memoria corta (memoriaCartas, ver el
+    // comentario grande en crearPartida).
     const categoria = rng.chance(0.5) ? 'vida' : 'evento';
     const carta = elegirEvento(rng, {
       jugador: jugadorActual, etapa: tag, categoria, recientes: memoriaEvento,
     });
     memoriaEvento = recordarCarta(memoriaEvento, carta.id);
     cola.push({ tipo: 'evento', datos: { carta } });
-  }
-
-  if (rng.chance(etapa.probRedes)) {
+  } else {
     const carta = elegirCartaRedes(rng, { jugador: jugadorActual, recientes: memoriaRedes });
     memoriaRedes = recordarCarta(memoriaRedes, carta.id);
     cola.push({ tipo: 'redes', datos: { carta } });
   }
 
+  // Task 5.2 ("peleas por momento de la carrera"): el lote de peleas del AÑO
+  // (no del bloque) se procesa una sola vez, en el bloque de enero — ver
+  // `esInicioDeAnio`, arriba. Mayo y septiembre no tocan nada de esto: solo
+  // traen su decisión (ya armada arriba). Esto preserva la cadencia de
+  // pelea de siempre (ya era anual) sin triplicarla por accidente al pasar
+  // de bloques-año a bloques-cuatrimestre.
+  //
   // v6, segunda vuelta ("no todas las peleas se juegan igual"): en
   // profesional, un año puede traer VARIOS cupos de pelea (intentosDePelea,
-  // tramite.js — declina con la edad, sube si hay mucho en juego). En
-  // juvenil/amateur sigue siendo el viejo gate de un solo intento
-  // (`etapa.probPelea`), pero ninguno de esos intentos puede volverse
-  // jugable (`permiteJugable:false` más abajo): TODA pelea de formación se
-  // resuelve sola — ver el comentario grande de ETAPAS.
+  // tramite.js — por momento de la carrera, Task 5.2). En juvenil/amateur
+  // sigue siendo el viejo gate de un solo intento (`etapa.probPelea`), pero
+  // ninguno de esos intentos puede volverse jugable (`permiteJugable:false`
+  // más abajo): TODA pelea de formación se resuelve sola — ver el
+  // comentario grande de ETAPAS.
   //
   // v7, corrección del coordinador ("las lesiones tienen que costar de
   // verdad"): el gate de lesión YA NO se revisa acá, de una sola vez para
   // todo el año (ver `puedePelear`, injuries.js) — se mudó DENTRO de
   // `armarLotePeleas` (tramite.js), cupo por cupo, así que armarLotePeleas
   // se llama siempre que haya intentos, esté o no lesionado el jugador AL
-  // ARRANCAR el bloque.
+  // ARRANCAR el año.
   const esProfesional = etapa.id === 'profesional';
-  const intentos = esProfesional
-    ? intentosDePelea(rng, jugadorActual)
-    : (rng.chance(etapa.probPelea) ? 1 : 0);
+  if (esInicioDeAnio(partida.bloqueGlobal)) {
+    const intentos = esProfesional
+      ? intentosDePelea(rng, jugadorActual)
+      : (rng.chance(etapa.probPelea) ? 1 : 0);
 
-  if (intentos > 0) {
-    const forzarTitulo = esProfesional
-      && jugadorActual.titulos.length === 0
-      && (jugadorActual.ranking ?? 99) <= 3;
-    // Un campeón indiscutido (los tres cinturones) elige, la mayoría de
-    // los años, no arriesgar nada — ver permiteMarqueeEsteAnio (tramite.js)
-    // para el porqué: sin este freno, "jugando bien" convierte cada año
-    // que le queda de carrera en una defensa jugable más, reventando el
-    // presupuesto de minutos sin sumarle nada al eje de cinturones (ya
-    // resuelto). Los cupos de ESTE año siguen existiendo igual (la cuenta
-    // de peleas profesionales totales no se toca) — se resuelven todos
-    // como trámite.
-    const permiteJugable = esProfesional && permiteMarqueeEsteAnio(rng, jugadorActual);
-    // Cuántas semanas de calendario representa CADA cupo (ver el comentario
-    // grande de armarLotePeleas, tramite.js): con más intentos en el año, el
-    // año se reparte en ventanas más chicas — una lesión corta puede caer
-    // entera dentro de una sola ventana y no costar nada; con pocos
-    // intentos (veterano), cada ventana es casi el año entero.
-    const semanasPorIntento = Math.round(semanasDeBloque(etapa.aniosPorBloque) / intentos);
+    if (intentos > 0) {
+      const forzarTitulo = esProfesional
+        && jugadorActual.titulos.length === 0
+        && (jugadorActual.ranking ?? 99) <= 3;
+      // Task 5.2: el viejo freno `permiteMarqueeEsteAnio` (el campeón
+      // indiscutido "descansaba" el 80% de los años, para que sus defensas
+      // no reventaran el presupuesto de minutos) ya no hace falta — un
+      // campeón (con cualquier cinturón puesto) ya tiene un único cupo por
+      // año (ver `intentosDePelea`, tramite.js), y esa única pelea SIEMPRE
+      // es importante ("al que le va bien no puede tocarle jugar menos").
+      // La frecuencia YA es el techo; no hace falta un segundo freno encima.
+      const permiteJugable = esProfesional;
+      // Cuántas semanas de calendario representa CADA cupo (ver el
+      // comentario grande de armarLotePeleas, tramite.js): con más intentos
+      // en el año, el año se reparte en ventanas más chicas — una lesión
+      // corta puede caer entera dentro de una sola ventana y no costar
+      // nada; con pocos intentos (veterano), cada ventana es casi el año
+      // entero.
+      const semanasPorIntento = Math.round(SEMANAS_POR_ANIO / intentos);
 
-    const lote = armarLotePeleas(rng, {
-      jugador: jugadorActual,
-      mundo: partida.mundo,
-      etapa: tag,
-      rivalidades: rivalidadesActuales,
-      forzarTitulo,
-      intentos,
-      permiteJugable,
-      tono: tag,
-      semanasPorIntento,
-      // Resumen de fin de año: la fecha de cada pelea de trámite (ver el
-      // comentario grande en armarLotePeleas, tramite.js).
-      semanaGlobal: partida.semanaGlobal,
-    });
-
-    jugadorActual = lote.jugador;
-    rivalidadesActuales = lote.rivalidades;
-    // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
-    // año fue pasando" antes de llegar a la que de verdad importa.
-    //
-    // Pedidos 1/2 (v7): si el lote sacó un destacado (armarLotePeleas,
-    // tramite.js — a lo sumo uno por lote, ver PROB_DESTACADO_TRAMITE), su
-    // oferta todavía NO está resuelta (mismo criterio que `marqueeOferta`:
-    // se juega de verdad, acá con el minijuego en vez de la crónica
-    // completa) — se encola como su propio beat 'tramiteDestacado', que
-    // main.js resuelve con card+minijuego y recién ahí aplica el resultado.
-    // El resto del lote (si lo hay) NO se encola aparte: viaja DENTRO del
-    // mismo beat como `resumenResto` (recortar un "Seguir" de más que no
-    // aportaba nada — pedido del coordinador). Sin destacado, es la
-    // síntesis de siempre.
-    if (lote.destacadoOferta) {
-      cola.push({
-        tipo: 'tramiteDestacado',
-        datos: {
-          oferta: lote.destacadoOferta,
-          alMejorDe: lote.alMejorDeDestacado,
-          semanasPorIntento,
-          resumenResto: lote.beatTramite ? lote.beatTramite.datos : null,
-        },
+      const lote = armarLotePeleas(rng, {
+        jugador: jugadorActual,
+        mundo: partida.mundo,
+        etapa: tag,
+        rivalidades: rivalidadesActuales,
+        forzarTitulo,
+        intentos,
+        permiteJugable,
+        tono: tag,
+        semanasPorIntento,
+        // Resumen de fin de año: la fecha de cada pelea de trámite (ver el
+        // comentario grande en armarLotePeleas, tramite.js).
+        semanaGlobal: partida.semanaGlobal,
       });
-    } else if (lote.beatTramite) {
-      cola.push(lote.beatTramite);
-    }
-    if (lote.marqueeOferta) {
-      cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
-      ofertaPendiente = { oferta: lote.marqueeOferta };
-    }
-    // El ranking se recalcula ACÁ (no solo una vez por bloque en
-    // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
-    // cupo de este mismo bloque (o el forzarTitulo del bloque siguiente)
-    // tiene que verlas reflejadas, no el ranking de antes de pelear. El
-    // destacado (si lo hay) todavía no se resolvió, así que no participa acá
-    // — su resultado recalcula el ranking recién en el próximo bloque
-    // (avanzarBloque), igual que cualquier oferta jugable normal.
-    if (lote.beatTramite) {
-      jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
-    }
-    // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
-    // por seguir lesionado en su momento — ver `bloqueados`, tramite.js), el
-    // juego avisa por qué no llegó ninguna oferta. Si al menos uno se
-    // recuperó a tiempo y sí hubo pelea (jugable, trámite, o el destacado
-    // todavía pendiente de jugarse), no hace falta este aviso.
-    if (!lote.marqueeOferta && !lote.destacadoOferta && !lote.beatTramite && lote.bloqueados > 0) {
-      cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
-    }
-    // Cuántas ofertas le costó la lesión en total en la carrera (contador
-    // acumulado, mismo criterio que `lesionesSufridas` en main.js): la
-    // métrica real de si la regla "cualquier lesión bloquea" pesa de
-    // verdad — ver el informe de balance de esta ronda.
-    if (lote.bloqueados > 0) {
-      jugadorActual = {
-        ...jugadorActual,
-        ofertasPerdidasPorLesion: (jugadorActual.ofertasPerdidasPorLesion ?? 0) + lote.bloqueados,
-      };
+
+      jugadorActual = lote.jugador;
+      rivalidadesActuales = lote.rivalidades;
+      // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
+      // año fue pasando" antes de llegar a la que de verdad importa.
+      //
+      // Pedidos 1/2 (v7): si el lote sacó un destacado (armarLotePeleas,
+      // tramite.js — a lo sumo uno por lote, ver PROB_DESTACADO_TRAMITE), su
+      // oferta todavía NO está resuelta (mismo criterio que `marqueeOferta`:
+      // se juega de verdad, acá con el minijuego en vez de la crónica
+      // completa) — se encola como su propio beat 'tramiteDestacado', que
+      // main.js resuelve con card+minijuego y recién ahí aplica el resultado.
+      // El resto del lote (si lo hay) NO se encola aparte: viaja DENTRO del
+      // mismo beat como `resumenResto` (recortar un "Seguir" de más que no
+      // aportaba nada — pedido del coordinador). Sin destacado, es la
+      // síntesis de siempre.
+      //
+      // Task 5.3 ("la tarjeta previa a la pelea"): un lote puramente de
+      // trámite (sin destacado ni marquee) antes no traía NINGÚN aviso
+      // previo — el jugador se enteraba de todo en el resumen posterior. La
+      // charla del entrenador (no es de acción, un solo "Seguir") lo tapa:
+      // te dice contra quién fuiste, antes del resumen. Nunca compite con la
+      // oferta (importante) ni con el destacado (que ya es su propio aviso
+      // + minijuego): esos siguen su camino de siempre.
+      if (lote.destacadoOferta) {
+        cola.push({
+          tipo: 'tramiteDestacado',
+          datos: {
+            oferta: lote.destacadoOferta,
+            alMejorDe: lote.alMejorDeDestacado,
+            semanasPorIntento,
+            resumenResto: lote.beatTramite ? lote.beatTramite.datos : null,
+          },
+        });
+      } else if (lote.beatTramite) {
+        const primero = lote.beatTramite.datos.resultados[0];
+        cola.push({
+          tipo: 'charlaEntrenador',
+          datos: {
+            rivalNombre: primero.rivalNombre,
+            rivalApodo: primero.rivalApodo,
+            texto: textoCharlaEntrenador(rng, primero.rivalApodo ?? primero.rivalNombre),
+          },
+        });
+        cola.push(lote.beatTramite);
+      }
+      if (lote.marqueeOferta) {
+        cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });
+        ofertaPendiente = { oferta: lote.marqueeOferta };
+      }
+      // El ranking se recalcula ACÁ (no solo una vez por año en
+      // avanzarBloque): si el lote resolvió peleas de trámite, el próximo
+      // cupo de este mismo año tiene que verlas reflejadas, no el ranking de
+      // antes de pelear. El destacado (si lo hay) todavía no se resolvió,
+      // así que no participa acá — su resultado recalcula el ranking recién
+      // en el próximo año (avanzarBloque), igual que cualquier oferta
+      // jugable normal.
+      if (lote.beatTramite) {
+        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
+      }
+      // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
+      // por seguir lesionado en su momento — ver `bloqueados`, tramite.js),
+      // el juego avisa por qué no llegó ninguna oferta. Si al menos uno se
+      // recuperó a tiempo y sí hubo pelea (jugable, trámite, o el destacado
+      // todavía pendiente de jugarse), no hace falta este aviso.
+      if (!lote.marqueeOferta && !lote.destacadoOferta && !lote.beatTramite && lote.bloqueados > 0) {
+        cola.push({ tipo: 'lesionSinOferta', datos: { lesion: jugadorActual.estado.lesion } });
+      }
+      // Cuántas ofertas le costó la lesión en total en la carrera (contador
+      // acumulado, mismo criterio que `lesionesSufridas` en main.js): la
+      // métrica real de si la regla "cualquier lesión bloquea" pesa de
+      // verdad — ver el informe de balance de esta ronda.
+      if (lote.bloqueados > 0) {
+        jugadorActual = {
+          ...jugadorActual,
+          ofertasPerdidasPorLesion: (jugadorActual.ofertasPerdidasPorLesion ?? 0) + lote.bloqueados,
+        };
+      }
     }
   }
 
@@ -1024,11 +1098,20 @@ export function siguienteBeat(partida) {
       nueva.etapaIndice += 1;
       nueva.bloque = 1;
     }
-    if (nueva.bloqueGlobal > 1) nueva = avanzarBloque(nueva);
+    // Task 5.1: solo el bloque de enero es "pesado" (avanzarBloque: envejece,
+    // mueve el mundo). Mayo y septiembre son "livianos" (avanzarTrimestre):
+    // corren el calendario hasta su propio mes, nada más — ver el comentario
+    // grande de ETAPAS y `esInicioDeAnio`, arriba.
+    if (nueva.bloqueGlobal > 1) {
+      nueva = esInicioDeAnio(nueva.bloqueGlobal)
+        ? avanzarBloque(nueva)
+        : avanzarTrimestre(nueva, (nueva.bloqueGlobal - 1) % BLOQUES_POR_ANIO);
+    }
 
     // Resumen de fin de año (v12: el cruce de año calendario, no el fin de
-    // bloque en sí — ver `cerrarAniosCruzados`): si avanzarBloque acaba de
-    // cerrar uno o más años (siempre que bloqueGlobal>1, arriba), sus beats
+    // bloque en sí — ver `cerrarAniosCruzados`): si avanzarBloque/
+    // avanzarTrimestre acaban de cerrar uno o más años (siempre que
+    // bloqueGlobal>1, arriba), sus beats
     // ya vienen armados y filtrados en `beatsResumenAnio`, en orden
     // cronológico. Van AL FRENTE de la cola del bloque que arranca — antes
     // que la mejora obligatoria — y `beatsResumenAnio` se limpia ACÁ: es un
