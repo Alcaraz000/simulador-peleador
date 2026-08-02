@@ -2363,3 +2363,54 @@ input.creacion-control { cursor: text; }
 .panel-calendario .calendario-semana {
   margin-left: auto;
 }
+
+/* ============================================================================
+   v13 — Simplificación de atributos y progresión: de seis atributos + cinco
+   estados a cuatro atributos y nada más (fuerza, defensa, cardio, agilidad).
+   Reglas nuevas al final del archivo, mismo criterio que los bloques
+   anteriores.
+   ============================================================================ */
+
+/* La fila de atributos (`.panel-peleador-atributos`, más arriba) ya reparte
+   el ancho por partes iguales entre sus hijos (`flex:1 1 0` en cada
+   `.panel-peleador-atributo`): con cuatro cuadros en vez de seis, cada uno ya
+   mide un 50% más ancho SOLO por eso, sin tocar una línea de CSS. Pero un
+   cuadro más ancho con la misma tipografía de antes se ve espacioso de
+   sobra, no "aprovechado" (pedido textual: "hay más ancho, aprovechalo, sin
+   dejar espacio muerto") — esta regla sube el número y la etiqueta un
+   escalón para que el cuadro se sienta lleno, no un cuadro chico con más
+   aire alrededor. Pisa la última definición de `.panel-peleador-atributo`
+   (el bloque "AJUSTES VISUALES v11", más arriba). Sin escopear a un
+   contenedor particular: con la simplificación de atributos las DOS filas
+   que existen en todo el juego —el tablero (panel-peleador.js) y la
+   mini-ficha del rival en el trámite (panel-tramite.js, `tileAtributo`)—
+   muestran exactamente las mismas cuatro claves, así que comparten el mismo
+   tamaño más grande sin que haga falta distinguirlas. */
+.panel-peleador-atributo {
+  min-height: 72px;
+  gap: 4px;
+}
+
+.panel-peleador-atributo .valor {
+  font-size: 26px;
+}
+
+.panel-peleador-atributo .nombre {
+  font-size: 10px;
+  letter-spacing: 0.7px;
+}
+
+.panel-peleador-atributos {
+  gap: 8px;
+}
+
+/* La señal de talento (v13, spec: "el talento se intuye, no se lee"):
+   comparte el mismo lenguaje visual que la frase fija del entrenador (cursiva,
+   texto atenuado) — es la misma voz, ahora opinando sobre el progreso en vez
+   de solo presentarse. Sin clase propia no se distinguiría de `.medio` a
+   secas, pero tampoco necesita mucho más que eso: un espacio prolijo arriba
+   para no pegarse a la frase cuando las dos están presentes a la vez. */
+.rincon-senal-talento {
+  padding-top: 8px;
+  border-top: 1px solid var(--borde);
+}

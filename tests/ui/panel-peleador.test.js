@@ -3,6 +3,7 @@ import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
 import { rankingDelJugador, tablaRanking } from '../../src/core/world.js';
 import { STAFF } from '../../src/core/money.js';
+import { DECISIONES_ANTES_DE_OPINAR } from '../../src/content/senales-talento.js';
 import {
   renderPanelPeleador, renderPanelAtributos, renderPanelEstado, renderPanelDinero,
 } from '../../src/ui/screens/panel-peleador.js';
@@ -13,6 +14,12 @@ import {
 // su celda fija — ver el comentario largo al principio de panel-peleador.js.
 // Este archivo prueba cada exportación por separado, agrupada según qué
 // celda del tablero pinta ahora.
+//
+// v13 (simplificación de atributos y progresión): de seis atributos + cinco
+// estados a cuatro atributos y nada más (fuerza, defensa, cardio, agilidad),
+// sin fama. Este archivo se reescribió para probar el diseño nuevo — ya no
+// hay "renderPanelEstado" con mentón/disciplina/forma/moral (ver su propio
+// describe, más abajo: ahora solo pinta la lesión).
 
 function partidaBase({ media = 55 } = {}) {
   const jugador = crearPeleador({
@@ -75,7 +82,7 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
   it('el ranking del panel coincide siempre con el puesto del jugador en tablaRanking', () => {
     const p = partidaBase();
     p.jugador.record = { v: 3, d: 1, e: 0, ko: 2, sub: 0, dec: 0 };
-    p.jugador.atributos.potencia = Math.min(99, p.jugador.atributos.potencia + 15);
+    p.jugador.atributos.fuerza = Math.min(99, p.jugador.atributos.fuerza + 15);
     p.jugador.ranking = 1; // deliberadamente stale, no el puesto real
 
     renderPanelPeleador(cont, { partida: p });
@@ -171,17 +178,50 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
       iniciales: 'DP',
       escuela: 'escuela técnica',
       frase: 'Pensá antes de tirar.',
-      aporte: { tecnica: 6, defensa: 4 },
+      aporte: { defensa: 6, agilidad: 4 },
     };
     renderPanelPeleador(cont, { partida: p });
     expect(cont.textContent).toContain('Don Pepe');
     expect(cont.textContent).toContain('Pensá antes de tirar.');
   });
 
-  // Cabecera rearmada (Cambio 3): PESO | MANO HÁBIL, EDAD | FORMA (con
-  // ícono nuevo), y FAMA. El gimnasio ya no vive en la cabecera (no está en
-  // el mockup del usuario; sigue mostrándose en la pantalla de sparring).
-  describe('cabecera rearmada (Cambio 3: media + identidad + datos + fama)', () => {
+  // v13, spec ("el talento se intuye, no se lee"): el entrenador va tirando
+  // señales sobre cómo viene rindiendo el pibe, en el mismo rincón donde ya
+  // habla. Antes de la quinta decisión (DECISIONES_ANTES_DE_OPINAR) no hay
+  // con qué opinar todavía.
+  describe('señal de talento (Tu rincón)', () => {
+    it('no aparece todavia si el jugador arranco la carrera (pocas decisiones tomadas)', () => {
+      const p = partidaBase();
+      p.bloqueGlobal = 1; // decisionesTomadas = 0
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.querySelector('.rincon-senal-talento')).toBeNull();
+    });
+
+    it('aparece una vez que hubo suficientes decisiones, sin mostrar nunca un numero', () => {
+      const p = partidaBase();
+      p.bloqueGlobal = DECISIONES_ANTES_DE_OPINAR + 5;
+      renderPanelPeleador(cont, { partida: p });
+      const senal = cont.querySelector('.rincon-senal-talento');
+      expect(senal).toBeTruthy();
+      expect(senal.textContent.length).toBeGreaterThan(0);
+      expect(senal.textContent).not.toMatch(/\d/);
+    });
+
+    it('no reemplaza la frase fija del entrenador: las dos conviven', () => {
+      const p = partidaBase();
+      p.bloqueGlobal = DECISIONES_ANTES_DE_OPINAR + 5;
+      p.jugador.entrenador = {
+        nombre: 'Don Pepe', iniciales: 'DP', escuela: 'escuela técnica', frase: 'Pensá antes de tirar.', aporte: {},
+      };
+      renderPanelPeleador(cont, { partida: p });
+      expect(cont.textContent).toContain('Pensá antes de tirar.');
+      expect(cont.querySelector('.rincon-senal-talento')).toBeTruthy();
+    });
+  });
+
+  // Cabecera rearmada (Cambio 3): PESO | MANO HÁBIL | EDAD, sin fama (v13: se
+  // va del juego, ver stats.js) ni forma (ídem).
+  describe('cabecera rearmada (Cambio 3: media + identidad + datos)', () => {
     it('muestra peso (categoría) y mano hábil', () => {
       const p = partidaBase();
       renderPanelPeleador(cont, { partida: p });
@@ -201,9 +241,9 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
     // contradictorio?"): la cabecera ya NO muestra el estado de forma
     // ("En Punto"/"Normal"/"Oxidado") — se saca de acá para no convivir con
     // la fase física (ver describe "fase física" más abajo), que es la que
-    // queda. El valor numérico de forma sigue disponible, sin duplicar,
-    // en el módulo de Estado (renderPanelEstado).
-    it('ya NO muestra el estado de forma ("En Punto"/"Normal"/"Oxidado"): esa lectura vive solo en la fase física', () => {
+    // queda. v13: la forma desapareció del todo del juego, así que esta
+    // garantía ahora es incondicional.
+    it('ya NO muestra el estado de forma ("En Punto"/"Normal"/"Oxidado"): esa lectura ya no existe', () => {
       const p = partidaBase();
       renderPanelPeleador(cont, { partida: p });
       const cabecera = cont.querySelector('.panel-peleador-cabecera');
@@ -213,15 +253,13 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
       expect(cabecera.textContent).not.toContain('OXIDADO');
     });
 
-    // La fama ya NO es un panel independiente (el viejo panel de
-    // "Archirrival" que la traía se sacó del tablero, Pedido 6): vive acá,
-    // junto al resto de los datos del peleador.
-    it('la fama vive en la cabecera, no en un panel aparte', () => {
+    // v13 (spec, "se va la fama: no hacía nada relevante"): ya no vive en
+    // ningún lado del tablero, ni acá ni en un panel aparte.
+    it('ya NO muestra la fama en ningún lado de la cabecera', () => {
       const p = partidaBase();
-      p.jugador.fama = 42;
       renderPanelPeleador(cont, { partida: p });
-      expect(cont.textContent).toContain('Fama');
-      expect(cont.textContent).toContain('42');
+      const cabecera = cont.querySelector('.panel-peleador-cabecera');
+      expect(cabecera.textContent).not.toContain('Fama');
     });
 
     it('apodo y apellido van en renglones propios (el nombre respira, no se aprieta en una sola linea)', () => {
@@ -282,21 +320,6 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
       renderPanelPeleador(cont, { partida: p });
       expect(cont.textContent).toContain('En declive');
     });
-
-    // Pedido 4 (v9): la queja concreta era ver "En Punto" (forma) Y "En
-    // Declive" (fase física) juntos en la misma esquina, como si se
-    // contradijeran. Con forma sacada de la cabecera (test de arriba), un
-    // jugador en fase de declive nunca puede volver a mostrar ambas cosas
-    // acá, sea cual sea su forma del momento.
-    it('un jugador en declive con la forma "en punto" no muestra ambas lecturas juntas (ya no hay contradicción posible)', () => {
-      const p = partidaBase();
-      p.jugador.edad = 34;
-      p.jugador.estado.forma = 90; // "EN PUNTO"
-      renderPanelPeleador(cont, { partida: p });
-      const cabecera = cont.querySelector('.panel-peleador-cabecera');
-      expect(cabecera.textContent).toContain('En declive');
-      expect(cabecera.textContent).not.toContain('EN PUNTO');
-    });
   });
 
   it('dispara el callback de historial', () => {
@@ -344,6 +367,16 @@ describe('renderPanelPeleador (columna izquierda: personaje, rincón, categoría
 });
 
 describe('renderPanelAtributos (columna central, arriba del módulo de decisión)', () => {
+  // v13: cuatro cuadros — fuerza, defensa, cardio, agilidad — en una sola
+  // fila, del mismo tamaño (mismo patrón que antes con seis).
+  it('muestra exactamente los cuatro atributos, en su orden fijo', () => {
+    const p = partidaBase();
+    renderPanelAtributos(cont, { jugador: p.jugador });
+    const cuadros = cont.querySelectorAll('.panel-peleador-atributo');
+    expect(cuadros).toHaveLength(4);
+    expect([...cuadros].map((c) => c.dataset.atributo)).toEqual(['fuerza', 'defensa', 'cardio', 'agilidad']);
+  });
+
   it('muestra el aporte del entrenador resaltado', () => {
     const p = partidaBase();
     p.jugador.entrenador = {
@@ -351,12 +384,12 @@ describe('renderPanelAtributos (columna central, arriba del módulo de decisión
       iniciales: 'DP',
       escuela: 'escuela técnica',
       frase: 'Pensá antes de tirar.',
-      aporte: { tecnica: 6, defensa: 4 },
+      aporte: { defensa: 6, agilidad: 4 },
     };
     renderPanelAtributos(cont, { jugador: p.jugador });
-    const filaTecnica = cont.querySelector('[data-atributo="tecnica"]');
-    expect(filaTecnica.classList.contains('con-aporte')).toBe(true);
-    expect(filaTecnica.textContent).toContain('+6');
+    const filaDefensa = cont.querySelector('[data-atributo="defensa"]');
+    expect(filaDefensa.classList.contains('con-aporte')).toBe(true);
+    expect(filaDefensa.textContent).toContain('+6');
     const filaCardio = cont.querySelector('[data-atributo="cardio"]');
     expect(filaCardio.classList.contains('con-aporte')).toBe(false);
   });
@@ -368,26 +401,26 @@ describe('renderPanelAtributos (columna central, arriba del módulo de decisión
   // a la vista ("64 +6" cuando el atributo real es 64, no 70). El número
   // grande tiene que ser la BASE sin entrenador; el badge, lo que él aporta.
   it('el numero base que se pinta NO incluye el aporte del entrenador (no lo duplica)', () => {
-    // partidaBase() usa estilo 'tecnico', que trae a El Profesor Aldana con
-    // aporte real {tecnica: 6, iq: 2} ya horneado en jugador.atributos.
+    // partidaBase() usa estilo 'tecnico', que trae al Profesor Aldana con
+    // aporte real {defensa: 6, agilidad: 2} ya horneado en jugador.atributos.
     const p = partidaBase();
     const { jugador } = p;
     expect(jugador.entrenador).toBeTruthy();
-    const aporteTecnica = jugador.entrenador.aporte.tecnica;
-    expect(aporteTecnica).toBeGreaterThan(0);
+    const aporteDefensa = jugador.entrenador.aporte.defensa;
+    expect(aporteDefensa).toBeGreaterThan(0);
 
     renderPanelAtributos(cont, { jugador });
 
-    const filaTecnica = cont.querySelector('[data-atributo="tecnica"]');
-    const baseMostrada = Number(filaTecnica.querySelector('.valor').textContent);
+    const filaDefensa = cont.querySelector('[data-atributo="defensa"]');
+    const baseMostrada = Number(filaDefensa.querySelector('.valor').textContent);
 
     // La base pintada NO es el atributo horneado (no está duplicando el
     // aporte encima de un valor que ya lo incluye)...
-    expect(baseMostrada).not.toBe(jugador.atributos.tecnica);
+    expect(baseMostrada).not.toBe(jugador.atributos.defensa);
     // ...y base + aporte da EXACTAMENTE el atributo real que usa la pelea
     // (la invariante documentada en atributosConEntrenador, coach.js).
-    expect(baseMostrada + aporteTecnica).toBe(jugador.atributos.tecnica);
-    expect(filaTecnica.textContent).toContain(`+${aporteTecnica}`);
+    expect(baseMostrada + aporteDefensa).toBe(jugador.atributos.defensa);
+    expect(filaDefensa.textContent).toContain(`+${aporteDefensa}`);
   });
 
   it('"aporte del entrenador" se muestra como una etiqueta chica, no como un titulo', () => {
@@ -398,84 +431,63 @@ describe('renderPanelAtributos (columna central, arriba del módulo de decisión
     expect(tag.textContent).toContain('aporte del entrenador');
   });
 
-  it('no muestra la seccion de estado (menton/disciplina/forma/moral): eso es renderPanelEstado', () => {
+  // v13: la sección de Estado desaparece entera del tablero (ver el describe
+  // de renderPanelEstado, más abajo) — ninguno de sus viejos atributos
+  // (forma, moral, mentón, disciplina personal) puede aparecer acá.
+  it('no muestra la seccion de estado (ya eliminada del todo)', () => {
     const p = partidaBase();
     renderPanelAtributos(cont, { jugador: p.jugador });
     expect(cont.querySelector('[data-atributo="forma"]')).toBeNull();
     expect(cont.querySelector('[data-atributo="moral"]')).toBeNull();
+    expect(cont.querySelector('[data-atributo="menton"]')).toBeNull();
+    expect(cont.querySelector('[data-atributo="disciplinaPersonal"]')).toBeNull();
   });
 
-  // v8 (pedido textual: "NO quiero que estén resumidos los títulos... el
-  // único permitido así es IQ"): los cuadros de atributos muestran el nombre
-  // COMPLETO (Potencia, Velocidad, Técnica, Defensa, Cardio), nunca la
-  // abreviatura de 3 letras — salvo IQ, que se mantiene corto a propósito.
-  it('muestra el nombre completo de cada atributo, nunca la abreviatura (salvo IQ)', () => {
+  // v8 (pedido textual: "NO quiero que estén resumidos los títulos"): los
+  // cuadros de atributos muestran el nombre COMPLETO (Fuerza, Defensa,
+  // Cardio, Agilidad), nunca la abreviatura de 3 letras.
+  it('muestra el nombre completo de cada atributo, nunca la abreviatura', () => {
     const p = partidaBase();
     renderPanelAtributos(cont, { jugador: p.jugador });
 
     const nombreDe = (clave) => cont.querySelector(`[data-atributo="${clave}"] .nombre`).textContent;
-    expect(nombreDe('potencia')).toBe('Potencia');
-    expect(nombreDe('velocidad')).toBe('Velocidad');
-    expect(nombreDe('tecnica')).toBe('Técnica');
+    expect(nombreDe('fuerza')).toBe('Fuerza');
     expect(nombreDe('defensa')).toBe('Defensa');
     expect(nombreDe('cardio')).toBe('Cardio');
-    // IQ es la única excepción explícita: su forma larga ("IQ de pelea") es
-    // demasiado larga para lo que aporta.
-    expect(nombreDe('iq')).toBe('IQ');
-    expect(cont.textContent).not.toContain('IQ de pelea');
+    expect(nombreDe('agilidad')).toBe('Agilidad');
   });
 });
 
-// Diagnóstico del coordinador: las tarjetas modifican mentón/disciplina
-// personal (jugador.especiales) y forma/moral (jugador.estado) igual que a
-// los atributos de combate, pero ninguno de los cuatro aparecía en ningún
-// lado del tablero — el jugador leía "+10 Forma" en una tarjeta sin poder
-// verificarlo nunca. Fatiga y lesión quedan afuera a propósito (ya se
-// muestran en panel-avance.js).
-describe('renderPanelEstado (columna central, debajo de atributos)', () => {
-  it('muestra mentón, disciplina personal, forma y moral con sus valores', () => {
+// v13 (simplificación de atributos): mentón, disciplina personal, forma y
+// moral desaparecen del todo — `renderPanelEstado` (mismo nombre, mismo
+// hueco del tablero) ya no pinta ningún cuadro de "estado": lo único que
+// sigue viviendo acá es el aviso de lesión + su botón de curar.
+describe('renderPanelEstado (columna central, debajo de atributos: ahora solo la lesión)', () => {
+  it('sin lesión, no pinta nada (ni un panel vacío con titulo "Estado")', () => {
     const p = partidaBase();
-    p.jugador.especiales = { disciplinaPersonal: 47, menton: 63 };
-    p.jugador.estado = { ...p.jugador.estado, forma: 72, moral: 55 };
     renderPanelEstado(cont, { jugador: p.jugador });
-
-    const filaMenton = cont.querySelector('[data-atributo="menton"]');
-    const filaDisciplina = cont.querySelector('[data-atributo="disciplinaPersonal"]');
-    const filaForma = cont.querySelector('[data-atributo="forma"]');
-    const filaMoral = cont.querySelector('[data-atributo="moral"]');
-
-    expect(filaMenton.querySelector('.valor').textContent).toBe('63');
-    expect(filaDisciplina.querySelector('.valor').textContent).toBe('47');
-    expect(filaForma.querySelector('.valor').textContent).toBe('72');
-    expect(filaMoral.querySelector('.valor').textContent).toBe('55');
+    expect(cont.textContent).not.toContain('Estado');
+    expect(cont.querySelector('.panel-lesion')).toBeNull();
   });
 
-  it('no muestra fatiga ni lesion en la seccion de estado (ya viven en otro lado del tablero)', () => {
+  it('con una lesión activa, muestra su nombre, las semanas restantes y el boton de curar', () => {
     const p = partidaBase();
+    p.jugador.estado.lesion = { nombre: 'Corte en el ojo', semanasRestantes: 3, costo: 500 };
+    p.jugador.dinero = 1000;
+    renderPanelEstado(cont, { jugador: p.jugador, onCurar: () => {} });
+    const lesion = cont.querySelector('.panel-lesion');
+    expect(lesion).toBeTruthy();
+    expect(lesion.textContent).toContain('Corte en el ojo');
+    expect(lesion.textContent).toContain('3');
+    expect(cont.querySelector('[data-accion="curar"]')).toBeTruthy();
+  });
+
+  it('no muestra ningun cuadro de atributo (ni fatiga): la lesión no es un numero mas de la grilla', () => {
+    const p = partidaBase();
+    p.jugador.estado.lesion = { nombre: 'Corte en el ojo', semanasRestantes: 3, costo: 500 };
     renderPanelEstado(cont, { jugador: p.jugador });
     expect(cont.querySelector('[data-atributo="fatiga"]')).toBeNull();
-    expect(cont.querySelector('[data-atributo="lesion"]')).toBeNull();
-  });
-
-  it('las filas de estado no llevan el badge de aporte del entrenador (eso es solo de los 6 de combate)', () => {
-    const p = partidaBase();
-    renderPanelEstado(cont, { jugador: p.jugador });
-    const filaForma = cont.querySelector('[data-atributo="forma"]');
-    expect(filaForma.classList.contains('con-aporte')).toBe(false);
-    expect(filaForma.querySelector('.aporte-entrenador')).toBeNull();
-  });
-
-  // v8 (pedido textual, mismo criterio que renderPanelAtributos): nombre
-  // completo, nunca la abreviatura de 3 letras.
-  it('muestra el nombre completo de mentón/disciplina/forma/moral, nunca la abreviatura', () => {
-    const p = partidaBase();
-    renderPanelEstado(cont, { jugador: p.jugador });
-
-    const nombreDe = (clave) => cont.querySelector(`[data-atributo="${clave}"] .nombre`).textContent;
-    expect(nombreDe('menton')).toBe('Mentón');
-    expect(nombreDe('disciplinaPersonal')).toBe('Disciplina');
-    expect(nombreDe('forma')).toBe('Forma');
-    expect(nombreDe('moral')).toBe('Moral');
+    expect(cont.querySelector('.panel-peleador-atributo')).toBeNull();
   });
 });
 
