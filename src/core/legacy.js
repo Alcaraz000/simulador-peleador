@@ -1,10 +1,15 @@
-import { recordTexto, mediaDe } from './fighter.js';
+import {
+  recordTexto, mediaDe, nombreConApodo,
+} from './fighter.js';
 import { h2hTexto } from './rivalry.js';
 import { LUJOS } from './money.js';
 import { clamp } from './stats.js';
 import { fechaDe } from './calendario.js';
 import { ANIO_INICIAL } from './world.js';
-import { MOMENTOS } from '../content/legacy-lines.js';
+import { CINTURONES } from './offers.js';
+import { edadDeDeclive, EDAD_DECLIVE_JUGADOR } from './career.js';
+import { estadisticasDeCarrera } from './stats-carrera.js';
+import { MOMENTOS, CIERRE } from '../content/legacy-lines.js';
 
 const ESCALA = [
   [85, 'Leyenda'],
@@ -157,30 +162,126 @@ function titulosDetalleDe(jugador) {
   return [...reinados.values()];
 }
 
-function biografiaDe(jugador, legados, archirrival) {
-  const { v, d, e } = jugador.record;
+// Task 6.2 ("La carrera que no llegó también se cuenta"): con el nuevo
+// balance de rejugabilidad, 3 de cada 4 carreras no llegan al mundial (ver
+// docs/superpowers/specs/2026-07-28-simplificacion-y-progresion.md). El
+// cierre no puede tratar esas carreras como un fracaso — se arma sobre lo
+// que el peleador SÍ hizo, nunca sobre lo que le faltó.
+//
+// Nivel máximo de título ALGUNA VEZ conquistado (no el que tiene puesto al
+// retirarse: un campeón que perdió el cinturón antes de colgar los guantes
+// sigue teniendo esa historia para toda la vida). Se lee de `titulosDetalle`
+// (line de tiempo completa, arriba), no de `jugador.titulos` (solo lo que
+// conserva HOY).
+const ORDEN_CINTURONES = CINTURONES.map((c) => c.nombre);
+
+function nivelMaximoDe(titulosDetalle) {
+  let mejorIndice = -1;
+  for (const t of titulosDetalle) {
+    const indice = ORDEN_CINTURONES.indexOf(t.nombre);
+    if (indice > mejorIndice) mejorIndice = indice;
+  }
+  return mejorIndice === -1 ? null : CINTURONES[mejorIndice].id;
+}
+
+// Umbrales de lo que hace que un hecho de la carrera valga la pena contarlo
+// en el cierre. Calibrados sobre el rango de diseño (72 decisiones, ~20-32
+// peleas profesionales, declive base a los 34 — ver el spec).
+const RACHA_NOTABLE = 6;
+const MEDIA_RIVAL_GRANDE = 80;
+const DEFENSAS_NOTABLES = 3;
+const PELEAS_CARRERA_LARGA = 24;
+const ADELANTO_DECLIVE_NOTABLE = 3;
+
+// El rival más duro al que de verdad le GANÓ (no el más duro que enfrentó:
+// ver mejorVictoria en stats-carrera.js — perder contra un crack no es
+// "vencer a alguien grande").
+function hechosDeCierre(jugador, nivelMaximo, titulosDetalle, estadisticas) {
+  const { v, d, e } = jugador.record ?? { v: 0, d: 0, e: 0 };
   const peleas = v + d + e;
-  const deportivo = legados.find((l) => l.id === 'deportivo').puntaje;
+  const tituloMaximoNombre = nivelMaximo
+    ? CINTURONES.find((c) => c.id === nivelMaximo).nombre
+    : null;
+  const reinadoMaximo = tituloMaximoNombre
+    ? titulosDetalle.find((t) => t.nombre === tituloMaximoNombre)
+    : null;
+  const mejorVictoria = estadisticas.mejorVictoria;
 
-  // Con apodo, "Nombre, "Apodo", cerró..."; sin apodo (guardado viejo, o un
-  // rival sin apodo asignado), se omite la coma extra en vez de mostrar
-  // "Nombre, "null", cerró...".
-  const apertura = jugador.apodo
-    ? `${jugador.nombre}, "${jugador.apodo}", cerró su carrera con ${v} victorias y ${d} derrotas en ${peleas} peleas.`
-    : `${jugador.nombre} cerró su carrera con ${v} victorias y ${d} derrotas en ${peleas} peleas.`;
-  const medio = jugador.titulos.length > 0
-    ? ` Se colgó ${jugador.titulos.length === 1 ? 'un cinturón' : `${jugador.titulos.length} cinturones`} y defendió ${jugador.defensas} ${jugador.defensas === 1 ? 'vez' : 'veces'}.`
-    : ' Nunca llegó a colgarse un cinturón, aunque estuvo cerca más de una vez.';
-  const rival = archirrival
-    ? ` Su historia quedó atada a ${archirrival.nombre}: ${archirrival.h2h} en los cara a cara.`
-    : ' Nunca encontró un rival que lo marcara de por vida.';
-  const cierre = deportivo >= 65
-    ? ' En el gimnasio del barrio todavía cuelga su foto.'
-    : deportivo >= 35
-      ? ' Los que lo vieron pelear se acuerdan. Los demás, no tanto.'
-      : ' Fue uno de los miles que lo intentaron. Y eso ya es algo.';
+  return {
+    peleas,
+    invicto: peleas > 0 && d === 0,
+    racha: estadisticas.rachaMasLarga,
+    rachaNotable: estadisticas.rachaMasLarga >= RACHA_NOTABLE,
+    rivalGrande: mejorVictoria && mejorVictoria.media >= MEDIA_RIVAL_GRANDE ? mejorVictoria : null,
+    cuerpoCastigado: edadDeDeclive(jugador) <= EDAD_DECLIVE_JUGADOR - ADELANTO_DECLIVE_NOTABLE,
+    defensas: jugador.defensas ?? 0,
+    defensasNotables: (jugador.defensas ?? 0) >= DEFENSAS_NOTABLES,
+    perdioElCetro: Boolean(reinadoMaximo?.fechaPerdido),
+    carreraLarga: peleas >= PELEAS_CARRERA_LARGA,
+  };
+}
 
-  return apertura + medio + rival + cierre;
+// Hash chico y estable, mismo criterio que `indiceEstable`/`fraseDe` de más
+// abajo (usados también para "momentos memorables"): se arma con los datos
+// REALES de la carrera (nombre, récord, títulos, defensas, última pelea) —
+// nunca con Math.random() ni con el rng de la partida (esto es sabor de
+// texto, no una decisión de juego). La MISMA carrera siempre cierra con el
+// MISMO texto; dos carreras distintas, casi siempre con uno distinto.
+function semillaCierreDe(jugador) {
+  const { v, d, e } = jugador.record ?? { v: 0, d: 0, e: 0 };
+  const historial = jugador.historial ?? [];
+  const ultima = historial[historial.length - 1];
+  const huella = ultima ? `${ultima.rivalNombre}|${ultima.fecha ?? ''}|${ultima.metodo ?? ''}` : 'sin-huella';
+  return `${jugador.nombre}|${jugador.apodo ?? ''}|${v}-${d}-${e}|${(jugador.titulos ?? []).join(',')}|${jugador.defensas ?? 0}|${historial.length}|${huella}`;
+}
+
+const APERTURA_POR_NIVEL = {
+  mundial: CIERRE.aperturaMundial,
+  nacional: CIERRE.aperturaNacional,
+  regional: CIERRE.aperturaRegional,
+};
+const CIERRE_POR_NIVEL = {
+  mundial: CIERRE.cierreMundial,
+  nacional: CIERRE.cierreNacional,
+  regional: CIERRE.cierreRegional,
+};
+
+function biografiaDe(jugador, nivelMaximo, hechos) {
+  if (hechos.peleas === 0) {
+    // Caso límite (una partida guardada antes del debut profesional, o un
+    // fixture de test): no hay carrera profesional todavía que narrar. No es
+    // un final real del juego (la carrera SIEMPRE llega a la etapa
+    // profesional), pero tiene que existir un texto neutro, sin inventar
+    // datos, en vez de reventar.
+    return `${nombreConApodo(jugador)} todavía no debutó como profesional.`;
+  }
+
+  const datos = {
+    nombre: nombreConApodo(jugador),
+    record: recordTexto(jugador),
+    peleas: hechos.peleas,
+    racha: hechos.racha,
+    defensas: hechos.defensas,
+    rival: hechos.rivalGrande ? nombreConApodo({ nombre: hechos.rivalGrande.nombre, apodo: hechos.rivalGrande.apodo }) : '',
+  };
+  const semilla = semillaCierreDe(jugador);
+
+  const aperturaPool = APERTURA_POR_NIVEL[nivelMaximo] ?? CIERRE.aperturaSinTitulo;
+  const cierrePool = CIERRE_POR_NIVEL[nivelMaximo] ?? CIERRE.cierreSinTitulo;
+
+  const hitos = [];
+  if (hechos.invicto) hitos.push(fraseDe(CIERRE.invicto, `${semilla}|invicto`, datos));
+  else if (hechos.perdioElCetro) hitos.push(fraseDe(CIERRE.perdioElCetro, `${semilla}|perdioElCetro`, datos));
+  if (hechos.rivalGrande) hitos.push(fraseDe(CIERRE.rivalGrande, `${semilla}|rivalGrande`, datos));
+  if (hechos.defensasNotables) hitos.push(fraseDe(CIERRE.defensasNotables, `${semilla}|defensas`, datos));
+  if (hechos.cuerpoCastigado) hitos.push(fraseDe(CIERRE.cuerpoCastigado, `${semilla}|cuerpo`, datos));
+  if (hechos.rachaNotable) hitos.push(fraseDe(CIERRE.racha, `${semilla}|racha`, datos));
+  if (hechos.carreraLarga) hitos.push(fraseDe(CIERRE.carreraLarga, `${semilla}|larga`, datos));
+
+  const apertura = fraseDe(aperturaPool, `${semilla}|apertura`, datos);
+  const cierre = fraseDe(cierrePool, `${semilla}|cierre`, datos);
+
+  return [apertura, ...hitos.slice(0, 3), cierre].join(' ');
 }
 
 export function calcularLegado(partida) {
@@ -237,6 +338,11 @@ export function calcularLegado(partida) {
 
   const { v, d, e } = jugador.record;
 
+  const titulosDetalle = titulosDetalleDe(jugador);
+  const nivelMaximo = nivelMaximoDe(titulosDetalle);
+  const estadisticas = estadisticasDeCarrera(partida);
+  const hechos = hechosDeCierre(jugador, nivelMaximo, titulosDetalle, estadisticas);
+
   return {
     record: recordTexto(jugador),
     peleas: v + d + e,
@@ -247,8 +353,13 @@ export function calcularLegado(partida) {
     mediaFinal: mediaDe(jugador),
     archirrival,
     momentos: momentosDe(jugador),
-    titulosDetalle: titulosDetalleDe(jugador),
-    biografia: biografiaDe(jugador, legados, archirrival),
+    titulosDetalle,
+    // Nivel más alto de título ALGUNA VEZ conquistado ('mundial' | 'nacional'
+    // | 'regional' | null) — Task 6.2: distingue el cierre de una carrera
+    // de campeón mundial, nacional o regional (aunque el cinturón ya no lo
+    // tenga puesto) de una que nunca ganó ninguno.
+    nivelMaximo,
+    biografia: biografiaDe(jugador, nivelMaximo, hechos),
     legados,
   };
 }
