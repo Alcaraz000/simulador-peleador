@@ -1,6 +1,8 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { bandera } from '../flags.js';
 import { nombreConApodo, recordAmateurTexto } from '../../core/fighter.js';
+import { fechaDe } from '../../core/calendario.js';
+import { ANIO_INICIAL } from '../../core/world.js';
 
 function tile(nombre, valor, clase = '') {
   return el('div', { class: 'tile' }, [
@@ -114,13 +116,26 @@ function chipNivelMaximo(nivelMaximo) {
 // resultado coloreado — pero en su PROPIO panel (`data-bloque`
 // distinto), nunca mezclado con `panelTitulos`/`bloqueEstadisticas` de
 // arriba, que hablan solo de lo profesional.
+// Pedido 1 (v14, "falta agregar, en el historial de peleas, el mes y año"):
+// mismo helper y mismo criterio que profile.js (omitir si no hay `fecha`,
+// nunca mostrar "undefined"/"NaN" — peleas amateur viejas también pueden
+// carecer de este campo).
+function mesAnioDe(pelea) {
+  if (pelea.fecha == null) return null;
+  const fecha = fechaDe(pelea.fecha, ANIO_INICIAL);
+  return `${fecha.nombreMes.slice(0, 3)} ${fecha.anio}`;
+}
+
 function filaPeleaAmateur(p, i) {
   return el('div', {
     class: 'panel', style: 'display:flex;justify-content:space-between;gap:8px',
   }, [
     el('div', {}, [
       el('div', { style: 'font-weight:800', text: `${i + 1}. ${p.rivalNombre}` }),
-      el('div', { class: 'etiqueta', text: `${METODOS[p.metodo] ?? p.metodo} · round ${p.round}` }),
+      el('div', {
+        class: 'etiqueta',
+        text: [mesAnioDe(p), `${METODOS[p.metodo] ?? p.metodo} · round ${p.round}`].filter(Boolean).join(' · '),
+      }),
     ]),
     el('div', {
       class: p.resultado === 'v' ? 'verde' : p.resultado === 'd' ? 'rojo' : 'sutil',
