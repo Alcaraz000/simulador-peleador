@@ -403,6 +403,13 @@ export function generarOferta(rng, {
     // para consolidarse en ese cinturón (ver CINTURONES). Se usa para mostrarle
     // al jugador su progreso ("defensa 2 de 3") antes de la pelea.
     defensasObligatorias: nivel.id === 'defensa' ? cinturon.defensasObligatorias : null,
+    // Bloque 6 ("no toda defensa es un evento"): true cuando esta defensa es
+    // la PRIMERA del reinado actual de este cinturón (jugador.defensasCinturon
+    // todavía en 0 o sin entrada — se resetea a 0 cada vez que se conquista el
+    // cinturón, ver aplicarResultado más abajo). Es la única defensa que
+    // `esPeleaImportante` trata como grande por sí sola; las siguientes son
+    // rutina — ver el comentario grande ahí.
+    esPrimeraDefensa: nivel.id === 'defensa' && (jugador.defensasCinturon?.[cinturon.id] ?? 0) === 0,
     textoGancho: gancho,
   };
 
@@ -419,36 +426,42 @@ export function generarOferta(rng, {
 // El criterio central del rediseño de ritmo v6 ("no todas las peleas se
 // juegan igual"): decide si ESTA oferta merece la crónica completa (careo,
 // campamento, pelea round a round) o si es una de trámite que se resuelve
-// sola (ver armarLotePeleas/resumenLote en tramite.js). Cuatro condiciones,
-// CUALQUIERA alcanza:
-//   - esTitulo: cubre tanto disputar un cinturón como defenderlo — lo más
-//     grande que le puede pasar a una carrera.
-//   - esRevancha: ya se cruzaron antes; hay una historia en juego, no un
-//     desconocido más.
-//   - esArchirrival: el rival de tu vida, aunque esta pelea puntual no
-//     tenga cinturón en juego.
-//   - nivel === 'eliminatoria': la pelea que define el ascenso — ganarla es
-//     lo que te pone en carrera por el título (ver decidirNivel: solo se
-//     ofrece con ranking top-6, o forzada en la etiqueta de sabor
-//     "veterano", ver tagContenido en career.js).
+// sola (ver armarLotePeleas/resumenLote en tramite.js).
 //
-// Se descartó a propósito un quinto criterio ("riesgo alto": rival
-// claramente mejor) que estuvo en un borrador de esta misma ronda — medido
-// con scripts/balance-sim.mjs, disparaba en CASI CUALQUIER matchup temprano
-// (el matchmaking normal ya sesga hacia arriba, ver rankingObjetivo más
-// abajo) y volvía "jugable" la mitad de los años de la carrera, reventando
-// el presupuesto de ~20 minutos sin sumar nada al eje de cinturones (una
-// pelea de trámite ganada suma exactamente lo mismo al récord). Los cuatro
-// criterios que quedan son, literalmente, los que pidió el brief: "peleas de
-// título, defensas, tu archirrival, revanchas, y las que definen tu
-// ascenso" — ni más ni menos.
+// Bloque 6 (spec v13, "la partida dura 44,6 minutos, el objetivo es 27-30"):
+// la causa medida era que un campeón pelea una vez al año, pero ANTES de
+// este cambio "esTitulo" cubría TANTO disputar un cinturón COMO defenderlo
+// — así que, jugando bien, casi todas las peleas de la segunda mitad de la
+// carrera (10-13 años como campeón) se jugaban COMPLETAS (careo + campamento
+// + ronda a ronda + rincón + golpe de gracia), aunque fueran la quinta o
+// sexta defensa del mismo cinturón contra un retador cualquiera. Eso llevó
+// las peleas jugables de ~6 a ~11,9 por carrera y la partida a 44,6 minutos.
 //
-// Todo lo que NO cumple ninguna de estas cuatro es "trámite": un combate
-// regional, parejo o cómodo, que no cambia la historia de la carrera — se
-// resuelve solo, en lote, con sabor (ver resumenLote, tramite.js).
+// La regla de diseño "al que le va bien no puede tocarle jugar menos" NO
+// pide que cada defensa sea un evento — pide que el campeón siga teniendo SU
+// pelea del año, visible y jugada, nunca resuelta en silencio. Se separan
+// dos niveles:
+//   - GRANDE (se juega completa): conquistar un cinturón nuevo (incluida la
+//     "unificación" de ir por el próximo escalón mientras tenés el actual
+//     puesto), la PRIMERA defensa de un reinado (`esPrimeraDefensa`, arriba:
+//     ese primer desafío después de coronarte SÍ es un evento), una
+//     revancha, el archirrival, o la eliminatoria que define el ascenso.
+//   - RUTINA (se juega con el minijuego, nunca en silencio): la segunda
+//     defensa en adelante del mismo cinturón contra un retador sin historia
+//     — `armarLotePeleas` (tramite.js) la fuerza SIEMPRE al camino
+//     "destacado" (tarjeta + piedra-papel-tijera de 3-5 rondas), nunca a la
+//     resolución muda de `resolverResultadoRapido` ni al ~10% al azar que
+//     rige el resto del trámite — ver el comentario grande ahí.
+//
+// Se descartó a propósito un criterio más viejo ("riesgo alto": rival
+// claramente mejor) — medido con scripts/balance-sim.mjs, disparaba en CASI
+// CUALQUIER matchup temprano y volvía "jugable" la mitad de los años de la
+// carrera sin sumar nada al eje de cinturones.
 export function esPeleaImportante(oferta) {
+  const esTituloNuevo = oferta.nivel === 'titulo';
+  const esDefensaGrande = oferta.nivel === 'defensa' && oferta.esPrimeraDefensa;
   return Boolean(
-    oferta.esTitulo || oferta.esRevancha || oferta.esArchirrival || oferta.nivel === 'eliminatoria',
+    esTituloNuevo || esDefensaGrande || oferta.esRevancha || oferta.esArchirrival || oferta.nivel === 'eliminatoria',
   );
 }
 

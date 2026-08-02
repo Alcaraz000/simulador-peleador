@@ -1,12 +1,19 @@
 import { describe, it, expect } from 'vitest';
-import { crearPeleador } from '../../src/core/fighter.js';
+import {
+  crearPeleador, mediaDe, repartirOrigenes,
+} from '../../src/core/fighter.js';
+import { repartirApodos } from '../../src/core/nicknames.js';
 import {
   ETAPAS, crearPartida, siguienteBeat, etapaActual, avanzarBloque, firmarPelea, cancelarProximaPelea,
   edadDeDeclive,
   faseFisicaJugador,
 } from '../../src/core/career.js';
 import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
-import { intentosDePelea } from '../../src/core/tramite.js';
+import {
+  intentosDePelea, resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
+} from '../../src/core/tramite.js';
+import { aplicarCarta } from '../../src/core/cards.js';
+import { resolverOpcion } from '../../src/core/events.js';
 import { createRng } from '../../src/core/rng.js';
 import { SEMANAS_POR_ANIO, semanasHastaPelea, fechaDe } from '../../src/core/calendario.js';
 import { ANIO_INICIAL } from '../../src/core/world.js';
@@ -32,11 +39,53 @@ function jugarTodo(partida, limite = 400) {
   return { partida: actual, beats };
 }
 
+// Puntaje crudo de mods positivos — mismo criterio que `elegirMejor`/
+// `puntajeMods` en scripts/balance-sim.mjs (no se importa desde ahí: ese
+// script no es un módulo pensado para reusarse, arranca su propia simulación
+// apenas se lo importa).
+function puntajeMods(mods = {}) {
+  return Object.values(mods).reduce((acc, v) => acc + Math.max(0, v), 0);
+}
+
+function elegirMejorCarta(cartas) {
+  return cartas.reduce(
+    (mejor, c) => (puntajeMods(c.mods) > puntajeMods(mejor.mods) ? c : mejor),
+    cartas[0],
+  );
+}
+
+function elegirMejorOpcion(carta) {
+  return carta.opciones.reduce((mejor, o) => {
+    const puntuar = (op) => {
+      const prob = op.probabilidades
+        ? Math.max(...op.probabilidades.map((p) => puntajeMods(p.mods)))
+        : 0;
+      return puntajeMods(op.mods) + prob + (op.efectos?.dinero ?? 0) / 20000;
+    };
+    return puntuar(o) > puntuar(mejor) ? o : mejor;
+  }, carta.opciones[0]);
+}
+
 // Juega una carrera entera aceptando y ganando cada oferta JUGABLE que
 // aparece (sin correr el motor de pelea completo: aplica directamente un
-// resultado ganador vía aplicarResultado). Sirve para verificar que la
+// resultado ganador vía aplicarResultado), Y ELIGIENDO SIEMPRE LA MEJOR
+// OPCIÓN en cada mejora/evento/redes/campCarta — sirve para verificar que la
 // progresión de cinturones funciona de punta a punta cuando al jugador le
-// va bien.
+// va bien de verdad, no solo cuando gana peleas con la MEDIA congelada.
+//
+// Bloque 6 (hallazgo de balance): antes de este bloque, este helper NO
+// aplicaba ninguna carta — el jugador ganaba todas sus peleas jugables pero
+// su MEDIA nunca se movía más allá del crecimiento pasivo (career.js). Con
+// un mundo que también crece de verdad (ver el arreglo de `declive` en
+// world.js), un jugador que no crece nunca deja de ser competitivo — así que
+// el mismo cambio que arregló el balance real hizo que este helper dejara de
+// alcanzar ninguna oferta jugable dentro de la ventana de los tests. Ahora
+// aplica siempre la mejor carta ofrecida (mismo criterio que
+// scripts/balance-sim.mjs: la opción con más puntos de mods positivos, más
+// el mejor desenlace posible si hay probabilidades, más el dinero como
+// desempate), consumiendo un rng cosmético propio (derivado de
+// `partida.semilla`, igual que main.js) para resolverOpcion/el minijuego de
+// trámite — nunca el rng propio de la partida, que sigue calibrando el ritmo.
 //
 // Task v3 ("las semanas de preparación antes de una pelea"): aceptar ya no
 // resuelve la pelea en el acto — firma el contrato (firmarPelea) y el
@@ -49,13 +98,17 @@ function jugarTodo(partida, limite = 400) {
 // nunca dispara ningún campamento).
 //
 // v6, segunda vuelta ("no todas las peleas se juegan igual"): `ofertas`
-// ahora cuenta SOLO las peleas JUGABLES (beat 'oferta' -> campamento
-// completo) — las de trámite (beat 'peleasResueltas') se resuelven solas
-// DENTRO de armarCola, antes de que este helper vea nada que aceptar.
-// `peleasTotales` (jugador.record) es el número que de verdad mide el
-// objetivo de "30-40 peleas profesionales": jugables + trámite juntas.
+// cuenta las peleas JUGABLES (beat 'oferta' -> campamento completo) MÁS los
+// destacados de trámite (Bloque 6: "no toda defensa es un evento" — una
+// defensa rutinaria ahora se juega con el minijuego, no con la crónica
+// completa, pero sigue siendo LA pelea del año de un campeón). Las de
+// trámite silenciosas (beat 'peleasResueltas') se resuelven solas DENTRO de
+// armarCola, antes de que este helper vea nada que aceptar. `peleasTotales`
+// (jugador.record) es el número que de verdad mide el objetivo de "30-32
+// peleas profesionales": jugables + destacadas + trámite silencioso, juntas.
 function jugarGanandoTodo(partida, limite = 500) {
   let actual = partida;
+  const rngCosmetico = createRng(`${partida.semilla}_cosmetico`);
   let guardia = 0;
   let defensas = 0;
   let ofertas = 0;
@@ -67,17 +120,67 @@ function jugarGanandoTodo(partida, limite = 500) {
     if (!paso.beat) continue;
     beats += 1;
 
-    if (paso.beat.tipo === 'oferta') {
+    if (paso.beat.tipo === 'mejora') {
+      const elegida = elegirMejorCarta(paso.beat.datos.cartas);
+      const aplicado = aplicarCarta(actual.jugador, elegida);
+      actual = { ...actual, jugador: aplicado.jugador };
+    } else if (paso.beat.tipo === 'evento' || paso.beat.tipo === 'redes') {
+      const carta = paso.beat.datos.carta;
+      const opcion = elegirMejorOpcion(carta);
+      const resuelto = resolverOpcion(rngCosmetico, {
+        jugador: actual.jugador, carta, opcionId: opcion.id, rivalidades: actual.rivalidades,
+        rivalObjetivoId: actual.mundo.roster[0]?.id ?? null,
+      });
+      actual = { ...actual, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+    } else if (paso.beat.tipo === 'tramiteDestacado') {
+      // Bloque 6: la defensa rutinaria de un campeón se juega con el
+      // minijuego (piedra-papel-tijera), nunca en silencio — mismo criterio
+      // que scripts/balance-sim.mjs: "jugando bien" siempre elige la misma
+      // acción táctica (el ciclo es simétrico, no cambia el resultado
+      // agregado) y gana lo que el rng cosmético defina.
+      const { oferta, alMejorDe } = paso.beat.datos;
+      const necesarias = rondasParaGanar(alMejorDe);
+      let puntosJugador = 0;
+      let puntosRival = 0;
+      while (puntosJugador < necesarias && puntosRival < necesarias) {
+        const { resultado } = resolverRondaMinijuego(rngCosmetico, {
+          jugador: actual.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: 'tecnico',
+        });
+        if (resultado === 'jugador') puntosJugador += 1; else puntosRival += 1;
+      }
+      const { metodo, ganador } = resultadoDeMarcador({ jugador: puntosJugador, rival: puntosRival }, alMejorDe);
+      const round = roundDeCierreMinijuego(rngCosmetico, { jugador: actual.jugador, oferta, metodo });
+      ofertas += 1;
+      if (oferta.nivel === 'defensa') defensas += 1;
+      const resultado = aplicarResultado(actual.jugador, {
+        oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: actual.semanaGlobal,
+      });
+      actual = { ...actual, jugador: resultado.jugador };
+    } else if (paso.beat.tipo === 'oferta') {
       const { oferta } = paso.beat.datos;
       actual = firmarPelea(actual, { oferta });
-    } else if (paso.beat.tipo === 'campCarta' || paso.beat.tipo === 'campSparring') {
+    } else if (paso.beat.tipo === 'campCarta') {
+      const { carta, oferta, ultimo } = paso.beat.datos;
+      const opcion = elegirMejorOpcion(carta);
+      const resuelto = resolverOpcion(rngCosmetico, {
+        jugador: actual.jugador, carta, opcionId: opcion.id, rivalidades: actual.rivalidades,
+      });
+      actual = { ...actual, jugador: resuelto.jugador, rivalidades: resuelto.rivalidades };
+      if (ultimo) {
+        ofertas += 1;
+        if (oferta.nivel === 'defensa') defensas += 1;
+        const resultado = aplicarResultado(actual.jugador, {
+          oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 }, semanaGlobal: actual.semanaGlobal,
+        });
+        actual = { ...actual, jugador: resultado.jugador };
+      }
+    } else if (paso.beat.tipo === 'campSparring') {
       const { oferta, ultimo } = paso.beat.datos;
       if (ultimo) {
         ofertas += 1;
         if (oferta.nivel === 'defensa') defensas += 1;
         const resultado = aplicarResultado(actual.jugador, {
-          oferta,
-          resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+          oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 }, semanaGlobal: actual.semanaGlobal,
         });
         actual = { ...actual, jugador: resultado.jugador };
       }
@@ -242,18 +345,22 @@ describe('ritmo de la carrera', () => {
   // aplican — el bloque pasó de año a cuatrimestre (72 en vez de 24, con una
   // decisión GARANTIZADA en cada uno, no probabilística) y las peleas por
   // año pasaron a depender del MOMENTO de la carrera (joven/prime/campeón/
-  // veterano, ver tramite.js), no de una banda continua por edad. Medido con
-  // este mismo método (jugarGanandoTodo, 1500 semillas):
-  //   beats estructurales: avg=158.5 | min=133 max=180
-  //   peleas PROFESIONALES TOTALES (jugables+trámite): avg=28.5 | min=22 max=37
-  // "Jugando bien" corona un cinturón temprano casi siempre (progresión de
-  // cinturones, más abajo) y un campeón pelea UNA vez al año de ahí en
-  // adelante (la regla de diseño: "al que le va bien no puede tocarle jugar
-  // menos" — no MÁS) — por eso el promedio de peleas queda un poco por debajo
-  // del ~30-32 declarado en la spec (que es el objetivo de una carrera
-  // representativa, no del piso "siempre gana": ver scripts/balance-sim.mjs,
-  // que sí aplica cartas/pierde alguna, para el número que de verdad calibra
-  // el Bloque 6).
+  // veterano, ver tramite.js), no de una banda continua por edad.
+  //
+  // Bloque 6 ("no toda defensa es un evento" + el arreglo de fondo de
+  // `declive` en world.js, que dejó de ser casi un no-op): `jugarGanandoTodo`
+  // (arriba) pasó a elegir siempre la MEJOR mejora/evento/redes/campCarta —
+  // antes de este bloque nunca tocaba una carta, y con un mundo que ahora
+  // crece de verdad un jugador que no crece se queda sin ofertas jugables
+  // (ver el comentario grande de `jugarGanandoTodo`). Con la MEDIA subiendo
+  // de verdad Y las defensas rutinarias resolviéndose con el minijuego (no
+  // con la crónica completa), el número de BEATS estructurales bajó bastante
+  // del ~158.5 de la ronda anterior. Medido con este mismo método
+  // (jugarGanandoTodo, 4500 semillas en tres ventanas de 1500 — ver el
+  // informe de balance de esta ronda para la estabilidad):
+  //   beats estructurales: avg≈145.4 | min=118 max=168, estable entre ventanas
+  //   peleas PROFESIONALES TOTALES (jugables+destacadas+trámite): avg≈26.3 |
+  //   min=23 max=36, estable entre ventanas
   it('sobre muchas semillas, el promedio de beats estructurales/carrera cae en el rango medido (jugadas de punta a punta, con campamento incluido)', () => {
     const total = 1500;
     const todos = [];
@@ -262,18 +369,20 @@ describe('ritmo de la carrera', () => {
     }
     const promedio = todos.reduce((a, b) => a + b, 0) / total;
 
-    // Banda amplia sobre el ~158.5 medido, para no ser flaky pero seguir
+    // Banda amplia sobre el ~145.4 medido, para no ser flaky pero seguir
     // marcando una regresión real si alguien recorta o infla el ritmo.
-    expect(promedio).toBeGreaterThanOrEqual(145);
-    expect(promedio).toBeLessThanOrEqual(172);
+    expect(promedio).toBeGreaterThanOrEqual(132);
+    expect(promedio).toBeLessThanOrEqual(158);
 
-    const dentroDelRango = todos.filter((b) => b >= 110 && b <= 200).length;
+    const dentroDelRango = todos.filter((b) => b >= 100 && b <= 190).length;
     expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 
   // El objetivo de la spec (Task 5.2): ~30-32 peleas PROFESIONALES por
   // carrera (jugables + trámite) — ver el comentario grande de arriba sobre
-  // por qué "jugando bien" (este helper) mide un poco menos que eso.
+  // por qué "jugando bien" (este helper) mide un poco menos que eso: un
+  // campeón (que "jugando bien" corona temprano en la mayoría de las
+  // carreras) pelea una vez al año de ahí en adelante.
   it('sobre muchas semillas, las peleas profesionales totales (jugables + trámite) caen en el rango medido', () => {
     const total = 1500;
     const todas = [];
@@ -281,8 +390,8 @@ describe('ritmo de la carrera', () => {
       todas.push(jugarGanandoTodo(nuevaPartida(semilla)).peleasTotales);
     }
     const promedio = todas.reduce((a, b) => a + b, 0) / total;
-    expect(promedio).toBeGreaterThanOrEqual(24);
-    expect(promedio).toBeLessThanOrEqual(33);
+    expect(promedio).toBeGreaterThanOrEqual(23);
+    expect(promedio).toBeLessThanOrEqual(30);
 
     // Piso duro: ninguna carrera jugada de punta a punta debería quedar muy
     // por debajo de "una carrera profesional completa".
@@ -739,38 +848,41 @@ describe('ofertas de pelea bloqueadas por lesion', () => {
 });
 
 describe('ofertas de pelea por carrera', () => {
-  // v6, segunda vuelta ("no todas las peleas se juegan igual"): esto ahora
-  // mide solo las peleas JUGABLES (beat 'oferta' — título/defensa/revancha/
-  // archirrival/eliminatoria/riesgo alto, ver esPeleaImportante en
-  // offers.js). El total de peleas PROFESIONALES (jugables + trámite) es
-  // otro eje — ver 'ritmo de la carrera' más arriba para el objetivo de
-  // 30-40. Medido con jugarTodo (nunca acepta nada, pero eso no frena a las
-  // de trámite: se resuelven solas igual) sobre las semillas 1-10: entre 7 y
-  // 15 jugables por carrera (rango recalculado tras el minijuego de trámite,
-  // Pedido 2 v7 — `armarLotePeleas` consume tiradas de rng nuevas por lote
-  // de trámite, primero para decidir si el lote saca destacado
-  // (PROB_DESTACADO_TRAMITE) y después, si lo saca, para el propio
-  // minijuego cuando el jugador lo juega — así que corre la secuencia
-  // entera y cambia qué semillas caen en qué matchup puntual; el eje que de
-  // verdad importa, el de 30-40 profesionales sobre 3000 semillas, sigue
-  // intacto).
-  const semillas = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+  // v6, segunda vuelta ("no todas las peleas se juegan igual"): esto medía
+  // solo las peleas JUGABLES completas (beat 'oferta'). Bloque 6 ("no toda
+  // defensa es un evento"): una defensa rutinaria ya no se juega completa —
+  // se resuelve con el minijuego ('tramiteDestacado') — así que "cuántas
+  // peleas de verdad importaron" pasa a ser jugables + destacadas juntas
+  // (`ofertas`, en `jugarGanandoTodo`), no solo el beat 'oferta' a secas.
+  //
+  // Con `jugarTodo` (nunca acepta ni gana nada, la media del jugador no se
+  // mueve) esto medía casi siempre 1 sola oferta por carrera entera —
+  // esperable: sin ganar ni crecer, un jugador no tiene forma de rankear lo
+  // bastante alto en un mundo que ahora también crece de verdad (ver el
+  // arreglo de `declive`, world.js). Por eso el helper acá abajo pasa a ser
+  // `jugarGanandoTodo` (gana Y elige siempre la mejor carta) — mismo
+  // criterio que 'ritmo de la carrera', arriba.
+  //
+  // Medido sobre 1500 semillas: avg≈11.9 | min=2 max=19 (hay carreras con
+  // muy poca varianza de ranking que tardan en clasificar y otras que
+  // explotan rápido — el piso duro de acá abajo es generoso a propósito,
+  // para no ser flaky, y la franja "típica" cubre a la enorme mayoría sin
+  // exigirle lo mismo a cada semilla individual).
+  it('el promedio de peleas jugables+destacadas por carrera cae en el rango medido', () => {
+    const total = 1500;
+    const todas = [];
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      todas.push(jugarGanandoTodo(nuevaPartida(semilla)).ofertas);
+    }
+    const promedio = todas.reduce((a, b) => a + b, 0) / total;
+    expect(promedio).toBeGreaterThanOrEqual(10);
+    expect(promedio).toBeLessThanOrEqual(14);
 
-  it('nunca caen por debajo de 5 peleas jugables en toda la carrera', () => {
-    semillas.forEach((semilla) => {
-      const { beats } = jugarTodo(nuevaPartida(semilla));
-      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
-      expect(ofertas).toBeGreaterThanOrEqual(5);
-    });
-  });
-
-  it('tipicamente caen entre 7 y 18 peleas jugables por carrera', () => {
-    semillas.forEach((semilla) => {
-      const { beats } = jugarTodo(nuevaPartida(semilla));
-      const ofertas = beats.filter((b) => b.tipo === 'oferta').length;
-      expect(ofertas).toBeGreaterThanOrEqual(7);
-      expect(ofertas).toBeLessThanOrEqual(18);
-    });
+    // Piso duro, generoso: ninguna carrera jugada de punta a punta debería
+    // quedar en cero peleas jugables/destacadas.
+    expect(Math.min(...todas)).toBeGreaterThanOrEqual(1);
+    const dentroDelRango = todas.filter((n) => n >= 4 && n <= 20).length;
+    expect(dentroDelRango / total).toBeGreaterThanOrEqual(0.97);
   });
 });
 
@@ -786,79 +898,117 @@ describe('ofertas de pelea por carrera', () => {
 // hacía crecer el heap del mismo worker hasta quedarse sin memoria (medido
 // en esa corrección).
 
-describe('progresión de cinturones', () => {
-  it('ganando todas las ofertas de pelea, el jugador consigue los tres cinturones', () => {
-    // Semilla 5 (antes era 1: el fix de apodos duplicados del roster —
-    // Task 6.3, ver crearRoster/crearMundo — corre la secuencia de rng, y la
-    // semilla 1 dejó de llegar a los tres cinturones con esa secuencia
-    // nueva). No es una regla especial de la semilla 1: varias otras (5, 6,
-    // 7, 8...) siguen llegando de punta a punta.
-    const { partida } = jugarGanandoTodo(nuevaPartida(5));
-    expect(partida.jugador.titulos.length).toBe(CINTURONES.length);
-    CINTURONES.forEach((cinturon) => {
-      expect(partida.jugador.titulos).toContain(cinturon.nombre);
-    });
-  });
+// Puntaje crudo de mods positivos — mismo criterio que `elegirMejorCarta`
+// de arriba, usado acá para elegir el MEJOR origen/apodo ofrecido en la
+// creación (igual que `elegirMejor` en scripts/balance-sim.mjs).
+function elegirMejorDe(items, puntuar) {
+  return items.reduce((mejor, item) => (puntuar(item) > puntuar(mejor) ? item : mejor), items[0]);
+}
 
-  // No basta con una semilla favorable: esto garantiza que el eje de cinturones
-  // funciona de punta a punta para la gran mayoría de las carreras, no solo para
-  // una elegida a mano. Si `decidirNivel` (offers.js) vuelve a priorizar la defensa
-  // del cinturón actual por sobre escalar al siguiente cuando el ranking ya
-  // califica, este test lo detecta.
-  //
-  // Muestra subida de 150 a 400 semillas en la Task 5.2 (el piso se queda en
-  // 0.85, no en 0.9): con n=150 el test era flaky de nacimiento, no un
-  // problema de balance. Medido a mano sobre seis sub-muestras de 150
-  // semillas cada una: 89.3% / 86.7% / 95.3% / 83.3% / 90.0% / 90.0% — rango
-  // de 83.3% a 95.3%, la mitad por debajo de cualquier piso de 90%. Con
-  // n=400 la tasa era estable en ~90% con una desviación de ~1.5 puntos, así
-  // que un piso de 0.85 quedaba a más de 3 sigma de la media.
-  //
-  // Muestra subida otra vez a 3000 en la Task 6.3: el fix de apodos
-  // duplicados del roster (crearRoster ahora evita que dos rivales, o el
-  // rival y el propio jugador, compartan apodo — antes pasaba en ~97% y
-  // ~44% de las carreras respectivamente) corre la secuencia de rng para
-  // TODA la carrera, no solo la creación del roster. Medido con 5000
-  // semillas después del fix: la media real bajó de ~90% a ~87% (no es
-  // ruido de muestra: la sub-muestra 1-400, la que corría este test, cayó a
-  // 84%, y 1500/2500/5000 semillas convergen todas en 86.7-87%, no
-  // alrededor de 90%). Con n=3000 el piso de 0.85 vuelve a quedar a >3
-  // sigma de esa media real (~87%), y sigue siendo el ≥85% jugando bien que
-  // pide el brief de la Task 6 — no hizo falta tocar el piso, alcanzó con
-  // agrandar la muestra otra vez.
-  //
-  // Revisión del coordinador (misma Task 6.3, después de sumar contenido de
-  // 'evento' para juvenil/amateur — ver events.test.js): pidió intentar
-  // bajar a n=1000 antes de aceptar n=3000, porque n=3000 triplicó el
-  // tiempo de este test solo. Medido: n=1000 (semillas 1-1000) da 86.50%,
-  // apenas ~1.6 puntos sobre el piso de 0.85 — con la desviación real de
-  // ~1.06pp a ese tamaño de muestra, son ~1.6 sigma, no los ">2 sigma
-  // largos" que se esperaba. Seis sub-muestras de 1000 semillas cada una
-  // (1-1000, 1001-2000, ..., 5001-6000) dieron 86.5% / 86.4% / 87.5% /
-  // 85.3% / 89.4% / 88.8% — una de las seis quedó a apenas 0.3 puntos del
-  // piso. Con n=3000 esa misma dispersión no se vio (86.80%, y n=5000 da
-  // 87.02%: convergen). Se decidió, según el criterio que dio el
-  // coordinador ("si con 1000 resulta inestable, dejá 3000"), mantener
-  // n=3000: no es una preferencia por la suite lenta porque sí, es que la
-  // muestra de 1000 no deja margen suficiente para el próximo cambio de
-  // contenido que vuelva a correr esta secuencia de rng compartida (van
-  // dos en esta misma task).
-  it('sobre muchas semillas (3000), al menos el 85% de las carreras ganadas de punta a punta terminan con los tres cinturones', () => {
-    const total = 3000;
-    let conLosTres = 0;
-    for (let semilla = 1; semilla <= total; semilla += 1) {
-      const { partida } = jugarGanandoTodo(nuevaPartida(semilla));
-      if (partida.jugador.titulos.length === CINTURONES.length) conLosTres += 1;
+// Bloque 6 (hallazgo de balance, "que el talento y el reparto inicial pesen
+// más"): `crearPeleador` solo tira un talento/reparto inicial DISTINTO por
+// carrera si recibe un `rng` — sin uno, cae al default de fighter.js
+// (`createRng(1)`, fijo). Antes de este bloque, NI la creación real del
+// juego (src/main.js) NI esta clase de medición (scripts/balance-sim.mjs)
+// se lo pasaban: todo peleador jugador salía con el MISMO talento pase lo
+// que pase la semilla, así que el eje entero que calibra este bloque
+// (sortearTalento/repartirAtributosIniciales, talento.js/fighter.js) nunca
+// llegaba a pesar en ninguna carrera real — ver el informe de balance
+// entregado con esta ronda. Acá se arma el jugador con el mismo criterio que
+// "creación real" en balance-sim.mjs: elige el MEJOR origen/apodo ofrecido
+// (jugando bien de verdad, no solo aceptando el primero) y les pasa un rng
+// propio (namespaced por semilla) que sigue consumiéndose en `crearPeleador`
+// — así el talento y el reparto inicial SÍ varían semilla a semilla.
+function jugadorConTalentoReal(semilla) {
+  const rngCreacion = createRng(`creacion_${semilla}`);
+  const origenElegido = elegirMejorDe(repartirOrigenes(rngCreacion), (o) => puntajeMods(o.mods));
+  const apodoElegido = elegirMejorDe(repartirApodos(rngCreacion), (a) => puntajeMods(a.mods));
+  return crearPeleador({
+    apellido: 'Ortiz', apodoId: apodoElegido.id, nacionalidad: 'AR', disciplina: 'boxeo',
+    estilo: 'tecnico', categoria: 'pluma', origen: origenElegido.id, media: 38, esJugador: true,
+    rng: rngCreacion,
+  });
+}
+
+// ---- Bloque 6: el eje de rejugabilidad -------------------------------------
+// Reemplaza el viejo "≥85% consigue los tres cinturones" (spec v13,
+// "simplificación y progresión" — ese objetivo se elimina a propósito: si el
+// 100% de las carreras llega al mundial, el peleador malo no existe, es un
+// peleador bueno con más pasos). Los objetivos nuevos:
+//   - al menos un cinturón: 85-90% de las carreras jugadas de punta a punta.
+//   - llegó al mundial: 20-25% — TIENE que poder fallar.
+//   - media final: ~85-90, con dispersión GRANDE (un juego rejugable no
+//     converge todas las carreras al mismo número).
+//
+// Medido con este mismo método (jugarGanandoTodo + jugadorConTalentoReal) en
+// CINCO ventanas independientes de 1500 semillas cada una (1-1500,
+// 1501-3000, 3001-4500, 4501-6000, 6001-7500 — la lección del proyecto sobre
+// muestras chicas, "con n=150 las sub-muestras variaban 12 puntos": acá se
+// verificó la estabilidad ANTES de fijar el umbral, no después):
+//   al menos un cinturón: 89.2% / 87.9% / 88.5% / 86.3% / 88.7%
+//   llegó al mundial:     24.5% / 24.1% / 23.3% / 23.1% / 23.9%
+//   media final avg:      88.70 / 88.17 / 88.48 / 88.02 / 88.20
+//   media final desv:      8.44 /  8.63 /  8.15 /  8.99 /  8.41
+// Las cinco ventanas caen dentro de los rangos de la spec sin excepción — los
+// umbrales de acá abajo dejan margen sobre lo medido (no pegados al valor
+// exacto) para no ser flaky, pero siguen marcando una regresión real si el
+// talento deja de pesar (todo sube hacia ~100%/~97) o si pesa demasiado
+// (todo se derrumba).
+describe('Bloque 6: el eje de rejugabilidad (reemplaza "3 cinturones")', () => {
+  const NOMBRE_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
+  const TOTAL = 1500;
+
+  function carrerasDeMuestra() {
+    const resultados = [];
+    for (let semilla = 1; semilla <= TOTAL; semilla += 1) {
+      const { partida } = jugarGanandoTodo(crearPartida({ jugador: jugadorConTalentoReal(semilla), semilla }));
+      resultados.push(partida.jugador);
     }
-    expect(conLosTres / total).toBeGreaterThanOrEqual(0.85);
+    return resultados;
+  }
+
+  it('sobre muchas semillas, entre 83% y 92% de las carreras jugadas de punta a punta ganan al menos un cinturón', () => {
+    const jugadores = carrerasDeMuestra();
+    const tasa = jugadores.filter((j) => j.titulos.length > 0).length / TOTAL;
+    expect(tasa).toBeGreaterThanOrEqual(0.83);
+    expect(tasa).toBeLessThanOrEqual(0.92);
   });
 
-  // Guarda del lado opuesto: si `PROB_ASCENSO_PRIORITARIO` se acerca demasiado a 1,
-  // "defender el cinturón" deja de sentirse presente (el jugador siempre escala
-  // apenas puede y nunca ve una defensa obligatoria). Task 25 midió que en 0.95
-  // casi 1 de cada 5 carreras no ofrecía ninguna defensa; este test pone un piso.
+  it('sobre muchas semillas, entre 18% y 28% llega al cinturón mundial — tiene que poder fallar, nunca ~100%', () => {
+    const jugadores = carrerasDeMuestra();
+    const tasa = jugadores.filter((j) => j.titulos.includes(NOMBRE_MUNDIAL)).length / TOTAL;
+    expect(tasa).toBeGreaterThanOrEqual(0.18);
+    expect(tasa).toBeLessThanOrEqual(0.28);
+  });
+
+  it('la media final promedia ~85-90, con dispersión grande: un juego rejugable no converge todas las carreras al mismo número', () => {
+    const jugadores = carrerasDeMuestra();
+    const medias = jugadores.map((j) => mediaDe(j));
+    const avg = medias.reduce((a, b) => a + b, 0) / TOTAL;
+    const desv = Math.sqrt(medias.reduce((a, m) => a + (m - avg) ** 2, 0) / TOTAL);
+    expect(avg).toBeGreaterThanOrEqual(84);
+    expect(avg).toBeLessThanOrEqual(92);
+    // Antes de este bloque la desviación estándar rondaba 1.7-1.9 (casi
+    // todas las carreras terminaban en 96-99, pegadas al techo de 99) —
+    // ahora tiene que ser, como mínimo, el triple.
+    expect(desv).toBeGreaterThanOrEqual(6);
+  });
+});
+
+// Guarda del lado opuesto: si `PROB_ASCENSO_PRIORITARIO` se acerca demasiado a 1,
+// "defender el cinturón" deja de sentirse presente (el jugador siempre escala
+// apenas puede y nunca ve una defensa obligatoria). Task 25 midió que en 0.95
+// casi 1 de cada 5 carreras no ofrecía ninguna defensa; este test pone un piso.
+// Usa `nuevaPartida` (jugador fijo) y no el talento real de arriba: esto mide
+// una mecánica de matchmaking (offers.js), no el eje de rejugabilidad — con
+// `jugarGanandoTodo` ya aplicando siempre la mejor carta (Bloque 6, ver el
+// comentario grande ahí), el jugador fijo crece de sobra para calificar a
+// defensas con normalidad. Muestra subida de 150 (flaky de nacimiento, misma
+// lección del proyecto que arriba) a 1500: medido en tres ventanas de 1500,
+// 0.00% / 0.07% / 0.00% sin ninguna defensa — muy por debajo del piso.
+describe('defensa obligatoria (matchmaking)', () => {
   it('sobre muchas semillas, casi siempre aparece al menos una defensa obligatoria', () => {
-    const total = 150;
+    const total = 1500;
     let sinDefensas = 0;
     for (let semilla = 1; semilla <= total; semilla += 1) {
       const { defensas } = jugarGanandoTodo(nuevaPartida(semilla));
@@ -894,8 +1044,33 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   // (antes que la mejora) — ver anioTieneAlgoQueContar, year-summary.js. Acá
   // se lo consume como un beat más (no aporta nada a lo que este helper
   // busca) para seguir devolviendo, siempre, el primer beat de contenido.
+  //
+  // Bloque 6 (hallazgo): `actual.etapaIndice = 2` fuerza 'profesional' SIN
+  // pasar por juvenil/amateur — el jugador arranca la etapa profesional a
+  // los 15 (EDAD_INICIAL), no a los 21 (edadDesde real), así que la carrera
+  // simulada acá TERMINA (agota los 54 bloques de 'profesional') a los ~33
+  // años, nunca llega a los ~38 del tag de sabor 'veterano' (donde
+  // decidirNivel, offers.js, ofrece eliminatoria sin condiciones). Con un
+  // mundo que ahora sí crece de verdad (ver el arreglo de `declive` en
+  // world.js), un jugador con la media base de `nuevaPartida` (45, sin
+  // ninguna carta aplicada — este helper tampoco elige mejoras, solo drena
+  // la cola) puede tardar más de 60 bloques en rankear lo bastante alto para
+  // que decidirNivel le ofrezca algo jugable. Una media base más alta (70,
+  // muy por encima de la media inicial real) no es una carrera "jugando
+  // bien" — es simplemente un jugador ya fuerte de entrada, elegido a mano
+  // para que este test (que verifica una invariante MECÁNICA, no de
+  // balance: `ofertaPendiente` vs `proximaPelea`) encuentre su oferta rápido
+  // y de forma confiable, sin depender de cuánto tarde en madurar.
+  function nuevaPartidaFuerte(semilla) {
+    const jugador = crearPeleador({
+      nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 70, esJugador: true,
+    });
+    return crearPartida({ jugador, semilla });
+  }
+
   function primerPasoConOfertaPendiente(semilla, { maxBloques = 60 } = {}) {
-    let actual = nuevaPartida(semilla);
+    let actual = nuevaPartidaFuerte(semilla);
     actual.etapaIndice = 2;
     for (let i = 0; i < maxBloques; i += 1) {
       let primerPaso = siguienteBeat(actual);
@@ -915,13 +1090,14 @@ describe('ofertaPendiente / proximaPelea (calendario del tablero)', () => {
   it('en cuanto se arma la cola con una oferta, queda en ofertaPendiente (dato interno) pero proximaPelea sigue null hasta que el jugador firme', () => {
     const primerPaso = primerPasoConOfertaPendiente(2);
 
-    // El primer beat de CONTENIDO de un bloque siempre es "mejora" (puede
-    // haber un 'resumenAnio' antes, ya consumido por el helper de arriba):
-    // si el bloque trae una oferta más adelante en la cola, ofertaPendiente
-    // ya tiene que reflejarla (para que cancelarProximaPelea pueda actuar),
-    // pero proximaPelea -lo único que lee el panel- tiene que seguir null: el
-    // jugador todavía no vio la oferta, mucho menos la aceptó.
-    expect(primerPaso.beat.tipo).toBe('mejora');
+    // v13 (ritmo nuevo): cada bloque trae UNA decisión, sorteada por peso
+    // entre mejora/evento/redes — ya no es siempre 'mejora'. Lo que este test
+    // protege no es cuál salió, sino que si el bloque trae una oferta más
+    // adelante en la cola, `ofertaPendiente` ya la refleje (para que
+    // cancelarProximaPelea pueda actuar) mientras `proximaPelea` — lo único
+    // que lee el panel — sigue null: el jugador todavía no vio esa oferta,
+    // mucho menos la firmó.
+    expect(['mejora', 'evento', 'redes']).toContain(primerPaso.beat.tipo);
     expect(primerPaso.partida.ofertaPendiente).not.toBeNull();
     expect(primerPaso.partida.proximaPelea).toBeNull();
 
@@ -1217,7 +1393,14 @@ describe('Task 5.1: tres decisiones al año, una cada cuatro meses', () => {
 });
 
 // ---- Task 5.3: la tarjeta previa a la pelea --------------------------------
-describe('Task 5.3: la charla del entrenador (simulada) vs. la oferta (importante)', () => {
+// Bloque 6 ("resolver la pelea simulada en el mismo beat del anuncio", una de
+// las palancas de menor daño que la propia spec sugiere si la partida se
+// siente larga): la charla del entrenador (Task 5.3) empezó como su PROPIO
+// beat, antes del resumen del lote — dos "Seguir" para contar lo mismo una
+// vez ("contra quién fuiste") y la síntesis ("3-0, dos por nocaut"). Ahora
+// viaja DENTRO del beat 'peleasResueltas', en `datos.charla`: un solo beat,
+// la misma información. Este describe se reescribe sobre esa fusión.
+describe('Task 5.3/Bloque 6: la charla del entrenador (fusionada en el resumen) vs. la oferta (importante)', () => {
   // Recorre varias carreras (jugarTodo: nunca acepta nada, así que el juego
   // no se detiene esperando una decisión de aceptar/rechazar) y clasifica
   // cada bloque de enero según qué beat de pelea trajo.
@@ -1226,34 +1409,42 @@ describe('Task 5.3: la charla del entrenador (simulada) vs. la oferta (important
     return beats;
   }
 
-  it('un año resuelto entero como trámite (sin destacado ni marquee) encola la charla, nunca la oferta', () => {
+  it('un año resuelto entero como trámite (sin destacado ni marquee) trae la charla dentro del resumen, nunca la oferta', () => {
     let vistoCharla = false;
     for (let semilla = 1; semilla <= 40; semilla += 1) {
       const beats = beatsDePeleaDeCarrera(semilla);
-      for (let i = 0; i < beats.length; i += 1) {
-        if (beats[i].tipo === 'charlaEntrenador') {
+      beats.forEach((b) => {
+        if (b.tipo === 'peleasResueltas' && b.datos.charla) {
           vistoCharla = true;
-          // Siempre viaja pegada al resumen del lote de trámite, nunca junto
-          // a una oferta jugable en el mismo golpe.
-          expect(beats[i + 1]?.tipo).toBe('peleasResueltas');
-          expect(beats[i].datos.texto.length).toBeGreaterThan(0);
-          expect(beats[i].datos.texto).not.toMatch(/\{rival\}/);
+          expect(b.datos.charla.length).toBeGreaterThan(0);
+          expect(b.datos.charla).not.toMatch(/\{rival\}/);
         }
-      }
+      });
     }
     expect(vistoCharla).toBe(true);
   });
 
-  it('una pelea importante siempre encola la oferta (aceptar/rechazar), nunca la charla', () => {
+  it('una pelea importante siempre encola su propia oferta (aceptar/rechazar), nunca disfrazada de resumen de trámite', () => {
+    // Bloque 6: un mismo bloque puede traer trámite (peleas de más allá del
+    // primer cupo, ver armarLotePeleas) Y una oferta jugable a la vez (el
+    // primer cupo del año, si califica) — en ese caso 'peleasResueltas'
+    // SÍ puede aparecer antes de 'oferta' en la misma cola, y es correcto:
+    // son dos peleas DISTINTAS del mismo año. Lo que nunca puede pasar es
+    // que la oferta jugable en sí venga escondida dentro de un beat de
+    // resumen — siempre es su propio beat 'oferta', con su propia oferta.
     let vistoOferta = false;
     for (let semilla = 1; semilla <= 40; semilla += 1) {
       const beats = beatsDePeleaDeCarrera(semilla);
-      beats.forEach((b, i) => {
+      beats.forEach((b) => {
         if (b.tipo === 'oferta') {
           vistoOferta = true;
-          // La oferta nunca aparece envuelta en una charla informativa: es
-          // su propia tarjeta de aceptar o rechazar.
-          expect(beats[i - 1]?.tipo).not.toBe('charlaEntrenador');
+          expect(b.datos.oferta).toBeTruthy();
+          expect(b.datos.charla).toBeUndefined();
+        }
+        if (b.tipo === 'peleasResueltas') {
+          // El resumen de trámite nunca trae una oferta jugable adentro: eso
+          // es exclusivo del beat 'oferta'.
+          expect(b.datos.oferta).toBeUndefined();
         }
       });
     }
@@ -1264,7 +1455,9 @@ describe('Task 5.3: la charla del entrenador (simulada) vs. la oferta (important
     const textos = new Set();
     for (let semilla = 1; semilla <= 200; semilla += 1) {
       const beats = beatsDePeleaDeCarrera(semilla);
-      beats.filter((b) => b.tipo === 'charlaEntrenador').forEach((b) => textos.add(b.datos.texto));
+      beats
+        .filter((b) => b.tipo === 'peleasResueltas' && b.datos.charla)
+        .forEach((b) => textos.add(b.datos.charla));
     }
     expect(textos.size).toBeGreaterThanOrEqual(8);
   });

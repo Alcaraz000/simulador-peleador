@@ -10,6 +10,7 @@ import {
 } from './news.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp } from './stats.js';
+import { rendimientoDeMejora } from './talento.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
@@ -198,11 +199,24 @@ const ATRIBUTOS_CON_CRECIMIENTO = ['fuerza', 'defensa', 'cardio', 'agilidad'];
 // pasivo, determinístico (no tira del rng compartido, mismo criterio que
 // declivePorEdadJugador — ver el comentario grande más arriba). Se frena del
 // todo en EDAD_FIN_CRECIMIENTO (la meseta del prime): antes de eso, decae
-// lineal desde CRECIMIENTO_MAX_POR_BLOQUE (a los 15) hasta 0. Es el PISO de
-// la progresión: las cartas de mejora (con su rareza y su suerte legendaria)
-// siguen siendo lo que de verdad separa una carrera con suerte de una sin
-// ella — esto solo garantiza que ALGO suba incluso si nunca tocás una carta
-// buena.
+// lineal desde CRECIMIENTO_MAX_POR_BLOQUE (a los 15) hasta 0.
+//
+// Bloque 6 (spec v13, "que el talento y el reparto inicial pesen más"):
+// hasta acá este crecimiento era FIJO, igual para cualquier peleador —
+// mientras las cartas de mejora sí escalaban con `rendimientoDeMejora`
+// (talento.js), este piso pasivo no. Medido con scripts/balance-sim.mjs: era
+// la causa real de que "al menos un cinturón"/"llegó al mundial" dieran
+// ~100% pase lo que pase con el talento — sumaba ~+18 de MEDIA garantizados
+// entre los 15 y los 27 años (la mitad del camino a los 99 de techo), IGUAL
+// para el peleador con más suerte que para el que menos, así que ensanchar
+// el rango del techo (ver TECHO_MIN/TECHO_MAX, talento.js) casi no movía el
+// resultado final: este piso solo, sin talento, ya empujaba a cualquiera
+// cerca del techo. Ahora el mismo `rendimientoDeMejora` que ya escala las
+// cartas también escala ESTE crecimiento — un peleador que "aprende rápido"
+// también absorbe más rápido lo que le enseña el gimnasio sin que medie
+// ninguna carta; uno al que le cuesta, menos. Ya no es un piso incondicional
+// (`delta` puede redondear a 0 en un peleador de techo bajo): es la MISMA
+// palanca de talento, aplicada también acá, no un mecanismo aparte.
 function crecimientoPorEdadJugador(jugador) {
   if (jugador.edad >= EDAD_FIN_CRECIMIENTO) return jugador.atributos;
   const progreso = clamp(
@@ -210,7 +224,8 @@ function crecimientoPorEdadJugador(jugador) {
     0,
     1,
   );
-  const delta = Math.round(CRECIMIENTO_MAX_POR_BLOQUE * progreso);
+  const rendimiento = rendimientoDeMejora(jugador, jugador.edad);
+  const delta = Math.round(CRECIMIENTO_MAX_POR_BLOQUE * progreso * rendimiento);
   if (delta <= 0) return jugador.atributos;
   const atributos = { ...jugador.atributos };
   for (const clave of ATRIBUTOS_CON_CRECIMIENTO) {
@@ -299,15 +314,17 @@ function declivePorEdadJugador(jugador) {
 // cupo por año, la frecuencia YA es el techo.
 //
 // Task 5.3 ("la tarjeta previa a la pelea"): antes de una pelea de trámite,
-// el entrenador te avisa contra quién vas (beat 'charlaEntrenador' — no es de
-// acción, solo información); antes de una importante, la tarjeta es aceptar
-// o rechazar (beat 'oferta', sin cambios). Nunca al revés: ver
-// `elegirTipoDecision`/el armado del lote de peleas, más abajo.
+// el entrenador te avisa contra quién vas (no es de acción, solo
+// información); antes de una importante, la tarjeta es aceptar o rechazar
+// (beat 'oferta', sin cambios). Nunca al revés: ver `elegirTipoDecision`/el
+// armado del lote de peleas, más abajo. Bloque 6: la charla ya NO es su
+// propio beat 'charlaEntrenador' — viaja fusionada dentro del beat
+// 'peleasResueltas' (`datos.charla`), ver el comentario ahí para el porqué.
 //
 // Los números de esta ronda (peleas/año, decisiones/año, meses) se miden con
 // `scripts/balance-sim.mjs` — el objetivo viejo de cinturones (≥85% consigue
-// los tres) queda reemplazado por el nuevo eje de rejugabilidad, que calibra
-// el Bloque 6 (no esta ronda).
+// los tres) queda reemplazado por el nuevo eje de rejugabilidad, calibrado
+// en el Bloque 6 — ver el comentario grande de ahí, más abajo.
 const BLOQUES_POR_ANIO = 3;
 
 export const ETAPAS = [
@@ -962,9 +979,19 @@ function armarCola(partida) {
       //
       // Task 5.3 ("la tarjeta previa a la pelea"): un lote puramente de
       // trámite (sin destacado ni marquee) antes no traía NINGÚN aviso
-      // previo — el jugador se enteraba de todo en el resumen posterior. La
-      // charla del entrenador (no es de acción, un solo "Seguir") lo tapa:
-      // te dice contra quién fuiste, antes del resumen. Nunca compite con la
+      // previo — el jugador se enteraba de todo en el resumen posterior.
+      //
+      // Bloque 6 (spec, "si se siente largo, la palanca de menor daño es
+      // resolver la pelea simulada en el mismo beat del anuncio"): la
+      // primera versión de esta charla (Task 5.3) era su PROPIO beat, antes
+      // del resumen — dos pantallas de un solo "Seguir" cada una para contar
+      // lo mismo una vez ("contra quién fuiste") y la síntesis ("3-0, dos
+      // por nocaut"). Medido con scripts/balance-sim.mjs: con la partida ya
+      // en 33,2 minutos después de las otras palancas de este bloque (ver
+      // más abajo), esas dos pantallas separadas costaban ~2 minutos que no
+      // aportaban nada que la fusión no pueda contar en una sola. Ahora la
+      // frase del entrenador viaja DENTRO de `beatTramite.datos.charla`: un
+      // solo beat, un solo "Seguir", misma información. Nunca compite con la
       // oferta (importante) ni con el destacado (que ya es su propio aviso
       // + minijuego): esos siguen su camino de siempre.
       if (lote.destacadoOferta) {
@@ -980,14 +1007,12 @@ function armarCola(partida) {
       } else if (lote.beatTramite) {
         const primero = lote.beatTramite.datos.resultados[0];
         cola.push({
-          tipo: 'charlaEntrenador',
+          ...lote.beatTramite,
           datos: {
-            rivalNombre: primero.rivalNombre,
-            rivalApodo: primero.rivalApodo,
-            texto: textoCharlaEntrenador(rng, primero.rivalApodo ?? primero.rivalNombre),
+            ...lote.beatTramite.datos,
+            charla: textoCharlaEntrenador(rng, primero.rivalApodo ?? primero.rivalNombre),
           },
         });
-        cola.push(lote.beatTramite);
       }
       if (lote.marqueeOferta) {
         cola.push({ tipo: 'oferta', datos: { oferta: lote.marqueeOferta } });

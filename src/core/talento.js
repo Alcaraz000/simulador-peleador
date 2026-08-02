@@ -13,7 +13,7 @@ import { clamp } from './stats.js';
 // no dan son las colas. Se sortea sumando tres tiradas y promediando: eso
 // genera una campana (teorema central del límite en versión barata) en vez
 // de un uniforme, donde un techo extremo sería tan común como uno normal.
-export const TECHO_MIN = 0.7;
+export const TECHO_MIN = 0.2;
 export const TECHO_MAX = 1.3;
 
 const CURVAS = ['temprana', 'normal', 'tardia'];
@@ -47,7 +47,15 @@ export function rendimientoDeMejora(jugador, edad = jugador?.edad ?? 25) {
   const pico = PICO_POR_CURVA[talento.curva] ?? PICO_POR_CURVA.normal;
   const distancia = Math.abs(edad - pico);
   const factorCurva = clamp(1.15 - (distancia / ANCHO_CURVA) * 0.5, 0.55, 1.15);
-  return clamp(talento.techo * factorCurva, 0.35, 1.6);
+  // Bloque 6 ("que el talento pese más"): el piso/techo de acá abajo eran
+  // 0.35/1.6 — con TECHO_MIN/TECHO_MAX en 0.7/1.3 (rango viejo), el peor caso
+  // posible (0.7*0.55=0.385) ya caía casi encima del piso de 0.35: ensanchar
+  // solo TECHO_MIN/TECHO_MAX no cambiaba nada en la práctica, el clamp de
+  // ACÁ absorbía toda la diferencia. Ensanchado a juego con el rango nuevo
+  // (0.4-1.6 de techo): un peleador realmente flojo, lejos de su pico, rinde
+  // de verdad menos de la mitad de uno normal (0.18) — y uno con suerte
+  // extrema, en su pico, rinde casi el doble (1.84).
+  return clamp(talento.techo * factorCurva, 0.12, 2.0);
 }
 
 /**

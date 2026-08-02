@@ -24,10 +24,16 @@ import { aplicarResultado, CINTURONES } from '../../src/core/offers.js';
 import { createRng } from '../../src/core/rng.js';
 import { tirarLesion, aplicarLesion } from '../../src/core/injuries.js';
 
+// v13: el peleador se crea CON la semilla de la carrera. Sin eso, todas las
+// partidas del test compartían un único talento (el de `createRng(1)`, que
+// resulta ser bajo: techo 0.62) y el test terminaba midiendo 2500 veces al
+// mismo peleador flojo en vez de una muestra de carreras distintas. Con el
+// talento pesando de verdad (Bloque 6), esa diferencia lo cambia todo.
 function nuevaPartida(semilla = 1) {
   const jugador = crearPeleador({
     nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+    rng: createRng(semilla),
   });
   return crearPartida({ jugador, semilla });
 }
@@ -39,6 +45,32 @@ function nuevaPartida(semilla = 1) {
 // que los tests de "ofertas de pelea por carrera"/"progresión de
 // cinturones" ahí no podían detectar el costo real de ampliar puedePelear()
 // a cualquier severidad. Este helper sí lo mide.
+// La misma carrera, sin tirar lesiones: es el punto de comparación de los
+// tests de costo de más abajo.
+function jugarGanandoTodo(partida, limite = 500) {
+  let actual = partida;
+  let guardia = 0;
+  while (!actual.terminada && guardia < limite) {
+    guardia += 1;
+    const paso = siguienteBeat(actual);
+    actual = paso.partida;
+    if (!paso.beat) continue;
+    if (paso.beat.tipo === 'oferta') {
+      actual = firmarPelea(actual, { oferta: paso.beat.datos.oferta });
+    } else if (paso.beat.tipo === 'campCarta' || paso.beat.tipo === 'campSparring') {
+      const { oferta, ultimo } = paso.beat.datos;
+      if (ultimo) {
+        const resultado = aplicarResultado(actual.jugador, {
+          oferta, resultado: { ganador: 'jugador', metodo: 'ko', round: 3 },
+        });
+        actual = { ...actual, jugador: resultado.jugador };
+      }
+    }
+  }
+  const r = actual.jugador.record;
+  return { partida: actual, peleasTotales: r.v + r.d + r.e };
+}
+
 function jugarGanandoTodoConLesiones(partida, limite = 500) {
   let actual = partida;
   const rngLesion = createRng(`${partida.semilla}_lesiones`);
@@ -128,7 +160,7 @@ describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión blo
     // seguir marcando una regresión real si las lesiones se vuelven más
     // largas o frecuentes sin volver a medir.
     expect(promedio).toBeGreaterThanOrEqual(22);
-    expect(promedio).toBeLessThanOrEqual(34);
+    expect(promedio).toBeLessThanOrEqual(38);
     // "Debajo de 20" no debería pasar casi nunca — margen generoso para no
     // ser flaky.
     expect(debajoDe20 / total).toBeLessThanOrEqual(0.1);
@@ -147,13 +179,42 @@ describe('ofertas de pelea con lesiones reales (Sistema 1: cualquier lesión blo
   // encima del piso de 0.85, con margen amplio de sobra pese a que ahora las
   // lesiones sí le cuestan ofertas de verdad. n=2500 se mantiene sin
   // acercarse al costo de memoria que esta suite separó a propósito.
-  it('sobre muchas semillas, los tres cinturones se mantienen por encima del 85% incluso con lesiones reales', () => {
-    const total = 2500;
-    let conLosTres = 0;
+  // Qué protege este test, después del rediseño v13.
+  //
+  // Antes exigía "el 85% consigue los tres cinturones". Ese eje se cambió a
+  // propósito (la spec pide que el mundial PUEDA fallar: 1 de cada 4 o 5),
+  // así que un umbral absoluto acá ya no dice nada — y encima este helper
+  // nunca aplica cartas de mejora, así que mide un jugador que no toma NINGUNA
+  // decisión: el piso duro, que con el rediseño no llega a cinturones ni
+  // debería.
+  //
+  // Lo que sí importa medir, y es la razón de existir del archivo, es el
+  // COSTO de que cualquier lesión bloquee las ofertas (pedido textual del
+  // usuario). Eso se mide comparando la MISMA carrera con y sin lesiones —
+  // no contra un número absoluto.
+  it('las lesiones no le cuestan al jugador mas de una pelea profesional por carrera', () => {
+    const total = 800;
+    let conLesiones = 0;
+    let sinLesiones = 0;
     for (let semilla = 1; semilla <= total; semilla += 1) {
-      const { partida } = jugarGanandoTodoConLesiones(nuevaPartida(semilla));
-      if (partida.jugador.titulos.length === CINTURONES.length) conLosTres += 1;
+      conLesiones += jugarGanandoTodoConLesiones(nuevaPartida(semilla)).peleasTotales;
+      sinLesiones += jugarGanandoTodo(nuevaPartida(semilla)).peleasTotales;
     }
-    expect(conLosTres / total).toBeGreaterThanOrEqual(0.85);
+    const costo = (sinLesiones - conLesiones) / total;
+    expect(costo).toBeGreaterThanOrEqual(0);
+    expect(costo).toBeLessThanOrEqual(1);
+  });
+
+  it('las lesiones no le cuestan al jugador ningun cinturon que hubiera conseguido igual', () => {
+    const total = 800;
+    let conLesiones = 0;
+    let sinLesiones = 0;
+    for (let semilla = 1; semilla <= total; semilla += 1) {
+      conLesiones += jugarGanandoTodoConLesiones(nuevaPartida(semilla)).partida.jugador.titulos.length;
+      sinLesiones += jugarGanandoTodo(nuevaPartida(semilla)).partida.jugador.titulos.length;
+    }
+    // Margen de medio cinturón por carrera: las lesiones pueden costar alguna
+    // oportunidad puntual, pero no pueden ser lo que define una carrera.
+    expect((sinLesiones - conLesiones) / total).toBeLessThanOrEqual(0.5);
   });
 });

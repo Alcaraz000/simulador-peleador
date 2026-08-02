@@ -258,8 +258,17 @@ describe('esPeleaImportante (v6, criterio de "que pelea se juega completa")', ()
     };
   }
 
-  it('una pelea de titulo importa', () => {
-    expect(esPeleaImportante(ofertaBase({ esTitulo: true }))).toBe(true);
+  it('disputar un cinturon importa', () => {
+    expect(esPeleaImportante(ofertaBase({ esTitulo: true, nivel: 'titulo' }))).toBe(true);
+  });
+
+  // Bloque 6 (v13): la PRIMERA defensa de un cinturón es un evento; las
+  // siguientes son rutina y se resuelven con el minijuego. Sin esto, un
+  // campeón que defiende una vez por año durante media carrera jugaba
+  // completa cada una de esas peleas y la partida se iba a 44 minutos.
+  it('la primera defensa de un cinturon importa; las siguientes son rutina', () => {
+    expect(esPeleaImportante(ofertaBase({ esTitulo: true, nivel: 'defensa', esPrimeraDefensa: true }))).toBe(true);
+    expect(esPeleaImportante(ofertaBase({ esTitulo: true, nivel: 'defensa', esPrimeraDefensa: false }))).toBe(false);
   });
 
   it('una revancha importa', () => {

@@ -4,6 +4,7 @@ import {
   registrarDecision, registrarMuestraMedia,
 } from './core/career.js';
 import { tablaRanking, rankingDelJugador } from './core/world.js';
+import { crearPeleador } from './core/fighter.js';
 import { hitosDePelea, hitoDeEtapa, noticiaDeHitoJugador } from './core/hitos.js';
 import { generarNoticia, agregarNoticias } from './core/news.js';
 import { crearPelea } from './core/fight.js';
@@ -1422,7 +1423,39 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     renderCreacion(contenedor, {
       onComenzar: (jugador) => {
         const semilla = Date.now();
-        partida = crearPartida({ jugador, semilla });
+        // Bloque 6 (spec v13, "que el talento y el reparto inicial pesen
+        // más" — la palanca central de rejugabilidad): `renderCreacion`
+        // (create.js) construye `jugador` con `crearPeleador` SIN pasarle un
+        // rng — cae al default de fighter.js (`createRng(1)`, fijo, pensado
+        // para tests deterministas). Eso significa que, sin este arreglo,
+        // TODO peleador jugador salía con el MISMO talento y el MISMO
+        // reparto inicial de atributos en cada carrera nueva — el eje entero
+        // que calibra este bloque (sortearTalento/repartirAtributosIniciales)
+        // nunca llegaba a pesar en una partida real, solo en las mediciones
+        // sintéticas de scripts/balance-sim.mjs (que tenía el mismo bug, ya
+        // corregido ahí también).
+        //
+        // Se vuelve a tirar acá, con el rng real de la sesión (semilla), SIN
+        // tocar create.js (fuera de alcance de este bloque): se reconstruye
+        // el mismo peleador con `crearPeleador`, pasándole exactamente lo que
+        // el jugador ya eligió en la pantalla de creación (apellido, apodo,
+        // nacionalidad, estilo, categoría, origen, mano) más el rng nuevo.
+        // `media: 38` tiene que coincidir con el mismo número que usa
+        // create.js — si ese archivo cambia su media base, este también.
+        const jugadorConTalento = crearPeleador({
+          apellido: jugador.apellido,
+          apodoId: jugador.apodoId,
+          nacionalidad: jugador.nacionalidad,
+          disciplina: jugador.disciplina,
+          estilo: jugador.estilo,
+          categoria: jugador.categoria,
+          origen: jugador.origen,
+          mano: jugador.mano,
+          esJugador: true,
+          media: 38,
+          rng: createRng(semilla),
+        });
+        partida = crearPartida({ jugador: jugadorConTalento, semilla });
         rng = createRng(semilla + 7777);
         siguiente();
       },

@@ -1,6 +1,7 @@
 import { crearRoster, generarDebutantes } from './roster.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
+import { rendimientoDeMejora } from './talento.js';
 // `rankingDelJugador` (más abajo) es lo que habilita las peleas de título:
 // sin ranking, el jugador nunca calificaría para disputar un cinturón.
 
@@ -50,13 +51,76 @@ function clonarRoster(roster) {
   }));
 }
 
+// Bloque 6 (hallazgo de balance): esta función seguía escrita para el
+// sistema de seis atributos (tecnica/iq/velocidad) que el rediseño v13
+// (Bloque 1) reemplazó por los cuatro nuevos — nadie la migró, así que desde
+// entonces era casi un no-op: los debutantes ("promesas jóvenes y flojas",
+// ver generarDebutantes en roster.js, pensadas para MADURAR con los años)
+// nunca crecían de verdad (tecnica/iq no existen), y los veteranos solo
+// perdían cardio (velocidad tampoco existe). Medido con una corrida de 24
+// años sobre un roster de 100: el techo de la tabla (media del puesto 7,
+// la vara del cinturón mundial) se desplomaba de 79 a 49 según avanzaba la
+// carrera — la "montaña" (Pedido 1, v6: "tiene que sentirse alta") se
+// derretía sola, así que CUALQUIER jugador que progresara aunque fuera un
+// poco terminaba dominando un mundo que se había vuelto de cartón. Esa
+// caída, no el talento del jugador, era la razón real de fondo por la que
+// "al menos un cinturón"/"llegó al mundial" daban ~100% pase lo que pase.
+//
+// Arreglada sobre los cuatro atributos reales, con el MISMO `talento` que ya
+// tiene cada rival (sortearTalento ya corre para todo peleador, jugador o
+// no — ver crearPeleador, fighter.js): un debutante también puede ser un
+// crack que madura rápido o uno que nunca despega, ni más ni menos que el
+// propio jugador. Los umbrales de edad son más simples que los del jugador
+// (career.js: EDAD_FIN_CRECIMIENTO/EDAD_DECLIVE_JUGADOR con su escalón
+// duro) a propósito — acá no hace falta narrar un arco, solo que la tabla
+// se mueva de verdad.
+const EDAD_FIN_CRECIMIENTO_MUNDO = 33;
+const EDAD_DECLIVE_MUNDO = 34;
+const ATRIBUTOS_CON_CRECIMIENTO_MUNDO = ['fuerza', 'defensa', 'cardio', 'agilidad'];
+// A diferencia del jugador, un rival no tiene 72 decisiones con cartas
+// empujando su MEDIA: este trickle de fondo es TODO lo que tiene para
+// crecer. La primera versión de este arreglo escalaba SOLO la magnitud del
+// golpe de crecimiento por `rendimiento` (con una chance fija para
+// cualquiera): con 100 rivales y 16 años de ventana, hasta el talento más
+// flojo terminaba acumulando bastante por pura cantidad de intentos (la
+// misma trampa de "ley de los grandes números" que diluía el talento del
+// propio jugador antes de este bloque) — la tabla se volvía más alta en
+// conjunto, pero el puesto 7 (la vara del mundial) y el puesto 28 (la del
+// regional) subían casi PAREJO, así que separar "llega al mundial" de "gana
+// al menos un cinturón" pedía magnitudes cada vez más extremas sin lograrlo
+// del todo.
+//
+// Ahora el talento pesa DOS veces, compuesto CUADRÁTICAMENTE:
+// `factorMundo = rendimiento²` corre TANTO la chance de que el crecimiento
+// se dispare COMO su tamaño (linealmente compuesto, probado antes de esto,
+// todavía dejaba que "gana al menos un cinturón" y "llega al mundial" subieran
+// casi PAREJO — no alcanzaba con que el talentoso creciera más Y más seguido
+// de forma lineal, la cola alta necesitaba despegarse más fuerte). Elevar al
+// cuadrado estira la cola alta mucho más de lo que hunde la cola baja
+// (rendimiento 1.4 dos veces por encima de 1 da factor ~2 puntos por encima
+// de 1; rendimiento 0.5 da factor 0.25, no 0.5): unos pocos rivales de
+// verdad se despegan del resto de la tabla — el puesto 7 (mundial) se separa
+// del puesto 28 (regional) — en vez de que la tabla entera suba o baje en
+// bloque. Es la misma idea de "el techo... es la palanca que más diferencia
+// una carrera de otra" (spec v13) aplicada al mundo, no solo al jugador.
+const PROB_CRECIMIENTO_MUNDO_BASE = 0.6;
+const MAGNITUD_CRECIMIENTO_MUNDO = 12;
+
 function declive(peleador, rng) {
-  if (peleador.edad < 32) {
-    if (rng.chance(0.5)) peleador.atributos.tecnica = clamp(peleador.atributos.tecnica + 1, 1, 99);
-    if (rng.chance(0.4)) peleador.atributos.iq = clamp(peleador.atributos.iq + 1, 1, 99);
+  if (peleador.edad < EDAD_FIN_CRECIMIENTO_MUNDO) {
+    const rendimiento = rendimientoDeMejora(peleador, peleador.edad);
+    const factorMundo = rendimiento * rendimiento;
+    const probCrecimiento = clamp(PROB_CRECIMIENTO_MUNDO_BASE * factorMundo, 0, 0.9);
+    for (const clave of ATRIBUTOS_CON_CRECIMIENTO_MUNDO) {
+      if (!rng.chance(probCrecimiento)) continue;
+      const delta = Math.round(MAGNITUD_CRECIMIENTO_MUNDO * factorMundo);
+      if (delta <= 0) continue;
+      peleador.atributos[clave] = clamp(peleador.atributos[clave] + delta, 1, 99);
+    }
     return;
   }
-  peleador.atributos.velocidad = clamp(peleador.atributos.velocidad - rng.int(1, 3), 1, 99);
+  if (peleador.edad < EDAD_DECLIVE_MUNDO) return;
+  peleador.atributos.agilidad = clamp(peleador.atributos.agilidad - rng.int(1, 3), 1, 99);
   peleador.atributos.cardio = clamp(peleador.atributos.cardio - rng.int(0, 2), 1, 99);
 }
 

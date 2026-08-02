@@ -92,10 +92,20 @@ function elegirMejorOpcion(carta) {
   });
 }
 
-function nuevoJugadorBaseline() {
+// Bloque 6 (hallazgo, "que el talento y el reparto inicial pesen más"):
+// ninguna de las dos funciones de acá abajo le pasaba un `rng` a
+// `crearPeleador` — caía al default de fighter.js (`createRng(1)`, fijo), así
+// que TODAS las carreras simuladas (cualquier semilla) arrancaban con el
+// MISMO talento y el MISMO reparto inicial de atributos. El eje entero que
+// calibra este bloque (sortearTalento/repartirAtributosIniciales) nunca se
+// movía en esta medición — toda la varianza medida antes de este fix salía
+// solo del mundo/matchmaking/cartas, nunca del propio peleador. El mismo bug
+// existía en la creación real del juego (src/main.js), ya corregido ahí.
+function nuevoJugadorBaseline(semilla) {
   return crearPeleador({
     nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+    rng: createRng(`talento_${semilla}`),
   });
 }
 
@@ -108,9 +118,13 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
 
   const legendariaEnCreacion = origenElegido.rareza === 'legendaria' || apodoElegido.rareza === 'legendaria';
 
+  // Sigue consumiendo LA MISMA secuencia (`rngCreacion`) que ya usaron
+  // origen/apodo arriba, en vez de abrir un rng nuevo aparte: es el mismo
+  // criterio que main.js (un único hilo de rng para toda la creación).
   const jugador = crearPeleador({
     apellido: 'Ortiz', apodoId: apodoElegido.id, nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: origenElegido.id, media: 38, esJugador: true,
+    rng: rngCreacion,
   });
   return {
     jugador, legendariaEnCreacion, origenElegido, apodoElegido,
@@ -540,7 +554,7 @@ const baseline = [];
 const creacionReal = [];
 const pisoCreacionReal = []; // mismas 500 semillas, pero evitando SIEMPRE lo legendario que se pueda evitar
 for (let semilla = 1; semilla <= N; semilla += 1) {
-  baseline.push(jugarCarrera(semilla, { crearJugador: () => ({ jugador: nuevoJugadorBaseline(), legendariaEnCreacion: false }) }));
+  baseline.push(jugarCarrera(semilla, { crearJugador: (s) => ({ jugador: nuevoJugadorBaseline(s), legendariaEnCreacion: false }) }));
   creacionReal.push(jugarCarrera(semilla, { crearJugador: nuevoJugadorCreacionReal }));
   pisoCreacionReal.push(jugarCarrera(semilla, {
     crearJugador: (s) => nuevoJugadorCreacionReal(s, { evitarLegendarias: true }),

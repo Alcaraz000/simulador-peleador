@@ -5,12 +5,18 @@ import {
 } from '../../src/core/talento.js';
 
 describe('sortearTalento', () => {
-  it('el techo se reparte como campana: la mayoria cerca de 1, con colas a los dos lados', () => {
+  // Bloque 6 (v13): el rango se ensanchó (TECHO_MIN bajó) para que el talento
+  // pese de verdad y las partidas se sientan distintas. La forma sigue siendo
+  // de campana — el grueso agrupado en el centro del rango, no repartido
+  // parejo — pero ese centro ya no está en 1.
+  it('el techo se reparte como campana: el grueso agrupado, con colas a los dos lados', () => {
     const techos = Array.from({ length: 500 }, (_, i) => sortearTalento(createRng(i + 1)).techo);
-    const enElMedio = techos.filter((t) => t >= 0.9 && t <= 1.1).length / techos.length;
+    const centro = (TECHO_MIN + TECHO_MAX) / 2;
+    const anchoCuarto = (TECHO_MAX - TECHO_MIN) / 4;
+    const enElMedio = techos.filter((t) => Math.abs(t - centro) <= anchoCuarto).length / techos.length;
     expect(enElMedio).toBeGreaterThan(0.5);
-    expect(Math.min(...techos)).toBeLessThan(0.85);
-    expect(Math.max(...techos)).toBeGreaterThan(1.15);
+    expect(Math.min(...techos)).toBeLessThan(centro - anchoCuarto);
+    expect(Math.max(...techos)).toBeGreaterThan(centro + anchoCuarto);
   });
 
   it('nunca se sale del rango declarado', () => {
@@ -61,9 +67,12 @@ describe('rendimientoDeMejora', () => {
     for (const curva of ['temprana', 'normal', 'tardia']) {
       for (let edad = 15; edad <= 40; edad += 1) {
         for (const techo of [TECHO_MIN, 1, TECHO_MAX]) {
+          // El rango se ensanchó junto con el techo (Bloque 6): un peleador
+          // realmente flojo lejos de su pico rinde menos de la mitad que uno
+          // normal, y uno con suerte extrema en su pico casi el doble.
           const r = rendimientoDeMejora(con(techo, curva), edad);
-          expect(r).toBeGreaterThan(0.3);
-          expect(r).toBeLessThan(1.7);
+          expect(r).toBeGreaterThan(0.1);
+          expect(r).toBeLessThan(2.1);
         }
       }
     }

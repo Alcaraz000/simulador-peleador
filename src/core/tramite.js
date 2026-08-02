@@ -464,7 +464,18 @@ export function armarLotePeleas(rng, {
       continue;
     }
 
-    if (faltaElegirDestacado) {
+    // Bloque 6 ("no toda defensa es un evento", ver el comentario grande de
+    // esPeleaImportante en offers.js): una defensa que NO es la primera del
+    // reinado (`esPrimeraDefensa`) ya no puede ser "importante" arriba, pero
+    // tampoco puede caer en el silencio de `resolverResultadoRapido` — sigue
+    // siendo LA pelea del año de un campeón. Se fuerza SIEMPRE al camino
+    // "destacado" (tarjeta + minijuego), sin pasar por el ~10% al azar
+    // (`faltaElegirDestacado`) que rige el resto del trámite: solo puede
+    // pasar en el primer cupo (soloRegional deja `nivel` en 'regional' para
+    // cualquier cupo que no sea el primero, ver más arriba).
+    const esDefensaRutinaria = primerCupo && oferta.nivel === 'defensa' && !esPeleaImportante(oferta);
+
+    if (faltaElegirDestacado || esDefensaRutinaria) {
       destacadoOferta = oferta;
       alMejorDeDestacado = alMejorDeCuantos(jugadorActual, oferta.rivalMedia);
       faltaElegirDestacado = false;
