@@ -87,9 +87,31 @@ function cumpleCondiciones(carta, jugador) {
 // condiciones situacionales — nunca una pantalla sin nada para elegir. Quien
 // llama ya filtró `pool` por etapa/disciplina/estado/categoría antes de
 // pasarlo acá, así que ese filtro de base sigue de pie en el fallback.
-export function conSalvaguardaDeCondiciones(pool, jugador) {
-  const filtrado = pool.filter((carta) => cumpleCondiciones(carta, jugador));
-  return filtrado.length > 0 ? filtrado : pool;
+// Una carta que en alguna de sus ramas te voltea la pelea (`caePelea: true`)
+// no tiene ningún sentido si no hay pelea en danza: el usuario se cruzó "El
+// sobre en el vestuario" —cuyo mal desenlace es "se cae la pelea"— sin tener
+// nada pactado. Se INFIERE del contenido en vez de declararlo carta por
+// carta: así una carta nueva con `caePelea` queda cubierta sola, sin que
+// nadie tenga que acordarse de agregarle una condición.
+export function puedeVoltearUnaPelea(carta) {
+  return (carta.opciones ?? []).some((opcion) => (
+    opcion.caePelea === true
+    || (opcion.probabilidades ?? []).some((rama) => rama.caePelea === true)
+  ));
+}
+
+/**
+ * `contexto.hayPeleaEnDanza` — si hay una pelea firmada o una oferta todavía
+ * sin firmar en este bloque. Sin contexto se asume que sí, para no cambiar el
+ * comportamiento de quien no lo pase (el campamento, por ejemplo, siempre
+ * corre con una pelea firmada).
+ */
+export function conSalvaguardaDeCondiciones(pool, jugador, contexto = {}) {
+  const hayPelea = contexto.hayPeleaEnDanza ?? true;
+  const filtrado = pool.filter((carta) => (
+    cumpleCondiciones(carta, jugador) && (hayPelea || !puedeVoltearUnaPelea(carta))
+  ));
+  return filtrado.length > 0 ? filtrado : pool.filter((carta) => hayPelea || !puedeVoltearUnaPelea(carta));
 }
 
 // Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.

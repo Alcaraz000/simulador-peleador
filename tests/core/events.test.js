@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
+import { conSalvaguardaDeCondiciones, puedeVoltearUnaPelea } from '../../src/core/cards.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import { CARTAS_REDES } from '../../src/content/cards-social.js';
 import { elegirEvento, elegirCartaRedes, resolverOpcion } from '../../src/core/events.js';
@@ -403,5 +404,42 @@ describe('resolverOpcion', () => {
       expect(paso.jugador.dinero).toBe(1300);
       expect(paso.caePelea).toBe(false);
     });
+  });
+});
+
+// Reporte del usuario (v14): "hubo un momento donde, cuando no tenía una pelea
+// pactada, apareció el evento 'El sobre en el vestuario' — la consecuencia de
+// aceptar es 'se cae la pelea', no tiene sentido en ese momento de la partida".
+describe('cartas que voltean una pelea', () => {
+  it('detecta las que pueden voltearla, mire la rama o la opcion', () => {
+    expect(puedeVoltearUnaPelea({ opciones: [{ id: 'a', caePelea: true }] })).toBe(true);
+    expect(puedeVoltearUnaPelea({
+      opciones: [{ id: 'a', probabilidades: [{ peso: 1 }, { peso: 1, caePelea: true }] }],
+    })).toBe(true);
+    expect(puedeVoltearUnaPelea({ opciones: [{ id: 'a', mods: { fuerza: 3 } }] })).toBe(false);
+  });
+
+  it('sin pelea en danza, ninguna carta que pueda voltearla queda elegible', () => {
+    const pool = [
+      { id: 'peligrosa', opciones: [{ id: 'x', caePelea: true }] },
+      { id: 'inofensiva', opciones: [{ id: 'y', mods: { fuerza: 3 } }] },
+    ];
+    const salida = conSalvaguardaDeCondiciones(pool, { edad: 25 }, { hayPeleaEnDanza: false });
+    expect(salida.map((c) => c.id)).toEqual(['inofensiva']);
+  });
+
+  it('con pelea en danza, siguen estando disponibles', () => {
+    const pool = [
+      { id: 'peligrosa', opciones: [{ id: 'x', caePelea: true }] },
+      { id: 'inofensiva', opciones: [{ id: 'y', mods: { fuerza: 3 } }] },
+    ];
+    const salida = conSalvaguardaDeCondiciones(pool, { edad: 25 }, { hayPeleaEnDanza: true });
+    expect(salida.map((c) => c.id).sort()).toEqual(['inofensiva', 'peligrosa']);
+  });
+
+  it('en el catalogo real, ninguna carta con caePelea sale sin pelea en danza', () => {
+    const elegibles = conSalvaguardaDeCondiciones(CARTAS_EVENTO, { edad: 25, titulos: [], dinero: 0, historial: [] }, { hayPeleaEnDanza: false });
+    expect(elegibles.filter(puedeVoltearUnaPelea)).toHaveLength(0);
+    expect(elegibles.length).toBeGreaterThan(0);
   });
 });
