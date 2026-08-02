@@ -74,8 +74,13 @@ export const CARTAS_EVENTO = [
     texto: 'Alguien tiene una foto tuya de una noche que preferís olvidar. Pide plata.',
     opciones: [
       { id: 'pagar', texto: 'Pagar y que se termine.', efectos: { dinero: -25000 }, mods: {} },
+      // Rebalanceo (Pedido 2, v14, "no entiendo qué hace esta tarjeta"): la
+      // rama optimista no traía mods ni efectos — la píldora previa a elegir
+      // quedaba en un "50%" pelado, igual que el bug de 'polemica_calculada'
+      // (cards-social.js). Un +1 defensa simboliza la tranquilidad de haber
+      // llamado el bluff y seguir entrenando sin la cabeza en otro lado.
       { id: 'ignorar', texto: 'Que la publique.', probabilidades: [
-        { peso: 50, mods: {}, texto: 'Era un bluff. Nunca hubo foto.' },
+        { peso: 50, mods: { defensa: 1 }, texto: 'Era un bluff. Nunca hubo foto.' },
         { peso: 50, mods: { cardio: -2 }, texto: 'La publicó. Quilombo por dos semanas: cuesta concentrarse.' },
       ] },
       { id: 'denunciar', texto: 'Ir a la policía.', mods: { defensa: 2 } },
@@ -284,8 +289,11 @@ export const CARTAS_EVENTO = [
     id: 'picado_de_barrio', categoria: 'vida', titulo: 'El picado antes del pesaje', etapas: JOVEN, rareza: 'normal',
     texto: 'Te invitan a un picado en la canchita de tierra del barrio, justo el día antes de pesar para el torneo amateur.',
     opciones: [
+      // Rebalanceo (Pedido 2, v14): la rama sin sobresaltos no traía mods ni
+      // efectos — píldora "65%" pelada. Un +1 Agilidad por las gambetas de la
+      // tarde le da a la píldora algo concreto que anunciar.
       { id: 'jugar', texto: 'Entrar a jugar un rato.', probabilidades: [
-        { peso: 65, mods: {}, texto: 'Un par de gambetas, te reíste con los pibes y volviste liviano de cabeza.' },
+        { peso: 65, mods: { agilidad: 1 }, texto: 'Un par de gambetas, te reíste con los pibes y volviste liviano de cabeza.' },
         { peso: 35, mods: { cardio: -3 }, texto: 'Un pisotón mal puesto y el tobillo se hincha como pelota.' },
       ] },
       { id: 'mirar', texto: 'Mirar desde el alambrado, sin arriesgar nada.', mods: {} },
@@ -306,8 +314,11 @@ export const CARTAS_EVENTO = [
     id: 'flete_de_ultima', categoria: 'vida', titulo: 'El flete de última', etapas: JOVEN, rareza: 'normal',
     texto: 'Se te hizo tarde para el sparring fuerte y no te alcanza ni para el boleto: un camión de reparto para justo al lado.',
     opciones: [
+      // Rebalanceo (Pedido 2, v14): la rama sin contratiempos no traía mods
+      // ni efectos — píldora "80%" pelada. Un +1 Cardio por ahorrarte la
+      // caminata (llegaste descansado en vez de a pie) le da contenido real.
       { id: 'subirse', texto: 'Subirte a upa hasta el gimnasio.', probabilidades: [
-        { peso: 80, mods: {}, texto: 'Llegaste diez minutos tarde nomás. El chofer resultó ser un capo.' },
+        { peso: 80, mods: { cardio: 1 }, texto: 'Llegaste diez minutos tarde nomás. El chofer resultó ser un capo.' },
         { peso: 20, mods: {}, efectos: { dinero: -3000 }, texto: 'Apenas bajaste, notaste que te habían afanado unos mangos del bolsillo.' },
       ] },
       { id: 'caminar', texto: 'Caminar, aunque llegues tarde.', mods: {} },

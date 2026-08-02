@@ -149,6 +149,30 @@ describe('cartas de riesgo (contrato de catálogo)', () => {
       expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
     }
   });
+
+  // Reporte del usuario (v14): una tarjeta del careo... resultó ser una
+  // tarjeta de redes ("La polémica calculada") que mostraba dos píldoras
+  // "55%"/"45%" sin decir a qué correspondían. La causa: la píldora previa a
+  // elegir (armada en main.js con `textoDeRama`, que solo lee `mods`/
+  // `efectos.dinero`/`caePelea` — NUNCA el `texto` narrativo, que recién se
+  // muestra DESPUÉS de elegir) no tenía nada que mostrar porque esas dos
+  // ramas solo traían texto de sabor. Esta invariante de catálogo blinda que
+  // no vuelva a pasar: toda rama de `probabilidades`, en cualquier carta de
+  // evento o de redes, tiene que dejar algo que la píldora pueda anunciar de
+  // antemano.
+  it('toda rama de probabilidades deja algo visible en la pildora antes de elegir (mods no vacios, dinero distinto de cero, o caePelea) — nunca solo el porcentaje pelado', () => {
+    for (const { carta, opcion } of conProbabilidades()) {
+      for (const rama of opcion.probabilidades) {
+        const tieneMods = Object.keys(rama.mods ?? {}).length > 0;
+        const tieneDinero = typeof rama.efectos?.dinero === 'number' && rama.efectos.dinero !== 0;
+        const caePelea = rama.caePelea === true;
+        expect(
+          tieneMods || tieneDinero || caePelea,
+          `"${carta.id}" tiene una rama (peso ${rama.peso}) sin mods/dinero/caePelea: la pildora quedaria vacia`,
+        ).toBe(true);
+      }
+    }
+  });
 });
 
 describe('catalogo de redes', () => {
