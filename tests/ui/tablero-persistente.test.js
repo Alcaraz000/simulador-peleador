@@ -230,10 +230,14 @@ function jugarDesdeCareo(cont) {
     const instruccion = accionNodo.querySelector('.tarjeta[data-instruccion]');
     if (instruccion) { instruccion.click(); continue; }
 
-    const zona = accionNodo.querySelector('.silueta-zona');
+    // Golpe de gracia (v14): vive en un POPUP (abrirPopup, popup.js),
+    // appendeado a `document.body` — NO adentro de `accionNodo` (mismo
+    // motivo que el popup de la tienda: buscarlo dentro de `cont`/
+    // `accionNodo` nunca lo encuentra y el autoplay quedaría trabado acá).
+    const zona = document.querySelector('.silueta-zona');
     if (zona) {
       zona.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      const pista = accionNodo.querySelector('.barra-precision-pista');
+      const pista = document.querySelector('.barra-precision-pista');
       if (pista) pista.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       continue;
     }

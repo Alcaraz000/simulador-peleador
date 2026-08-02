@@ -94,4 +94,90 @@ describe('abrirPopup', () => {
   it('sin título, no rompe (el título es opcional)', () => {
     expect(() => abrirPopup({ contenido: el('p', { text: 'x' }) })).not.toThrow();
   });
+
+  // Pedido 3 (v14, golpe de gracia como popup — "quiero que dé la sensación
+  // de que es un momento de urgencia y crítico"): una clase extra opcional
+  // en el panel para que un llamador puntual pueda darle su propio look
+  // (el golpe de gracia la usa para un borde/resplandor rojo, ver
+  // fight.js/theme.css) sin tocar el resto de los popups, que no la pasan.
+  it('con claseExtra, se la suma a .popup-panel (sin pisar la clase base)', () => {
+    abrirPopup({ titulo: 'T', contenido: el('p'), claseExtra: 'popup-critico' });
+    const panel = document.querySelector('.popup-panel');
+    expect(panel.classList.contains('popup-panel')).toBe(true);
+    expect(panel.classList.contains('popup-critico')).toBe(true);
+  });
+
+  it('sin claseExtra (el resto de los popups), el panel no lleva ninguna clase de más', () => {
+    abrirPopup({ titulo: 'T', contenido: el('p') });
+    const panel = document.querySelector('.popup-panel');
+    expect(panel.className.trim()).toBe('popup-panel');
+  });
+
+  // Pedido 3 (v14, golpe de gracia como popup): "no quiero que se pueda
+  // cerrar con Escape ni clickeando afuera — si te vas, perdés la chance, y
+  // eso tiene que ser una decisión explícita, no un accidente". Los otros
+  // consumidores (tienda, ranking, hitos, nacionalidad) no pasan estas
+  // opciones — por default siguen cerrando con las tres vías de siempre
+  // (los tests de arriba ya lo prueban sin pasar nada nuevo).
+  describe('con cerrableConEscape/cerrableClickAfuera en false (popup "sin salida fácil")', () => {
+    it('Escape NO cierra el popup', () => {
+      let cerrado = false;
+      abrirPopup({
+        titulo: 'T', contenido: el('p'), onCerrar: () => { cerrado = true; }, cerrableConEscape: false,
+      });
+      dispatchEscape();
+      expect(cerrado).toBe(false);
+      expect(document.querySelector('.popup-overlay')).toBeTruthy();
+    });
+
+    it('clickear afuera (el fondo) NO cierra el popup', () => {
+      let cerrado = false;
+      abrirPopup({
+        titulo: 'T', contenido: el('p'), onCerrar: () => { cerrado = true; }, cerrableClickAfuera: false,
+      });
+      document.querySelector('.popup-overlay').click();
+      expect(cerrado).toBe(false);
+      expect(document.querySelector('.popup-overlay')).toBeTruthy();
+    });
+
+    it('la X SIGUE cerrando el popup (la única salida es explícita)', () => {
+      let cerrado = false;
+      abrirPopup({
+        titulo: 'T',
+        contenido: el('p'),
+        onCerrar: () => { cerrado = true; },
+        cerrableConEscape: false,
+        cerrableClickAfuera: false,
+      });
+      document.querySelector('.popup-cerrar').click();
+      expect(cerrado).toBe(true);
+      expect(document.querySelector('.popup-overlay')).toBeNull();
+    });
+
+    it('llamar a cerrar() a mano sigue funcionando (para que el propio llamador pueda cerrarlo por código)', () => {
+      let cerrado = false;
+      const popup = abrirPopup({
+        titulo: 'T',
+        contenido: el('p'),
+        onCerrar: () => { cerrado = true; },
+        cerrableConEscape: false,
+        cerrableClickAfuera: false,
+      });
+      popup.cerrar();
+      expect(cerrado).toBe(true);
+    });
+
+    it('no deja el listener de Escape colgado aunque Escape no cierre nada mientras estuvo abierto', () => {
+      let veces = 0;
+      const popup = abrirPopup({
+        titulo: 'T', contenido: el('p'), onCerrar: () => { veces += 1; }, cerrableConEscape: false,
+      });
+      dispatchEscape();
+      expect(veces).toBe(0);
+      popup.cerrar();
+      expect(veces).toBe(1);
+      dispatchEscape();
+      expect(veces).toBe(1); // el listener ya se sacó, Escape no hace nada
+    });
+  });
 });

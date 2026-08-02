@@ -2589,3 +2589,28 @@ input.creacion-control { cursor: text; }
     font-size: 12.5px;
   }
 }
+
+/* --- Pedido 3: el golpe de gracia como popup, con look de momento crítico -
+   Reusa `.popup-panel`/`.popup-overlay` tal cual (mismo cierre con X, mismo
+   devolver el foco, mismo "nunca deja listeners colgados" — ver
+   components/popup.js) — lo único nuevo es esta clase (`claseExtra`, ver
+   abrirPopup) que le suma un borde y un resplandor rojos: "quiero que dé la
+   sensación de que es un momento de urgencia y crítico", y el rojo ya es el
+   color que este juego reserva para peligro/urgencia en todos lados
+   (`.chip.rojo`, `.tarjeta-efecto.negativo`, el ícono de riesgo alto en
+   fight.js). Estático (sin animación): un resplandor que pulsara iría en
+   contra de "un `outline` de foco tiene que poder distinguirse siempre" y
+   competiría con la propia animación de entrada del popup — alcanza con el
+   color para leerse distinto de un popup común (tienda, ranking, hitos),
+   que se quedan con el borde neutro de siempre. */
+.popup-panel.popup-critico {
+  border-color: var(--rojo);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 46px rgba(239, 68, 68, 0.28);
+}
+
+.popup-panel.popup-critico .popup-titulo {
+  color: var(--rojo);
+}

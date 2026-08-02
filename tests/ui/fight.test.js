@@ -425,38 +425,55 @@ describe('renderPelea — rincon', () => {
   });
 });
 
-describe('renderPelea — golpe de gracia', () => {
+// Pedido 3 (v14, "el golpe de gracia debe verse como un 'pop up'"): vive
+// AHORA como un popup (abrirPopup, ui/components/popup.js) — se monta sobre
+// `document.body`, ya no adentro del panel de acción (`accionNodo`, dentro
+// de `cont`). Todos los tests de acá abajo que antes buscaban la silueta/
+// barra con `cont.querySelector` ahora buscan con `document.querySelector`
+// (el popup vive al lado de `cont`, no adentro).
+describe('renderPelea — golpe de gracia (popup)', () => {
   function peleaGroggy() {
     const { pelea } = simularRound(peleaBase());
     return { ...pelea, aguante: { ...pelea.aguante, rival: 12 }, pendiente: 'golpe' };
   }
 
-  it('el golpe de gracia convive con el marcador y muestra la silueta', () => {
+  it('el golpe de gracia convive con el marcador y muestra la silueta EN UN POPUP, no en el panel de acción', () => {
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [] });
     expect(cont.querySelector('[data-bloque="marcador"]')).toBeTruthy();
-    expect(cont.querySelector('svg.silueta-rival')).toBeTruthy();
-    expect(cont.querySelectorAll('[data-zona]')).toHaveLength(3);
+
+    // El popup existe, con su silueta adentro...
+    expect(document.querySelector('.popup-overlay')).toBeTruthy();
+    expect(document.querySelector('.popup-panel svg.silueta-rival')).toBeTruthy();
+    expect(document.querySelectorAll('.popup-panel [data-zona]')).toHaveLength(3);
+
+    // ...y el panel de acción del tablero (donde vivía antes) queda vacío:
+    // el golpe de gracia ya NO es "un panel más" de la pantalla de pelea.
+    const accion = cont.querySelector('[data-bloque="accion"]');
+    expect(accion.querySelector('svg.silueta-rival')).toBeNull();
   });
 
-  it('elegir una zona muestra la barra de precision', () => {
+  it('elegir una zona muestra la barra de precision (sigue dentro del mismo popup)', () => {
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [] });
     const info = abrirGolpeDeGracia(pelea);
-    cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
-    expect(cont.querySelector('.barra-precision-pista')).toBeTruthy();
-    expect(cont.querySelector('svg.silueta-rival')).toBeNull();
+    document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+    expect(document.querySelector('.popup-panel .barra-precision-pista')).toBeTruthy();
+    expect(document.querySelector('svg.silueta-rival')).toBeNull();
+    // Un solo popup en todo momento (paso 2 reemplaza el contenido EN el
+    // mismo popup, nunca abre uno nuevo encima).
+    expect(document.querySelectorAll('.popup-overlay')).toHaveLength(1);
   });
 
-  it('frenar la barra reporta el golpe a tiempo con la zona elegida', () => {
+  it('frenar la barra reporta el golpe a tiempo con la zona elegida, y cierra el popup', () => {
     vi.useFakeTimers();
     let golpe = null;
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; } });
     const info = abrirGolpeDeGracia(pelea);
-    cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
     vi.advanceTimersByTime(50);
-    cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
     // La barra ya no avisa en el mismo instante del click: primero se ve el
     // efecto de impacto (verde/amarillo/error) y recién tras esa pausa breve
     // se reporta el golpe hacia afuera (Pedido v6, ver barra-precision.js).
@@ -466,16 +483,19 @@ describe('renderPelea — golpe de gracia', () => {
     expect(golpe.zonaElegida).toBe(info.zonaAbierta);
     expect(golpe.precision).toBeGreaterThanOrEqual(0);
     expect(golpe.precision).toBeLessThanOrEqual(1);
+    expect(document.querySelector('.popup-overlay')).toBeNull();
   });
 
-  it('si se acaba la ventana sin elegir zona, reporta que no llego a tiempo', () => {
+  it('si se acaba la ventana sin elegir zona, reporta que no llego a tiempo y cierra el popup', () => {
     vi.useFakeTimers();
     let golpe = null;
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; }, ventanaMs: 1000 });
+    expect(document.querySelector('.popup-overlay')).toBeTruthy();
     vi.advanceTimersByTime(1200);
     expect(golpe).not.toBeNull();
     expect(golpe.aTiempo).toBe(false);
+    expect(document.querySelector('.popup-overlay')).toBeNull();
   });
 
   it('la ventana cubre solo elegir la zona: tomarse tiempo en la barra no pierde el golpe', () => {
@@ -488,14 +508,14 @@ describe('renderPelea — golpe de gracia', () => {
     renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; }, ventanaMs: 1000 });
     const info = abrirGolpeDeGracia(pelea);
     vi.advanceTimersByTime(900); // justo antes de que se cierre la ventana
-    cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
 
     // Mucho mas que la ventana original: si los dos relojes siguieran
     // corriendo, esto ya deberia haber disparado el timeout.
     vi.advanceTimersByTime(5000);
     expect(golpe).toBeNull();
 
-    cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
     // Misma pausa de feedback que arriba antes de que se reporte el golpe.
     vi.advanceTimersByTime(500);
     expect(golpe).not.toBeNull();
@@ -503,15 +523,19 @@ describe('renderPelea — golpe de gracia', () => {
     expect(golpe.zonaElegida).toBe(info.zonaAbierta);
   });
 
-  it('si se re-renderiza mientras la ventana del golpe esta pendiente, no queda un timer colgado', () => {
+  it('si se re-renderiza mientras la ventana del golpe esta pendiente, no queda un timer colgado NI un popup huérfano', () => {
     vi.useFakeTimers();
     let llamadas = 0;
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [], onGolpe: () => { llamadas += 1; }, ventanaMs: 1000 });
+    expect(document.querySelector('.popup-overlay')).toBeTruthy();
     // El jugador (o el flujo) vuelve a pintar la pantalla para otro estado
     // antes de que la ventana del golpe se cumpla o se elija una zona.
     renderPelea(cont, { pelea: { ...pelea, pendiente: null }, momentos: [], onSeguir: () => {} });
     expect(vi.getTimerCount()).toBe(0);
+    // El popup del golpe viejo se cerró solo (nunca queda flotando encima
+    // de la pantalla nueva).
+    expect(document.querySelector('.popup-overlay')).toBeNull();
     vi.advanceTimersByTime(2000);
     expect(llamadas).toBe(0); // el onGolpe viejo nunca se dispara
   });
@@ -522,8 +546,8 @@ describe('renderPelea — golpe de gracia', () => {
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [], onGolpe: () => { llamadas += 1; }, ventanaMs: 1000 });
     const info = abrirGolpeDeGracia(pelea);
-    cont.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
-    cont.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+    document.querySelector('.barra-precision-pista').dispatchEvent(new Event('click', { bubbles: true }));
     vi.advanceTimersByTime(1500);
     expect(llamadas).toBe(1);
   });
@@ -535,14 +559,66 @@ describe('renderPelea — golpe de gracia', () => {
     // fuerzo el mentón (mas dificil, franja mas fina) si no es la abierta, o
     // comparo directamente la zona abierta contra higado si aplica.
     const zonaElegida = Object.keys(ZONAS_GOLPE).find((z) => z !== info.zonaAbierta) ?? info.zonaAbierta;
-    cont.querySelector(`[data-zona="${zonaElegida}"]`).dispatchEvent(new Event('click', { bubbles: true }));
-    const anchoVerde = Number(cont.querySelector('.franja-verde').style.width.replace('%', ''));
+    document.querySelector(`[data-zona="${zonaElegida}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+    const anchoVerde = Number(document.querySelector('.franja-verde').style.width.replace('%', ''));
     // higado (0.3) siempre da la franja mas ancha de las tres posibles.
     if (zonaElegida === 'higado') {
       expect(anchoVerde).toBeGreaterThan(15);
     } else {
       expect(anchoVerde).toBeLessThan(24);
     }
+  });
+
+  // Pedido 3 (v14, "no se puede cerrar con Escape ni clickeando afuera — si
+  // te vas, perdés la chance, y eso tiene que ser una decisión explícita").
+  describe('el popup no se puede cerrar por accidente', () => {
+    it('Escape NO cierra el popup ni reporta nada', () => {
+      let golpe = null;
+      const pelea = peleaGroggy();
+      renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; } });
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      expect(document.querySelector('.popup-overlay')).toBeTruthy();
+      expect(golpe).toBeNull();
+    });
+
+    it('clickear afuera (el fondo del popup) NO lo cierra ni reporta nada', () => {
+      let golpe = null;
+      const pelea = peleaGroggy();
+      renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; } });
+      document.querySelector('.popup-overlay').click();
+      expect(document.querySelector('.popup-overlay')).toBeTruthy();
+      expect(golpe).toBeNull();
+    });
+
+    it('la X SÍ cierra el popup — y al ser una decisión explícita del jugador, se reporta como que no llegó a tiempo (pierde la chance)', () => {
+      vi.useFakeTimers();
+      let golpe = null;
+      const pelea = peleaGroggy();
+      renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; } });
+      document.querySelector('.popup-cerrar').click();
+      expect(document.querySelector('.popup-overlay')).toBeNull();
+      expect(golpe).not.toBeNull();
+      expect(golpe.aTiempo).toBe(false);
+      expect(golpe.zonaElegida).toBeNull();
+      // Sin timers colgados tras cerrar por la X.
+      expect(vi.getTimerCount()).toBe(0);
+    });
+
+    it('cerrar con la X durante el paso de la barra (ya elegida la zona) tambien reporta la pérdida, sin timers colgados', () => {
+      vi.useFakeTimers();
+      let golpe = null;
+      const pelea = peleaGroggy();
+      renderPelea(cont, { pelea, momentos: [], onGolpe: (g) => { golpe = g; } });
+      const info = abrirGolpeDeGracia(pelea);
+      document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+      expect(document.querySelector('.barra-precision-pista')).toBeTruthy();
+
+      document.querySelector('.popup-cerrar').click();
+      expect(document.querySelector('.popup-overlay')).toBeNull();
+      expect(golpe).not.toBeNull();
+      expect(golpe.aTiempo).toBe(false);
+      expect(vi.getTimerCount()).toBe(0);
+    });
   });
 });
 

@@ -11,10 +11,29 @@ import { icono } from '../icons.js';
 // `document` en vez de en el propio popup.
 
 /**
- * @param {{ titulo?: string, contenido: Node, onCerrar?: () => void }} props
+ * @param {{
+ *   titulo?: string, contenido: Node, onCerrar?: () => void,
+ *   cerrableConEscape?: boolean, cerrableClickAfuera?: boolean, claseExtra?: string,
+ * }} props - `cerrableConEscape`/`cerrableClickAfuera` (v14, golpe de
+ *   gracia como popup — Pedido 3: "no se puede cerrar con Escape ni
+ *   clickeando afuera, si te vas perdés la chance y eso tiene que ser una
+ *   decisión explícita"): por default siguen en `true`, el comportamiento
+ *   de siempre para el resto de los popups (tienda, ranking, hitos,
+ *   nacionalidad — ninguno pasa estas opciones). La X sigue cerrando SIEMPRE
+ *   (no se puede desactivar): es la única vía que ya requiere un click
+ *   deliberado sobre un botón chico, a diferencia de un Escape reflejo o un
+ *   click afuera por error — perder la chance por ahí sigue siendo una
+ *   decisión explícita, no un accidente.
+ *   `claseExtra` (v14, mismo pedido, "que dé la sensación de un momento de
+ *   urgencia y crítico"): clase opcional sumada a `.popup-panel`, para que
+ *   un llamador puntual (el golpe de gracia, ver fight.js) le dé su propio
+ *   look sin tocar el resto de los popups, que no la pasan.
  * @returns {{ cerrar: () => void, overlay: HTMLElement, panel: HTMLElement, cuerpo: HTMLElement }}
  */
-export function abrirPopup({ titulo = '', contenido, onCerrar = () => {} }) {
+export function abrirPopup({
+  titulo = '', contenido, onCerrar = () => {}, cerrableConEscape = true, cerrableClickAfuera = true,
+  claseExtra = '',
+}) {
   const focoPrevio = document.activeElement;
   let cerrado = false;
 
@@ -25,7 +44,7 @@ export function abrirPopup({ titulo = '', contenido, onCerrar = () => {} }) {
     onClick: () => cerrar(),
   }, [icono('cruz', { tamano: 16 })]);
 
-  const panel = el('div', { class: 'popup-panel', role: 'dialog', 'aria-modal': 'true' }, [
+  const panel = el('div', { class: `popup-panel ${claseExtra}`.trim(), role: 'dialog', 'aria-modal': 'true' }, [
     el('div', { class: 'popup-cabecera' }, [
       titulo ? el('div', { class: 'popup-titulo', text: titulo }) : el('div'),
       botonCerrar,
@@ -35,11 +54,11 @@ export function abrirPopup({ titulo = '', contenido, onCerrar = () => {} }) {
 
   const overlay = el('div', { class: 'popup-overlay' }, [panel]);
   overlay.addEventListener('click', (ev) => {
-    if (ev.target === overlay) cerrar();
+    if (ev.target === overlay && cerrableClickAfuera) cerrar();
   });
 
   function alTecla(ev) {
-    if (ev.key === 'Escape') cerrar();
+    if (ev.key === 'Escape' && cerrableConEscape) cerrar();
   }
   document.addEventListener('keydown', alTecla);
 
