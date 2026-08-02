@@ -223,3 +223,38 @@ describe('limitarAlAltoDeIzquierda (DOM)', () => {
     });
   });
 });
+
+// Pedido del usuario (v15): "todavía queda el hueco libre en la zona central
+// inferior (la parte de las decisiones). Siempre tiene que ocupar ese hueco
+// en la pantalla, nunca más y nunca menos tampoco."
+//
+// El panel de decisión mide lo que miden sus tarjetas, así que con dos
+// opciones cortas terminaba ~108px por encima del piso de la izquierda. La
+// diferencia con el módulo de noticias es que ahí NO tiene sentido crecer
+// más allá del contenido (sería aire debajo de la última noticia), y acá sí:
+// el sobrante se reparte entre las tarjetas.
+describe('estirarPorEncimaDelContenido', () => {
+  it('por defecto no crece mas alla del contenido natural', () => {
+    expect(alturaLimitada({
+      altoReferencia: 600, altoColumna: 400, altoElemento: 300, maximo: 300,
+    })).toBe(300);
+  });
+
+  it('con el techo liberado, llena todo el hueco disponible', () => {
+    expect(alturaLimitada({
+      altoReferencia: 600, altoColumna: 400, altoElemento: 300, maximo: Infinity,
+    })).toBe(500);
+  });
+
+  it('"nunca mas": si la columna ya se pasa del piso, achica', () => {
+    expect(alturaLimitada({
+      altoReferencia: 600, altoColumna: 700, altoElemento: 300, maximo: Infinity,
+    })).toBe(200);
+  });
+
+  it('nunca baja del minimo, por mas que la izquierda sea diminuta', () => {
+    expect(alturaLimitada({
+      altoReferencia: 100, altoColumna: 900, altoElemento: 300, minimo: 120, maximo: Infinity,
+    })).toBe(120);
+  });
+});

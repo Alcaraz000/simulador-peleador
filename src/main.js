@@ -421,6 +421,39 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   function volverAlTablero() {
     montarTablero();
     pintarCentro();
+    estirarDecisionAlPiso();
+  }
+
+  // Pedido del usuario (v15): "todavía queda el hueco libre en la zona
+  // central inferior (la parte de las decisiones). Siempre tiene que ocupar
+  // ese hueco en la pantalla, nunca más y nunca menos tampoco."
+  //
+  // El panel de decisión mide lo que miden sus tarjetas, así que con dos
+  // opciones cortas terminaba ~108px por encima del piso de la izquierda.
+  // Acá se lo estira (o se lo achica) para que cierre EXACTO contra ese
+  // piso, con la misma función que ya alinea el módulo de noticias.
+  //
+  // Solo toca `.panel-decision`: el resumen de fin de año tiene su propio
+  // acuerdo con la izquierda (`.resumen-anio-cuerpo`, ver montarTablero) y
+  // la pelea vive fuera del tablero, así que ninguno pasa por acá.
+  function estirarDecisionAlPiso() {
+    const shell = shellActual;
+    if (!shell) return;
+    // Las dos pantallas del tablero que se estiran: la decisión y el resumen
+    // de fin de año. El resumen además tiene su propio cuerpo con scroll
+    // interno (`.resumen-anio-cuerpo`, acotado más arriba en montarTablero):
+    // acá se estira el contenedor y el cuerpo se queda con el sobrante (ver
+    // theme.css, bloque v15).
+    const objetivo = shell.regiones.centro.querySelector('.panel-decision')
+      ?? shell.regiones.centro.querySelector('.resumen-anio');
+    if (!objetivo) return;
+    limitarAlAltoDeIzquierda({
+      izquierda: shell.regiones.izquierda,
+      columna: shell.regiones.centro,
+      elemento: objetivo,
+      propiedad: 'height',
+      estirarPorEncimaDelContenido: true,
+    });
   }
 
   // Registra QUÉ pintar en el centro ahora mismo y lo pinta ya (asegurando el
@@ -604,18 +637,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         anio, muestrasMedia, decisiones, peleas: peleasConBandera, narrativa,
         onContinuar: () => siguiente(),
       });
-      // Pedido 1 (v10, "lo más bajo que puede estar el resumen es el piso
-      // del módulo de ranking"): el tramo scrolleable del resumen
-      // (`.resumen-anio-cuerpo`, ver resumen-anio.js — la cabecera con el
-      // año y el botón "Seguir" quedan siempre afuera, visibles) se acota al
-      // piso real de la columna izquierda EN ESTA PARTIDA — se mide recién
-      // acá porque `centro()` ya llamó a `volverAlTablero()` (montarTablero
-      // + este mismo callback), así que la izquierda ya está pintada.
-      limitarAlAltoDeIzquierda({
-        izquierda: shellActual.regiones.izquierda,
-        columna: shellActual.regiones.centro,
-        elemento: centroContenido().querySelector('.resumen-anio-cuerpo'),
-      });
+      // v15: el resumen entero se estira al piso de la izquierda en
+      // `estirarDecisionAlPiso` (arriba), y su cuerpo se queda con el
+      // sobrante por flex (theme.css, bloque v15). Antes se acotaba el
+      // cuerpo acá con un `max-height`, pero las dos cosas se peleaban: ese
+      // tope le impedía crecer, así que el contenedor se estiraba y el botón
+      // "Seguir" quedaba flotando arriba con el hueco debajo. Una sola
+      // autoridad sobre la altura, no dos.
+      estirarDecisionAlPiso();
     }, { ocultarAtributosEstado: true });
   }
 

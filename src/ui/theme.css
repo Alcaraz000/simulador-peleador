@@ -2614,3 +2614,65 @@ input.creacion-control { cursor: text; }
 .popup-panel.popup-critico .popup-titulo {
   color: var(--rojo);
 }
+
+/* ============================================================================
+   v15 — el panel de decisión ocupa el hueco central, ni más ni menos
+   ============================================================================
+   Pedido textual: "todavía queda el hueco libre en la zona central inferior
+   (la parte de las decisiones). Siempre tiene que ocupar ese hueco en la
+   pantalla, nunca más y nunca menos tampoco."
+
+   `estirarDecisionAlPiso` (main.js) le fija a `.panel-decision` el alto que
+   hace que cierre exacto contra el piso de la columna izquierda. Estas
+   reglas reparten ESE alto adentro: la cabecera (título + bajada + texto)
+   mide lo suyo y la grilla de tarjetas se queda con todo el resto, así el
+   espacio sobrante va a las tarjetas y no a un hueco al pie.
+
+   Las tarjetas se estiran con la grilla (`align-items: stretch` por defecto
+   en grid) y su contenido se reparte de arriba a abajo, para que una tarjeta
+   alta no deje su texto flotando arriba con aire muerto debajo.
+
+   Solo en escritorio: en celular las columnas se apilan y "el piso de la
+   izquierda" no significa nada (ver sincronizar-alturas.js). */
+@media (min-width: 960px) {
+  .panel-decision {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .panel-decision .panel-decision-grilla,
+  .panel-decision .panel-decision-grilla-2 {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .panel-decision .panel-decision-grilla > .tarjeta,
+  .panel-decision .panel-decision-grilla-2 > .tarjeta {
+    height: 100%;
+    justify-content: flex-start;
+  }
+
+  /* Los efectos (las píldoras de "+3 Fuerza") se anclan al pie de su
+     tarjeta: son la conclusión de lo que estás por elegir, y con la tarjeta
+     estirada quedaban colgando a media altura. */
+  .panel-decision .tarjeta-efectos {
+    margin-top: auto;
+  }
+}
+
+/* El resumen de fin de año se estira igual que la decisión: la cabecera y el
+   botón Seguir miden lo suyo, y el cuerpo (gráficos + listas, con su propio
+   scroll si hiciera falta) se queda con todo el resto. */
+@media (min-width: 960px) {
+  .resumen-anio {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .resumen-anio .resumen-anio-cuerpo {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
