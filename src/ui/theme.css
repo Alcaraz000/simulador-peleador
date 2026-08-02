@@ -2515,3 +2515,77 @@ input.creacion-control { cursor: text; }
   height: 480px;
   overflow-y: auto;
 }
+
+/* --- Pedido 2a: la decisión de 2 opciones aprovecha el alto libre ---------
+   BUG REAL (con captura): una decisión de 2 opciones (evento/campamento —
+   la MAYORÍA de las cartas de evento del catálogo trae exactamente 2, ver
+   content/cards-events.js) deja las tarjetas con el tamaño de SIEMPRE
+   (pensado para la grilla de 3) arriba de todo, y como el centro no se
+   estira (cada columna del shell mide su propio alto, ver el comentario
+   grande de shell.js) queda un tramo entero de fondo vacío hasta el pie de
+   la columna izquierda. El usuario autorizó explícitamente rediseñar estas
+   tarjetas — acá se agranda TODO lo que tiene adentro (ícono, título,
+   descripción, el aire alrededor) en vez de solo estirar el contenedor: un
+   ícono a 42px o una descripción de 4 líneas se ven perdidos en una tarjeta
+   mucho más ancha y alta, lo que hace falta es una tarjeta que de verdad
+   se sienta más grande, no una más chica con más padding vacío.
+   Escopeado a `.panel-decision .panel-decision-grilla-2` (el wrapper que
+   arma panel-decision.js, ver ese archivo) — NUNCA a `.panel-decision-grilla-2`
+   a secas, que create.js también usa para origen/estilo en la creación del
+   peleador (una pantalla `.pantalla-corta` aparte, sin columnas laterales
+   ni "piso" que perseguir: agrandar esas tarjetas ahí no resolvería nada
+   que se haya reportado, y sí arriesgaría desacomodar una pantalla que
+   nadie se quejó).
+   Sigue siendo TAMAÑO FIJO (pedido general del proyecto: "toda tarjeta con
+   tamaño fijo, para que las grillas no se deformen") — más grande que la
+   tarjeta de 3 columnas, pero constante siempre que la decisión traiga
+   exactamente 2 opciones: nunca se calcula en base a la izquierda ni a
+   ningún otro alto dinámico (eso sería "algo se mueve solo", lo que el
+   usuario pidió explícitamente que nunca pase).
+   Escopeado ADEMÁS a escritorio (`min-width:960px`, el mismo corte que ya
+   usa el shell para pasar a 3 columnas): medido con Playwright contra el
+   texto de opción MÁS LARGO del catálogo (78 caracteres, "Armar algo con lo
+   que hay..." — content/cards-events.js, no se toca en esta ronda), a los
+   ~190px que mide cada tarjeta en el celular de 2 columnas ni siquiera el
+   tamaño ORIGINAL (sin agrandar) le alcanza para no cortarse con "…": es un
+   bug preexistente, ajeno a los 3 pedidos de esta ronda, y agrandar el
+   título ahí solo lo hubiera empeorado. En escritorio, en cambio, la
+   tarjeta mide ~375px y el mismo texto entra completo en las 2 líneas
+   reservadas — por eso el agrandado corre SOLO ahí. */
+@media (min-width: 960px) {
+  .panel-decision .panel-decision-grilla-2 .tarjeta {
+    padding: 22px 20px 26px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-icono {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-titulo {
+    margin-top: 16px;
+    font-size: 17px;
+    height: 46px;
+    line-height: 23px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-desc {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 18px;
+    height: 126px;
+    -webkit-line-clamp: 7;
+    line-clamp: 7;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-efectos {
+    margin-top: 16px;
+    gap: 8px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-efecto {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
