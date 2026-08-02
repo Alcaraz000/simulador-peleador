@@ -104,9 +104,18 @@ function esEscritorio() {
  * también revela ese default al medir, igual que el resguardo estático de
  * `.resumen-anio-cuerpo`.
  */
+/**
+ * `estirarPorEncimaDelContenido` (v15): por defecto el elemento nunca crece
+ * más allá de su alto natural — para el módulo de noticias eso es lo
+ * correcto (no tiene sentido reservar aire debajo de la última noticia).
+ * Pero el panel de decisión sí tiene que LLENAR el hueco aunque su contenido
+ * mida menos: el pedido fue "nunca más y nunca menos tampoco", y ahí el
+ * espacio sobrante se reparte adentro, entre las tarjetas (ver theme.css,
+ * bloque v15).
+ */
 export function limitarAlAltoDeIzquierda({
   izquierda, columna, elemento, escritorio = esEscritorio, minimo = ALTO_MINIMO_PX,
-  propiedad = 'maxHeight',
+  propiedad = 'maxHeight', estirarPorEncimaDelContenido = false,
 }) {
   if (!izquierda || !columna || !elemento) return;
   if (!escritorio()) { elemento.style[propiedad] = ''; return; }
@@ -130,7 +139,9 @@ export function limitarAlAltoDeIzquierda({
   // inline ya se haya sacado arriba. `scrollHeight` es el único valor que
   // de verdad ignora cualquier recorte por overflow y refleja el contenido
   // completo.
-  const techo = Math.max(altoElemento, elemento.scrollHeight);
+  const techo = estirarPorEncimaDelContenido
+    ? Infinity
+    : Math.max(altoElemento, elemento.scrollHeight);
 
   const nuevo = alturaLimitada({
     altoReferencia, altoColumna, altoElemento, minimo, maximo: techo,
