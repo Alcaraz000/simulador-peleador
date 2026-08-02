@@ -47,12 +47,15 @@ describe('comprar', () => {
     expect(paso.texto).toBeTruthy();
   });
 
-  it('un lujo suma fama y queda en la lista', () => {
+  // v13: los lujos ya no dan fama (eliminada) — solo legado (no probado
+  // acá, ver legacy.test.js). Lo que de verdad importaba de este test sigue
+  // valiendo: el ítem se cobra y queda en la lista.
+  it('un lujo se cobra y queda en la lista', () => {
     const item = LUJOS[0];
-    const paso = comprar(jugador({ dinero: item.precio, fama: 10 }), item.id);
+    const paso = comprar(jugador({ dinero: item.precio }), item.id);
     expect(paso.ok).toBe(true);
     expect(paso.jugador.lujos).toContain(item.id);
-    expect(paso.jugador.fama).toBeGreaterThan(10);
+    expect(paso.jugador.dinero).toBe(0);
   });
 
   it('falla si no alcanza y no cobra', () => {
@@ -150,10 +153,13 @@ describe('cobrarSponsor', () => {
     expect(hubo).toBe(false);
   });
 
-  it('con mucha fama aparece seguido y paga', () => {
+  // v13: el sponsor ya no depende de la fama (eliminada) sino de
+  // `tironSponsor` (money.js) — cinturones puestos y ranking. Un campeón
+  // mundial bien rankeado atrae marcas todo el tiempo; un desconocido no.
+  it('con titulos y buen ranking aparece seguido y paga', () => {
     let cobros = 0;
     for (let s = 1; s <= 40; s++) {
-      const paso = cobrarSponsor(jugador({ fama: 90 }), createRng(s));
+      const paso = cobrarSponsor(jugador({ titulos: ['Cinturón mundial', 'Cinturón regional'], ranking: 1 }), createRng(s));
       if (paso) {
         cobros++;
         expect(paso.monto).toBeGreaterThan(0);

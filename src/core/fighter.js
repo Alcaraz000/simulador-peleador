@@ -1,10 +1,14 @@
-import { crearAtributos, crearEstado, calcularMedia, aplicarModificadores, clamp } from './stats.js';
-import { getDisciplina, pesosDe } from './disciplines.js';
+import {
+  ATRIBUTOS, crearAtributos, crearEstado, aplicarModificadores,
+} from './stats.js';
+import { getDisciplina } from './disciplines.js';
 import { ESTILOS, estilosDisponibles } from './styles.js';
 import { NOMBRES, APELLIDOS, APODOS, NACIONALIDADES, NOMBRES_POR_PAIS, GIMNASIOS } from '../content/names.js';
 import { crearEntrenadorDe } from './coach.js';
 import { NICKNAMES } from '../content/nicknames.js';
+import { sortearTalento } from './talento.js';
 import { sortearPorRareza } from './cards.js';
+import { createRng } from './rng.js';
 
 export const CATEGORIAS = {
   pluma: { id: 'pluma', nombre: 'Peso pluma', pesoMin: 55, pesoMax: 57, alturaMedia: 170 },
@@ -12,19 +16,19 @@ export const CATEGORIAS = {
 };
 
 // Pool de orígenes (Paso 2 de la creación): rareza + efectos distintos.
-// Los normales quedan como en la v1 (sin tocarles los mods); se suman dos
-// normales, dos raros y un legendario nuevos. Las legendarias no se
-// nerfean: son raras (5% en repartirOrigenes) y pegan fuerte cuando tocan.
+// v13 (simplificación a cuatro atributos): los mods se reescribieron sobre
+// fuerza/defensa/cardio/agilidad. Las legendarias no se nerfean: son raras
+// (5% en repartirOrigenes) y pegan fuerte cuando tocan.
 export const ORIGENES = [
-  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', rareza: 'normal', mods: { potencia: 3, menton: 3, tecnica: -3 } },
-  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', rareza: 'normal', mods: { tecnica: 4, disciplinaPersonal: 5, potencia: -2 } },
-  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', rareza: 'normal', mods: { iq: 5, tecnica: 2, menton: -2 } },
-  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', rareza: 'normal', mods: { cardio: 4, disciplinaPersonal: 3, iq: -3 } },
-  { id: 'amateur_de_toda_la_vida', nombre: 'Amateur de toda la vida', descripcion: 'Torneos federados desde los diez años: subiste a un cuadrilátero antes que a un colectivo solo.', rareza: 'normal', mods: { tecnica: 3, iq: 2, potencia: -2 } },
-  { id: 'videos_viejos', nombre: 'VHS y madrugadas', descripcion: 'Aprendiste mirando peleas grabadas mil veces, cuadro por cuadro.', rareza: 'normal', mods: { tecnica: 3, defensa: 2, cardio: -2 } },
-  { id: 'sangre_importada', nombre: 'Sangre importada', descripcion: 'Un familiar boxeó afuera y te dejó mañas que acá nadie enseña.', rareza: 'rara', mods: { tecnica: 4, velocidad: 3, disciplinaPersonal: -3 } },
-  { id: 'becado_desde_pibe', nombre: 'Becado desde pibe', descripcion: 'Un sponsor te becó temprano: nutrición y material que la mayoría ni sueña.', rareza: 'rara', mods: { cardio: 4, potencia: 3, iq: -2 } },
-  { id: 'sangre_de_campeon', nombre: 'Sangre de campeón', descripcion: 'Tu apellido ya es un cinturón colgado en la pared del gimnasio. Ahora te toca a vos.', rareza: 'legendaria', mods: { tecnica: 5, potencia: 4, iq: 4, cardio: -3 } },
+  { id: 'barrio', nombre: 'El barrio', descripcion: 'Aprendiste a la mala, en la calle.', rareza: 'normal', mods: { fuerza: 4, defensa: -2 } },
+  { id: 'club', nombre: 'El club del barrio', descripcion: 'Escuelita, disciplina y horarios.', rareza: 'normal', mods: { defensa: 4, cardio: 3, fuerza: -2 } },
+  { id: 'familia', nombre: 'Familia de peleadores', descripcion: 'Lo tenés en la sangre.', rareza: 'normal', mods: { agilidad: 6, defensa: -2 } },
+  { id: 'tarde', nombre: 'Arrancaste tarde', descripcion: 'Llegaste de grande, con hambre.', rareza: 'normal', mods: { cardio: 6, agilidad: -2 } },
+  { id: 'amateur_de_toda_la_vida', nombre: 'Amateur de toda la vida', descripcion: 'Torneos federados desde los diez años: subiste a un cuadrilátero antes que a un colectivo solo.', rareza: 'normal', mods: { defensa: 3, agilidad: 2, fuerza: -2 } },
+  { id: 'videos_viejos', nombre: 'VHS y madrugadas', descripcion: 'Aprendiste mirando peleas grabadas mil veces, cuadro por cuadro.', rareza: 'normal', mods: { defensa: 5, cardio: -2 } },
+  { id: 'sangre_importada', nombre: 'Sangre importada', descripcion: 'Un familiar boxeó afuera y te dejó mañas que acá nadie enseña.', rareza: 'rara', mods: { defensa: 4, agilidad: 3, cardio: -2 } },
+  { id: 'becado_desde_pibe', nombre: 'Becado desde pibe', descripcion: 'Un sponsor te becó temprano: nutrición y material que la mayoría ni sueña.', rareza: 'rara', mods: { cardio: 4, fuerza: 3, agilidad: -2 } },
+  { id: 'sangre_de_campeon', nombre: 'Sangre de campeón', descripcion: 'Tu apellido ya es un cinturón colgado en la pared del gimnasio. Ahora te toca a vos.', rareza: 'legendaria', mods: { defensa: 5, fuerza: 4, agilidad: 4, cardio: -3 } },
 ];
 
 /**
@@ -45,13 +49,38 @@ function nuevoId(prefijo = 'ftr') {
   return `${prefijo}_${Date.now().toString(36)}_${contadorId}`;
 }
 
-function baseAtributos(disciplina, mediaObjetivo) {
-  const nivel = clamp(Math.round(mediaObjetivo), 1, 99);
+// Cuánta variación (en puntos, antes de recentrar la suma en 0) recibe cada
+// atributo al repartir el nivel inicial de un peleador. Calibrado a mano
+// (Task 1.2) para que, con la misma media objetivo, dos peleadores salgan
+// con perfiles bien distintos (ej.: 55 de fuerza y 28 de cardio) sin que la
+// media objetivo se corra más de un punto entero.
+const DESVIO_ATRIBUTO_INICIAL = 22;
+
+/**
+ * Reparte los cuatro atributos alrededor de `mediaObjetivo`, DESIGUAL: ya no
+ * arranca parejo (v13). Es la primera de las cuatro palancas de rejugabilidad
+ * de la spec ("el reparto inicial"): un peleador puede salir con 55 de
+ * fuerza y 28 de cardio, y esa asimetría obliga a elegir si tapar el agujero
+ * o potenciar lo que ya tiene.
+ *
+ * Cada atributo recibe un desvío = promedio de dos tiradas uniformes (más
+ * campana que una sola uniforme, para que lo típico sea "desigual pero no
+ * extremo"). Los cuatro desvíos se recentran para sumar 0 antes de
+ * aplicarlos, así el promedio de los cuatro atributos resultantes queda
+ * dentro de un punto de `mediaObjetivo` (crearAtributos redondea y clampea
+ * cada uno por separado: ahí puede colarse hasta 1 punto de resto).
+ */
+export function repartirAtributosIniciales(rng, mediaObjetivo) {
+  const desvios = ATRIBUTOS.map(() => {
+    const a = rng.float(-1, 1);
+    const b = rng.float(-1, 1);
+    return ((a + b) / 2) * DESVIO_ATRIBUTO_INICIAL;
+  });
+  const promedioDesvio = desvios.reduce((suma, d) => suma + d, 0) / desvios.length;
   const valores = {};
-  for (const clave of ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq']) {
-    valores[clave] = nivel;
-  }
-  valores.grappling = getDisciplina(disciplina).usaGrappling ? nivel : 1;
+  ATRIBUTOS.forEach((clave, indice) => {
+    valores[clave] = mediaObjetivo + (desvios[indice] - promedioDesvio);
+  });
   return crearAtributos(valores);
 }
 
@@ -65,10 +94,19 @@ export function crearPeleador(opciones) {
     mano = 'derecha', altura, alcance, origen = 'barrio',
     esJugador = false, edad = EDAD_INICIAL, media = 40,
     gimnasio = GIMNASIOS[0], personalidad = 'respetuoso',
+    // Todo el azar de acá adentro (el reparto inicial desigual, más abajo)
+    // pasa por este rng — nunca por Math.random(). Sin uno explícito
+    // (llamadas legacy, ~20 archivos de test, la creación del jugador en
+    // create.js) cae a una semilla fija: determinista, sin sorpresas, hasta
+    // que el Bloque 5/7 haga viajar un rng de verdad por esos caminos.
+    rng = createRng(1),
   } = opciones;
 
   if (!CATEGORIAS[categoria]) throw new Error(`Categoría desconocida: ${categoria}`);
-  const disc = getDisciplina(disciplina);
+  // Solo valida que la disciplina exista (tira si no) — el reparto de
+  // atributos ya no depende de ella (grappling dejó de ser un atributo
+  // separado, se fundió en los cuatro nuevos).
+  getDisciplina(disciplina);
   const est = ESTILOS[estilo];
   if (!est) throw new Error(`Estilo desconocido: ${estilo}`);
   if (!est.disciplinas.includes(disciplina)) {
@@ -91,21 +129,15 @@ export function crearPeleador(opciones) {
   // número que de verdad pelea (media, ranking, ofertas) ya lo incluye.
   const entrenador = crearEntrenadorDe(estilo);
 
-  let atributos = baseAtributos(disciplina, media);
-  let especiales = { disciplinaPersonal: 40, menton: 40 };
+  let atributos = repartirAtributosIniciales(rng, media);
 
   for (const mods of [est.mods, orig.mods, nick?.mods ?? {}, entrenador?.aporte ?? {}]) {
     const soloAtributos = {};
-    const soloEspeciales = {};
     for (const [clave, valor] of Object.entries(mods)) {
       if (clave in atributos) soloAtributos[clave] = valor;
-      else if (clave in especiales) soloEspeciales[clave] = valor;
     }
     atributos = aplicarModificadores(atributos, soloAtributos).resultado;
-    especiales = aplicarModificadores(especiales, soloEspeciales).resultado;
   }
-
-  if (!disc.usaGrappling) atributos.grappling = 1;
 
   const cat = CATEGORIAS[categoria];
   return {
@@ -123,8 +155,13 @@ export function crearPeleador(opciones) {
     origen,
     edad,
     atributos,
-    especiales,
     entrenador,
+    // Talento (v13): cuánto le rinde entrenar y cuándo llega a su mejor
+    // momento. Es la palanca principal de rejugabilidad — dos peleadores con
+    // la misma media inicial pueden tener carreras completamente distintas.
+    // NUNCA se muestra como número: el jugador lo intuye por lo que le dice
+    // el entrenador y por lo que ve arriba del ring.
+    talento: sortearTalento(rng),
     estado: crearEstado(),
     record: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     // Récord AMATEUR (v6, "las peleas amateur no cuentan ni en el ranking ni
@@ -136,7 +173,6 @@ export function crearPeleador(opciones) {
     // `oferta.nivelPelea === 'amateur'`.
     recordAmateur: { v: 0, d: 0, e: 0, ko: 0, sub: 0, dec: 0 },
     dinero: 0,
-    fama: 0,
     titulos: [],
     defensas: 0,
     // Defensas exitosas del cinturón que tiene puesto AHORA MISMO, por id de
@@ -184,12 +220,21 @@ export function peleadorAleatorio(rng, opciones = {}) {
     media: opciones.media ?? rng.int(40, 70),
     gimnasio: opciones.gimnasio ?? rng.pick(GIMNASIOS),
     personalidad: opciones.personalidad ?? 'respetuoso',
+    // Los NPC también necesitan el reparto inicial desigual (Task 1.2): se
+    // arma con el mismo rng con semilla que ya viaja por roster.js, no con
+    // uno nuevo — así el roster entero sigue siendo determinista con la
+    // semilla de la partida.
+    rng,
     esJugador: false,
   });
 }
 
+// v13: la media es el promedio simple de los cuatro atributos, redondeado.
+// Deja de usar pesos por disciplina (calcularMedia, stats.js, ya no existe):
+// esa es la aritmética que hace que "+4 en un atributo = +1 de media exacto".
 export function mediaDe(peleador) {
-  return calcularMedia(peleador.atributos, pesosDe(peleador.disciplina));
+  const suma = ATRIBUTOS.reduce((acc, clave) => acc + peleador.atributos[clave], 0);
+  return Math.round(suma / ATRIBUTOS.length);
 }
 
 function textoDeRecord(record) {

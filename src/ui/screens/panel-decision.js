@@ -68,14 +68,25 @@ export function renderPanelDecision(region, {
  * después de aplicar el efecto de la decisión. Dejar legible el desenlace es
  * lo único que le importa a esta función.
  *
+ * `previa` (v13, Bloque 6, "la tarjeta previa a la pelea"): un lote de
+ * trámite resuelto entero como charla + resumen fusionados en un solo beat
+ * (`peleasResueltas`, ver el comentario grande de esa sección en career.js)
+ * trae la voz del entrenador avisando contra quién fue la pelea ANTES del
+ * resultado — un solo "Seguir", misma información que antes hubiera costado
+ * dos pantallas. Opcional (texto vacío por default): el resto de los
+ * llamadores de `renderDesenlace` (evento sin pelea, lesión sin oferta,
+ * destacado de trámite) no tienen ninguna charla previa que mostrar y siguen
+ * exactamente igual que siempre.
+ *
  * @param {HTMLElement} region - normalmente `shell.regiones.centro`.
  */
 export function renderDesenlace(region, {
-  titulo = 'Resultado', texto = '', deltasTexto = [], onContinuar = () => {},
+  titulo = 'Resultado', texto = '', previa = '', deltasTexto = [], onContinuar = () => {},
 }) {
   mount(region, el('div', { class: 'stack panel-decision-desenlace' }, [
     el('div', { class: 'etiqueta', text: titulo }),
     el('div', { class: 'panel' }, [
+      previa ? el('p', { class: 'medio desenlace-previa', style: 'font-style:italic;margin:0 0 8px', text: previa }) : null,
       texto ? el('p', { class: 'medio', text: texto }) : null,
       deltasTexto.length > 0 ? el('div', { class: 'mods', text: deltasTexto.join(' · ') }) : null,
     ]),

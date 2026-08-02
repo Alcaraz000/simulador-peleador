@@ -8,7 +8,7 @@ import {
   describe, it, expect, beforeEach, afterEach, vi,
 } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPartida } from '../../src/core/career.js';
+import { crearPartida, ETAPAS } from '../../src/core/career.js';
 import { guardar } from '../../src/core/save.js';
 import { CLAVE_ACCESO } from '../../src/ui/screens/login.js';
 import { iniciar } from '../../src/main.js';
@@ -29,14 +29,21 @@ function nuevoJugador() {
   });
 }
 
-// Partida a UN paso de cruzar de "juvenil" (3 bloques) a "amateur": con
-// `bloque` ya por encima de `etapa.bloques` y la cola vacía, el próximo
-// `siguienteBeat` (disparado por "Continuar") va a disparar la transición de
-// etapa — ver el bloque `if (nueva.bloque > etapa.bloques)` en
-// siguienteBeat, career.js.
+// Partida a UN paso de cruzar de "juvenil" a "amateur": con `bloque` ya por
+// encima de `etapa.bloques` y la cola vacía, el próximo `siguienteBeat`
+// (disparado por "Continuar") va a disparar la transición de etapa — ver el
+// bloque `if (nueva.bloque > etapa.bloques)` en siguienteBeat, career.js.
+// v13 (Bloque 5, "tres decisiones al año"): juvenil pasó a durar
+// `3 años × BLOQUES_POR_ANIO` bloques (9, no los 3 de antes, cuando un
+// bloque era un año entero) — se calcula desde `ETAPAS` en vez de
+// hardcodear un número que dejó de significar "la etapa entera" con el
+// cambio de cadencia.
 function partidaAlBordeDeEtapa(semilla) {
   const partida = crearPartida({ jugador: nuevoJugador(), semilla });
-  return { ...partida, etapaIndice: 0, bloque: 4 };
+  const unPasoDeMas = ETAPAS[0].bloques + 1;
+  return {
+    ...partida, etapaIndice: 0, bloque: unPasoDeMas, bloqueGlobal: unPasoDeMas,
+  };
 }
 
 function prepararStorage(partida) {

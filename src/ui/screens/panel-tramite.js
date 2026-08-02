@@ -1,7 +1,7 @@
 import { el, mount, fmtDinero } from '../dom.js';
 import { bandera } from '../flags.js';
 import { icono } from '../icons.js';
-import { rangoDeMedia, ETIQUETAS } from '../../core/stats.js';
+import { ATRIBUTOS, rangoDeMedia, ETIQUETAS } from '../../core/stats.js';
 import { renderPanelDecision } from './panel-decision.js';
 import { animarBarajado } from '../components/roll.js';
 
@@ -60,8 +60,6 @@ function tileAtributo(clave, valor) {
   ]);
 }
 
-const ATRIBUTOS_RESUMEN = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
-
 function textoFaltan(semanas) {
   if (semanas <= 0) return 'Es esta semana';
   return `Faltan ${semanas} ${semanas === 1 ? 'semana' : 'semanas'}`;
@@ -111,7 +109,7 @@ export function renderCardTramite(region, {
         ]),
       ]),
       rival ? el('div', { class: 'panel-peleador-atributos', style: 'margin-top:12px' },
-        ATRIBUTOS_RESUMEN.map((c) => tileAtributo(c, rival.atributos[c]))) : null,
+        ATRIBUTOS.map((c) => tileAtributo(c, rival.atributos[c]))) : null,
       el('div', {
         class: 'etiqueta',
         style: 'margin-top:12px;font-size:11px',

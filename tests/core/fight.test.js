@@ -388,3 +388,76 @@ describe('tarjetasJurados', () => {
     expect(resumen.toLowerCase()).toContain('arriba');
   });
 });
+
+// ---- El contrato de los cuatro atributos (v13) -------------------------
+//
+// Cada atributo tiene un rol declarado en la spec, y este bloque es lo que
+// lo vuelve verificable: subir UNO solo, dejando los otros tres iguales,
+// tiene que mejorar el resultado. Si algún día alguien reescribe la fórmula
+// de combate y deja un atributo sin efecto, estos tests lo agarran.
+describe('los cuatro atributos pesan en la pelea', () => {
+  function peleadorCon(atributos, esJugador) {
+    const p = crearPeleador({
+      nombre: esJugador ? 'Jugador' : 'Rival', apodo: esJugador ? 'Uno' : 'Otro',
+      nacionalidad: 'AR', disciplina: 'boxeo', estilo: 'tecnico',
+      categoria: 'pluma', origen: 'barrio', media: 50, esJugador,
+    });
+    return { ...p, atributos: { ...atributos } };
+  }
+
+  // Se mide sobre las peleas DEFINIDAS (victorias vs derrotas), no sobre el
+  // total: con ocho rounds entre dos peleadores casi iguales, uno de cada
+  // cuatro combates termina empatado, y contar los empates como "no ganó"
+  // enmascara la ventaja que se está midiendo.
+  function tasaDeVictoria(clave, valorAlto, semillas = 240) {
+    const base = { fuerza: 50, defensa: 50, cardio: 50, agilidad: 50 };
+    let ganadas = 0;
+    let definidas = 0;
+    for (let s = 1; s <= semillas; s += 1) {
+      const jugador = peleadorCon({ ...base, [clave]: valorAlto }, true);
+      const rival = peleadorCon(base, false);
+      const pelea = crearPelea({
+        jugador, rival, disciplina: 'boxeo', nivel: 'profesional', plan: 'afuera', rng: createRng(s),
+      });
+      const res = resultadoDe(pelearHasta(pelea).pelea);
+      if (!res || res.ganador === 'empate') continue;
+      definidas += 1;
+      if (res.ganador === 'jugador') ganadas += 1;
+    }
+    return definidas === 0 ? 0 : ganadas / definidas;
+  }
+
+  it('cada atributo, subido solo, mejora el resultado', () => {
+    for (const clave of ['fuerza', 'defensa', 'cardio', 'agilidad']) {
+      const conVentaja = tasaDeVictoria(clave, 75);
+      expect(conVentaja, `subir ${clave} tiene que servir`).toBeGreaterThan(0.55);
+    }
+  });
+
+  it('la fatiga arranca en cero: ya no viene del peleador', () => {
+    const pelea = armar();
+    expect(pelea.fatiga.jugador).toBe(0);
+    expect(pelea.fatiga.rival).toBe(0);
+  });
+
+  it('la fatiga sube round a round dentro de la pelea', () => {
+    const pelea = armar();
+    const r1 = simularRound(pelea).pelea;
+    expect(r1.fatiga.jugador).toBeGreaterThan(0);
+    const r2 = simularRound(r1).pelea;
+    expect(r2.fatiga.jugador).toBeGreaterThan(r1.fatiga.jugador);
+  });
+
+  it('mas cardio = menos fatiga acumulada al mismo round', () => {
+    function fatigaTras(cardio, rounds) {
+      const jugador = peleadorCon({ fuerza: 50, defensa: 50, cardio, agilidad: 50 }, true);
+      const rival = peleadorCon({ fuerza: 50, defensa: 50, cardio: 50, agilidad: 50 }, false);
+      let pelea = crearPelea({
+        jugador, rival, disciplina: 'boxeo', nivel: 'titulo', plan: 'afuera', rng: createRng(9),
+      });
+      for (let i = 0; i < rounds && !peleaTerminada(pelea); i += 1) pelea = simularRound(pelea).pelea;
+      return pelea.fatiga.jugador;
+    }
+    expect(fatigaTras(85, 4)).toBeLessThan(fatigaTras(30, 4));
+  });
+});

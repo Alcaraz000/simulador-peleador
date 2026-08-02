@@ -19,7 +19,7 @@ import { clamp } from './stats.js';
 // isla privada queda deliberadamente como estiramiento para las carreras más
 // ganadoras — no todas las carreras tienen que poder comprar TODO.
 export const STAFF = [
-  { id: 'psicologo', nombre: 'Psicólogo deportivo', descripcion: 'Cabeza fría: la mala racha te dura menos.', precio: 12000, efecto: 'moral' },
+  { id: 'psicologo', nombre: 'Psicólogo deportivo', descripcion: 'Cabeza fría: las malas noches pesan menos y el desgaste te alcanza más tarde.', precio: 12000, efecto: 'castigo' },
   { id: 'kinesiologo', nombre: 'Kinesiólogo personal', descripcion: 'Cuerpo blindado: menos riesgo de lesión.', precio: 16000, efecto: 'lesiones' },
   { id: 'entrenador', nombre: 'Entrenador de elite', descripcion: 'Mejores cartas de mejora: más opciones y números más altos.', precio: 22000, efecto: 'cartas' },
   { id: 'preparador', nombre: 'Preparador físico', descripcion: 'El declive de las piernas llega más tarde.', precio: 28000, efecto: 'declive' },
@@ -27,11 +27,11 @@ export const STAFF = [
 ];
 
 export const LUJOS = [
-  { id: 'auto', nombre: 'Auto deportivo', precio: 14000, fama: 3, legado: 1 },
-  { id: 'casa', nombre: 'Casa propia', precio: 32000, fama: 4, legado: 2 },
-  { id: 'mansion', nombre: 'Mansión con ring', precio: 110000, fama: 8, legado: 4 },
-  { id: 'yate', nombre: 'Yate', precio: 260000, fama: 10, legado: 6 },
-  { id: 'isla', nombre: 'Isla privada', precio: 650000, fama: 15, legado: 10 },
+  { id: 'auto', nombre: 'Auto deportivo', precio: 14000, legado: 1 },
+  { id: 'casa', nombre: 'Casa propia', precio: 32000, legado: 2 },
+  { id: 'mansion', nombre: 'Mansión con ring', precio: 110000, legado: 4 },
+  { id: 'yate', nombre: 'Yate', precio: 260000, legado: 6 },
+  { id: 'isla', nombre: 'Isla privada', precio: 650000, legado: 10 },
 ];
 
 const TODOS = [...STAFF, ...LUJOS];
@@ -97,7 +97,6 @@ export function comprar(jugador, itemId) {
     return { jugador: nuevo, ok: true, texto: `${item.nombre} se suma al equipo.` };
   }
   nuevo.lujos.push(itemId);
-  nuevo.fama = clamp(nuevo.fama + item.fama, 0, 100);
   return { jugador: nuevo, ok: true, texto: `Te compraste ${item.nombre.toLowerCase()}. Que se note.` };
 }
 
@@ -107,10 +106,22 @@ export function bonusCartas(jugador) {
     : { opcionesExtra: 0, bonusValor: 0 };
 }
 
+// v13: la fama desapareció, así que lo que atrae sponsors pasa a ser lo que
+// de verdad te hace conocido en el deporte — los cinturones que tenés puestos
+// y qué tan arriba estás en el ranking. Un campeón mundial factura; un tipo
+// del puesto 80 no le interesa a ninguna marca.
+function tironSponsor(jugador) {
+  const porTitulos = (jugador.titulos?.length ?? 0) * 14;
+  const ranking = jugador.ranking;
+  const porRanking = ranking == null ? 0 : Math.max(0, 30 - ranking) / 2;
+  return porTitulos + porRanking;
+}
+
 export function cobrarSponsor(jugador, rng) {
-  const prob = clamp(jugador.fama / 180, 0, 0.5);
-  if (jugador.fama <= 0 || !rng.chance(prob)) return null;
-  const monto = Math.round(1500 * (1 + jugador.fama / 12) * rng.float(0.8, 1.4));
+  const tiron = tironSponsor(jugador);
+  const prob = clamp(tiron / 60, 0, 0.5);
+  if (tiron <= 0 || !rng.chance(prob)) return null;
+  const monto = Math.round(1500 * (1 + tiron / 8) * rng.float(0.8, 1.4));
   const nuevo = clonar(jugador);
   nuevo.dinero += monto;
   const marcas = ['una marca de indumentaria', 'una cervecería', 'una casa de suplementos', 'una app de apuestas'];

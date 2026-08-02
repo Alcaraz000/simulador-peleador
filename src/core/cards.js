@@ -1,7 +1,8 @@
 import {
-  ATRIBUTOS, ETIQUETAS, aplicarModificadores, LIMITES_ESTADO,
+  ATRIBUTOS, ETIQUETAS, aplicarModificadores,
 } from './stats.js';
 import { bonusCartas } from './money.js';
+import { rendimientoDeMejora } from './talento.js';
 import { CARTAS_MEJORA } from '../content/cards-improve.js';
 
 export function formatearMods(mods) {
@@ -40,7 +41,6 @@ function cartaAplica(carta, { etapa, disciplina, estado }) {
 // tocar esta función ni la de quien reparte. Los campos soportados hoy:
 //   - edadMin / edadMax: rango de edad del jugador (inclusive).
 //   - campeon: true exige al menos un cinturón puesto, false exige NINGUNO.
-//   - famaMin / famaMax: rango de fama (0-100).
 //   - dineroMin / dineroMax: rango de plata en el bolsillo.
 //   - resultadoReciente: 'victoria' | 'derrota' | 'empate' — el resultado de
 //     la ÚLTIMA pelea PROFESIONAL (jugador.historial; en juvenil/amateur ese
@@ -48,6 +48,8 @@ function cartaAplica(carta, { etapa, disciplina, estado }) {
 //     fighter.js/career.js — así que una carta con esta condición nunca
 //     aplica antes del debut profesional, algo correcto: no hay "la última
 //     pelea" todavía).
+// v13 (simplificación): la fama se va del juego, así que `famaMin`/`famaMax`
+// dejaron de ser condiciones soportadas — ningún catálogo nuevo debe usarlas.
 // Este catálogo de campos es EXTENSIBLE (agregar un tipo de condición nuevo
 // sí toca esta función, una vez), pero USAR uno ya existente en una carta
 // nueva es puramente declarativo.
@@ -62,9 +64,6 @@ function cumpleCondiciones(carta, jugador) {
     const esCampeon = (jugador.titulos?.length ?? 0) > 0;
     if (cond.campeon !== esCampeon) return false;
   }
-
-  if (cond.famaMin != null && (jugador.fama ?? 0) < cond.famaMin) return false;
-  if (cond.famaMax != null && (jugador.fama ?? 0) > cond.famaMax) return false;
 
   if (cond.dineroMin != null && (jugador.dinero ?? 0) < cond.dineroMin) return false;
   if (cond.dineroMax != null && (jugador.dinero ?? 0) > cond.dineroMax) return false;
@@ -362,32 +361,32 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
   });
 }
 
+// v13: los mods de una carta van SOLO a los cuatro atributos. Ya no hay
+// `especiales` (mentón, disciplina personal) ni estados numéricos (forma,
+// moral, fatiga) que repartir — desaparecieron con la simplificación, y un
+// mod que apunte a una clave inexistente simplemente no se aplica.
 export function aplicarCarta(jugador, carta) {
   const nuevo = {
     ...jugador,
     atributos: { ...jugador.atributos },
-    especiales: { ...jugador.especiales },
     estado: { ...jugador.estado },
   };
 
+  // El talento (v13) multiplica lo que RINDE una mejora: a un peleador que
+  // aprende rápido la misma carta le da más. Solo se aplica a los mods
+  // POSITIVOS — que el talento te salvara de tus propias malas decisiones
+  // sería raro, y encima haría que un crack no pudiera arruinarse nunca.
+  const rendimiento = rendimientoDeMejora(jugador, jugador.edad);
   const paraAtributos = {};
-  const paraEspeciales = {};
-  const paraEstado = {};
   for (const [clave, valor] of Object.entries(carta.mods)) {
-    if (clave in nuevo.atributos) paraAtributos[clave] = valor;
-    else if (clave in nuevo.especiales) paraEspeciales[clave] = valor;
-    else if (clave in nuevo.estado) paraEstado[clave] = valor;
+    if (!(clave in nuevo.atributos)) continue;
+    paraAtributos[clave] = valor > 0 ? Math.max(1, Math.round(valor * rendimiento)) : valor;
   }
 
   const a = aplicarModificadores(nuevo.atributos, paraAtributos);
-  const e = aplicarModificadores(nuevo.especiales, paraEspeciales);
-  const s = aplicarModificadores(nuevo.estado, paraEstado, LIMITES_ESTADO);
   nuevo.atributos = a.resultado;
-  nuevo.especiales = e.resultado;
-  nuevo.estado = s.resultado;
 
-  const deltas = { ...a.deltas, ...e.deltas, ...s.deltas };
-  return { jugador: nuevo, deltas, texto: formatearMods(deltas).join(' · ') };
+  return { jugador: nuevo, deltas: a.deltas, texto: formatearMods(a.deltas).join(' · ') };
 }
 
 // `indice` es la posición de la rama ganadora DENTRO de `opcion.probabilidades`

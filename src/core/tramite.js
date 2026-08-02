@@ -16,68 +16,57 @@ import { getDisciplina } from './disciplines.js';
 import { mediaDe } from './fighter.js';
 import {
   generarOferta, aplicarResultado, esPeleaImportante,
-  cinturonActual, proximoCinturon, puedeDisputar, CINTURONES,
 } from './offers.js';
 import { recuperar, puedePelear } from './injuries.js';
 import { POOLS_TRAMITE } from '../content/tramite-lines.js';
 
-// Cuántos cupos de pelea trae un año de carrera profesional, según la edad
-// (Pedido 3, v6: "de joven se pelea más seguido... un pibe de 21 pelea
-// cuatro o cinco veces al año; un campeón de 34 pelea dos"). La MAYORÍA de
-// estos cupos van a ser trámite (ver armarLotePeleas): un pibe de 21 con
-// cuatro o cinco peleas en el año casi siempre tiene UNA que importa (o
-// ninguna) y el resto son cartelera de relleno que ni el jugador necesita
-// jugar. Calibrado con scripts/_tune.mjs (ver el comentario de ETAPAS en
-// career.js para los números medidos).
-const BANDAS_FRECUENCIA_PRO = [
-  { hasta: 22, min: 3, max: 3 },
-  { hasta: 25, min: 2, max: 2 },
-  { hasta: 29, min: 2, max: 2 },
-  { hasta: 33, min: 1, max: 1 },
-  { hasta: Infinity, min: 1, max: 1 },
-];
+// Task 5.2 (v13, "el ritmo"): cuántos cupos de pelea trae un año de carrera
+// profesional, según el MOMENTO de la carrera — ya no una banda continua por
+// edad (esa era la ronda v6). La tabla es la de la spec, textual:
+//
+//   Joven               2-3
+//   Prime, sin cinturón  2
+//   Campeón              1, y TODAS importantes
+//   Veterano             1-2
+//   Veterano y campeón    1
+//
+// La razón de diseño de la fila "Campeón" (documentada también en el
+// comentario grande de ETAPAS, career.js): "al que le va bien no puede
+// tocarle jugar menos". Un campeón (con al menos un cinturón puesto, no hace
+// falta que sean los tres) pelea una sola vez al año — pero esa pelea SIEMPRE
+// se juega completa y es un evento; el techo de la carrera se tiene que
+// sentir como un techo, no como más minijuegos. Esto reemplaza al viejo
+// freno `permiteMarqueeEsteAnio` (que hacía "descansar" al campeón
+// indiscutido el 80% de los años): con un único cupo, la frecuencia YA es el
+// techo — no hace falta un segundo freno además.
+//
+// "Joven" y "veterano" reusan los mismos umbrales de edad que ya gobiernan el
+// arco físico del jugador en career.js (EDAD_FIN_CRECIMIENTO=27, donde
+// termina el crecimiento pasivo y arranca el prime; EDAD_DECLIVE_JUGADOR=34,
+// donde empieza el declive) — se repiten acá en vez de importarse porque
+// career.js ya importa de este módulo (evita el ciclo), pero es el MISMO
+// criterio: el jugador siente el mismo quiebre en las piernas y en la
+// cartelera al mismo tiempo.
+const EDAD_FIN_JOVEN = 26; // el año que viene (27) ya es "prime" (EDAD_FIN_CRECIMIENTO, career.js).
+const EDAD_VETERANO = 34; // mismo umbral que EDAD_DECLIVE_JUGADOR, career.js.
 
-function bandaDe(edad) {
-  return BANDAS_FRECUENCIA_PRO.find((b) => edad <= b.hasta) ?? BANDAS_FRECUENCIA_PRO.at(-1);
+function esCampeon(jugador) {
+  return (jugador.titulos?.length ?? 0) > 0;
 }
 
-// "Sube con lo que está en juego": defendiendo un cinturón (o ya calificado
-// por ranking para el próximo) el circuito no te deja quieto — un campeón
-// sigue activo, no descansa la temporada entera. Se refleja subiendo el TECHO
-// del rango en vez de mover el piso: el mínimo de la banda de edad no
-// cambia, pero el año puede estirarse uno más si hay algo grande en juego.
-function conMuchoEnJuego(jugador) {
-  return Boolean(cinturonActual(jugador)) || puedeDisputar(jugador, proximoCinturon(jugador));
+function bandaPorMomento(jugador) {
+  // Campeón (o veterano y campeón, misma fila): manda por sobre la edad —
+  // un chico que corona un cinturón muy joven también pasa a pelear una vez
+  // al año, siempre importante.
+  if (esCampeon(jugador)) return { min: 1, max: 1 };
+  if (jugador.edad >= EDAD_VETERANO) return { min: 1, max: 2 };
+  if (jugador.edad <= EDAD_FIN_JOVEN) return { min: 2, max: 3 };
+  return { min: 2, max: 2 }; // prime, sin cinturón.
 }
 
 export function intentosDePelea(rng, jugador) {
-  const banda = bandaDe(Math.floor(jugador.edad));
-  const max = conMuchoEnJuego(jugador) ? banda.max + 1 : banda.max;
-  return rng.int(banda.min, max);
-}
-
-// Un campeón indiscutido (los tres cinturones puestos) ya escaló todo lo que
-// el ranking le podía pedir. Sin este freno, medido con
-// scripts/balance-sim.mjs: un "jugando bien" que corona los tres cinturones
-// a mitad de carrera pasa el resto (a veces 8-10 años más) con CADA cupo de
-// pelea convertido en una defensa del mundial — esPeleaImportante la marca
-// esTitulo siempre, así que cada año de campeón indiscutido se volvía una
-// pelea JUGABLE más, dispuesto el presupuesto de minutos muy por encima de
-// los ~20 declarados sin sumarle nada al eje de cinturones (ya los tiene
-// los tres). La cuenta de peleas PROFESIONALES totales no se toca (el año
-// sigue trayendo sus cupos de trámite, ver intentosDePelea arriba) — lo que
-// se apaga es la posibilidad de que ESTE año en particular sea la excepción
-// que se juega completa: el campeón, la mayoría de los años, elige no
-// arriesgar el cinturón en nada que no sea trámite. Esto no toca la
-// frecuencia mientras el reinado todavía se está construyendo (subir a
-// buscar el próximo cinturón, o la primera defensa recién ganado el
-// mundial) — sólo el tramo final, ya consagrado.
-const PROB_DESCANSO_CAMPEON_INDISCUTIDO = 0.8;
-
-export function permiteMarqueeEsteAnio(rng, jugador) {
-  const esCampeonIndiscutido = (jugador.titulos?.length ?? 0) >= CINTURONES.length;
-  if (esCampeonIndiscutido && rng.chance(PROB_DESCANSO_CAMPEON_INDISCUTIDO)) return false;
-  return true;
+  const banda = bandaPorMomento(jugador);
+  return rng.int(banda.min, banda.max);
 }
 
 // Resultado rápido de una pelea de trámite: mismo criterio que el combate
@@ -475,7 +464,18 @@ export function armarLotePeleas(rng, {
       continue;
     }
 
-    if (faltaElegirDestacado) {
+    // Bloque 6 ("no toda defensa es un evento", ver el comentario grande de
+    // esPeleaImportante en offers.js): una defensa que NO es la primera del
+    // reinado (`esPrimeraDefensa`) ya no puede ser "importante" arriba, pero
+    // tampoco puede caer en el silencio de `resolverResultadoRapido` — sigue
+    // siendo LA pelea del año de un campeón. Se fuerza SIEMPRE al camino
+    // "destacado" (tarjeta + minijuego), sin pasar por el ~10% al azar
+    // (`faltaElegirDestacado`) que rige el resto del trámite: solo puede
+    // pasar en el primer cupo (soloRegional deja `nivel` en 'regional' para
+    // cualquier cupo que no sea el primero, ver más arriba).
+    const esDefensaRutinaria = primerCupo && oferta.nivel === 'defensa' && !esPeleaImportante(oferta);
+
+    if (faltaElegirDestacado || esDefensaRutinaria) {
       destacadoOferta = oferta;
       alMejorDeDestacado = alMejorDeCuantos(jugadorActual, oferta.rivalMedia);
       faltaElegirDestacado = false;

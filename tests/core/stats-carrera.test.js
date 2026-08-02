@@ -126,4 +126,32 @@ describe('estadisticasDeCarrera', () => {
     expect(e.promedioRoundPorPelea).toBe(0);
     expect(e.rivalMasDuro).toBeNull();
   });
+
+  // Task 6.2: el cierre de carrera necesita distinguir "el rival más duro que
+  // ENFRENTÓ" (rivalMasDuro, de arriba, cuenta también las derrotas) de "el
+  // rival más duro al que le GANÓ" — solo esta segunda es una victoria que
+  // vale la pena destacar en el cierre. Un peleador que perdió contra un
+  // crack no "venció a alguien grande": lo enfrentó, nomás.
+  describe('mejorVictoria (el rival mas duro al que le gano, no solo enfrento)', () => {
+    it('identifica al rival de mayor media entre los que SI vencio', () => {
+      const e = estadisticasDeCarrera(partidaCon([
+        pelea('v', { rivalNombre: 'Flojo', rivalApodo: 'El Flojo', rivalMedia: 50 }),
+        pelea('d', { rivalNombre: 'Dyke Tyzon', rivalApodo: 'El Ciclón', rivalMedia: 90 }),
+        pelea('v', { rivalNombre: 'Nico Salas', rivalApodo: 'El Nico', rivalMedia: 75 }),
+      ]));
+      expect(e.mejorVictoria.nombre).toBe('Nico Salas');
+    });
+
+    it('sin ninguna victoria, es null', () => {
+      const e = estadisticasDeCarrera(partidaCon([
+        pelea('d', { rivalMedia: 90 }),
+      ]));
+      expect(e.mejorVictoria).toBeNull();
+    });
+
+    it('con carrera vacia no explota', () => {
+      const e = estadisticasDeCarrera(partidaCon([]));
+      expect(e.mejorVictoria).toBeNull();
+    });
+  });
 });

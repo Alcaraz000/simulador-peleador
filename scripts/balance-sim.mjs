@@ -58,6 +58,10 @@ import {
   avanzarPelea, instruccionRecomendada, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia,
 } from '../src/core/fight-interactive.js';
 
+// El nuevo eje de rejugabilidad (spec v13) mide "llegó al mundial" además de
+// "consiguió los tres" — ver el comentario grande en jugarCarrera, más abajo.
+const NOMBRE_CINTURON_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
+
 function puntajeMods(mods = {}) {
   return Object.values(mods).reduce((acc, v) => acc + Math.max(0, v), 0);
 }
@@ -80,16 +84,28 @@ function elegirMejorOpcion(carta) {
   return elegirMejor(carta.opciones, (o) => {
     const base = puntajeMods(o.mods);
     const prob = o.probabilidades ? Math.max(...o.probabilidades.map((p) => puntajeMods(p.mods))) : 0;
+    // v13: la fama se fue (Bloque 1, "simplificación y progresión") — ya no
+    // hay efectos.fama en ninguna carta. Solo queda el dinero como bonus
+    // fuera de los mods.
     const dinero = (o.efectos?.dinero ?? 0) / 20000;
-    const fama = (o.efectos?.fama ?? 0) / 5;
-    return base + prob + dinero + fama;
+    return base + prob + dinero;
   });
 }
 
-function nuevoJugadorBaseline() {
+// Bloque 6 (hallazgo, "que el talento y el reparto inicial pesen más"):
+// ninguna de las dos funciones de acá abajo le pasaba un `rng` a
+// `crearPeleador` — caía al default de fighter.js (`createRng(1)`, fijo), así
+// que TODAS las carreras simuladas (cualquier semilla) arrancaban con el
+// MISMO talento y el MISMO reparto inicial de atributos. El eje entero que
+// calibra este bloque (sortearTalento/repartirAtributosIniciales) nunca se
+// movía en esta medición — toda la varianza medida antes de este fix salía
+// solo del mundo/matchmaking/cartas, nunca del propio peleador. El mismo bug
+// existía en la creación real del juego (src/main.js), ya corregido ahí.
+function nuevoJugadorBaseline(semilla) {
   return crearPeleador({
     nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 45, esJugador: true,
+    rng: createRng(`talento_${semilla}`),
   });
 }
 
@@ -102,9 +118,13 @@ function nuevoJugadorCreacionReal(semilla, { evitarLegendarias = false } = {}) {
 
   const legendariaEnCreacion = origenElegido.rareza === 'legendaria' || apodoElegido.rareza === 'legendaria';
 
+  // Sigue consumiendo LA MISMA secuencia (`rngCreacion`) que ya usaron
+  // origen/apodo arriba, en vez de abrir un rng nuevo aparte: es el mismo
+  // criterio que main.js (un único hilo de rng para toda la creación).
   const jugador = crearPeleador({
     apellido: 'Ortiz', apodoId: apodoElegido.id, nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: origenElegido.id, media: 38, esJugador: true,
+    rng: rngCreacion,
   });
   return {
     jugador, legendariaEnCreacion, origenElegido, apodoElegido,
@@ -220,9 +240,10 @@ function resolverPeleaDeCampamento(jugador, oferta, rival, {
   };
 }
 
-// Mitad de carrera: 24 bloques totales ahora (3 juvenil + 3 amateur + 18
-// profesional, ver ETAPAS en career.js) — antes 20. Bloque 12, no 10.
-const MITAD_BLOQUE = 12;
+// Mitad de carrera: v13 (Bloque 5, "el ritmo") triplicó los bloques — ahora
+// son cuatrimestres, no años (9 juvenil + 9 amateur + 54 profesional = 72,
+// ver ETAPAS en career.js). Bloque 36, no 12.
+const MITAD_BLOQUE = 36;
 
 function jugarCarrera(semilla, {
   crearJugador, limite = 700, evitarLegendarias = false, simularLesiones = false,
@@ -348,13 +369,18 @@ function jugarCarrera(semilla, {
       accionesJugadas += accionesDestacado;
       accionesTramiteDestacado += accionesDestacado;
       tramitesDestacados += 1;
-    } else if (beat.tipo === 'sparring' || beat.tipo === 'campSparring') {
-      // No se puede simular el minijuego de reacción; se asume un desempeño
-      // "bien" (velocidad +2 — bug v4: MS_BIEN no se exigía y el mod era de
-      // solo +1, ver core/sparring.js), ni el piso ("flojo", sin mods) ni el
-      // techo ("perfecto", velocidad+3/forma+4) del minijuego. Sin rareza
-      // propia, no afecta la medición de suerte legendaria.
-      partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 2) } } };
+    } else if (beat.tipo === 'campSparring') {
+      // No se puede simular el minijuego de reacción de verdad; se asume un
+      // desempeño "bien", aproximado acá como +2 agilidad (el atributo de
+      // "pies y manos rápidas" del rediseño v13, el más cercano a lo que el
+      // sparring premia) — ni el piso (sin mods) ni el techo del minijuego.
+      // OJO (hallazgo incidental, fuera del alcance de esta ronda): src/core/
+      // sparring.js todavía devuelve mods sobre 'velocidad'/'forma', dos
+      // claves que ya no existen en el jugador de cuatro atributos —
+      // `aplicarModificadores` (stats.js) las ignora en silencio, así que el
+      // sparring real hoy no premia nada. No se toca acá (no es parte de las
+      // Tasks 5.1/5.2/5.3); queda para quien retome sparring.js.
+      partida = { ...partida, jugador: { ...partida.jugador, atributos: { ...partida.jugador.atributos, agilidad: Math.min(99, partida.jugador.atributos.agilidad + 2) } } };
       if (beat.tipo === 'campSparring' && beat.datos.ultimo) {
         const teniaLesionAntes = Boolean(partida.jugador.estado.lesion);
         const rival = partida.mundo.roster.find((p) => p.id === beat.datos.oferta.rivalId) ?? null;
@@ -402,14 +428,23 @@ function jugarCarrera(semilla, {
     } else if (beat.tipo === 'lesionSinOferta') {
       bloquesLesionado += 1;
     }
-    // 'redes'/'evento' ya cubiertos arriba.
+    // 'redes'/'evento' ya cubiertos arriba. 'charlaEntrenador' (Task 5.3, la
+    // charla del entrenador antes de un año resuelto entero como trámite) no
+    // necesita rama propia: es de solo lectura, y el conteo genérico de
+    // arriba (beats/accionesJugadas += 1) ya la cubre.
   }
 
   const mediaFinal = mediaDe(partida.jugador);
-  if (mediaAMitad === null) mediaAMitad = mediaFinal; // carreras rarísimas que nunca llegan al bloque 12
+  if (mediaAMitad === null) mediaAMitad = mediaFinal; // carreras rarísimas que nunca llegan a mitad de carrera
   const tresCinturones = partida.jugador.titulos.length === CINTURONES.length;
   const legendariasTotal = legendariasEnCarrera + (legendariaEnCreacion ? 1 : 0);
   const peleasProfesionalesTotales = partida.jugador.record.v + partida.jugador.record.d + partida.jugador.record.e;
+  // v13 (Bloque 5): el eje de rejugabilidad de la spec reemplaza "≥85%
+  // consigue los tres" — Bloque 6 lo calibra, esta ronda solo lo reporta
+  // (pedido explícito del usuario: "no persigas ningún número de
+  // cinturones acá, solo reportá cómo quedó").
+  const alMenosUnCinturon = partida.jugador.titulos.length > 0;
+  const llegoAlMundial = partida.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL);
 
   return {
     beats,
@@ -423,6 +458,8 @@ function jugarCarrera(semilla, {
     defensas,
     lesiones,
     bloquesLesionado,
+    alMenosUnCinturon,
+    llegoAlMundial,
     // v7, corrección del coordinador ("las lesiones tienen que costar de
     // verdad, evaluadas semana a semana"): cuántos CUPOS de pelea (no
     // bloques enteros) se perdieron por seguir lesionado en el momento
@@ -453,6 +490,8 @@ function resumen(nombre, resultados) {
   const medias = resultados.map((r) => r.mediaFinal);
   const mediasAMitad = resultados.map((r) => r.mediaAMitad);
   const con3 = resultados.filter((r) => r.tresCinturones).length;
+  const conAlMenosUno = resultados.filter((r) => r.alMenosUnCinturon).length;
+  const llegaronAlMundial = resultados.filter((r) => r.llegoAlMundial).length;
   const sinDefensas = resultados.filter((r) => r.defensas === 0).length;
 
   const conLegendaria = resultados.filter((r) => r.legendariasTotal > 0);
@@ -477,7 +516,9 @@ function resumen(nombre, resultados) {
   console.log(`ACCIONES JUGADAS (con el mando: estructurales + negociación/careo/rounds/rincón/golpe de cada pelea jugable): avg=${avg(acciones).toFixed(1)} p10=${percentil(acciones, 10).toFixed(0)} p50=${percentil(acciones, 50).toFixed(0)} p90=${percentil(acciones, 90).toFixed(0)}`);
   console.log(`  => minutos estimados (${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(acciones) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p50=${(percentil(acciones, 50) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min | p90=${(percentil(acciones, 90) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min`);
   console.log(`peleas JUGABLES/carrera: avg=${avg(peleasJugables).toFixed(2)} min=${Math.min(...peleasJugables)} max=${Math.max(...peleasJugables)}`);
-  console.log(`peleas PROFESIONALES TOTALES (jugables+trámite)/carrera: avg=${avg(peleasProTotales).toFixed(2)} min=${Math.min(...peleasProTotales)} max=${Math.max(...peleasProTotales)} | dentro[30,40]=${((peleasProTotales.filter((x) => x >= 30 && x <= 40).length / n) * 100).toFixed(1)}%`);
+  // v13: el objetivo de la spec (Task 5.2) es ~30-32, no [30,40] — se deja el
+  // rango viejo como referencia junto al nuevo.
+  console.log(`peleas PROFESIONALES TOTALES (jugables+trámite)/carrera: avg=${avg(peleasProTotales).toFixed(2)} min=${Math.min(...peleasProTotales)} max=${Math.max(...peleasProTotales)} | dentro[30,32]=${((peleasProTotales.filter((x) => x >= 30 && x <= 32).length / n) * 100).toFixed(1)}% | dentro[25,40]=${((peleasProTotales.filter((x) => x >= 25 && x <= 40).length / n) * 100).toFixed(1)}%`);
   // Pedidos 1/2 (v7): impacto del minijuego de trámite en el presupuesto de
   // minutos — cuántos combates de trámite por carrera se juegan con tarjeta
   // + minijuego (uno como mucho por lote), y cuántas ACCIONES EXTRA (más
@@ -485,13 +526,19 @@ function resumen(nombre, resultados) {
   console.log(`trámites destacados (con minijuego)/carrera: avg=${avg(tramitesDestacados).toFixed(2)} | acciones EXTRA que sumó el minijuego/carrera: avg=${avg(accionesTramiteDestacado).toFixed(1)}`);
   // Resumen de fin de año (pedido del usuario, esta ronda): solo aparece en
   // años con al menos una pelea (peleasDelAnio.length>0 — ver
-  // anioTieneAlgoQueContar, year-summary.js), sobre 24 bloques/años posibles.
-  // Cada uno cuenta como 1 acción más (ya sumada arriba, en accionesJugadas):
+  // anioTieneAlgoQueContar, year-summary.js), sobre 24 años posibles. Cada
+  // uno cuenta como 1 acción más (ya sumada arriba, en accionesJugadas):
   // esta línea aísla el costo para que quede visible por separado.
   console.log(`resúmenes de año mostrados/carrera (de 24 años posibles): avg=${avg(resumenesAnio).toFixed(2)} min=${Math.min(...resumenesAnio)} max=${Math.max(...resumenesAnio)} | minutos que suman (${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(resumenesAnio) * SEGUNDOS_POR_BEAT / 60).toFixed(2)} min`);
-  console.log(`3 cinturones: ${con3}/${n} = ${((con3 / n) * 100).toFixed(2)}%`);
+  // v13 (Bloque 5): el eje viejo ("3 cinturones") queda solo como referencia
+  // — el nuevo eje de la spec (Bloque 6 lo calibra, acá solo se reporta) es
+  // "al menos un cinturón" (objetivo 85-90%) y "llegó al mundial" (objetivo
+  // 20-25%, tiene que poder FALLAR para que la carrera sea rejugable).
+  console.log(`3 cinturones (eje viejo, ya no es el objetivo): ${con3}/${n} = ${((con3 / n) * 100).toFixed(2)}%`);
+  console.log(`AL MENOS UN CINTURÓN (objetivo spec: 85-90%): ${conAlMenosUno}/${n} = ${((conAlMenosUno / n) * 100).toFixed(2)}%`);
+  console.log(`LLEGÓ AL MUNDIAL (objetivo spec: 20-25%): ${llegaronAlMundial}/${n} = ${((llegaronAlMundial / n) * 100).toFixed(2)}%`);
   console.log(`carreras sin ninguna defensa obligatoria: ${sinDefensas}/${n} = ${((sinDefensas / n) * 100).toFixed(2)}%`);
-  console.log(`MEDIA a mitad de carrera (bloque ${MITAD_BLOQUE}/24, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
+  console.log(`MEDIA a mitad de carrera (bloque ${MITAD_BLOQUE}/72, todas): avg=${avg(mediasAMitad).toFixed(2)} min=${Math.min(...mediasAMitad)} max=${Math.max(...mediasAMitad)}`);
   console.log(`MEDIA final (todas): avg=${avg(medias).toFixed(2)} min=${Math.min(...medias)} max=${Math.max(...medias)}`);
   console.log(`Con al menos una legendaria (creación o carrera): ${conLegendaria.length}/${n} = ${((conLegendaria.length / n) * 100).toFixed(1)}%`);
   console.log(fmtGrupo(conLegendaria, 'CON legendaria'));
@@ -507,7 +554,7 @@ const baseline = [];
 const creacionReal = [];
 const pisoCreacionReal = []; // mismas 500 semillas, pero evitando SIEMPRE lo legendario que se pueda evitar
 for (let semilla = 1; semilla <= N; semilla += 1) {
-  baseline.push(jugarCarrera(semilla, { crearJugador: () => ({ jugador: nuevoJugadorBaseline(), legendariaEnCreacion: false }) }));
+  baseline.push(jugarCarrera(semilla, { crearJugador: (s) => ({ jugador: nuevoJugadorBaseline(s), legendariaEnCreacion: false }) }));
   creacionReal.push(jugarCarrera(semilla, { crearJugador: nuevoJugadorCreacionReal }));
   pisoCreacionReal.push(jugarCarrera(semilla, {
     crearJugador: (s) => nuevoJugadorCreacionReal(s, { evitarLegendarias: true }),
@@ -565,14 +612,17 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   console.log(`3 cinturones: jugando bien=${((c3Techo / N) * 100).toFixed(1)}% | piso sin legendarias evitables=${((c3Piso / N) * 100).toFixed(1)}%`);
 }
 
-// ===== Informe final v6, segunda vuelta: la tabla que pide el brief =====
+// ===== Informe final v13 (Bloque 5, "el ritmo"): tabla de la spec =====
+// El eje de cinturones (3 cinturones / al menos uno / llegó al mundial) NO
+// se ajusta en esta ronda — Bloque 6 lo calibra. Se reporta tal cual queda
+// después de Task 5.1/5.2/5.3 (pedido explícito del usuario).
 {
   const avg = (arr) => arr.reduce((a, b) => a + b, 0) / arr.length;
   const r = creacionReal; // "jugando bien", el escenario representativo
-  console.log('\n=== INFORME v6 (segunda vuelta): tabla pedida por el brief (creación real, "jugando bien") ===');
-  console.log(`Peleas profesionales/carrera: avg=${avg(r.map((x) => x.peleasProfesionalesTotales)).toFixed(1)} (objetivo: 30-40)`);
+  console.log('\n=== INFORME v13 (Bloque 5, "el ritmo"): tabla de la spec (creación real, "jugando bien") ===');
+  console.log(`Peleas profesionales/carrera: avg=${avg(r.map((x) => x.peleasProfesionalesTotales)).toFixed(1)} (objetivo spec: ~30-32)`);
   console.log(`Beats jugados (acciones con el mando)/carrera: avg=${avg(r.map((x) => x.accionesJugadas)).toFixed(1)}`);
-  console.log(`Minutos estimados (supuesto: ${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min (objetivo: ~20 min)`);
+  console.log(`Minutos estimados (supuesto: ${SEGUNDOS_POR_BEAT}s/acción): avg=${(avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min (objetivo spec: 27-30 min)`);
   // Resumen de fin de año (pedido del usuario, esta ronda): impacto aislado
   // sobre el total de arriba — cuántos minutos de los `accionesJugadas` ya
   // contados son el resumen (avg(resumenesAnio) acciones, 1 cada uno).
@@ -580,9 +630,12 @@ resumen('Creación real + LESIONES REALES (cualquier lesión bloquea ofertas, Si
   const minutosSinResumen = (avg(r.map((x) => x.accionesJugadas)) - resumenesAnioProm) * SEGUNDOS_POR_BEAT / 60;
   const minutosConResumen = avg(r.map((x) => x.accionesJugadas)) * SEGUNDOS_POR_BEAT / 60;
   console.log(`  de los cuales, resumen de fin de año: avg=${resumenesAnioProm.toFixed(2)} resúmenes/carrera (de 24 años) => minutos SIN resumen=${minutosSinResumen.toFixed(1)} min | CON resumen=${minutosConResumen.toFixed(1)} min`);
-  console.log(`3 cinturones: ${((r.filter((x) => x.tresCinturones).length / r.length) * 100).toFixed(1)}% (objetivo: >=85%)`);
+  console.log(`3 cinturones (eje viejo, ya no es el objetivo): ${((r.filter((x) => x.tresCinturones).length / r.length) * 100).toFixed(1)}%`);
+  console.log(`AL MENOS UN CINTURÓN (objetivo spec: 85-90%): ${((r.filter((x) => x.alMenosUnCinturon).length / r.length) * 100).toFixed(1)}%`);
+  console.log(`LLEGÓ AL MUNDIAL (objetivo spec: 20-25%, tiene que poder fallar): ${((r.filter((x) => x.llegoAlMundial).length / r.length) * 100).toFixed(1)}%`);
   console.log(`MEDIA a mitad de carrera: avg=${avg(r.map((x) => x.mediaAMitad)).toFixed(1)}`);
-  console.log(`MEDIA final: avg=${avg(r.map((x) => x.mediaFinal)).toFixed(1)}`);
+  console.log(`MEDIA final: avg=${avg(r.map((x) => x.mediaFinal)).toFixed(1)} (objetivo spec: ~85-90, dispersión grande = rejugable)`);
+  console.log(`  desviación estándar de la MEDIA final: ${Math.sqrt(avg(r.map((x) => (x.mediaFinal - avg(r.map((y) => y.mediaFinal))) ** 2))).toFixed(2)} (un juego rejugable no converge todas las carreras al mismo número)`);
   // Pedidos 1/2 (v7): cuánto de esos minutos es el minijuego de trámite.
   const accionesExtraTramite = avg(r.map((x) => x.accionesTramiteDestacado));
   console.log(`  de las cuales, acciones EXTRA del minijuego de trámite: avg=${accionesExtraTramite.toFixed(1)} (${(accionesExtraTramite * SEGUNDOS_POR_BEAT / 60).toFixed(1)} min) sobre ${avg(r.map((x) => x.tramitesDestacados)).toFixed(1)} destacados/carrera`);

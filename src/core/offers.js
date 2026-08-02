@@ -6,17 +6,17 @@ import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
 
 export const NIVELES = {
-  local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4, famaBase: 2 },
-  regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1, famaBase: 4 },
+  local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4 },
+  regional: { id: 'regional', nombre: 'Cartelera regional', nivelPelea: 'profesional', multiplicadorBolsa: 1 },
   // `nivelPelea: 'eliminatoria'` (Pedido 4, barrida de experto en boxeo): antes
   // era 'profesional' a secas, así que se peleaba a 8 rounds — la misma
   // distancia que una regional de trámite. Es la pelea que define el ascenso
   // al puesto de retador: en el boxeo real, un final eliminator se juega a
   // distancia de campeonato, no a la de una cartelera cualquiera (ver
   // roundsPorNivel en disciplines.js, ahora con su propia entrada).
-  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8, famaBase: 7 },
-  titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4, famaBase: 15 },
-  defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2, famaBase: 10 },
+  eliminatoria: { id: 'eliminatoria', nombre: 'Eliminatoria', nivelPelea: 'eliminatoria', multiplicadorBolsa: 1.8 },
+  titulo: { id: 'titulo', nombre: 'Pelea de título', nivelPelea: 'titulo', multiplicadorBolsa: 4 },
+  defensa: { id: 'defensa', nombre: 'Defensa obligatoria', nivelPelea: 'titulo', multiplicadorBolsa: 3.2 },
 };
 
 /**
@@ -35,9 +35,9 @@ export const NIVELES = {
  * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, famaExtra: 8, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, famaExtra: 14, defensasObligatorias: 3 },
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, famaExtra: 25, defensasObligatorias: 4 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, defensasObligatorias: 3 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, defensasObligatorias: 4 },
 ];
 
 // v7 (pedido textual del usuario: "un debutante NO puede pelear por el
@@ -119,14 +119,13 @@ export function evaluarRiesgo(jugador, rival) {
 // no, si cree que NO se puede ganar, si cree que hay pocas chances...)".
 // Pura y determinista (nada de rng: el criterio siempre da lo mismo para los
 // mismos números, así el jugador puede aprender a leerlo). Compara tu media
-// con la del rival y castiga el puntaje si llegás golpeado (forma baja,
-// fatiga alta, lesión) — exactamente los mismos datos que ya evalúa
-// `evaluarRiesgo`, pero acá se traduce a una opinión hablada, no a un chip.
+// con la del rival y castiga el puntaje si llegás golpeado — exactamente los
+// mismos datos que ya evalúa `evaluarRiesgo`, pero acá se traduce a una
+// opinión hablada, no a un chip. v13: forma y fatiga dejaron de existir como
+// estados, así que lo único que queda para "llegás golpeado" es la lesión.
 function ventajaPercibida(jugador, oferta) {
   const estado = jugador.estado ?? {};
   let ventaja = mediaDe(jugador) - oferta.rivalMedia;
-  if ((estado.forma ?? 60) < 40) ventaja -= 8;
-  if ((estado.fatiga ?? 0) > 60) ventaja -= 8;
   if (estado.lesion) ventaja -= 15;
   return ventaja;
 }
@@ -342,7 +341,7 @@ export function generarOferta(rng, {
   const multiplicadorCinturon = cinturon ? cinturon.multiplicador : 1;
   const bolsaBase = Math.round(
     BOLSA_BASE * nivel.multiplicadorBolsa * multiplicadorCinturon
-    * (1 + jugador.fama / 60) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
+    * (1 + (jugador.titulos?.length ?? 0) * 0.35) * (1 + mediaDe(rival) / 120) * rng.float(0.9, 1.15),
   );
   // El manager (money.js) promete "bolsas más gordas" además de bajar el
   // riesgo de negociación (ver REDUCCION_MANAGER en negotiation.js).
@@ -400,11 +399,17 @@ export function generarOferta(rng, {
     // puede cruzarlo). Lo usa `esPeleaImportante` (más abajo).
     esArchirrival: Boolean(archirrival && archirrival.rivalId === rival.id),
     cinturonId: cinturon ? cinturon.id : null,
-    famaBase: nivel.famaBase + (cinturon ? cinturon.famaExtra : 0),
     // Solo tiene sentido en una defensa: cuántas defensas exitosas hacen falta
     // para consolidarse en ese cinturón (ver CINTURONES). Se usa para mostrarle
     // al jugador su progreso ("defensa 2 de 3") antes de la pelea.
     defensasObligatorias: nivel.id === 'defensa' ? cinturon.defensasObligatorias : null,
+    // Bloque 6 ("no toda defensa es un evento"): true cuando esta defensa es
+    // la PRIMERA del reinado actual de este cinturón (jugador.defensasCinturon
+    // todavía en 0 o sin entrada — se resetea a 0 cada vez que se conquista el
+    // cinturón, ver aplicarResultado más abajo). Es la única defensa que
+    // `esPeleaImportante` trata como grande por sí sola; las siguientes son
+    // rutina — ver el comentario grande ahí.
+    esPrimeraDefensa: nivel.id === 'defensa' && (jugador.defensasCinturon?.[cinturon.id] ?? 0) === 0,
     textoGancho: gancho,
   };
 
@@ -421,36 +426,42 @@ export function generarOferta(rng, {
 // El criterio central del rediseño de ritmo v6 ("no todas las peleas se
 // juegan igual"): decide si ESTA oferta merece la crónica completa (careo,
 // campamento, pelea round a round) o si es una de trámite que se resuelve
-// sola (ver armarLotePeleas/resumenLote en tramite.js). Cuatro condiciones,
-// CUALQUIERA alcanza:
-//   - esTitulo: cubre tanto disputar un cinturón como defenderlo — lo más
-//     grande que le puede pasar a una carrera.
-//   - esRevancha: ya se cruzaron antes; hay una historia en juego, no un
-//     desconocido más.
-//   - esArchirrival: el rival de tu vida, aunque esta pelea puntual no
-//     tenga cinturón en juego.
-//   - nivel === 'eliminatoria': la pelea que define el ascenso — ganarla es
-//     lo que te pone en carrera por el título (ver decidirNivel: solo se
-//     ofrece con ranking top-6, o forzada en la etiqueta de sabor
-//     "veterano", ver tagContenido en career.js).
+// sola (ver armarLotePeleas/resumenLote en tramite.js).
 //
-// Se descartó a propósito un quinto criterio ("riesgo alto": rival
-// claramente mejor) que estuvo en un borrador de esta misma ronda — medido
-// con scripts/balance-sim.mjs, disparaba en CASI CUALQUIER matchup temprano
-// (el matchmaking normal ya sesga hacia arriba, ver rankingObjetivo más
-// abajo) y volvía "jugable" la mitad de los años de la carrera, reventando
-// el presupuesto de ~20 minutos sin sumar nada al eje de cinturones (una
-// pelea de trámite ganada suma exactamente lo mismo al récord). Los cuatro
-// criterios que quedan son, literalmente, los que pidió el brief: "peleas de
-// título, defensas, tu archirrival, revanchas, y las que definen tu
-// ascenso" — ni más ni menos.
+// Bloque 6 (spec v13, "la partida dura 44,6 minutos, el objetivo es 27-30"):
+// la causa medida era que un campeón pelea una vez al año, pero ANTES de
+// este cambio "esTitulo" cubría TANTO disputar un cinturón COMO defenderlo
+// — así que, jugando bien, casi todas las peleas de la segunda mitad de la
+// carrera (10-13 años como campeón) se jugaban COMPLETAS (careo + campamento
+// + ronda a ronda + rincón + golpe de gracia), aunque fueran la quinta o
+// sexta defensa del mismo cinturón contra un retador cualquiera. Eso llevó
+// las peleas jugables de ~6 a ~11,9 por carrera y la partida a 44,6 minutos.
 //
-// Todo lo que NO cumple ninguna de estas cuatro es "trámite": un combate
-// regional, parejo o cómodo, que no cambia la historia de la carrera — se
-// resuelve solo, en lote, con sabor (ver resumenLote, tramite.js).
+// La regla de diseño "al que le va bien no puede tocarle jugar menos" NO
+// pide que cada defensa sea un evento — pide que el campeón siga teniendo SU
+// pelea del año, visible y jugada, nunca resuelta en silencio. Se separan
+// dos niveles:
+//   - GRANDE (se juega completa): conquistar un cinturón nuevo (incluida la
+//     "unificación" de ir por el próximo escalón mientras tenés el actual
+//     puesto), la PRIMERA defensa de un reinado (`esPrimeraDefensa`, arriba:
+//     ese primer desafío después de coronarte SÍ es un evento), una
+//     revancha, el archirrival, o la eliminatoria que define el ascenso.
+//   - RUTINA (se juega con el minijuego, nunca en silencio): la segunda
+//     defensa en adelante del mismo cinturón contra un retador sin historia
+//     — `armarLotePeleas` (tramite.js) la fuerza SIEMPRE al camino
+//     "destacado" (tarjeta + piedra-papel-tijera de 3-5 rondas), nunca a la
+//     resolución muda de `resolverResultadoRapido` ni al ~10% al azar que
+//     rige el resto del trámite — ver el comentario grande ahí.
+//
+// Se descartó a propósito un criterio más viejo ("riesgo alto": rival
+// claramente mejor) — medido con scripts/balance-sim.mjs, disparaba en CASI
+// CUALQUIER matchup temprano y volvía "jugable" la mitad de los años de la
+// carrera sin sumar nada al eje de cinturones.
 export function esPeleaImportante(oferta) {
+  const esTituloNuevo = oferta.nivel === 'titulo';
+  const esDefensaGrande = oferta.nivel === 'defensa' && oferta.esPrimeraDefensa;
   return Boolean(
-    oferta.esTitulo || oferta.esRevancha || oferta.esArchirrival || oferta.nivel === 'eliminatoria',
+    esTituloNuevo || esDefensaGrande || oferta.esRevancha || oferta.esArchirrival || oferta.nivel === 'eliminatoria',
   );
 }
 
@@ -466,10 +477,12 @@ function clonarJugador(jugador) {
   };
 }
 
+// v13: rechazar costaba fama, que ya no existe. El costo real es el que
+// siempre estuvo: la pelea que no diste no suma récord ni ranking, y una
+// obligatoria rechazada te puede costar el cinturón (lo maneja la comisión,
+// más arriba). No hace falta un número aparte para castigarlo.
 export function rechazarOferta(jugador, oferta) {
   const nuevo = clonarJugador(jugador);
-  const costo = oferta.esObligatoria ? 12 : 4;
-  nuevo.fama = clamp(nuevo.fama - costo, 0, 100);
   const texto = oferta.esObligatoria
     ? `Rechazaste una defensa obligatoria. La comisión te la va a hacer pagar.`
     : `Le dijiste que no a ${oferta.rivalApodo}. Algunos dicen que le escapaste.`;
@@ -520,14 +533,10 @@ export function aplicarResultado(jugador, {
 
   nuevo.dinero += oferta.bolsa;
 
-  const famaDelta = gano ? oferta.famaBase : empate ? Math.round(oferta.famaBase / 3) : -Math.round(oferta.famaBase / 2);
-  nuevo.fama = clamp(nuevo.fama + famaDelta, 0, 100);
-  // El psicólogo deportivo (money.js) promete que "la mala racha te dura
-  // menos": amortigua el golpe de moral de una derrota (no toca el envión de
-  // ganar ni el empate).
-  const tienePsicologo = (jugador.staff ?? []).includes('psicologo');
-  const golpeDerrota = tienePsicologo ? -6 : -12;
-  nuevo.estado.moral = clamp(nuevo.estado.moral + (gano ? 10 : empate ? 0 : golpeDerrota), 0, 100);
+  // v13: acá se movía la moral tras cada pelea. La moral dejó de existir
+  // como estado — el impacto de ganar o perder se siente en el ranking, en
+  // las ofertas que llegan y en el castigo acumulado que adelanta el declive
+  // (career.js), no en un número aparte.
 
   if (!esAmateur && oferta.esTitulo) {
     if (gano) {

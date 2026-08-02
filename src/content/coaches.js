@@ -7,9 +7,9 @@
  * ahora enseña lo que hacía en el ring).
  *
  * `mods`: exactamente lo que este entrenador aporta a los atributos del
- * jugador (potencia, velocidad, tecnica, defensa, cardio, iq, grappling).
- * No toca especiales (mentón, disciplina personal): ese aporte solo se
- * pinta arriba de los atributos en el tablero (ver panel-peleador.js).
+ * jugador (v13: fuerza, defensa, cardio, agilidad — los únicos cuatro que
+ * existen). Se hornea directo en `jugador.atributos` (ver crearEntrenadorDe/
+ * coach.js), nunca un overlay aparte.
  */
 export const ENTRENADORES = [
   {
@@ -20,7 +20,7 @@ export const ENTRENADORES = [
     escuela: 'Gimnasio El Yunque',
     frase: 'Un piano no le pega a nadie desde la lona. Tirá primero, preguntá después.',
     rareza: 'normal',
-    mods: { potencia: 5, cardio: 2, defensa: -1 },
+    mods: { fuerza: 5, cardio: 2, defensa: -1 },
   },
   {
     id: 'profesor_aldana',
@@ -30,7 +30,7 @@ export const ENTRENADORES = [
     escuela: 'Academia Guantes de Seda',
     frase: 'El que pega feo, pega una vez. El que pega lindo, pega siempre.',
     rareza: 'normal',
-    mods: { tecnica: 6, iq: 2 },
+    mods: { defensa: 6, agilidad: 2 },
   },
   {
     id: 'don_casimiro_vergara',
@@ -50,7 +50,7 @@ export const ENTRENADORES = [
     escuela: 'Escuela El Intocable de Mendoza',
     frase: 'Yo no esquivo golpes: los invito a pasar de largo. Ahora te voy a enseñar a vos.',
     rareza: 'legendaria',
-    mods: { tecnica: 8, iq: 6, velocidad: 4 },
+    mods: { defensa: 8, agilidad: 10 },
   },
   // --- Catálogo v4: un entrenador por cada estilo nuevo ---
   {
@@ -61,7 +61,7 @@ export const ENTRENADORES = [
     escuela: 'Escuela Alas del Sur',
     frase: 'El que no está, no lo tocan. Aprendé a no estar.',
     rareza: 'normal',
-    mods: { velocidad: 4, cardio: 3 },
+    mods: { agilidad: 4, cardio: 3 },
   },
   {
     id: 'negro_corvalan',
@@ -71,7 +71,7 @@ export const ENTRENADORES = [
     escuela: 'Gimnasio La Trituradora',
     frase: 'Yo no vengo a esperar nada. Vengo a cobrar cada segundo del rival.',
     rareza: 'normal',
-    mods: { potencia: 4, cardio: 3 },
+    mods: { fuerza: 4, cardio: 3 },
   },
   {
     id: 'amelia_la_zurda_funes',
@@ -81,7 +81,7 @@ export const ENTRENADORES = [
     escuela: 'Academia del Espejo',
     frase: 'Todos entrenan para pegarle a un ortodoxo. Vos vas a ser el que nadie entrenó a leer.',
     rareza: 'rara',
-    mods: { tecnica: 5, velocidad: 3, iq: 2 },
+    mods: { defensa: 5, agilidad: 5 },
   },
   {
     id: 'cacho_herrera',
@@ -91,6 +91,6 @@ export const ENTRENADORES = [
     escuela: 'Yunque de Barrio Sin Reglas',
     frase: 'El reglamento lo escribió alguien que nunca se comió una piña en la calle. Acá se pelea de verdad.',
     rareza: 'rara',
-    mods: { potencia: 6, cardio: 3, defensa: -2 },
+    mods: { fuerza: 6, cardio: 3, defensa: -2 },
   },
 ];

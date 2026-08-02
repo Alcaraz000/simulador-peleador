@@ -4,11 +4,10 @@ import { bandera } from '../flags.js';
 import {
   mediaDe, recordTexto, CATEGORIAS,
 } from '../../core/fighter.js';
-import { getDisciplina } from '../../core/disciplines.js';
 import {
-  ETIQUETAS, rangoDeMedia,
+  ATRIBUTOS, ETIQUETAS, rangoDeMedia,
 } from '../../core/stats.js';
-import { atributosConEntrenador } from '../../core/coach.js';
+import { atributosConEntrenador, senalDeTalento } from '../../core/coach.js';
 import { rankingDelJugador, ANIO_INICIAL } from '../../core/world.js';
 import { faseFisicaJugador, etapaActual, fraseDeEtapa } from '../../core/career.js';
 import { CINTURONES } from '../../core/offers.js';
@@ -37,7 +36,6 @@ import { abrirPopup } from '../components/popup.js';
 // los mismos helpers de datos (fighter.js, coach.js, stats.js) y no hay
 // ganancia real en separarlos en archivos aparte.
 
-const BASE = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
 const MANO_TEXTO = { derecha: 'Derecha', zurda: 'Zurda' };
 const RESULTADO_TEXTO = { v: 'V', d: 'D', e: 'E' };
 const RESULTADO_CLASE = { v: 'verde', d: 'rojo', e: 'sutil' };
@@ -64,9 +62,8 @@ function peleasTotales(jugador) {
 
 // Cabecera del peleador (Cambio 3, mockup del usuario): un cuadro grande de
 // MEDIA a la izquierda; a su derecha, arriba bandera+apodo y abajo el
-// apellido; debajo, en columnas, PESO|MANO HÁBIL|EDAD; por último FAMA, que
-// ANTES vivía en su propio panel (bloqueRecursos, ya no existe — Pedido 6)
-// y ahora se mudó acá. Reemplaza a la cabecera de la v3 (MEDIA como badge
+// apellido; debajo, en columnas, PESO|MANO HÁBIL|EDAD. Reemplaza a la
+// cabecera de la v3 (MEDIA como badge
 // chico arriba a la derecha + una sola `h1` con bandera+apodo+apellido
 // juntos, que en la columna angosta del tablero se partía en tres líneas —
 // queja del usuario). Separar apodo (arriba) de apellido (abajo) en dos
@@ -83,13 +80,12 @@ function peleasTotales(jugador) {
 // Pedido 4 (v9, "dice 'En Punto' pero también dice 'En Declive' ¿no es
 // contradictorio?"): tenía razón — esta fila de la cabecera mostraba DOS
 // lecturas del mismo jugador que se leen como si se contradijeran: la FORMA
-// del momento ("En Punto"/"Normal"/"Oxidado", `etiquetaEstado('forma', ...)`,
-// stats.js) y la FASE física por edad ("En ascenso"/"En tu prime"/"En
-// declive", `cabecera-fase` más abajo). No son lo mismo (una es coyuntural,
-// la otra es el arco de la carrera), pero juntas en la misma esquina
-// confunden. Decisión: se saca la FORMA de acá (su número ya vive, sin
-// duplicar, en el módulo de ESTADO — renderPanelEstado, más abajo) y se deja
-// SOLO la fase física, que no está en ningún otro lado del tablero.
+// del momento ("En Punto"/"Normal"/"Oxidado") y la FASE física por edad ("En
+// ascenso"/"En tu prime"/"En declive", `cabecera-fase` más abajo). Con la
+// simplificación de atributos (v13, "se van los cinco estados") la forma
+// desapareció del todo del juego — ya no hay dos lecturas que puedan
+// contradecirse: queda SOLO la fase física, que es la única de las dos que
+// sigue existiendo.
 const CLASE_FASE = {
   ascenso: 'sutil', prime: 'dorado', declive: 'rojo', declive_duro: 'rojo',
 };
@@ -162,7 +158,6 @@ function cuadroMedia(jugador) {
       filaDato('Mano hábil', MANO_TEXTO[jugador.mano] ?? jugador.mano),
       filaDato('Edad', `${Math.floor(jugador.edad)} años`),
     ]),
-    filaDato('Fama', String(jugador.fama)),
   ]);
 }
 
@@ -278,23 +273,26 @@ function bloqueCinturones(partida) {
 // bien posicionados pero mal orientados... quiero que se vean en
 // horizontal... cuadros con POT / 33, VEL / 43"): antes una fila
 // `nombre .......... valor`; ahora un CUADRO — etiqueta arriba, valor grande
-// abajo — que vive en una grilla junto a sus hermanos (bloqueAtributosSolo/
-// bloqueEstadoSolo, más abajo).
+// abajo — que vive en una grilla (bloqueAtributosSolo, más abajo).
 //
-// v8 (pedido textual: "NO quiero que estén resumidos los títulos... el único
-// permitido así es IQ porque es muy largo"): se pasó de `ETIQUETAS[clave]
-// .corta` (POT, VEL, DIS, MEN...) a `.larga` (Potencia, Velocidad,
-// Disciplina...) para todos MENOS iq (su forma larga, "IQ de pelea", es
-// demasiado para lo que aporta — "IQ" a secas ya es corto y clarísimo). El
-// texto se muestra en mayúsculas por CSS (`text-transform`, ver
-// `.panel-peleador-atributo .nombre` al final de theme.css) — el string en
-// sí queda en su capitalización natural ("Potencia"), más legible para
+// v8 (pedido textual: "NO quiero que estén resumidos los títulos"): se pasó
+// de `ETIQUETAS[clave].corta` (POT, VEL, DIS...) a `.larga` (Potencia,
+// Velocidad...). El texto se muestra en mayúsculas por CSS (`text-transform`,
+// ver `.panel-peleador-atributo .nombre` al final de theme.css) — el string
+// en sí queda en su capitalización natural ("Fuerza"), más legible para
 // lectores de pantalla. La solución a "no entran en un cuadro angosto" ya NO
 // es acortar el texto (inaceptable, pedido explícito): es dejar que la
 // etiqueta envuelva a una segunda línea dentro del mismo cuadro — mismo
 // criterio que `.cabecera-apellido`, más arriba ("nunca …, puede envolver").
+//
+// v13 (simplificación de atributos): con solo cuatro claves —fuerza, defensa,
+// cardio, agilidad— ninguna necesita ya la excepción que antes tenía IQ ("IQ
+// de pelea" era demasiado largo para lo que aportaba): las cuatro formas
+// largas entran cómodas, así que esta función quedó reducida a un simple
+// alias de `ETIQUETAS[clave].larga` — se mantiene como función (en vez de
+// leerlo inline en `filaAtributo`) por si el día de mañana vuelve a hacer
+// falta una excepción puntual.
 function etiquetaAtributo(clave) {
-  if (clave === 'iq') return ETIQUETAS.iq.corta;
   return ETIQUETAS[clave].larga;
 }
 
@@ -320,30 +318,20 @@ function filaAtributo(clave, { base, aporte }) {
   ]);
 }
 
-// Especiales (`jugador.especiales`) y estado (`jugador.estado`) no vivían en
-// ningún lado del tablero: las tarjetas los modifican igual que a los
-// atributos de combate (aplicarCarta reparte por los tres grupos, ver
-// cards.js) y el jugador leía "+10 Forma" en una tarjeta sin que ese número
-// apareciera en ninguna parte (queja del usuario). Fatiga queda afuera (no
-// tiene panel propio); lesión SÍ se muestra, pero aparte (ver bloqueLesion,
-// más abajo) — no es un número más de la grilla, trae su propio botón de
-// curar.
-const ESTADO_VISIBLE = ['menton', 'disciplinaPersonal', 'forma', 'moral'];
-
-function filaEstado(jugador, clave) {
-  const valor = clave in jugador.especiales ? jugador.especiales[clave] : jugador.estado[clave];
-  return filaAtributo(clave, { base: valor, aporte: 0 });
-}
-
 // Lesión + botón de curar (v7, Pedido 3: "sacá 'lo que viene ahora'"): vivía
 // en panel-avance.js, la pantalla intermedia que se mostraba ENTRE beats —
 // al borrar esa pantalla (el jugador ahora pasa derecho a la próxima
-// tarjeta) esta función se muda ACÁ, al panel de Estado (columna central,
-// siempre visible, sea cual sea el beat que esté mostrando la tarjeta de
-// abajo): curar una lesión no puede quedar escondida detrás de una pantalla
-// que ya no existe. Mismo comportamiento de siempre — nombre, semanas
-// restantes, costo, botón deshabilitado si no alcanza la plata — solo
-// cambia dónde vive.
+// tarjeta) esta función se muda a la celda central que antes ocupaba el
+// módulo de Estado (siempre visible, sea cual sea el beat que esté mostrando
+// la tarjeta de abajo): curar una lesión no puede quedar escondida detrás de
+// una pantalla que ya no existe.
+//
+// v13 (simplificación de atributos, "se va la sección de Estado entera"):
+// mentón, disciplina personal, forma y moral desaparecen del todo — ya no
+// hay un panel "Estado" con sus cuatro cuadros. La lesión NUNCA fue uno de
+// esos cuadros (no es un número de la grilla, trae su propio botón de curar,
+// ver el comentario de más arriba), así que sigue viva tal cual estaba: solo
+// se queda sin la compañía del panel que la rodeaba.
 function bloqueLesion(jugador, onCurar) {
   const lesion = jugador.estado.lesion;
   if (!lesion) return null;
@@ -366,12 +354,13 @@ function bloqueLesion(jugador, onCurar) {
 }
 
 // Atributos y Estado eran un solo panel (`bloqueAtributos`) antes de la
-// reforma de grilla 3×3: el mockup los pide como dos celdas propias (columna
+// reforma de grilla 3×3: el mockup los pidió como dos celdas propias (columna
 // central, arriba del módulo de decisión — nunca mezclados con las tarjetas
-// de combate, que son las únicas con aporte de entrenador).
+// de combate, que son las únicas con aporte de entrenador). La celda de
+// Estado ya no existe (v13, ver bloqueLesion), pero esta sigue siendo su
+// propia celda: cuatro cuadros — FUERZA, DEFENSA, CARDIO, AGILIDAD, en ese
+// orden fijo (`ATRIBUTOS`, stats.js) — en una sola fila.
 function bloqueAtributosSolo(jugador) {
-  const disciplina = getDisciplina(jugador.disciplina);
-  const claves = disciplina.usaGrappling ? [...BASE, 'grappling'] : BASE;
   const desglose = atributosConEntrenador(jugador);
   return el('div', { class: 'panel' }, [
     el('div', { class: 'fila', style: 'justify-content:space-between;align-items:center;margin-bottom:8px' }, [
@@ -379,23 +368,37 @@ function bloqueAtributosSolo(jugador) {
       el('span', { class: 'panel-peleador-aporte-etiqueta', text: 'aporte del entrenador' }),
     ]),
     el('div', { class: 'panel-peleador-atributos' },
-      claves.map((c) => filaAtributo(c, desglose[c]))),
+      ATRIBUTOS.map((c) => filaAtributo(c, desglose[c]))),
   ]);
 }
 
-function bloqueEstadoSolo(jugador, onCurar) {
-  return el('div', { class: 'stack' }, [
-    el('div', { class: 'panel' }, [
-      el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Estado' }),
-      el('div', { class: 'panel-peleador-atributos panel-peleador-atributos-estado' },
-        ESTADO_VISIBLE.map((c) => filaEstado(jugador, c))),
-    ]),
-    bloqueLesion(jugador, onCurar),
-  ]);
+// v13: reemplaza a `bloqueEstadoSolo`/`renderPanelEstado` — con la sección de
+// Estado eliminada del todo, lo único que sigue viviendo en esta celda
+// central (debajo de Atributos, arriba del módulo de decisión) es el aviso
+// de lesión + su botón de curar, si hay una lesión activa. Sin lesión, la
+// celda queda vacía (`mount` de un fragmento sin hijos) — nunca se saca del
+// árbol, para no correr el resto de la columna central.
+function bloqueLesionSolo(jugador, onCurar) {
+  const lesion = bloqueLesion(jugador, onCurar);
+  return el('div', { class: 'stack' }, lesion ? [lesion] : []);
 }
 
-function bloqueRincon(jugador) {
+// La señal del entrenador sobre el talento (v13, spec: "el talento se
+// intuye, no se lee — el entrenador va tirando señales y el jugador saca sus
+// propias conclusiones"): vive en el mismo rincón que ya habla el
+// entrenador — es EL MISMO entrenador, ahora opinando sobre cómo viene
+// respondiendo el pibe al trabajo, en vez de solo presentarse. `frase` (fija,
+// la personalidad del entrenador) y `senal` (rotativa, lo que va descubriendo
+// del jugador) son dos líneas distintas, nunca se pisan: la frase de
+// entrenador siempre está si el entrenador la tiene; la señal recién
+// aparece cuando `senalDeTalento` (coach.js) tiene con qué opinar — antes de
+// la quinta decisión (DECISIONES_ANTES_DE_OPINAR, content/senales-talento.js)
+// devuelve `null` y no se agrega nada, para no cantar el talento en el
+// minuto uno. Nunca un número: la función ya lo garantiza (ver su propio
+// comentario), acá solo se pinta el texto que devuelve.
+function bloqueRincon(jugador, decisionesTomadas) {
   const entrenador = entrenadorDe(jugador);
+  const senal = senalDeTalento(jugador, decisionesTomadas);
   return el('div', { class: 'panel tu-rincon' }, [
     el('div', { class: 'etiqueta', style: 'margin-bottom:8px', text: 'Tu rincón' }),
     el('div', { class: 'fila', style: 'align-items:center;gap:10px' }, [
@@ -411,6 +414,13 @@ function bloqueRincon(jugador) {
     ]),
     entrenador.frase
       ? el('div', { class: 'medio', style: 'font-style:italic;margin-top:8px;font-size:11px', text: `"${entrenador.frase}"` })
+      : null,
+    senal
+      ? el('div', {
+        class: 'medio rincon-senal-talento',
+        style: 'font-style:italic;margin-top:8px;font-size:11px',
+        text: `"${senal}"`,
+      })
       : null,
   ]);
 }
@@ -580,16 +590,24 @@ export function renderPanelPeleador(region, {
     () => onHistorial(jugador),
   );
 
+  // La señal de talento necesita saber cuántas decisiones ya se tomaron
+  // (para no cantar el talento en el minuto uno, ver bloqueRincon): no hay un
+  // contador dedicado en `partida` (Bloque 5 solo lleva el registro del AÑO
+  // en curso, ver `registroAnioActual`, career.js), pero `bloqueGlobal`
+  // (career.js) ya cuenta un bloque —y por lo tanto una decisión de
+  // mejora/evento/redes— por cada cuatrimestre que pasó, arranca en 1 y
+  // nunca se reinicia en toda la carrera: `bloqueGlobal - 1` es exactamente
+  // cuántos bloques (decisiones) ya se resolvieron antes de este.
   mount(region, el('div', { class: 'stack panel-peleador' }, [
     cabecera,
     bloqueCinturones(partida),
-    bloqueRincon(jugador),
+    bloqueRincon(jugador, partida.bloqueGlobal - 1),
     bloqueEtapa(partida),
     historial,
   ]));
 }
 
-// Columna central, arriba del módulo de decisión: los 6-7 atributos de
+// Columna central, arriba del módulo de decisión: los cuatro atributos de
 // combate. Se repinta con el mismo ritmo que siempre tuvo la columna
 // izquierda (una vez por transición del tablero, ver montarTablero en
 // main.js) — nunca en cada micro-render de un mismo beat (un golpe de
@@ -599,12 +617,15 @@ export function renderPanelAtributos(region, { jugador }) {
   mount(region, bloqueAtributosSolo(jugador));
 }
 
-// Columna central: menton/disciplina/forma/moral, separados de los
-// atributos de combate (mismo criterio que antes, cuando compartían un solo
-// panel: nunca mezclados, porque solo los de combate llevan aporte de
-// entrenador).
+// Columna central, debajo de Atributos: v13 la sección de Estado (mentón,
+// disciplina personal, forma, moral) desaparece del todo — lo único que
+// sigue viviendo en esta celda es el aviso de lesión + su botón de curar,
+// si hay una lesión activa (ver bloqueLesionSolo). El nombre de la función
+// se mantiene (mismo hueco del tablero, mismo llamador en main.js) aunque ya
+// no pinte ningún "Estado": renombrarla junto con su celda en main.js no
+// aporta nada que este comentario no deje ya claro.
 export function renderPanelEstado(region, { jugador, onCurar = () => {} }) {
-  mount(region, bloqueEstadoSolo(jugador, onCurar));
+  mount(region, bloqueLesionSolo(jugador, onCurar));
 }
 
 // Columna derecha, junto al calendario: dinero y acceso a la tienda (mudados

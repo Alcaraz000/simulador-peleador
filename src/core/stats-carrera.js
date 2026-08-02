@@ -65,6 +65,17 @@ export function estadisticasDeCarrera(partida) {
     return mejor;
   }, null);
 
+  // Task 6.2 (cierre de carrera): "rivalMasDuro" de arriba cuenta cualquier
+  // pelea, ganada o perdida — sirve para "el más difícil que enfrentaste".
+  // El cierre necesita algo distinto: el más duro al que le GANASTE, para la
+  // frase "venció a alguien grande". Enfrentar a un crack y perder no es lo
+  // mismo que vencerlo.
+  const mejorVictoria = historial.reduce((mejor, p) => {
+    if (p.resultado !== 'v' || typeof p.rivalMedia !== 'number') return mejor;
+    if (!mejor || p.rivalMedia > mejor.rivalMedia) return p;
+    return mejor;
+  }, null);
+
   return {
     peleas: historial.length,
     victorias: victorias.length,
@@ -76,6 +87,9 @@ export function estadisticasDeCarrera(partida) {
     rachaDerrotasMasLarga: rachaDerrotasMasLargaDe(historial),
     rivalMasDuro: rivalMasDuro
       ? { nombre: rivalMasDuro.rivalNombre, apodo: rivalMasDuro.rivalApodo, media: rivalMasDuro.rivalMedia }
+      : null,
+    mejorVictoria: mejorVictoria
+      ? { nombre: mejorVictoria.rivalNombre, apodo: mejorVictoria.rivalApodo, media: mejorVictoria.rivalMedia }
       : null,
     bolsaMayor: historial.reduce((a, p) => Math.max(a, p.bolsa ?? 0), 0),
     roundsPeleados,

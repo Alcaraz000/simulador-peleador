@@ -1,11 +1,16 @@
 import { clamp } from './stats.js';
 import { PREGUNTAS_CAREO, NARRACION_CAREO } from '../content/cards-presser.js';
 
+// v13 (simplificación de atributos): `canchero` prometía "+ FAMA" en su
+// pista — la fama se va del juego (ver stats.js), pero el tono sigue
+// funcionando igual por dentro (EFECTOS_TONO, más abajo: es el que más hype
+// mueve después de provocador). La pista pasa a anunciar lo que de verdad
+// hace: sube el hype, con el mismo condimento de "impredecible" que ya tenía.
 export const TONOS = {
   provocador: { id: 'provocador', nombre: 'Provocador', pistaEfecto: '+ HYPE · riesgo: lo agranda' },
   frio: { id: 'frio', nombre: 'Frío / técnico', pistaEfecto: '+ VENTAJA MENTAL' },
   humilde: { id: 'humilde', nombre: 'Humilde', pistaEfecto: '– HYPE · + respeto' },
-  canchero: { id: 'canchero', nombre: 'Canchero', pistaEfecto: '+ FAMA · impredecible' },
+  canchero: { id: 'canchero', nombre: 'Canchero', pistaEfecto: '+ HYPE · impredecible' },
 };
 
 export const TELLS = {

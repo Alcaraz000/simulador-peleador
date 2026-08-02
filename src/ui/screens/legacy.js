@@ -89,6 +89,24 @@ function bloqueEstadisticas(e) {
 
 const METODOS = { ko: 'KO', tko: 'TKO', sumision: 'Sumisión', decision: 'Decisión', descalificacion: 'DQ' };
 
+// Task 6.2 ("el cierre le hace justicia a cada carrera"): chip con el nivel
+// más alto de título que ALGUNA VEZ se conquistó (`legado.nivelMaximo`, ver
+// core/legacy.js) — así un campeón nacional que después perdió el cinturón
+// sigue viéndose en pantalla como lo que fue, no como alguien sin nada. Sin
+// título ninguno, no hay chip: el panel de Títulos ya dice "Nunca se colgó
+// un cinturón" más abajo, no hace falta repetirlo acá arriba en negativo.
+const ETIQUETA_NIVEL_MAXIMO = {
+  mundial: 'Campeón del mundo',
+  nacional: 'Campeón nacional',
+  regional: 'Campeón regional',
+};
+
+function chipNivelMaximo(nivelMaximo) {
+  const etiqueta = ETIQUETA_NIVEL_MAXIMO[nivelMaximo];
+  if (!etiqueta) return null;
+  return el('div', { class: 'chip dorado', style: 'width:fit-content', text: etiqueta });
+}
+
 // Pedido 2 (v7, "el amateur tenga su propio historial de verdad —las
 // peleas, no solo el récord— y que se vea en la pantalla final, junto al
 // profesional pero claramente separado"): mismo lenguaje visual que el
@@ -134,6 +152,7 @@ export function renderLegado(contenedor, {
       bandera(jugador.nacionalidad, { ancho: 20 }),
       nombreConApodo(jugador).toUpperCase(),
     ]),
+    chipNivelMaximo(legado.nivelMaximo),
     el('div', { class: 'panel' }, [
       el('div', { class: 'fila' }, [
         el('div', { class: 'tile' }, [
@@ -167,7 +186,7 @@ export function renderLegado(contenedor, {
       el('div', { class: 'log' }, legado.momentos.map((m) => el('p', { text: m }))),
     ]) : null,
     el('div', { class: 'panel' }, [
-      el('div', { class: 'etiqueta dorado', text: 'Biografía' }),
+      el('div', { class: 'etiqueta dorado', text: 'Cierre de carrera' }),
       el('p', { text: legado.biografia }),
     ]),
     el('button', { class: 'boton', 'data-accion': 'nueva', text: 'Nueva carrera', onClick: onNuevaCarrera }),

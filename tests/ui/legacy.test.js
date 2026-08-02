@@ -223,9 +223,11 @@ describe('renderLegado', () => {
 });
 
 describe('renderFicha', () => {
+  // v13 (simplificación de atributos): de seis-siete atributos + especiales
+  // a cuatro atributos y nada más (fuerza, defensa, cardio, agilidad).
   it('muestra todos los atributos', () => {
     renderFicha(cont, { jugador: jugadorConCarrera(), seccion: 'atributos', onCerrar: () => {} });
-    expect(cont.querySelectorAll('[data-atributo-full]').length).toBeGreaterThanOrEqual(6);
+    expect(cont.querySelectorAll('[data-atributo-full]').length).toBe(4);
   });
 
   it('muestra el historial de peleas', () => {

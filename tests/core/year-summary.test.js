@@ -66,7 +66,7 @@ describe('registrarMuestraMedia', () => {
   it('agrega una muestra nueva sin tocar las anteriores', () => {
     const jugador = jugadorDePrueba();
     const registro = iniciarRegistroAnio(1, jugador);
-    const jugadorMasFuerte = { ...jugador, atributos: { ...jugador.atributos, potencia: jugador.atributos.potencia + 20 } };
+    const jugadorMasFuerte = { ...jugador, atributos: { ...jugador.atributos, fuerza: jugador.atributos.fuerza + 20 } };
     const actualizado = registrarMuestraMedia(registro, 10, jugadorMasFuerte);
     expect(actualizado.muestrasMedia).toHaveLength(2);
     expect(actualizado.muestrasMedia[0]).toEqual(registro.muestrasMedia[0]);
@@ -93,7 +93,7 @@ describe('registrarMuestraMedia', () => {
     const jugador = jugadorDePrueba();
     const mundo = mundoDePrueba();
     const registro = iniciarRegistroAnio(1, jugador, mundo);
-    const jugadorMasFuerte = { ...jugador, atributos: { ...jugador.atributos, potencia: jugador.atributos.potencia + 20 } };
+    const jugadorMasFuerte = { ...jugador, atributos: { ...jugador.atributos, fuerza: jugador.atributos.fuerza + 20 } };
     const actualizado = registrarMuestraMedia(registro, 10, jugadorMasFuerte, mundo);
     expect(actualizado.muestrasMedia[1].ranking).toBe(rankingDelJugador(mundo, jugadorMasFuerte));
   });

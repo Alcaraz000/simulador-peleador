@@ -164,7 +164,7 @@ describe('registrarDecision / registrarMuestraMedia (envoltorio a nivel partida)
     const p = nuevaPartida();
     const masFuerte = {
       ...p,
-      jugador: { ...p.jugador, atributos: { ...p.jugador.atributos, potencia: p.jugador.atributos.potencia + 30 } },
+      jugador: { ...p.jugador, atributos: { ...p.jugador.atributos, fuerza: p.jugador.atributos.fuerza + 30 } },
     };
     const conMuestra = registrarMuestraMedia(masFuerte);
     expect(conMuestra.registroAnioActual.muestrasMedia).toHaveLength(2);
@@ -174,21 +174,23 @@ describe('registrarDecision / registrarMuestraMedia (envoltorio a nivel partida)
 });
 
 // Partida armada a mano (no depende de que una semilla en particular traiga
-// pelea o no): `bloqueGlobal:2` fuerza a `siguienteBeat` a pasar por
-// `avanzarBloque` en la primera llamada (mismo camino que el juego real toma
-// al cerrar cualquier año que no sea el primero); `bloque:2` con etapaIndice
-// 0 (juvenil, 3 bloques) evita cualquier transición de etapa de por medio.
-// `semanaGlobal` se adelanta unos años (en vez de dejarlo en 1, el default de
-// crearPartida) para que "una pelea de un año viejo" sea un caso posible de
-// verdad en los tests de más abajo — con semanaGlobal:1 no hay ningún año
-// anterior al que cierra.
+// pelea o no): `bloqueGlobal:4` es el bloque de ENERO del segundo año (v13,
+// Task 5.1: bloqueGlobal ≡ 1 mod 3 es "inicio de año" — ver `esInicioDeAnio`,
+// career.js) — fuerza a `siguienteBeat` a pasar por el `avanzarBloque`
+// "pesado" en la primera llamada (mismo camino que el juego real toma al
+// cerrar cualquier año que no sea el primero); `bloque:4` con etapaIndice 0
+// (juvenil, 9 bloques ahora) evita cualquier transición de etapa de por
+// medio. `semanaGlobal` se adelanta unos años (en vez de dejarlo en 1, el
+// default de crearPartida) para que "una pelea de un año viejo" sea un caso
+// posible de verdad en los tests de más abajo — con semanaGlobal:1 no hay
+// ningún año anterior al que cierra.
 function partidaAPuntoDeCerrarAnio(overrides = {}) {
   const p = nuevaPartida(1);
   const semanaGlobal = 1 + 52 * 3 + 10;
   return {
     ...p,
-    bloqueGlobal: 2,
-    bloque: 2,
+    bloqueGlobal: 4,
+    bloque: 4,
     etapaIndice: 0,
     cola: [],
     semanaGlobal,
@@ -229,11 +231,12 @@ describe('siguienteBeat: el resumen de fin de año aparece como su propio beat',
     // muestra es `null` (ver rankingDelJugador, world.js), no un número.
     expect(paso.beat.datos.muestrasMedia[0].ranking).toBeNull();
 
-    // Al consumir el beat 'resumenAnio', lo próximo en la cola es la mejora
-    // del año que recién arranca — nunca se pierde un beat real por el
-    // resumen.
+    // Al consumir el beat 'resumenAnio', lo próximo en la cola es LA
+    // DECISIÓN del año que recién arranca (Task 5.1: mejora, evento o redes,
+    // elegida por peso — ya no siempre 'mejora') — nunca se pierde un beat
+    // real por el resumen.
     const siguientePaso = siguienteBeat(paso.partida);
-    expect(siguientePaso.beat.tipo).toBe('mejora');
+    expect(['mejora', 'evento', 'redes']).toContain(siguientePaso.beat.tipo);
   });
 
   it('combina peleas profesionales y amateur del año que cierra, y deja afuera las de otros años', () => {
@@ -278,13 +281,13 @@ describe('siguienteBeat: un año completamente vacío no dispara el resumen (nad
   // con la mejora obligatoria ya elegida SÍ amerita resumen ahora (ver
   // year-summary.test.js). Este test pasa a cubrir el caso que de verdad
   // sigue sin ceremonia: CERO peleas y CERO decisiones.
-  it('un año sin ninguna pelea NI ninguna decisión no interrumpe: el primer beat sigue siendo mejora', () => {
+  it('un año sin ninguna pelea NI ninguna decisión no interrumpe: el primer beat sigue siendo la decisión del bloque', () => {
     const p = partidaAPuntoDeCerrarAnio();
     // jugador.historial/historialAmateur ya arrancan vacíos en crearPeleador,
     // y no se registró ninguna decisión sobre `p`.
     const paso = siguienteBeat(p);
     expect(paso.beat.tipo).not.toBe('resumenAnio');
-    expect(paso.beat.tipo).toBe('mejora');
+    expect(['mejora', 'evento', 'redes']).toContain(paso.beat.tipo);
   });
 
   it('el primer año de la carrera (bloqueGlobal 1, sin pasar por avanzarBloque todavía) nunca dispara el resumen', () => {

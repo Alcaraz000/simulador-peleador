@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DISCIPLINAS, getDisciplina, pesosDe } from '../../src/core/disciplines.js';
+import { DISCIPLINAS, getDisciplina } from '../../src/core/disciplines.js';
 
 describe('disciplinas', () => {
   it('la v1 solo tiene boxeo', () => {
@@ -8,15 +8,11 @@ describe('disciplinas', () => {
 
   it('boxeo no usa grappling', () => {
     expect(DISCIPLINAS.boxeo.usaGrappling).toBe(false);
-    expect(pesosDe('boxeo').grappling ?? 0).toBe(0);
   });
 
-  it('los pesos de cada disciplina suman 1', () => {
-    for (const disciplina of Object.values(DISCIPLINAS)) {
-      const suma = Object.values(disciplina.pesos).reduce((a, b) => a + b, 0);
-      expect(suma).toBeCloseTo(1, 5);
-    }
-  });
+  // v13: los pesos por atributo desaparecieron junto con `pesosDe`. La media
+  // pasó a ser el promedio simple de los cuatro (mediaDe, fighter.js), que es
+  // lo que hace cierto y legible el "+4 en un atributo = +1 de media".
 
   it('boxeo no admite sumision', () => {
     expect(DISCIPLINAS.boxeo.desenlaces).not.toContain('sumision');

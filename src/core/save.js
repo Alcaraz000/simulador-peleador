@@ -1,4 +1,17 @@
-export const VERSION_ESQUEMA = 1;
+import { ATRIBUTOS } from './stats.js';
+
+// v13 (Bloque 1, simplificación y progresión): de seis atributos + cinco
+// estados a cuatro atributos y nada más. A diferencia del cambio v1→v2 (que
+// mantuvo VERSION_ESQUEMA fijo y se apoyó solo en un chequeo de forma, ver
+// tieneEsquemaV2 más abajo), acá el número SÍ sube: los atributos de una
+// partida vieja no significan lo mismo (50 de "potencia" no es comparable a
+// 50 de "fuerza") y no hay ninguna cuenta razonable que los migre. Subir
+// VERSION_ESQUEMA alcanza para tirar cualquier guardado real ya publicado
+// (todos quedaron grabados con version:1) sin tocar nada más; el chequeo de
+// forma de jugador.atributos (tieneAtributosVigentes, más abajo) es la
+// misma red de seguridad de siempre, por si algún día el número vuelve a
+// quedar fijo entre dos versiones.
+export const VERSION_ESQUEMA = 2;
 export const CLAVE_GUARDADO = 'simpeleador:save:v1';
 
 function storagePorDefecto() {
@@ -33,6 +46,23 @@ function tieneEsquemaV2(datos) {
   );
 }
 
+// v13: jugador.atributos tiene que traer EXACTAMENTE las cuatro claves
+// vigentes (fuerza/defensa/cardio/agilidad), ni una más ni una menos. Una
+// partida vieja (seis atributos: potencia/velocidad/tecnica/defensa/cardio/
+// iq, más grappling) no matchea, y tampoco matchearía una a mitad de
+// camino. No se valida el VALOR de cada atributo (con crearAtributos
+// clampeado siempre va a ser un número sano) — solo la FORMA.
+function tieneAtributosVigentes(datos) {
+  const atributos = datos?.jugador?.atributos;
+  if (!atributos || typeof atributos !== 'object') return false;
+  const esperadas = [...ATRIBUTOS].sort();
+  const recibidas = Object.keys(atributos).sort();
+  return (
+    esperadas.length === recibidas.length
+    && esperadas.every((clave, indice) => clave === recibidas[indice])
+  );
+}
+
 export function deserializar(texto) {
   let datos;
   try {
@@ -46,8 +76,8 @@ export function deserializar(texto) {
   if (datos.version !== VERSION_ESQUEMA) {
     throw new Error(`Versión de guardado incompatible: ${datos.version}`);
   }
-  if (!tieneEsquemaV2(datos)) {
-    throw new Error('Partida guardada de un esquema anterior (v1): hace falta empezar una carrera nueva.');
+  if (!tieneEsquemaV2(datos) || !tieneAtributosVigentes(datos)) {
+    throw new Error('Partida guardada de un esquema anterior: hace falta empezar una carrera nueva.');
   }
   return datos;
 }

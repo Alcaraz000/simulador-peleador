@@ -1,4 +1,4 @@
-import { el, mount, fmtDelta } from '../dom.js';
+import { el, mount } from '../dom.js';
 import { icono } from '../icons.js';
 import { crearTarjeta } from '../components/card.js';
 import { TONOS, resultadoCareo } from '../../core/presser.js';
@@ -43,7 +43,19 @@ function filaResumen(h) {
 // Resumen final (Task v3, pedido textual: "al terminar el careo, mostrar un
 // resumen de las respuestas y qué consecuencias tuvo"): qué respondiste
 // ronda por ronda, cómo quedó parado el careo (hype/ventaja) y qué
-// consecuencias de verdad tuvo (fama, moral, calentura del rival).
+// consecuencia de verdad tuvo.
+//
+// v13 (simplificación de atributos): fama y moral se van del juego (ver
+// stats.js) — `resultadoCareo` (presser.js) todavía calcula `bonusFama`/
+// `bonusMoral` como una lectura de "cuánto hype hiciste"/"cuánta ventaja
+// mental sacaste", pero ya no hay ningún jugador.fama ni jugador.estado.moral
+// donde guardarlos (main.js dejó de aplicarlos, ver el comentario de
+// `careo`/`onTerminar` ahí). Mostrar esas dos píldoras acá hubiera sido
+// prometerle al jugador un efecto que no pasa de verdad — se sacan, y queda
+// SOLO la consecuencia que sí se aplica: la calentura del rival (alimenta el
+// sistema de rivalidades, ver subirHeat en main.js). Hype/ventaja mental ya
+// se leen arriba, en vivo (barraHype y la etiqueta de ventaja mental): no
+// hace falta repetirlos acá con otro nombre.
 function bloqueResumen(careo) {
   const resultado = resultadoCareo(careo);
   return el('div', { class: 'stack' }, [
@@ -57,14 +69,6 @@ function bloqueResumen(careo) {
         text: `Terminaste con ${careo.hype}/100 de hype y la ventaja mental ${textoVentaja(careo.ventajaMental)}.`,
       }),
       el('div', { class: 'fila', style: 'margin-top:10px' }, [
-        el('div', { class: 'tile' }, [
-          el('div', { class: 'valor dorado', text: fmtDelta(resultado.bonusFama) }),
-          el('div', { class: 'nombre', text: 'Fama' }),
-        ]),
-        el('div', { class: 'tile' }, [
-          el('div', { class: `valor ${resultado.bonusMoral >= 0 ? 'verde' : 'rojo'}`, text: fmtDelta(resultado.bonusMoral) }),
-          el('div', { class: 'nombre', text: 'Moral' }),
-        ]),
         el('div', { class: 'tile' }, [
           el('div', { class: 'valor rojo', text: `+${resultado.heatRival}` }),
           el('div', { class: 'nombre', text: `Calentura de ${careo.rivalApodo}` }),
