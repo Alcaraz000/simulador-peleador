@@ -19,15 +19,28 @@ export const CARTAS_MEJORA = [
   { id: 'bolsa_pesada', titulo: 'La bolsa pesada hasta que duela', texto: 'Mil golpes por día. Los nudillos se acostumbran, la mano empieza a pegar distinto.', mods: { fuerza: 4, agilidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'sombra_y_guardia', titulo: 'Sombra y guardia, mil veces', texto: 'Repetís el mismo gesto hasta que el cuerpo lo hace solo, sin pensarlo.', mods: { defensa: 4, fuerza: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'soga_sin_parar', titulo: 'La soga hasta que se corte', texto: 'Pies livianos, pulmón que no se queja. La cuerda no perdona a nadie.', mods: { agilidad: 4, cardio: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
+  // Rebalanceo (Pedido 3, v14): daba +4 Cardio sin ningún costo — la única
+  // normal "de regalo" del mazo (todas las demás de un solo atributo pagan
+  // una baja chica en otro, ver la nota de diseño arriba), lo que la dejaba
+  // dominando de taquito a cualquier carta de cardio con una baja (p. ej. "El
+  // circuito que no perdona"). Con la baja de agilidad pasa a competir de
+  // igual a igual: mismo cardio, distinto costo.
   {
-    id: 'doble_turno', titulo: 'Doble turno como cuando eras pibe', texto: 'Mañana y tarde en el gimnasio, sin chistar — igual que en aquellos años.', mods: { cardio: 4 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', condiciones: { edadMin: 21 },
+    id: 'doble_turno', titulo: 'Doble turno como cuando eras pibe', texto: 'Mañana y tarde en el gimnasio, sin chistar — igual que en aquellos años.', mods: { cardio: 4, agilidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal', condiciones: { edadMin: 21 },
   },
   { id: 'nadie_te_toca', titulo: 'Nadie te toca la cara', texto: 'Semana entera solo defendiendo. Aburrido y efectivo.', mods: { defensa: 4, agilidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'sparring_duro', titulo: 'Sparring con uno más grande', texto: 'Te comés unas cuantas, pero aprendés a leer el peligro antes de que llegue.', mods: { defensa: 3, cardio: 1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'contragolpe_de_reloj', titulo: 'Timing de contragolpe', texto: 'Esperar el error ajeno y castigarlo en el momento justo.', mods: { agilidad: 3, defensa: 1 }, etapas: ['amateur', 'profesional', 'veterano'], disciplinas: TODAS, rareza: 'normal' },
   { id: 'gancho_al_higado', titulo: 'El gancho al hígado, mil veces', texto: 'Al cuerpo se gana. El que no respira, no pelea.', mods: { fuerza: 4, cardio: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'jab_como_religion', titulo: 'El jab como religión', texto: 'Todo empieza y termina con la mano de adelante.', mods: { agilidad: 4, fuerza: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
-  { id: 'pesas_en_serio', titulo: 'Pesas en serio, por primera vez', texto: 'El profe insiste: sin base física, la técnica se cae en el séptimo round.', mods: { fuerza: 3, agilidad: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
+  // Rebalanceo (Pedido 3, v14, "ojo con mostrar tarjetas donde una es
+  // claramente mejor... 'Pesas en serio' al mismo tiempo que 'La bolsa
+  // pesada'"): con el mismo costo (agilidad-1) y menos fuerza que "La bolsa
+  // pesada hasta que duela" (fuerza+4), esta carta nunca tenía motivo para
+  // ganarle — dominada al dígito. Se le cambia el costo a defensa (mismo perfil
+  // que "Pegada seca al cuerpo") para que compita en un eje distinto: quien
+  // no puede resignar agilidad ahora tiene una alternativa real.
+  { id: 'pesas_en_serio', titulo: 'Pesas en serio, por primera vez', texto: 'El profe insiste: sin base física, la técnica se cae en el séptimo round.', mods: { fuerza: 3, defensa: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'circuito_funcional', titulo: 'El circuito que no perdona', texto: 'Diez estaciones, sin pausa, hasta que las piernas pidan clemencia.', mods: { cardio: 4, fuerza: -1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'clinch_y_salida', titulo: 'Clinch y salida limpia', texto: 'Practicás cómo entrar pegado y salir sin que te castiguen por eso.', mods: { defensa: 3, agilidad: 1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
   { id: 'pique_de_velocidad', titulo: 'Piques de velocidad en la vereda', texto: 'Salidas cortas y explosivas, antes de que amanezca del todo.', mods: { agilidad: 3, cardio: 1 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'normal' },
@@ -46,8 +59,14 @@ export const CARTAS_MEJORA = [
   {
     id: 'hambre_de_debutante', titulo: 'El hambre del que recién empieza', texto: 'Todavía no tenés nada que perder, y eso se nota en cada sesión.', mods: { fuerza: 3, agilidad: 2 }, etapas: SIEMPRE, disciplinas: TODAS, rareza: 'rara', condiciones: { edadMax: 23 },
   },
+  // Rebalanceo (Pedido 3, v14): sin ningún costo, +3/+3 dominaba de taquito a
+  // "Una semana sin tocar el gimnasio" (defensa+2, cardio+2, misma rareza,
+  // sin condición) apenas el jugador tenía la plata — nunca había motivo real
+  // para elegir la otra. La baja de agilidad (el campamento de altísimo
+  // nivel también cansa) le da un costo propio y deja de comerse a su prima
+  // más barata.
   {
-    id: 'plata_para_el_campamento', titulo: 'Plata para pagarte un campamento en serio', texto: 'Con unos mangos extra, el entrenamiento cambia de categoría.', mods: { cardio: 3, defensa: 3 }, etapas: PRO, disciplinas: TODAS, rareza: 'rara', condiciones: { dineroMin: 50000 },
+    id: 'plata_para_el_campamento', titulo: 'Plata para pagarte un campamento en serio', texto: 'Con unos mangos extra, el entrenamiento cambia de categoría.', mods: { cardio: 3, defensa: 3, agilidad: -1 }, etapas: PRO, disciplinas: TODAS, rareza: 'rara', condiciones: { dineroMin: 50000 },
   },
 
   // --- Legendarias: raras a propósito (~5%) y potentes de verdad. No se

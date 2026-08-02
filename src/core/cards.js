@@ -345,6 +345,104 @@ function pesosCompensados(totalOfrecido, totalQueHubieraSalido) {
   };
 }
 
+// Pedido 3 (v14, "ojo con mostrar tarjetas donde una es claramente mejor"):
+// una carta DOMINA a otra cuando da el mismo o mayor beneficio en cada
+// atributo Y el mismo o menor costo — nunca hay una razón real para elegir
+// la dominada. En `mods` el beneficio y el costo viven en el MISMO número con
+// signo (+3 Fuerza es beneficio, -1 Agilidad es costo), así que "mismo o
+// mayor beneficio y mismo o menor costo" se reduce a una sola comparación por
+// atributo: el valor de A tiene que ser >= al de B en TODOS, con al menos uno
+// estrictamente mayor (si son idénticas, es un empate — nadie domina a
+// nadie, no hay tarjeta de sobra). Ejemplo real que motivó esto: "La bolsa
+// pesada hasta que duela" (fuerza+4, agilidad-1) domina a "Pesas en serio,
+// por primera vez" (fuerza+3, agilidad-1, antes del rebalanceo) — mismo
+// costo, menos beneficio, cero motivo para elegir la segunda.
+export function domina(cartaA, cartaB, atributos = ATRIBUTOS) {
+  let algunaEstricta = false;
+  for (const atributo of atributos) {
+    const valorA = cartaA.mods?.[atributo] ?? 0;
+    const valorB = cartaB.mods?.[atributo] ?? 0;
+    if (valorA < valorB) return false;
+    if (valorA > valorB) algunaEstricta = true;
+  }
+  return algunaEstricta;
+}
+
+// Primer par (ganadora, perdedora) dentro de un ramillete de cartas ya
+// repartidas donde una domina a la otra, o `null` si no hay ninguno. El orden
+// de recorrido es siempre el mismo para un mismo array (determinístico), así
+// que a igual entrada esto siempre encuentra el mismo par primero.
+function primerParDominante(cartas) {
+  for (const ganadora of cartas) {
+    for (const perdedora of cartas) {
+      if (ganadora !== perdedora && domina(ganadora, perdedora)) return { ganadora, perdedora };
+    }
+  }
+  return null;
+}
+
+// Reemplazar la carta DOMINADA (nunca la ganadora: perder de la mano una
+// legendaria/rara solo porque compartió mesa con la carta equivocada sería
+// peor que el problema que se quiere arreglar) por otra del pool elegible que
+// no cree un nuevo par dominante con el resto de la mano. Si ninguna
+// candidata queda libre de conflicto, se deja el par tal cual —misma
+// salvaguarda de siempre: mejor una elección poco interesante que repartir
+// menos cartas de las pedidas o dejar el pool en cero.
+function sinConflictoCon(candidata, resto) {
+  return !resto.some((otra) => domina(candidata, otra) || domina(otra, candidata));
+}
+
+// Reemplazo DETERMINISTA (nunca consume `rng`): a igualdad de todo lo demás
+// se prefiere una candidata de la MISMA rareza que la perdedora (así la
+// distribución 70/25/5 de más arriba no se resiente por esta corrección), y
+// entre esas, la primera en el orden del catálogo — estable, sin azar.
+//
+// Importante por qué esto NO tira de `rng`: `repartirMejoras` corre una vez
+// por bloque, DENTRO de la misma secuencia de tiradas que después decide
+// rivales/eventos/todo lo demás de la carrera (career.js). Una versión
+// anterior de este arreglo elegía el reemplazo con `elegirPorRareza(rng,
+// ...)` — funcionaba en aislado, pero cada vez que el sorteo por rareza
+// dejaba un par dominante (no es raro: pasa cada vez que toca una
+// legendaria/rara junto a la normal que domina), esa tirada EXTRA corría la
+// secuencia entera del resto de la carrera para adelante. Un cambio de
+// contenido (agregarle un mod a una carta) terminaba cambiando qué rival te
+// tocaba tres bloques después — se vio en tests/ui/main-shell.test.js, que
+// arma partidas de prueba buscando un beat puntual con una semilla fija: con
+// la tirada extra, esa semilla dejaba de llegar al mismo beat. Sin consumir
+// `rng`, esta corrección es invisible para el resto de la secuencia: mismo
+// resultado en todo lo que no sea la mano de mejora de ESTE bloque.
+function elegirReemplazoDeterminista(candidatas, rarezaPerdedora) {
+  return candidatas.find((c) => rarezaDe(c) === rarezaPerdedora) ?? candidatas[0];
+}
+
+// `conBono` (por defecto, identidad) tiene que ser el MISMO transformador que
+// ya se le aplicó a `elegidas` antes de llamar acá: el bonus de etapa
+// temprana excluye a propósito a las legendarias ("no aplanes su varianza",
+// ver más abajo) — sin aplicárselo también a cada candidata de reemplazo, una
+// rara con bonus podía terminar pareciendo mejor en el papel que una
+// legendaria SIN bonus y colarse como reemplazo "seguro" que en realidad
+// también domina a la carta que se quería proteger.
+function sinParesDominantes(elegidas, elegibles, conBono = (c) => c) {
+  let actuales = [...elegidas];
+  // Tope de intentos generoso pero finito: con a lo sumo 3 cartas por mano
+  // nunca hacen falta tantas vueltas, esto solo evita un loop infinito si
+  // algún día el catálogo cambia de forma que lo permita.
+  for (let vuelta = 0; vuelta < 10; vuelta += 1) {
+    const par = primerParDominante(actuales);
+    if (!par) break;
+    const resto = actuales.filter((c) => c !== par.perdedora);
+    const idsEnMano = new Set(actuales.map((c) => c.id));
+    const candidatas = elegibles
+      .filter((c) => !idsEnMano.has(c.id))
+      .map(conBono)
+      .filter((c) => sinConflictoCon(c, resto));
+    if (candidatas.length === 0) break;
+    const reemplazo = elegirReemplazoDeterminista(candidatas, par.perdedora.rareza);
+    actuales = actuales.map((c) => (c === par.perdedora ? reemplazo : c));
+  }
+  return actuales;
+}
+
 export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo = null }) {
   const fuente = catalogo ?? CARTAS_MEJORA;
   const bonus = bonusCartas(jugador);
@@ -369,18 +467,35 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
   const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
   const elegiblesBase = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
   const elegibles = conSalvaguardaDeCondiciones(elegiblesBase, jugador);
-  const elegidas = sortearPorRareza(rng, elegibles, cantidadBase, pesos);
 
   const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;
-  if (bonus.bonusValor === 0 && bonusEtapa === 0) return elegidas;
-  return elegidas.map((carta) => {
+  // El bono (entrenador de elite y/o etapa temprana) se define ACÁ como una
+  // función, para poder aplicárselo tanto a lo sorteado como a cualquier
+  // candidata de reemplazo (ver el comentario de `sinParesDominantes`): si se
+  // aplicara solo a `sorteadas` y no a los reemplazos, una carta con bono
+  // podía colarse como "segura" sin serlo de verdad.
+  function conBono(carta) {
+    if (bonus.bonusValor === 0 && bonusEtapa === 0) return carta;
     let mods = carta.mods;
     if (bonus.bonusValor > 0) mods = conBonusEnTodos(mods, bonus.bonusValor);
     // El bonus de etapa temprana NUNCA toca una legendaria (pedido explícito
     // y repetido: "no aplanes la varianza de las legendarias").
     if (bonusEtapa > 0 && carta.rareza !== 'legendaria') mods = conBonusEnElMasGrande(mods, bonusEtapa);
     return mods === carta.mods ? carta : { ...carta, mods };
-  });
+  }
+
+  const sorteadas = sortearPorRareza(rng, elegibles, cantidadBase, pesos).map(conBono);
+  // Pedido 3 (v14): que el sorteo por rareza haya dejado dos cartas donde una
+  // domina a la otra en la misma mano no es aceptable — se corrige DESPUÉS
+  // del sorteo Y del bono (una rara con bono de etapa temprana puede terminar
+  // superando en el papel a una legendaria SIN bono, que a propósito queda
+  // afuera de ese bono). La distribución 70/25/5 y la compensación legendaria
+  // de arriba siguen intactas: esto solo puede reemplazar a la carta
+  // perdedora, nunca cambia cuántas ni con qué pesos se sortearon — y no
+  // consume ninguna tirada nueva de `rng` (ver el comentario grande de
+  // `elegirReemplazoDeterminista`), así que el resto de la secuencia
+  // aleatoria de la carrera queda intacto pase o no pase esta corrección.
+  return sinParesDominantes(sorteadas, elegibles, conBono);
 }
 
 // v13: los mods de una carta van SOLO a los cuatro atributos. Ya no hay
