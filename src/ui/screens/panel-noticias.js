@@ -25,7 +25,25 @@ import { marcarLeidas } from '../../core/news.js';
 // por dentro si el contenido no entra. El alto de la columna derecha queda
 // constante durante TODA la carrera, así que ya no es la variable que
 // empuja a las otras dos a estirarse de más.
-const ALTO_LISTA_PX = 480;
+//
+// v14 (Pedido 2b, bug real con captura: "el panel de noticias no cierra a la
+// misma altura que la columna izquierda"): el `height:480px` de acá vivía
+// INLINE, puesto por este archivo — y `limitarAlAltoDeIzquierda`
+// (sincronizar-alturas.js, ver main.js) ajustaba un `max-height` aparte
+// encima. Verificado con Playwright real: `max-height` nunca hace CRECER un
+// elemento por encima de un `height` ya fijado más chico (`height:480px` +
+// `max-height:600px` sigue midiendo 480px, comprobado a mano) — así que
+// cuando la izquierda medía MÁS que el resto de la columna derecha + estos
+// 480px, el panel de noticias se quedaba corto y la columna derecha nunca
+// llegaba a alcanzar el piso real de la izquierda (achicarse por debajo de
+// 480 sí funcionaba siempre: por eso el bug pasaba desapercibido salvo con
+// una izquierda alta de verdad). El default de 480px se muda a la HOJA DE
+// ESTILOS (`.panel-noticias-lista`, ver el bloque "v14" al final de
+// theme.css) — este archivo ya no fija ningún alto inline: en celular (donde
+// sincronizar-alturas.js no toca nada) ese default de la hoja de estilos es
+// el que queda puesto tal cual; en escritorio, `limitarAlAltoDeIzquierda`
+// pisa el `height` (no el `max-height`) con el valor que haga falta,
+// creciendo o achicando sin el techo artificial que tenía antes.
 
 // Intervalo entre una noticia y la siguiente al entrar (pedido: "que se
 // vayan sumando", no todas de golpe). Dentro de la ventana 250-400ms pedida.
@@ -106,7 +124,6 @@ export function renderPanelNoticias(region, {
 
   const lista = el('div', {
     class: 'panel-noticias-lista',
-    style: `height:${ALTO_LISTA_PX}px;overflow-y:auto`,
   }, noticias.length > 0
     ? noticias.map((n) => itemNoticia(n, { oculta: idsPendientes.has(n.id) }))
     : [el('p', { class: 'medio', style: 'font-size:12px', text: 'Semana tranquila. Nadie habló de nadie.' })]);

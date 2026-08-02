@@ -2414,3 +2414,203 @@ input.creacion-control { cursor: text; }
   padding-top: 8px;
   border-top: 1px solid var(--borde);
 }
+
+/* ============================================================================
+   v14 — Tres pedidos de layout puntuales del usuario, con captura de pantalla
+   en mano. Reglas nuevas AL FINAL del archivo (mismo criterio que las
+   secciones anteriores: hay otro implementador en paralelo tocando
+   cards-*.js/stats-carrera.js/legacy.js/cards-presser.js — agregar acá en vez
+   de editar en el medio minimiza el choque). Todo lo de acá PISA selectores
+   que ya existen más arriba o suma clases nuevas; ninguna línea de arriba se
+   tocó. Cubre:
+     1) El resumen del año entra siempre sin scroll propio (los dos gráficos
+        van lado a lado en escritorio, la mitad de alto que apilados).
+     2) Las tarjetas de una decisión de 2 opciones aprovechan el alto libre.
+     3) El golpe de gracia como popup (ver fight.js).
+   ============================================================================ */
+
+/* --- Pedido 1: los dos gráficos del resumen, lado a lado en escritorio ----
+   BUG REAL (verificado con Playwright, no a ojo): con un año cargado (3
+   decisiones + 3 peleas, el máximo posible — career.js arma siempre EXACTO
+   3 decisiones por año) los dos gráficos APILADOS ya suman ~430px ellos
+   solos en un módulo central ancho — de sobra para que el cuerpo scrolleable
+   (`.resumen-anio-cuerpo`) se pase del piso real de la izquierda incluso
+   ANTES de sumar la crónica, las decisiones y las peleas. Ponerlos lado a
+   lado corta esa cifra a la mitad (cada uno pasa a ocupar la mitad del
+   ancho, y con el mismo aspect-ratio fijo del viewBox, la mitad del alto
+   también) — el ahorro más grande posible, justo el que pidió el usuario
+   ("los gráficos son lo que más lugar ocupa").
+   En celular se mantiene la columna apilada de siempre (`flex-direction`
+   por defecto): partir cada gráfico a la mitad de un ancho ya angosto
+   (~390px) dejaría los ejes ilegibles — ahí el "piso de la izquierda" ni
+   siquiera aplica (columnas apiladas, ver sincronizar-alturas.js), así que
+   no hay necesidad real de ahorrar ese alto.
+   `min-width:0` en los hijos: sin esto, un SVG con `width:100%` puede forzar
+   el ancho mínimo de su columna flex por encima del espacio real disponible
+   (el mismo motivo que ya cubre `.fila > *` más arriba en este archivo). */
+.resumen-anio-graficos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (min-width: 960px) {
+  .resumen-anio-graficos {
+    flex-direction: row;
+  }
+
+  .resumen-anio-graficos > .resumen-anio-grafico-panel {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/* --- Pedido 1: en celular, el cuerpo del resumen NUNCA scrollea por su
+   cuenta ------------------------------------------------------------------
+   BUG REAL: `.resumen-anio-cuerpo` (más arriba, sección "v10") fija
+   `max-height:60vh` SIEMPRE, sin importar el ancho — pensado como resguardo
+   ESTÁTICO para cuando `limitarAlAltoDeIzquierda` (sincronizar-alturas.js)
+   todavía no corrió. Pero en celular (columnas apiladas) ese módulo se
+   niega a tocar nada a propósito (`esEscritorio()` da `false`, ver el
+   comentario grande de ese archivo: "el piso de la izquierda" no significa
+   nada cuando la izquierda ya quedó arriba de todo) — ahí el único límite
+   que le queda a `.resumen-anio-cuerpo` es este `60vh` de la hoja de
+   estilos, que no tiene ninguna razón real de ser: en celular la PÁGINA
+   entera ya scrollea de punta a punta (como cualquier otra pantalla del
+   juego), así que forzar además un scroll INTERNO acá adentro es la típica
+   doble barra de scroll anidada — exactamente lo que reportó el usuario
+   ("no quiero que el jugador tenga que scrollear... para ver el resto del
+   resumen"). Se saca el tope en celular: el cuerpo crece con su contenido
+   real y se lee scrolleando la página, un solo scroll, como en cualquier
+   otra pantalla. */
+@media (max-width: 959.98px) {
+  .resumen-anio-cuerpo {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
+
+/* --- Pedido 2b: el panel de noticias, alineado de verdad con el piso de la
+   izquierda -------------------------------------------------------------
+   BUG REAL (verificado con Playwright, con captura en mano): el
+   `height:480px` de este módulo vivía INLINE (panel-noticias.js), puesto
+   por ese archivo; `limitarAlAltoDeIzquierda` (sincronizar-alturas.js)
+   ajustaba un `max-height` aparte encima para que la columna derecha
+   cerrara exacto al piso de la izquierda. Confirmado a mano: un
+   `max-height` MAYOR que un `height` ya fijado no hace nada — el elemento
+   se queda en su `height` de siempre, nunca crece. Mientras la izquierda
+   medía MENOS que el resto de la columna derecha + estos 480px, achicar
+   funcionaba bien (por eso el bug pasaba desapercibido en la mayoría de las
+   capturas) — pero apenas la izquierda medía MÁS (cinturones + rincón +
+   historial de peleas, todo junto), la columna derecha se quedaba corta:
+   "no cierra a la misma altura", tal cual reportó el usuario.
+   La solución: el default de 480px pasa a esta hoja de estilos (antes
+   inline) y `limitarAlAltoDeIzquierda` ahora pisa DIRECTO el `height` acá
+   (ver `propiedad:'height'`, sincronizar-alturas.js/main.js) — nunca un
+   `max-height` aparte que no puede ganarle a este `height` cuando hace
+   falta CRECER. En celular (sincronizar-alturas.js no toca nada ahí, no
+   hay "piso de la izquierda" que perseguir con columnas apiladas) este
+   default de 480px queda tal cual, igual que siempre. */
+.panel-noticias-lista {
+  height: 480px;
+  overflow-y: auto;
+}
+
+/* --- Pedido 2a: la decisión de 2 opciones aprovecha el alto libre ---------
+   BUG REAL (con captura): una decisión de 2 opciones (evento/campamento —
+   la MAYORÍA de las cartas de evento del catálogo trae exactamente 2, ver
+   content/cards-events.js) deja las tarjetas con el tamaño de SIEMPRE
+   (pensado para la grilla de 3) arriba de todo, y como el centro no se
+   estira (cada columna del shell mide su propio alto, ver el comentario
+   grande de shell.js) queda un tramo entero de fondo vacío hasta el pie de
+   la columna izquierda. El usuario autorizó explícitamente rediseñar estas
+   tarjetas — acá se agranda TODO lo que tiene adentro (ícono, título,
+   descripción, el aire alrededor) en vez de solo estirar el contenedor: un
+   ícono a 42px o una descripción de 4 líneas se ven perdidos en una tarjeta
+   mucho más ancha y alta, lo que hace falta es una tarjeta que de verdad
+   se sienta más grande, no una más chica con más padding vacío.
+   Escopeado a `.panel-decision .panel-decision-grilla-2` (el wrapper que
+   arma panel-decision.js, ver ese archivo) — NUNCA a `.panel-decision-grilla-2`
+   a secas, que create.js también usa para origen/estilo en la creación del
+   peleador (una pantalla `.pantalla-corta` aparte, sin columnas laterales
+   ni "piso" que perseguir: agrandar esas tarjetas ahí no resolvería nada
+   que se haya reportado, y sí arriesgaría desacomodar una pantalla que
+   nadie se quejó).
+   Sigue siendo TAMAÑO FIJO (pedido general del proyecto: "toda tarjeta con
+   tamaño fijo, para que las grillas no se deformen") — más grande que la
+   tarjeta de 3 columnas, pero constante siempre que la decisión traiga
+   exactamente 2 opciones: nunca se calcula en base a la izquierda ni a
+   ningún otro alto dinámico (eso sería "algo se mueve solo", lo que el
+   usuario pidió explícitamente que nunca pase).
+   Escopeado ADEMÁS a escritorio (`min-width:960px`, el mismo corte que ya
+   usa el shell para pasar a 3 columnas): medido con Playwright contra el
+   texto de opción MÁS LARGO del catálogo (78 caracteres, "Armar algo con lo
+   que hay..." — content/cards-events.js, no se toca en esta ronda), a los
+   ~190px que mide cada tarjeta en el celular de 2 columnas ni siquiera el
+   tamaño ORIGINAL (sin agrandar) le alcanza para no cortarse con "…": es un
+   bug preexistente, ajeno a los 3 pedidos de esta ronda, y agrandar el
+   título ahí solo lo hubiera empeorado. En escritorio, en cambio, la
+   tarjeta mide ~375px y el mismo texto entra completo en las 2 líneas
+   reservadas — por eso el agrandado corre SOLO ahí. */
+@media (min-width: 960px) {
+  .panel-decision .panel-decision-grilla-2 .tarjeta {
+    padding: 22px 20px 26px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-icono {
+    width: 72px;
+    height: 72px;
+    border-radius: 16px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-titulo {
+    margin-top: 16px;
+    font-size: 17px;
+    height: 46px;
+    line-height: 23px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-desc {
+    margin-top: 10px;
+    font-size: 13px;
+    line-height: 18px;
+    height: 126px;
+    -webkit-line-clamp: 7;
+    line-clamp: 7;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-efectos {
+    margin-top: 16px;
+    gap: 8px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-efecto {
+    padding: 7px 12px;
+    font-size: 12.5px;
+  }
+}
+
+/* --- Pedido 3: el golpe de gracia como popup, con look de momento crítico -
+   Reusa `.popup-panel`/`.popup-overlay` tal cual (mismo cierre con X, mismo
+   devolver el foco, mismo "nunca deja listeners colgados" — ver
+   components/popup.js) — lo único nuevo es esta clase (`claseExtra`, ver
+   abrirPopup) que le suma un borde y un resplandor rojos: "quiero que dé la
+   sensación de que es un momento de urgencia y crítico", y el rojo ya es el
+   color que este juego reserva para peligro/urgencia en todos lados
+   (`.chip.rojo`, `.tarjeta-efecto.negativo`, el ícono de riesgo alto en
+   fight.js). Estático (sin animación): un resplandor que pulsara iría en
+   contra de "un `outline` de foco tiene que poder distinguirse siempre" y
+   competiría con la propia animación de entrada del popup — alcanza con el
+   color para leerse distinto de un popup común (tienda, ranking, hitos),
+   que se quedan con el borde neutro de siempre. */
+.popup-panel.popup-critico {
+  border-color: var(--rojo);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 12px 40px rgba(0, 0, 0, 0.55),
+    0 0 46px rgba(239, 68, 68, 0.28);
+}
+
+.popup-panel.popup-critico .popup-titulo {
+  color: var(--rojo);
+}

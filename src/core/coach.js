@@ -1,4 +1,5 @@
 import { ENTRENADORES } from '../content/coaches.js';
+import { clamp, LIMITES_ATRIBUTO } from './stats.js';
 import { SENALES_TALENTO, DECISIONES_ANTES_DE_OPINAR } from '../content/senales-talento.js';
 import { lecturaDeTalento } from './talento.js';
 import { aplicarModificadores } from './stats.js';
@@ -48,7 +49,13 @@ export function atributosConEntrenador(jugador) {
   const resultado = {};
   for (const [clave, valor] of Object.entries(jugador.atributos)) {
     const aporteClave = aporte[clave] ?? 0;
-    resultado[clave] = { base: valor - aporteClave, aporte: aporteClave };
+    // `valor` ya viene clampeado a 1-99, así que restarle un aporte NEGATIVO
+    // daba una base fuera de rango: con la defensa en el tope y un entrenador
+    // que resta 2, el tablero mostraba 101. La base se clampea igual que el
+    // atributo, y el aporte se recalcula sobre ella para que la invariante
+    // `base + aporte === atributos[clave]` siga siendo cierta.
+    const base = clamp(valor - aporteClave, LIMITES_ATRIBUTO.min, LIMITES_ATRIBUTO.max);
+    resultado[clave] = { base, aporte: valor - base };
   }
   return resultado;
 }

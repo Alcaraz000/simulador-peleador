@@ -7,6 +7,7 @@ import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import {
   formatearMods, repartirMejoras, aplicarCarta, resolverProbabilidad, porcentajesDe,
   decidirCantidadMejoras, sortearPorRareza, elegirPorRareza, conSalvaguardaDeCondiciones,
+  domina,
 } from '../../src/core/cards.js';
 
 const RAREZAS_VALIDAS = ['normal', 'rara', 'legendaria'];
@@ -107,6 +108,93 @@ describe('catalogo de mejoras', () => {
       expect(carta.condiciones?.famaMin).toBeUndefined();
       expect(carta.condiciones?.famaMax).toBeUndefined();
     }
+  });
+});
+
+// Pedido 3 (v14, reporte del usuario: "ojo con mostrar tarjetas donde
+// claramente una es mejor que la otra, por ejemplo 'Pesas en serio, por
+// primera vez' al mismo tiempo que 'La bolsa pesada hasta que duela'"):
+// "domina" = mismo o mayor beneficio en cada atributo Y mismo o menor costo,
+// con al menos una diferencia real — si no, no hay decisión, hay una
+// respuesta obvia.
+describe('domina (Pedido 3, v14)', () => {
+  it('detecta el caso real que motivó el pedido: mismo costo, menos beneficio', () => {
+    expect(domina({ mods: { fuerza: 4, agilidad: -1 } }, { mods: { fuerza: 3, agilidad: -1 } })).toBe(true);
+    expect(domina({ mods: { fuerza: 3, agilidad: -1 } }, { mods: { fuerza: 4, agilidad: -1 } })).toBe(false);
+  });
+
+  it('dos cartas idénticas no se dominan entre sí (empate, no hay tarjeta de sobra)', () => {
+    expect(domina({ mods: { fuerza: 3 } }, { mods: { fuerza: 3 } })).toBe(false);
+  });
+
+  it('perfiles distintos (mejor en un eje, peor en otro) no son dominancia: ahí sí hay decisión real', () => {
+    expect(domina({ mods: { fuerza: 4, agilidad: -1 } }, { mods: { fuerza: 3, defensa: -1 } })).toBe(false);
+    expect(domina({ mods: { fuerza: 3, defensa: -1 } }, { mods: { fuerza: 4, agilidad: -1 } })).toBe(false);
+  });
+
+  it('mayor beneficio en un atributo Y menor costo en otro, a la vez, también es dominancia', () => {
+    expect(domina({ mods: { fuerza: 5, agilidad: 0 } }, { mods: { fuerza: 4, agilidad: -1 } })).toBe(true);
+  });
+
+  it('un atributo ausente cuenta como 0', () => {
+    expect(domina({ mods: { fuerza: 2 } }, { mods: { fuerza: 1, defensa: -1 } })).toBe(true);
+    expect(domina({ mods: { fuerza: 1 } }, { mods: { fuerza: 2 } })).toBe(false);
+  });
+});
+
+// Test que recorre el catálogo entero (Pedido 3a, v14): lista los pares
+// dominantes que existen hoy. Se separan en dos invariantes porque no toda
+// dominancia es un bug:
+//   - entre cartas de la MISMA rareza que de verdad pueden repartirse juntas
+//     (mismo estado sano/lesionado — son mutuamente excluyentes, ver
+//     cartaAplicaPorEstado en cards.js — y etapa en común) nunca debería
+//     haber una obviamente mejor: eso es el bug real (rebalanceado en esta
+//     misma tanda: bolsa_pesada/pesas_en_serio, doble_turno/circuito_funcional,
+//     plata_para_el_campamento/semana_sin_gimnasio).
+//   - entre rarezas distintas SÍ es aceptable que la más rara gane (una
+//     legendaria/rara puede superar a una normal a propósito, "no se
+//     nerfean") — lo que protege el segundo test es que nunca sea al revés.
+describe('dominancia en el catálogo de mejoras entero (Pedido 3, v14)', () => {
+  function bucketsDe(carta) {
+    return carta.estados ?? ['sano'];
+  }
+
+  function puedenRepartirseJuntas(a, b) {
+    const compartenEstado = bucketsDe(a).some((e) => bucketsDe(b).includes(e));
+    const compartenEtapa = a.etapas.some((e) => b.etapas.includes(e));
+    return compartenEstado && compartenEtapa;
+  }
+
+  it('dentro de la misma rareza, ninguna carta que pueda repartirse junto a otra la domina', () => {
+    const encontrados = [];
+    for (const a of CARTAS_MEJORA) {
+      for (const b of CARTAS_MEJORA) {
+        if (a === b || a.rareza !== b.rareza) continue;
+        if (puedenRepartirseJuntas(a, b) && domina(a, b)) encontrados.push(`"${a.id}" domina a "${b.id}" (ambas ${a.rareza})`);
+      }
+    }
+    expect(encontrados).toEqual([]);
+  });
+
+  // Nota: esto solo tiene sentido entre cartas que de verdad puedan
+  // repartirse juntas (mismo estado, etapa en común). Las cartas de
+  // recuperación (estados:['lesionado']) son deliberadamente chicas en sus
+  // números — nunca compiten contra el mazo de gimnasio, así que una normal
+  // "de gimnasio" ganándole en el papel a una rara "de lesionado" no es un
+  // error de diseño, es una comparación que jamás ocurre en el juego.
+  it('cuando SI hay dominancia entre rarezas distintas que pueden repartirse juntas, siempre gana la de mayor rareza (nunca una normal supera a una rara/legendaria en el papel)', () => {
+    const RANGO = { normal: 0, rara: 1, legendaria: 2 };
+    const violaciones = [];
+    for (const a of CARTAS_MEJORA) {
+      for (const b of CARTAS_MEJORA) {
+        if (a === b) continue;
+        if (!puedenRepartirseJuntas(a, b)) continue;
+        if (domina(a, b) && RANGO[a.rareza] < RANGO[b.rareza]) {
+          violaciones.push(`"${a.id}" (${a.rareza}) domina a "${b.id}" (${b.rareza})`);
+        }
+      }
+    }
+    expect(violaciones).toEqual([]);
   });
 });
 
@@ -661,6 +749,108 @@ describe('repartirMejoras', () => {
     expect(elegida.id).toBe('l');
     const elegidas = sortearPorRareza(createRng(1), catalogo, 1, { normal: 0, rara: 0, legendaria: 100 });
     expect(elegidas.map((c) => c.id)).toEqual(['l']);
+  });
+
+  // Pedido 3b (v14): "el reparto de mejoras tiene que evitar ofrecer dos
+  // cartas donde una domina a la otra". Se recorren muchas semillas y las
+  // cuatro etapas (el bonus de etapa temprana es justo donde más podría
+  // colarse un caso nuevo) con el catálogo REAL — no uno sintético — para que
+  // esto vigile de verdad lo que el jugador puede llegar a ver en pantalla.
+  describe('nunca reparte un par dominante en la misma mano (Pedido 3b, v14)', () => {
+    function sinParDominante(cartas) {
+      for (let i = 0; i < cartas.length; i += 1) {
+        for (let j = 0; j < cartas.length; j += 1) {
+          if (i === j) continue;
+          if (domina(cartas[i], cartas[j])) return `"${cartas[i].id}" domina a "${cartas[j].id}"`;
+        }
+      }
+      return null;
+    }
+
+    const ETAPAS = ['juvenil', 'amateur', 'profesional', 'veterano'];
+
+    it('sobre muchas semillas y las cuatro etapas, con cantidad 3 (jugador sano)', () => {
+      for (let semilla = 1; semilla <= 300; semilla += 1) {
+        for (const etapa of ETAPAS) {
+          const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa, cantidad: 3 });
+          const conflicto = sinParDominante(cartas);
+          expect(conflicto, `semilla ${semilla}, etapa ${etapa}: ${conflicto}`).toBeNull();
+        }
+      }
+    });
+
+    it('lo mismo con cantidad 2', () => {
+      for (let semilla = 1; semilla <= 200; semilla += 1) {
+        for (const etapa of ETAPAS) {
+          const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa, cantidad: 2 });
+          const conflicto = sinParDominante(cartas);
+          expect(conflicto, `semilla ${semilla}, etapa ${etapa}: ${conflicto}`).toBeNull();
+        }
+      }
+    });
+
+    it('lo mismo con un jugador lesionado (solo cartas de recuperación)', () => {
+      const jugadorLesionado = () => {
+        const j = jugador();
+        return { ...j, estado: { ...j.estado, lesion: { id: 'x', nombre: 'x', severidad: 1, semanasRestantes: 4, costo: 1, texto: 'x' } } };
+      };
+      for (let semilla = 1; semilla <= 200; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugadorLesionado(), etapa: 'profesional', cantidad: 3 });
+        const conflicto = sinParDominante(cartas);
+        expect(conflicto, `semilla ${semilla}: ${conflicto}`).toBeNull();
+      }
+    });
+
+    it('sin importar el reemplazo, sigue sin repetir cartas ni cambiar la cantidad pedida', () => {
+      for (let semilla = 1; semilla <= 200; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), { jugador: jugador(), etapa: 'profesional', cantidad: 3 });
+        expect(cartas).toHaveLength(3);
+        expect(new Set(cartas.map((c) => c.id)).size).toBe(3);
+      }
+    });
+
+    // La avoidance no puede desarmar la excitación de una legendaria: cuando
+    // el sorteo saca una carta junto con otra que domina, se reemplaza SOLO
+    // a la dominada (nunca a la ganadora) — con un catálogo chico y
+    // controlado se puede comprobar la pareja exacta, no solo "en algún
+    // momento hay una legendaria" (eso ya lo cubre el test de 70/25/5).
+    it('si el sorteo saca una carta fuerte junto con otra que domina, reemplaza a la dominada por una segura y nunca las deja juntas', () => {
+      const catalogoConDominancia = [
+        { id: 'fuerte', titulo: 'Fuerte', texto: 't', mods: { fuerza: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+        { id: 'dominada', titulo: 'Dominada', texto: 't', mods: { fuerza: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+        { id: 'segura', titulo: 'Segura', texto: 't', mods: { defensa: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      ];
+      let vistoJuntas = 0;
+      let vistoFuerteSinDominada = 0;
+      for (let semilla = 1; semilla <= 500; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugador(), etapa: 'profesional', cantidad: 2, catalogo: catalogoConDominancia,
+        });
+        const tieneFuerte = cartas.some((c) => c.id === 'fuerte');
+        const tieneDominada = cartas.some((c) => c.id === 'dominada');
+        if (tieneFuerte && tieneDominada) vistoJuntas += 1;
+        if (tieneFuerte && !tieneDominada) vistoFuerteSinDominada += 1;
+      }
+      expect(vistoJuntas).toBe(0);
+      expect(vistoFuerteSinDominada).toBeGreaterThan(0);
+    });
+
+    // Salvaguarda: si NO hay ninguna candidata sin conflicto para reemplazar
+    // a la dominada (pool minúsculo, sin margen), se deja el par tal cual en
+    // vez de repartir menos cartas de las pedidas — mismo criterio que el
+    // resto de las salvaguardas de repartirMejoras.
+    it('sin candidata de reemplazo disponible, se deja el par dominante antes que repartir menos cartas de las pedidas', () => {
+      const catalogoSinMargen = [
+        { id: 'fuerte', titulo: 'Fuerte', texto: 't', mods: { fuerza: 8 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'legendaria' },
+        { id: 'dominada', titulo: 'Dominada', texto: 't', mods: { fuerza: 3 }, etapas: SIEMPRE, disciplinas: 'todas', rareza: 'normal' },
+      ];
+      for (let semilla = 1; semilla <= 20; semilla += 1) {
+        const cartas = repartirMejoras(createRng(semilla), {
+          jugador: jugador(), etapa: 'profesional', cantidad: 2, catalogo: catalogoSinMargen,
+        });
+        expect(cartas).toHaveLength(2);
+      }
+    });
   });
 });
 

@@ -219,6 +219,26 @@ describe('renderLegado', () => {
       expect(() => renderCompleto(cont, jugador)).not.toThrow();
       expect(cont.querySelector('[data-bloque="historial-amateur"]')).toBeNull();
     });
+
+    // Pedido 1 (v14): mismo mes/año que el historial profesional de la ficha.
+    it('muestra el mes y año de cada pelea amateur', () => {
+      const jugador = jugadorConCarrera();
+      renderCompleto(cont, jugador);
+      const bloque = cont.querySelector('[data-bloque="historial-amateur"]');
+      expect(bloque.textContent).toMatch(/20\d{2}/);
+    });
+
+    it('una pelea amateur vieja sin fecha no muestra undefined ni NaN', () => {
+      const jugador = jugadorConCarrera();
+      jugador.historialAmateur = jugador.historialAmateur.map((p) => {
+        const { fecha, ...sinFecha } = p;
+        return sinFecha;
+      });
+      expect(() => renderCompleto(cont, jugador)).not.toThrow();
+      expect(cont.textContent).not.toContain('undefined');
+      expect(cont.textContent).not.toContain('NaN');
+      expect(cont.textContent).toContain('Pibe Amateur');
+    });
   });
 });
 
@@ -232,6 +252,30 @@ describe('renderFicha', () => {
 
   it('muestra el historial de peleas', () => {
     renderFicha(cont, { jugador: jugadorConCarrera(), seccion: 'historial', onCerrar: () => {} });
+    expect(cont.textContent).toContain('Dyke Tyzon');
+  });
+
+  // Pedido 1 (v14, "falta agregar, en el historial de peleas, el mes y año
+  // de cuando se peleó cada una"): cada fila trae `fecha` (semanaGlobal) —
+  // alcanza con confirmar que aparece un año de 4 dígitos, sin atarse a un
+  // mes puntual (mismo criterio que el test de fechas de título más arriba).
+  it('muestra el mes y año de cada pelea', () => {
+    renderFicha(cont, { jugador: jugadorConCarrera(), seccion: 'historial', onCerrar: () => {} });
+    expect(cont.textContent).toMatch(/20\d{2}/);
+  });
+
+  // Puede haber peleas guardadas antes de que se empezara a registrar
+  // `fecha` (partidas viejas retomadas): nunca "undefined" ni "NaN", la
+  // fecha se omite para esa fila en particular.
+  it('una pelea vieja sin fecha no muestra undefined ni NaN', () => {
+    const jugador = jugadorConCarrera();
+    jugador.historial = jugador.historial.map((p) => {
+      const { fecha, ...sinFecha } = p;
+      return sinFecha;
+    });
+    expect(() => renderFicha(cont, { jugador, seccion: 'historial', onCerrar: () => {} })).not.toThrow();
+    expect(cont.textContent).not.toContain('undefined');
+    expect(cont.textContent).not.toContain('NaN');
     expect(cont.textContent).toContain('Dyke Tyzon');
   });
 

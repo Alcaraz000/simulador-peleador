@@ -877,6 +877,12 @@ function armarCola(partida) {
   let memoriaEvento = partida.memoriaCartas?.evento ?? [];
   let memoriaRedes = partida.memoriaCartas?.redes ?? [];
 
+  // Una carta cuyo mal desenlace es "se cae la pelea" no puede salir si no
+  // hay ninguna pelea en danza (reporte del usuario: le apareció "El sobre en
+  // el vestuario" sin nada pactado). `ofertaPendiente` es la oferta de este
+  // bloque todavía sin firmar; `proximaPelea`, una ya firmada en campamento.
+  const hayPeleaEnDanza = Boolean(partida.ofertaPendiente || partida.proximaPelea);
+
   const tipoDecision = elegirTipoDecision(rng, tag);
   if (tipoDecision === 'mejora') {
     cola.push({
@@ -889,12 +895,14 @@ function armarCola(partida) {
     // comentario grande en crearPartida).
     const categoria = rng.chance(0.5) ? 'vida' : 'evento';
     const carta = elegirEvento(rng, {
-      jugador: jugadorActual, etapa: tag, categoria, recientes: memoriaEvento,
+      jugador: jugadorActual, etapa: tag, categoria, recientes: memoriaEvento, hayPeleaEnDanza,
     });
     memoriaEvento = recordarCarta(memoriaEvento, carta.id);
     cola.push({ tipo: 'evento', datos: { carta } });
   } else {
-    const carta = elegirCartaRedes(rng, { jugador: jugadorActual, recientes: memoriaRedes });
+    const carta = elegirCartaRedes(rng, {
+      jugador: jugadorActual, recientes: memoriaRedes, hayPeleaEnDanza,
+    });
     memoriaRedes = recordarCarta(memoriaRedes, carta.id);
     cola.push({ tipo: 'redes', datos: { carta } });
   }

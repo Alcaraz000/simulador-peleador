@@ -308,7 +308,12 @@ function filaAtributo(clave, { base, aporte }) {
     class: `panel-peleador-atributo${aporte ? ' con-aporte' : ''}`,
     dataset: { atributo: clave },
   }, [
-    aporte ? el('span', { class: 'aporte-entrenador', text: `+${aporte}` }) : null,
+    // Un aporte negativo se escribe "−2", no "+-2" (un entrenador puede
+    // restar en algún atributo: es parte de su carácter).
+    aporte ? el('span', {
+      class: `aporte-entrenador${aporte < 0 ? ' negativo' : ''}`,
+      text: aporte > 0 ? `+${aporte}` : `−${Math.abs(aporte)}`,
+    }) : null,
     // El número va PRIMERO y el nombre debajo (pedido del usuario): en el
     // cuadro manda el valor, la etiqueta lo acompaña. El orden del DOM
     // coincide con el visual a propósito — invertirlo solo por CSS deja a

@@ -167,13 +167,24 @@ export function renderResumenAnio(region, {
     ]),
   ]);
 
+  // Pedido 1 (v14, "los gráficos son lo que más lugar ocupa... los dos
+  // gráficos lado a lado en vez de apilados"): un solo contenedor de fila
+  // para los dos (`.resumen-anio-graficos`, theme.css lo pone lado a lado en
+  // escritorio — la mitad del alto de tenerlos apilados, que es justo lo que
+  // hacía falta para que el año más cargado entre sin scroll propio) y
+  // apilados en celular (ahí el ancho angosto no da para partir cada
+  // gráfico a la mitad sin perder legibilidad de los ejes).
+  const graficos = el('div', { class: 'resumen-anio-graficos' }, [
+    bloqueGrafico('Media', graficoMedia({ muestras: muestrasMedia, anio })),
+    bloqueGrafico('Ranking', graficoRanking({ muestras: muestrasMedia, anio })),
+  ]);
+
   const cuerpoScroll = el('div', { class: 'stack resumen-anio-cuerpo' }, [
     narrativa ? el('div', { class: 'fila', style: 'align-items:center;gap:8px' }, [
       el('div', { class: 'resumen-anio-icono resumen-anio-icono-chico' }, [icono('microfono', { tamano: 13 })]),
       el('p', { class: 'medio', style: 'margin:0;flex:1;min-width:0', text: narrativa }),
     ]) : null,
-    bloqueGrafico('Media', graficoMedia({ muestras: muestrasMedia, anio })),
-    bloqueGrafico('Ranking', graficoRanking({ muestras: muestrasMedia, anio })),
+    graficos,
     seccion('Decisiones', decisiones.map(itemDecision)),
     seccion('Peleas del año', peleas.map(itemPelea)),
   ]);

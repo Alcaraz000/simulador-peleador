@@ -201,9 +201,12 @@ export const CARTAS_CAMPAMENTO = [
     texto: 'Corre la bola en el ambiente: dicen que {rival} esconde una molestia física de verdad.',
     etapas: SIEMPRE, rareza: 'normal',
     opciones: [
+      // Rebalanceo (Pedido 2, v14): la rama del invento no traía mods ni
+      // efectos — píldora "45%" pelada. Un -1 Agilidad por el tiempo/cabeza
+      // perdidos siguiendo una pista falsa le da a la píldora algo que decir.
       { id: 'investigar', texto: 'Mover contactos para confirmarlo.', probabilidades: [
         { peso: 55, mods: { agilidad: 2 }, texto: 'Confirmás el dato: el rival esconde una molestia real y ajustás el plan.' },
-        { peso: 45, mods: {}, texto: 'Era un invento de la prensa para vender entradas.' },
+        { peso: 45, mods: { agilidad: -1 }, texto: 'Era un invento de la prensa para vender entradas.' },
       ] },
       { id: 'ignorarlo', texto: 'Ignorarlo y entrenar para el rival de siempre.', mods: {} },
     ],

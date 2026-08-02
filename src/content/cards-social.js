@@ -78,13 +78,21 @@ export const CARTAS_REDES = [
   // las otras dos quedan como siempre. `heatRival` va en `opcion.efectos`
   // (aplica siempre, gane la rama que gane: provocaste igual, salga bien o
   // mal) y el resultado, que sí depende de cómo salga, va por rama.
+  //
+  // Pedido 2 (v14, "no entiendo qué hace esta tarjeta"): las dos ramas solo
+  // traían `texto` narrativo, sin `mods` ni `efectos` — la píldora previa a
+  // elegir (armada en main.js con el % + `textoDeRama`, que solo lee mods/
+  // dinero/caePelea, nunca el texto de sabor) quedaba en un "55%"/"45%"
+  // pelado, sin decir a qué correspondía cada uno. El texto narrativo sigue
+  // intacto (se muestra recién DESPUÉS de elegir, como siempre); lo que faltaba
+  // era la consecuencia real que la píldora pudiera anunciar de antemano.
   {
     id: 'polemica_calculada', titulo: 'La polémica calculada', rareza: 'rara',
     texto: 'Te proponen tirar algo picante a propósito, calculado para explotar. Puede jugar a tu favor... o puede salir carísimo.',
     opciones: [
       { id: 'provocar', tono: 'provocador', texto: '"El campeón me tiene miedo. Todos lo saben."', efectos: { heatRival: 30 }, probabilidades: [
-        { peso: 55,  texto: 'Se hace tendencia en minutos. Todos hablan de vos.' },
-        { peso: 45,  texto: 'Se te fue la mano: te tratan de careta y hasta tu propio mánager te llama para bajarte los humos.' },
+        { peso: 55,  efectos: { dinero: 15000 },  texto: 'Se hace tendencia en minutos. Todos hablan de vos.' },
+        { peso: 45,  efectos: { dinero: -9000 }, texto: 'Se te fue la mano: te tratan de careta y hasta tu propio mánager te llama para bajarte los humos.' },
       ] },
       { id: 'humilde', tono: 'humilde', texto: '"Prefiero hablar arriba del ring."', mods: { defensa: 2 } },
       { id: 'promocionar', tono: 'promocional', texto: 'Dejar que el mánager arme el rumor por vos.', efectos: { dinero: 3000 } },
@@ -93,13 +101,15 @@ export const CARTAS_REDES = [
   // Pedido 2 (v7, "sumá más tarjetas de %, son lo más divertido"): mismo
   // patrón que 'polemica_calculada' — la rama provocadora es la que arriesga
   // (probabilidades), humilde/promocional quedan fijas como siempre.
+  // Rebalanceo v14: mismo problema y mismo arreglo que 'polemica_calculada'
+  // (ver el comentario de arriba) — se le suma la consecuencia real a cada rama.
   {
     id: 'entrevista_incomoda', titulo: 'La pregunta filosa', rareza: 'normal',
     texto: 'Un cronista te tira una pregunta pensada para que te calientes frente a cámara, en vivo.',
     opciones: [
       { id: 'provocar', tono: 'provocador', texto: 'Contestarle con la misma moneda.', efectos: { heatRival: 20 }, probabilidades: [
-        { peso: 70,  texto: 'Se arma un clip picante que todos comparten esa noche.' },
-        { peso: 30,  texto: 'Te pasaste de rosca: quedás como el maleducado de la cadena nacional.' },
+        { peso: 70,  efectos: { dinero: 4000 },  texto: 'Se arma un clip picante que todos comparten esa noche.' },
+        { peso: 30,  mods: { cardio: -2 }, texto: 'Te pasaste de rosca: quedás como el maleducado de la cadena nacional.' },
       ] },
       { id: 'humilde', tono: 'humilde', texto: 'Responder con calma, sin morder el anzuelo.', mods: { defensa: 2 } },
       { id: 'promocionar', tono: 'promocional', texto: 'Desviar la pregunta hacia la venta de entradas.', efectos: { dinero: 2500 } },
@@ -109,8 +119,8 @@ export const CARTAS_REDES = [
     texto: 'Te proponen entrenar en vivo para las redes, tal cual sale, sin cortes ni segundas tomas.',
     opciones: [
       { id: 'provocar', tono: 'provocador', texto: 'Aprovechar el vivo para picantear al rival.', efectos: { heatRival: 26 }, probabilidades: [
-        { peso: 55,  texto: 'Sale perfecto: la gente enloquece con la previa de la pelea.' },
-        { peso: 45,  texto: 'Un traspié en vivo, sin edición que lo tape, y se ríen de vos toda la semana.' },
+        { peso: 55,  efectos: { dinero: 12000 },  texto: 'Sale perfecto: la gente enloquece con la previa de la pelea.' },
+        { peso: 45,  mods: { defensa: -2 }, texto: 'Un traspié en vivo, sin edición que lo tape, y se ríen de vos toda la semana.' },
       ] },
       { id: 'humilde', tono: 'humilde', texto: 'Mostrar el entrenamiento tal cual, sin careteo.',  mods: { defensa: 3 } },
       { id: 'promocionar', tono: 'promocional', texto: 'Aprovechar para nombrar a los sponsors.', efectos: { dinero: 5000 } },

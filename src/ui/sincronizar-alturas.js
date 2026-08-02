@@ -82,13 +82,34 @@ function esEscritorio() {
  * @param {{
  *   izquierda: HTMLElement|null, columna: HTMLElement|null, elemento: HTMLElement|null,
  *   escritorio?: () => boolean, minimo?: number,
+ *   propiedad?: 'maxHeight'|'height',
  * }} args
+ *
+ * `propiedad` (v14, bug real encontrado con Playwright — "el panel de
+ * noticias no cierra a la misma altura que la columna izquierda"): por
+ * default sigue tocando `max-height` (`.resumen-anio-cuerpo` quiere
+ * CONTENT-HUGGING — si el contenido real no llena el piso disponible, se
+ * queda en su alto natural, nunca inventa aire vacío abajo; `max-height` da
+ * exactamente eso, dejando además el resguardo estático de la hoja de
+ * estilos como red de seguridad detrás). `panel-noticias-lista` en cambio
+ * quiere un alto FORZADO de verdad (ver panel-noticias.js: "no es lo
+ * suficientemente alto... siempre el mismo, con o sin noticias") — y ahí es
+ * donde `max-height` se queda corto: CSS nunca deja que `max-height` haga
+ * CRECER un elemento por encima de su propio `height` ya fijado (probado a
+ * mano: `height:480px` + `max-height:600px` sigue midiendo 480, nunca 600).
+ * Con `propiedad:'height'` esta función pisa esa altura fija directo, en
+ * vez de agregarle un techo que nunca gana cuando hace falta CRECER —
+ * `.panel-noticias-lista` trae su alto por defecto (480px) en la hoja de
+ * estilos (no inline, ver theme.css), así que resetear esta propiedad
+ * también revela ese default al medir, igual que el resguardo estático de
+ * `.resumen-anio-cuerpo`.
  */
 export function limitarAlAltoDeIzquierda({
   izquierda, columna, elemento, escritorio = esEscritorio, minimo = ALTO_MINIMO_PX,
+  propiedad = 'maxHeight',
 }) {
   if (!izquierda || !columna || !elemento) return;
-  if (!escritorio()) { elemento.style.maxHeight = ''; return; }
+  if (!escritorio()) { elemento.style[propiedad] = ''; return; }
 
   // Se resetea ANTES de medir: si una pasada anterior ya había recortado
   // `elemento` (p. ej. la izquierda medía menos en un beat previo), medir
@@ -97,7 +118,7 @@ export function limitarAlAltoDeIzquierda({
   // más. Sacarlo primero deja que esta pasada mida el tamaño de verdad, sin
   // memoria de la pasada anterior (la sincronización es idempotente: correr
   // esto dos veces seguidas dá el mismo resultado las dos veces).
-  elemento.style.maxHeight = '';
+  elemento.style[propiedad] = '';
 
   const altoReferencia = izquierda.getBoundingClientRect().height;
   const altoColumna = columna.getBoundingClientRect().height;
@@ -114,5 +135,5 @@ export function limitarAlAltoDeIzquierda({
   const nuevo = alturaLimitada({
     altoReferencia, altoColumna, altoElemento, minimo, maximo: techo,
   });
-  elemento.style.maxHeight = `${nuevo}px`;
+  elemento.style[propiedad] = `${nuevo}px`;
 }

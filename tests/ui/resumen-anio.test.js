@@ -75,6 +75,29 @@ describe('renderResumenAnio', () => {
     expect(r.querySelector('.grafico-media-svg')).toBeTruthy();
   });
 
+  // Pedido 1 (v14, "no quiero que el jugador tenga que scrollear... los
+  // gráficos son lo que más lugar ocupa, [...] por ejemplo, los dos gráficos
+  // lado a lado en vez de apilados"): antes cada gráfico vivía en su propio
+  // `.panel` suelto, uno debajo del otro dentro de `.resumen-anio-cuerpo` —
+  // dos gráficos apilados a ancho completo suman el doble de alto que uno
+  // solo. Ahora comparten un contenedor propio (`.resumen-anio-graficos`,
+  // ver theme.css: fila en escritorio, apilados en celular donde el ancho
+  // angosto no da para partir a la mitad sin perder legibilidad) — la mitad
+  // del alto en la pantalla donde más contenido hay que hacer entrar.
+  it('los dos gráficos viven juntos en un contenedor de fila (lado a lado en escritorio), no sueltos uno tras otro', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase());
+    const contenedor = r.querySelector('.resumen-anio-graficos');
+    expect(contenedor).toBeTruthy();
+    expect(contenedor.querySelector('.grafico-media-svg')).toBeTruthy();
+    expect(contenedor.querySelector('.grafico-ranking-svg')).toBeTruthy();
+    // Los dos paneles de gráfico son HIJOS DIRECTOS del mismo contenedor de
+    // fila — así theme.css los pone lado a lado con un solo selector, sin
+    // depender de dónde caigan dentro de `.resumen-anio-cuerpo`.
+    const paneles = [...contenedor.children].filter((n) => n.classList.contains('resumen-anio-grafico-panel'));
+    expect(paneles).toHaveLength(2);
+  });
+
   it('lista cada decision tomada con su titulo y la opcion elegida', () => {
     const r = region();
     renderResumenAnio(r, propsBase({

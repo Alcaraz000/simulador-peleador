@@ -7,6 +7,7 @@ import { crearTarjeta } from '../components/card.js';
 import { narrar } from '../components/narrador.js';
 import { dibujarSilueta } from '../components/silueta-rival.js';
 import { crearBarraPrecision } from '../components/barra-precision.js';
+import { abrirPopup } from '../components/popup.js';
 import { PLANES, tarjetasJurados } from '../../core/fight.js';
 import {
   INSTRUCCIONES_RINCON, ZONAS_GOLPE, POSTURAS, estadoRincon, abrirGolpeDeGracia, VENTANA_MS,
@@ -446,16 +447,68 @@ function pintarRincon(raiz, accionNodo, { pelea, onInstruccion = () => {} }) {
   ]));
 }
 
-// `raiz` recibe la limpieza en `raiz._limpiarAccion`: si `renderPelea` se
-// vuelve a llamar mientras la ventana del golpe de gracia (o la barra de
-// precisión) todavía está corriendo, `renderPelea` la cancela ANTES de
-// pintar el estado nuevo — sin eso, un setTimeout de la ventana anterior
-// podría disparar `onGolpe` con datos viejos aunque el panel ya cambió.
+// El contenido del paso 1 (silueta) y el paso 2 (barra de precisión), cada
+// uno como una función que devuelve el nodo a montar — separados de
+// `pintarGolpe` para que ésta se ocupe solo de ORQUESTAR (popup, timers,
+// resolución), nunca de armar DOM a mano.
+function contenidoPaso1(info, { onElegirZona }) {
+  const svg = dibujarSilueta({ postura: info.postura, zonas: info.zonas, onElegirZona });
+  return el('div', { class: 'stack' }, [
+    el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta rojo', text: '¡Lo tenés groggy!' }),
+      el('p', { class: 'medio', text: POSTURAS[info.postura]?.descripcion ?? 'Leé dónde quedó abierto y mandala. Rápido.' }),
+    ]),
+    svg,
+  ]);
+}
+
+function contenidoPaso2(zona, { onResultado }) {
+  const controlador = crearBarraPrecision({ dificultad: zona.dificultad, onResultado });
+  const nodo = el('div', { class: 'stack' }, [
+    el('div', { class: 'panel' }, [
+      el('div', { class: 'etiqueta rojo', text: `Vas al ${zona.nombre.toLowerCase()}` }),
+      el('p', { class: 'medio', text: 'Frená la flecha justo en el verde.' }),
+    ]),
+    controlador.nodo,
+  ]);
+  return { nodo, controlador };
+}
+
+// Pedido 3 (v14, "el golpe de gracia debe verse como un popup, [...] es el
+// momento más tenso del juego"): antes vivía DENTRO del panel de acción de
+// siempre (`accionNodo`), un panel más entre "Saltar" y el resultado de la
+// pelea — se sentía como una tarjeta cualquiera, no como el momento de
+// máxima tensión que es. Ahora se abre como POPUP (abrirPopup,
+// components/popup.js), que se impone sobre TODA la pantalla (tablero
+// oscurecido detrás, overlay al frente) — la misma silueta con sus tres
+// zonas, la misma barra de precisión, ningún efecto visual de los que ya
+// funcionaban se tocó, solo DÓNDE viven.
+//
+// `raiz` sigue recibiendo la limpieza en `raiz._limpiarAccion`: si
+// `renderPelea` se vuelve a llamar mientras la ventana del golpe (o la barra
+// de precisión) todavía está corriendo, la cancela ANTES de pintar el
+// estado nuevo — y ahora ADEMÁS cierra el popup, para que nunca quede
+// flotando huérfano sobre la pantalla siguiente.
+//
+// El popup de este momento NO se puede cerrar con Escape ni clickeando
+// afuera (`cerrableConEscape`/`cerrableClickAfuera` en `false`, ver
+// components/popup.js): irse a mitad de camino no puede ser un accidente —
+// un Escape reflejo o un click mal calculado en el borde no tienen que
+// costarte la chance. La X sigue cerrando (es la única vía que ya exige un
+// click deliberado sobre un botón chico): cerrarla ahí SÍ es una decisión
+// explícita del jugador, y se resuelve exactamente igual que agotar la
+// ventana sin elegir zona — perdés la chance, el rival se recompone.
 function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = VENTANA_MS }) {
   const info = abrirGolpeDeGracia(pelea);
   let resuelto = false;
   let ventanaTimer = null;
   let barra = null;
+  // Distingue un cierre DISPARADO POR NOSOTROS (limpiarTodo, al re-renderizar
+  // o al resolver de cualquier otra forma) de uno que el jugador gatilló de
+  // verdad clickeando la X: solo este último tiene que resolver el golpe —
+  // el primero ya lo hizo (o no corresponde resolver nada, solo limpiar).
+  let cerrandoPorLimpieza = false;
+  let popup;
 
   function limpiarVentana() {
     if (ventanaTimer !== null) {
@@ -467,6 +520,8 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
   function limpiarTodo() {
     limpiarVentana();
     if (barra) barra.detener();
+    cerrandoPorLimpieza = true;
+    popup.cerrar();
   }
   raiz._limpiarAccion = limpiarTodo;
 
@@ -489,43 +544,41 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
   function pintarPaso2(zonaId) {
     limpiarVentana();
     const zona = ZONAS_GOLPE[zonaId];
-    const controlador = crearBarraPrecision({
-      dificultad: zona.dificultad,
-      onResultado: ({ precision }) => {
-        resolver({ zonaElegida: zonaId, precision, aTiempo: true });
-      },
+    const { nodo, controlador } = contenidoPaso2(zona, {
+      onResultado: ({ precision }) => resolver({ zonaElegida: zonaId, precision, aTiempo: true }),
     });
     barra = controlador;
-
-    mount(accionNodo, el('div', { class: 'stack' }, [
-      el('div', { class: 'panel' }, [
-        el('div', { class: 'etiqueta rojo', text: `Vas al ${zona.nombre.toLowerCase()}` }),
-        el('p', { class: 'medio', text: 'Frená la flecha justo en el verde.' }),
-      ]),
-      controlador.nodo,
-    ]));
+    // El mismo popup se refresca EN EL LUGAR (nunca se cierra uno y se abre
+    // otro): `popup.cuerpo` es justo el nodo pensado para esto, ver el
+    // comentario de abrirPopup.
+    mount(popup.cuerpo, nodo);
   }
 
-  function pintarPaso1() {
-    const svg = dibujarSilueta({
-      postura: info.postura,
-      zonas: info.zonas,
+  // El panel de acción de siempre queda vacío: el golpe de gracia ya no es
+  // "un panel más" ahí — cualquier resto visible detrás del popup (p. ej.
+  // el botón "Saltar" que dejó la narración) se saca de en medio.
+  clear(accionNodo);
+
+  popup = abrirPopup({
+    titulo: 'Golpe de gracia',
+    contenido: contenidoPaso1(info, {
       onElegirZona: (zonaId) => {
         if (resuelto) return; // ya se resolvió (p. ej. la ventana se cerró justo antes del click)
         pintarPaso2(zonaId);
       },
-    });
-
-    mount(accionNodo, el('div', { class: 'stack' }, [
-      el('div', { class: 'panel' }, [
-        el('div', { class: 'etiqueta rojo', text: '¡Lo tenés groggy!' }),
-        el('p', { class: 'medio', text: POSTURAS[info.postura]?.descripcion ?? 'Leé dónde quedó abierto y mandala. Rápido.' }),
-      ]),
-      svg,
-    ]));
-  }
-
-  pintarPaso1();
+    }),
+    cerrableConEscape: false,
+    cerrableClickAfuera: false,
+    // "Quiero que dé la sensación de que es un momento de urgencia y
+    // crítico": borde/resplandor rojo (ver theme.css) que distingue este
+    // popup de los demás (tienda, ranking, hitos), todos con el look neutro
+    // de siempre.
+    claseExtra: 'popup-critico',
+    onCerrar: () => {
+      if (cerrandoPorLimpieza) return;
+      resolver({ zonaElegida: null, precision: 0, aTiempo: false });
+    },
+  });
 }
 
 function pintarAccionResuelta(raiz, accionNodo, props) {

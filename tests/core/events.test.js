@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
+import { conSalvaguardaDeCondiciones, puedeVoltearUnaPelea } from '../../src/core/cards.js';
 import { CARTAS_EVENTO } from '../../src/content/cards-events.js';
 import { CARTAS_REDES } from '../../src/content/cards-social.js';
 import { elegirEvento, elegirCartaRedes, resolverOpcion } from '../../src/core/events.js';
@@ -146,6 +147,30 @@ describe('cartas de riesgo (contrato de catálogo)', () => {
     for (const { opcion } of conProbabilidades()) {
       const pct = porcentajesDe(opcion);
       expect(pct.reduce((a, b) => a + b, 0)).toBe(100);
+    }
+  });
+
+  // Reporte del usuario (v14): una tarjeta del careo... resultó ser una
+  // tarjeta de redes ("La polémica calculada") que mostraba dos píldoras
+  // "55%"/"45%" sin decir a qué correspondían. La causa: la píldora previa a
+  // elegir (armada en main.js con `textoDeRama`, que solo lee `mods`/
+  // `efectos.dinero`/`caePelea` — NUNCA el `texto` narrativo, que recién se
+  // muestra DESPUÉS de elegir) no tenía nada que mostrar porque esas dos
+  // ramas solo traían texto de sabor. Esta invariante de catálogo blinda que
+  // no vuelva a pasar: toda rama de `probabilidades`, en cualquier carta de
+  // evento o de redes, tiene que dejar algo que la píldora pueda anunciar de
+  // antemano.
+  it('toda rama de probabilidades deja algo visible en la pildora antes de elegir (mods no vacios, dinero distinto de cero, o caePelea) — nunca solo el porcentaje pelado', () => {
+    for (const { carta, opcion } of conProbabilidades()) {
+      for (const rama of opcion.probabilidades) {
+        const tieneMods = Object.keys(rama.mods ?? {}).length > 0;
+        const tieneDinero = typeof rama.efectos?.dinero === 'number' && rama.efectos.dinero !== 0;
+        const caePelea = rama.caePelea === true;
+        expect(
+          tieneMods || tieneDinero || caePelea,
+          `"${carta.id}" tiene una rama (peso ${rama.peso}) sin mods/dinero/caePelea: la pildora quedaria vacia`,
+        ).toBe(true);
+      }
     }
   });
 });
@@ -403,5 +428,42 @@ describe('resolverOpcion', () => {
       expect(paso.jugador.dinero).toBe(1300);
       expect(paso.caePelea).toBe(false);
     });
+  });
+});
+
+// Reporte del usuario (v14): "hubo un momento donde, cuando no tenía una pelea
+// pactada, apareció el evento 'El sobre en el vestuario' — la consecuencia de
+// aceptar es 'se cae la pelea', no tiene sentido en ese momento de la partida".
+describe('cartas que voltean una pelea', () => {
+  it('detecta las que pueden voltearla, mire la rama o la opcion', () => {
+    expect(puedeVoltearUnaPelea({ opciones: [{ id: 'a', caePelea: true }] })).toBe(true);
+    expect(puedeVoltearUnaPelea({
+      opciones: [{ id: 'a', probabilidades: [{ peso: 1 }, { peso: 1, caePelea: true }] }],
+    })).toBe(true);
+    expect(puedeVoltearUnaPelea({ opciones: [{ id: 'a', mods: { fuerza: 3 } }] })).toBe(false);
+  });
+
+  it('sin pelea en danza, ninguna carta que pueda voltearla queda elegible', () => {
+    const pool = [
+      { id: 'peligrosa', opciones: [{ id: 'x', caePelea: true }] },
+      { id: 'inofensiva', opciones: [{ id: 'y', mods: { fuerza: 3 } }] },
+    ];
+    const salida = conSalvaguardaDeCondiciones(pool, { edad: 25 }, { hayPeleaEnDanza: false });
+    expect(salida.map((c) => c.id)).toEqual(['inofensiva']);
+  });
+
+  it('con pelea en danza, siguen estando disponibles', () => {
+    const pool = [
+      { id: 'peligrosa', opciones: [{ id: 'x', caePelea: true }] },
+      { id: 'inofensiva', opciones: [{ id: 'y', mods: { fuerza: 3 } }] },
+    ];
+    const salida = conSalvaguardaDeCondiciones(pool, { edad: 25 }, { hayPeleaEnDanza: true });
+    expect(salida.map((c) => c.id).sort()).toEqual(['inofensiva', 'peligrosa']);
+  });
+
+  it('en el catalogo real, ninguna carta con caePelea sale sin pelea en danza', () => {
+    const elegibles = conSalvaguardaDeCondiciones(CARTAS_EVENTO, { edad: 25, titulos: [], dinero: 0, historial: [] }, { hayPeleaEnDanza: false });
+    expect(elegibles.filter(puedeVoltearUnaPelea)).toHaveLength(0);
+    expect(elegibles.length).toBeGreaterThan(0);
   });
 });
