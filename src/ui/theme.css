@@ -2558,9 +2558,14 @@ input.creacion-control { cursor: text; }
   }
 
   .panel-decision .panel-decision-grilla-2 .tarjeta-icono {
-    width: 72px;
-    height: 72px;
+    width: 60px;
+    height: 60px;
     border-radius: 16px;
+  }
+
+  .panel-decision .panel-decision-grilla-2 .tarjeta-icono svg {
+    width: 29px;
+    height: 29px;
   }
 
   .panel-decision .panel-decision-grilla-2 .tarjeta-titulo {
@@ -2570,13 +2575,18 @@ input.creacion-control { cursor: text; }
     line-height: 23px;
   }
 
+  /* v16: la descripción medía 126px fijos (7 líneas). Con el panel ya
+     acotado al piso de la izquierda, ese alto no entraba y las tarjetas se
+     desbordaban 76px POR DEBAJO del piso — el contenedor medía bien, pero lo
+     que se veía se pasaba igual. Cuatro líneas entran y alcanzan de sobra
+     para cualquier descripción del catálogo. */
   .panel-decision .panel-decision-grilla-2 .tarjeta-desc {
     margin-top: 10px;
     font-size: 13px;
     line-height: 18px;
-    height: 126px;
-    -webkit-line-clamp: 7;
-    line-clamp: 7;
+    height: 72px;
+    -webkit-line-clamp: 4;
+    line-clamp: 4;
   }
 
   .panel-decision .panel-decision-grilla-2 .tarjeta-efectos {
@@ -2653,11 +2663,12 @@ input.creacion-control { cursor: text; }
     justify-content: flex-start;
   }
 
-  /* Los efectos (las píldoras de "+3 Fuerza") se anclan al pie de su
-     tarjeta: son la conclusión de lo que estás por elegir, y con la tarjeta
-     estirada quedaban colgando a media altura. */
-  .panel-decision .tarjeta-efectos {
-    margin-top: auto;
+  /* v16: los efectos NO se anclan al pie. Anclarlos ahí (v15) dejaba, con la
+     tarjeta ya estirada al alto de la columna, más de 200px de vacío entre el
+     ícono y las píldoras. Ahora el contenido entero se centra en su eje y las
+     píldoras se separan lo justo — "un poco de espacio", como se pidió. */
+  .panel-decision .tarjeta {
+    justify-content: center;
   }
 }
 
@@ -2674,5 +2685,163 @@ input.creacion-control { cursor: text; }
   .resumen-anio .resumen-anio-cuerpo {
     flex: 1 1 auto;
     min-height: 0;
+  }
+}
+
+/* ============================================================================
+   v16 — CUALQUIER pantalla central llena el hueco, no solo la decisión
+   ============================================================================
+   `estirarDecisionAlPiso` (main.js) le fija el alto al único hijo de
+   `[data-bloque="contenido"]`, sea cual sea la pantalla. Estas reglas
+   reparten ese alto adentro de forma genérica:
+
+     - el contenedor se vuelve columna flexible;
+     - el botón de acción (siempre el último hijo: "Seguir", "Empezar",
+       "Aceptar la pelea") se ancla abajo con `margin-top:auto`;
+     - lo que tenga `data-crece` o sea una grilla de tarjetas se queda con
+       el sobrante.
+
+   Escrito con `:is()` sobre el contenedor para no depender de la clase de
+   cada pantalla — el error de la primera versión fue justamente enumerar
+   pantallas: aparecía una nueva y el hueco volvía. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] > * {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* El botón de acción al pie, contra el borde de abajo. */
+  [data-bloque="contenido"] > * > .boton:last-child {
+    margin-top: auto;
+  }
+
+  /* Y si la pantalla trae una grilla de tarjetas o un bloque marcado para
+     crecer, ese se lleva el espacio antes que el botón. */
+  [data-bloque="contenido"] .panel-decision-grilla,
+  [data-bloque="contenido"] .panel-decision-grilla-2,
+  [data-bloque="contenido"] [data-crece] {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+}
+
+/* ============================================================================
+   v16 — las tarjetas, más estéticas
+   ============================================================================
+   Pedido del usuario, punto por punto: ícono más grande, todo más centrado
+   (las pills incluidas), aire entre el ícono y las pills, un efecto al
+   seleccionar, y brillo de oro en las legendarias. */
+
+/* Ícono más grande y con más presencia: 42 → 54px, con un halo suave que lo
+   despega del fondo de la tarjeta. */
+.tarjeta-icono {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.tarjeta-icono svg {
+  width: 26px;
+  height: 26px;
+}
+
+/* Todo centrado en su eje, y el bloque de pills separado del ícono con aire
+   propio en vez de pegarse a la descripción. */
+.tarjeta {
+  align-items: center;
+  padding: 10px 13px 14px;
+}
+
+.tarjeta-titulo,
+.tarjeta-desc {
+  width: 100%;
+  text-align: center;
+}
+
+.tarjeta-efectos {
+  width: 100%;
+  align-items: stretch;
+  padding-top: 10px;
+}
+
+.tarjeta-efecto {
+  text-align: center;
+  justify-content: center;
+}
+
+/* Al presionar: la tarjeta se hunde apenas y el borde se enciende. Feedback
+   inmediato de "esto registró tu toque", en la duración corta que pide el
+   criterio de animación del proyecto (100-160ms). */
+.tarjeta:not(:disabled):active {
+  transform: scale(0.975);
+  transition-duration: 0.1s;
+}
+
+/* Y una vez elegida, queda marcada mientras se resuelve. */
+.tarjeta.tarjeta-elegida {
+  border-color: var(--dorado);
+  box-shadow: 0 0 0 1px var(--dorado), 0 0 18px rgba(242, 193, 78, 0.28);
+}
+
+/* Las legendarias respiran oro: un barrido lento y diagonal por encima del
+   fondo, más un halo que late apenas. Es el único lugar del juego con una
+   animación en bucle, y se lo gana: una legendaria aparece en el 5% de los
+   repartos y tiene que sentirse un hallazgo.
+   El barrido va en un pseudo-elemento propio para no tocar el fondo real de
+   la tarjeta ni interferir con el click (pointer-events: none). */
+.tarjeta.legendaria {
+  position: relative;
+  overflow: hidden;
+}
+
+.tarjeta.legendaria::after {
+  content: '';
+  position: absolute;
+  inset: -40%;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 42%,
+    rgba(255, 224, 138, 0.16) 50%,
+    transparent 58%
+  );
+  animation: brillo-oro 4.5s ease-in-out infinite;
+}
+
+@keyframes brillo-oro {
+  0%, 100% { transform: translateX(-38%); }
+  50% { transform: translateX(38%); }
+}
+
+/* El contenido por encima del barrido. */
+.tarjeta.legendaria > * {
+  position: relative;
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tarjeta.legendaria::after { animation: none; }
+}
+
+/* Dentro del panel de decisión (que ya viene con su alto fijado al piso de la
+   izquierda), la descripción deja de tener una altura FIJA y pasa a quedarse
+   con el espacio que sobre. Perseguir el número exacto a mano no funciona: el
+   hueco disponible cambia con el largo de la columna izquierda, que a su vez
+   crece cuando el jugador suma historial y cinturones. Con la descripción
+   flexible, la tarjeta se adapta sola a cualquier hueco y nunca desborda —
+   el texto de más se sigue recortando con line-clamp, como siempre. */
+@media (min-width: 960px) {
+  .panel-decision .tarjeta {
+    overflow: hidden;
+  }
+
+  .panel-decision .tarjeta-desc,
+  .panel-decision .panel-decision-grilla-2 .tarjeta-desc {
+    flex: 1 1 auto;
+    height: auto;
+    min-height: 0;
+    overflow: hidden;
   }
 }

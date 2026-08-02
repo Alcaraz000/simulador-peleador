@@ -439,13 +439,16 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   function estirarDecisionAlPiso() {
     const shell = shellActual;
     if (!shell) return;
-    // Las dos pantallas del tablero que se estiran: la decisión y el resumen
-    // de fin de año. El resumen además tiene su propio cuerpo con scroll
-    // interno (`.resumen-anio-cuerpo`, acotado más arriba en montarTablero):
-    // acá se estira el contenedor y el cuerpo se queda con el sobrante (ver
-    // theme.css, bloque v15).
-    const objetivo = shell.regiones.centro.querySelector('.panel-decision')
-      ?? shell.regiones.centro.querySelector('.resumen-anio');
+    // GENÉRICO a propósito (v16): se estira lo que sea que esté montado en el
+    // centro, no una lista de pantallas conocidas. La primera versión nombraba
+    // `.panel-decision` y `.resumen-anio` una por una, y por eso el hueco
+    // seguía apareciendo en las otras cinco pantallas centrales (la card de
+    // trámite, el desenlace, la oferta, el sparring, el minijuego). Cada una
+    // de esas funciones hace `mount(region, unNodo)`, así que el contenido
+    // central es siempre un único hijo: ese es el que se estira, y cualquier
+    // pantalla que se agregue mañana queda cubierta sin tocar esto.
+    const contenido = shell.regiones.centro.querySelector('[data-bloque="contenido"]');
+    const objetivo = contenido?.firstElementChild;
     if (!objetivo) return;
     limitarAlAltoDeIzquierda({
       izquierda: shell.regiones.izquierda,
