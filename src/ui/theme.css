@@ -2414,3 +2414,78 @@ input.creacion-control { cursor: text; }
   padding-top: 8px;
   border-top: 1px solid var(--borde);
 }
+
+/* ============================================================================
+   v14 — Tres pedidos de layout puntuales del usuario, con captura de pantalla
+   en mano. Reglas nuevas AL FINAL del archivo (mismo criterio que las
+   secciones anteriores: hay otro implementador en paralelo tocando
+   cards-*.js/stats-carrera.js/legacy.js/cards-presser.js — agregar acá en vez
+   de editar en el medio minimiza el choque). Todo lo de acá PISA selectores
+   que ya existen más arriba o suma clases nuevas; ninguna línea de arriba se
+   tocó. Cubre:
+     1) El resumen del año entra siempre sin scroll propio (los dos gráficos
+        van lado a lado en escritorio, la mitad de alto que apilados).
+     2) Las tarjetas de una decisión de 2 opciones aprovechan el alto libre.
+     3) El golpe de gracia como popup (ver fight.js).
+   ============================================================================ */
+
+/* --- Pedido 1: los dos gráficos del resumen, lado a lado en escritorio ----
+   BUG REAL (verificado con Playwright, no a ojo): con un año cargado (3
+   decisiones + 3 peleas, el máximo posible — career.js arma siempre EXACTO
+   3 decisiones por año) los dos gráficos APILADOS ya suman ~430px ellos
+   solos en un módulo central ancho — de sobra para que el cuerpo scrolleable
+   (`.resumen-anio-cuerpo`) se pase del piso real de la izquierda incluso
+   ANTES de sumar la crónica, las decisiones y las peleas. Ponerlos lado a
+   lado corta esa cifra a la mitad (cada uno pasa a ocupar la mitad del
+   ancho, y con el mismo aspect-ratio fijo del viewBox, la mitad del alto
+   también) — el ahorro más grande posible, justo el que pidió el usuario
+   ("los gráficos son lo que más lugar ocupa").
+   En celular se mantiene la columna apilada de siempre (`flex-direction`
+   por defecto): partir cada gráfico a la mitad de un ancho ya angosto
+   (~390px) dejaría los ejes ilegibles — ahí el "piso de la izquierda" ni
+   siquiera aplica (columnas apiladas, ver sincronizar-alturas.js), así que
+   no hay necesidad real de ahorrar ese alto.
+   `min-width:0` en los hijos: sin esto, un SVG con `width:100%` puede forzar
+   el ancho mínimo de su columna flex por encima del espacio real disponible
+   (el mismo motivo que ya cubre `.fila > *` más arriba en este archivo). */
+.resumen-anio-graficos {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (min-width: 960px) {
+  .resumen-anio-graficos {
+    flex-direction: row;
+  }
+
+  .resumen-anio-graficos > .resumen-anio-grafico-panel {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+
+/* --- Pedido 1: en celular, el cuerpo del resumen NUNCA scrollea por su
+   cuenta ------------------------------------------------------------------
+   BUG REAL: `.resumen-anio-cuerpo` (más arriba, sección "v10") fija
+   `max-height:60vh` SIEMPRE, sin importar el ancho — pensado como resguardo
+   ESTÁTICO para cuando `limitarAlAltoDeIzquierda` (sincronizar-alturas.js)
+   todavía no corrió. Pero en celular (columnas apiladas) ese módulo se
+   niega a tocar nada a propósito (`esEscritorio()` da `false`, ver el
+   comentario grande de ese archivo: "el piso de la izquierda" no significa
+   nada cuando la izquierda ya quedó arriba de todo) — ahí el único límite
+   que le queda a `.resumen-anio-cuerpo` es este `60vh` de la hoja de
+   estilos, que no tiene ninguna razón real de ser: en celular la PÁGINA
+   entera ya scrollea de punta a punta (como cualquier otra pantalla del
+   juego), así que forzar además un scroll INTERNO acá adentro es la típica
+   doble barra de scroll anidada — exactamente lo que reportó el usuario
+   ("no quiero que el jugador tenga que scrollear... para ver el resto del
+   resumen"). Se saca el tope en celular: el cuerpo crece con su contenido
+   real y se lee scrolleando la página, un solo scroll, como en cualquier
+   otra pantalla. */
+@media (max-width: 959.98px) {
+  .resumen-anio-cuerpo {
+    max-height: none;
+    overflow-y: visible;
+  }
+}
