@@ -46,9 +46,11 @@ describe('renderCardTramite', () => {
     expect(cont.textContent).not.toMatch(/🇲🇽|🏳/);
   });
 
+  // v13 (simplificación de atributos): de seis atributos a cuatro (fuerza,
+  // defensa, cardio, agilidad).
   it('muestra un resumen de las estadisticas del rival', () => {
     renderCardTramite(cont, { oferta: ofertaDeMuestra(), rival: rivalDeMuestra() });
-    expect(cont.querySelectorAll('.panel-peleador-atributo').length).toBe(6);
+    expect(cont.querySelectorAll('.panel-peleador-atributo').length).toBe(4);
   });
 
   it('sin rival (dato no disponible), no rompe y sigue mostrando lo que trae la oferta', () => {

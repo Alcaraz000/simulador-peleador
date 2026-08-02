@@ -1,25 +1,22 @@
 import { el, mount, fmtDinero } from '../dom.js';
-import { ETIQUETAS } from '../../core/stats.js';
-import { getDisciplina } from '../../core/disciplines.js';
+import { ATRIBUTOS, ETIQUETAS } from '../../core/stats.js';
 import { recordTexto, recordAmateurTexto, nombreConApodo } from '../../core/fighter.js';
 
 const METODOS = { ko: 'KO', tko: 'TKO', sumision: 'Sumisión', decision: 'Decisión', descalificacion: 'DQ' };
 
+// v13 (simplificación de atributos): la Ficha mostraba los 6-7 atributos de
+// combate MÁS los "especiales" (mentón, disciplina personal, `jugador.
+// especiales`) — ambos grupos desaparecieron con la reforma a cuatro
+// atributos (fuerza, defensa, cardio, agilidad, `ATRIBUTOS` de stats.js): ya
+// no hay disciplinas con grappling ni especiales que mostrar aparte, así que
+// esta pantalla se reduce a una sola lista de cuatro filas.
 export function renderFicha(contenedor, { jugador, seccion = 'atributos', onCerrar }) {
-  const disciplina = getDisciplina(jugador.disciplina);
-  const claves = ['potencia', 'velocidad', 'tecnica', 'defensa', 'cardio', 'iq'];
-  if (disciplina.usaGrappling) claves.push('grappling');
-
-  const atributos = el('div', { class: 'stack' }, [
-    ...claves.map((c) => el('div', { class: 'panel', 'data-atributo-full': c, style: 'display:flex;justify-content:space-between' }, [
-      el('span', { text: ETIQUETAS[c].larga }),
-      el('span', { style: 'font-weight:800', text: String(jugador.atributos[c]) }),
-    ])),
-    ...['disciplinaPersonal', 'menton'].map((c) => el('div', { class: 'panel', 'data-atributo-full': c, style: 'display:flex;justify-content:space-between' }, [
-      el('span', { text: ETIQUETAS[c].larga }),
-      el('span', { style: 'font-weight:800', text: String(jugador.especiales[c]) }),
-    ])),
-  ]);
+  const atributos = el('div', { class: 'stack' }, ATRIBUTOS.map((c) => el('div', {
+    class: 'panel', 'data-atributo-full': c, style: 'display:flex;justify-content:space-between',
+  }, [
+    el('span', { text: ETIQUETAS[c].larga }),
+    el('span', { style: 'font-weight:800', text: String(jugador.atributos[c]) }),
+  ])));
 
   const historial = jugador.historial.length === 0
     ? el('p', { class: 'medio', text: 'Todavía no subiste al ring.' })
