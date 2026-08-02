@@ -117,6 +117,11 @@ export function animarRoll(nodoTarjeta, { indiceGanador, cantidad, onFin = () =>
 // sentirse ágil ronda tras ronda, no una pausa larga cada vez.
 export const DURACION_BARAJADO_MS = 900;
 
+/* Cuánto se queda quieto el barajado sobre la tarjeta del rival antes de
+   resolver la ronda. Suficiente para leer "ah, fue a esa", corto para que no
+   frene una partida que apunta a durar 20 minutos. */
+export const PAUSA_ELECCION_RIVAL_MS = 750;
+
 /**
  * Cicla un resaltado entre varios nodos (p.ej. las 3 tarjetas del minijuego
  * de trámite) durante `duracionMs` y frena en `indiceFinal`.
@@ -142,12 +147,14 @@ export function animarBarajado(nodos, {
   claseActiva = 'tarjeta-rolleo',
   indiceFinal = -1,
   claseFinal = 'tarjeta-rival',
+  pausaFinalMs = PAUSA_ELECCION_RIVAL_MS,
   onFin = () => {},
 } = {}) {
   const n = nodos.length;
   const aterriza = indiceFinal >= 0 && indiceFinal < n;
 
   let terminado = false;
+  let cerrado = false;
   let timerId = null;
 
   function marcar(indice) {
@@ -161,7 +168,16 @@ export function animarBarajado(nodos, {
     }
   }
 
-  function finalizar() {
+  // Cierra de verdad: dispara `onFin`, que en el minijuego significa "pasá a
+  // la ronda siguiente" y por lo tanto REMONTA el panel entero.
+  function cerrar() {
+    if (cerrado) return;
+    cerrado = true;
+    limpiarTimer();
+    onFin();
+  }
+
+  function finalizar({ inmediato = false } = {}) {
     if (terminado) return;
     terminado = true;
     limpiarTimer();
@@ -170,12 +186,31 @@ export function animarBarajado(nodos, {
     // jugador vea dónde cayó antes de leer el texto de la ronda. Sin él,
     // neutro: ninguno queda resaltado.
     marcar(-1);
-    if (aterriza) nodos[indiceFinal].classList.add(claseFinal);
-    onFin();
+    if (!aterriza) {
+      cerrar();
+      return;
+    }
+    nodos[indiceFinal].classList.add(claseFinal);
+    // La espera del pedido v17: marcar la tarjeta del rival y llamar a `onFin`
+    // en el mismo tick equivalía a NO mostrarla — el remount se comía el
+    // fotograma y el jugador se enteraba de la jugada del rival solo por el
+    // texto de la ronda siguiente. Ahora el barajado aterriza, se queda quieto
+    // un momento sobre la elección del rival, y recién ahí se resuelve.
+    if (inmediato || pausaFinalMs <= 0 || prefiereMovimientoReducido()) {
+      cerrar();
+      return;
+    }
+    timerId = setTimeout(cerrar, pausaFinalMs);
   }
 
+  // Mismo criterio que antes: "cancelar" es "resolvé ya". Si la pausa final
+  // está corriendo, la saltea en vez de dejar la ronda sin cerrar.
   function detener() {
-    finalizar();
+    if (terminado) {
+      cerrar();
+      return;
+    }
+    finalizar({ inmediato: true });
   }
 
   if (n <= 1 || prefiereMovimientoReducido()) {

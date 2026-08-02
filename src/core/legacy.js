@@ -132,34 +132,38 @@ function fechaTextoDe(pelea) {
 /**
  * Línea de tiempo de cada título alguna vez conquistado: cuándo se ganó,
  * cada defensa exitosa (con rival y fecha) y, si corresponde, cuándo se
- * perdió. Si el cinturón se perdió y se volvió a conquistar más adelante,
- * se muestra el reinado MÁS RECIENTE (gala el historial completo de
- * reinados sería mucho ruido para esta pantalla de cierre).
+ * perdió.
+ *
+ * Un cinturón puede tener VARIOS reinados: ganarlo, perderlo y
+ * reconquistarlo es una de las mejores historias que puede dar una carrera.
+ * Antes se guardaba un solo reinado por cinturón y la reconquista pisaba al
+ * anterior, así que la primera vez que lo ganaste —y la noche que lo
+ * perdiste— desaparecían del cierre (reportado por el usuario con captura).
+ * Ahora cada reinado se guarda entero, en orden cronológico.
  */
 function titulosDetalleDe(jugador) {
-  const reinados = new Map();
+  const porCinturon = new Map();
   for (const pelea of jugador.historial ?? []) {
     if (!pelea.esTitulo) continue;
     const clave = pelea.enJuego;
-    if (!reinados.has(clave)) {
-      reinados.set(clave, {
-        nombre: clave, fechaGanado: null, defensas: [], fechaPerdido: null,
-      });
-    }
-    const reinado = reinados.get(clave);
+    if (!porCinturon.has(clave)) porCinturon.set(clave, []);
+    const reinados = porCinturon.get(clave);
+    const actual = reinados[reinados.length - 1] ?? null;
+
     if (pelea.resultado === 'v' && !pelea.esObligatoria) {
-      // Arranca un reinado nuevo (primera conquista o reconquista): pisa lo
-      // que hubiera de un reinado anterior de este mismo cinturón.
-      reinado.fechaGanado = fechaTextoDe(pelea);
-      reinado.defensas = [];
-      reinado.fechaPerdido = null;
-    } else if (pelea.resultado === 'v' && pelea.esObligatoria) {
-      reinado.defensas.push({ rivalNombre: pelea.rivalNombre, fecha: fechaTextoDe(pelea) });
-    } else if (pelea.resultado === 'd') {
-      reinado.fechaPerdido = fechaTextoDe(pelea);
+      // Conquista: abre un reinado NUEVO, sin tocar los anteriores.
+      reinados.push({
+        nombre: clave, fechaGanado: fechaTextoDe(pelea), defensas: [], fechaPerdido: null,
+      });
+    } else if (pelea.resultado === 'v' && pelea.esObligatoria && actual) {
+      actual.defensas.push({ rivalNombre: pelea.rivalNombre, fecha: fechaTextoDe(pelea) });
+    } else if (pelea.resultado === 'd' && actual) {
+      actual.fechaPerdido = fechaTextoDe(pelea);
     }
   }
-  return [...reinados.values()];
+  // Aplanado en orden cronológico: todos los reinados de todos los
+  // cinturones, tal como sucedieron.
+  return [...porCinturon.values()].flat();
 }
 
 // Task 6.2 ("La carrera que no llegó también se cuenta"): con el nuevo

@@ -198,6 +198,24 @@ const PATHS = {
     'M6 8h12a2 2 0 0 1 2 2v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4a2 2 0 0 1 2-2z',
     'M12 10.5v3',
   ],
+
+  // Rework del sparring (v17, pedido textual: "agregá al centro de cada luz
+  // un ícono de un puño cerrado de frente"): no hay un ícono de puño en
+  // Feather/Lucide (mismo motivo que 'cinturon', más arriba, no está ahí:
+  // este es propio). De frente, no de perfil — silueta redondeada de
+  // nudillos arriba (el bloque de los 4 dedos doblados, con dos surcos que
+  // marcan la separación entre ellos) apoyada sobre una muñeca angosta, más
+  // el pulgar cruzado adelante como una curva aparte. Mismo trazo grueso
+  // redondeado que el resto del set (stroke-width 2, sin relleno).
+  puno: [
+    'M6.5 9.7V8.3a1.7 1.7 0 0 1 3.4 0v1.4',
+    'M9.9 9.2V7.8a1.7 1.7 0 0 1 3.4 0v1.4',
+    'M13.3 9.2V7.8a1.7 1.7 0 0 1 3.4 0v1.9',
+    'M6.5 9.9v2.9a5.6 5.6 0 0 0 5.6 5.6h.4a5.6 5.6 0 0 0 5.6-5.6v-2.8',
+    'M9.9 9.2v2.9',
+    'M13.3 9.2v2.9',
+    'M6.5 11.2c-1.5 0-2.6-1-2.6-2.3S5 6.6 6.5 6.6c.9 0 1.6.4 2 1.1',
+  ],
 };
 
 export function icono(nombre, { tamano = 18, color = 'currentColor' } = {}) {

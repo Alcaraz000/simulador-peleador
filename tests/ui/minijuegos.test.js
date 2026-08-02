@@ -7,7 +7,7 @@ import { crearSparring, registrarGolpe } from '../../src/core/sparring.js';
 import { crearCareo } from '../../src/core/presser.js';
 import { crearNegociacion } from '../../src/core/negotiation.js';
 import { renderCareo } from '../../src/ui/screens/presser.js';
-import { renderSparring, DURACION_RONDA_MS } from '../../src/ui/screens/sparring.js';
+import { renderSparring, DURACION_RONDA_MS, DURACION_FEEDBACK_MS } from '../../src/ui/screens/sparring.js';
 import { renderNegociacion } from '../../src/ui/screens/negotiation.js';
 
 const jugador = (extra = {}) => ({
@@ -73,22 +73,41 @@ describe('renderSparring', () => {
     expect(cont.querySelector('.pao.activo')).toBeTruthy();
   });
 
-  it('pegarle al pao activo reporta acierto', () => {
+  // Rework v17: pegarle a un pao ya no avisa `onGolpe` en el mismo instante
+  // del click — primero se pinta el golpe/error SINCRÓNICAMENTE (ver el
+  // describe de animaciones más abajo) y recién tras una pausa breve
+  // (DURACION_FEEDBACK_MS, bien por debajo de 200ms) se avisa hacia afuera.
+  // Mismo patrón ya establecido en este proyecto para el golpe de gracia
+  // (ver crearBarraPrecision, ui/components/barra-precision.js).
+  it('pegarle al pao activo reporta acierto (tras la pausa de feedback)', () => {
     let evento = null;
-    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
-    cont.querySelector('[data-accion="empezar"]').click();
-    cont.querySelector('.pao.activo').click();
-    expect(evento.acerto).toBe(true);
-    expect(typeof evento.ms).toBe('number');
+    vi.useFakeTimers();
+    try {
+      renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
+      cont.querySelector('[data-accion="empezar"]').click();
+      cont.querySelector('.pao.activo').click();
+      expect(evento).toBeNull();
+      vi.advanceTimersByTime(DURACION_FEEDBACK_MS);
+      expect(evento.acerto).toBe(true);
+      expect(typeof evento.ms).toBe('number');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
-  it('pegarle a un pao apagado reporta error', () => {
+  it('pegarle a un pao apagado reporta error (tras la pausa de feedback)', () => {
     let evento = null;
-    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
-    cont.querySelector('[data-accion="empezar"]').click();
-    const apagado = [...cont.querySelectorAll('.pao')].find((p) => !p.classList.contains('activo'));
-    apagado.click();
-    expect(evento.acerto).toBe(false);
+    vi.useFakeTimers();
+    try {
+      renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
+      cont.querySelector('[data-accion="empezar"]').click();
+      const apagado = [...cont.querySelectorAll('.pao')].find((p) => !p.classList.contains('activo'));
+      apagado.click();
+      vi.advanceTimersByTime(DURACION_FEEDBACK_MS);
+      expect(evento.acerto).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('muestra la grilla de seis paos', () => {
@@ -96,10 +115,158 @@ describe('renderSparring', () => {
     expect(cont.querySelectorAll('.pao')).toHaveLength(6);
   });
 
+  // Rework v17: puño cerrado al centro de cada luz (pedido textual), tanto
+  // apagada como encendida.
+  it('cada pao trae el icono de puño adentro', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    const paos = cont.querySelectorAll('.pao');
+    expect(paos).toHaveLength(6);
+    paos.forEach((p) => expect(p.querySelector('svg')).toBeTruthy());
+  });
+
   it('al terminar ofrece continuar', () => {
     const listo = { ...sparring(), terminado: true, aciertos: 8, indice: 10 };
     renderSparring(cont, { sparring: listo, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
     expect(cont.querySelector('[data-accion="terminar"]')).toBeTruthy();
+  });
+});
+
+// Rework visual v17 (pedido textual, con mockup en mano): "faltan animaciones
+// cuando se clickea bien la luz, faltan animaciones cuando se clickea MAL la
+// luz [...] dos sensaciones distintas y tienen que leerse al instante".
+describe('renderSparring — animaciones de acierto/error', () => {
+  const sparring = () => crearSparring(createRng(1), { jugador: jugador() });
+
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('pegarle al pao activo le suma la clase pao-acierto de inmediato (antes de la pausa)', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    cont.querySelector('[data-accion="empezar"]').click();
+    const activo = cont.querySelector('.pao.activo');
+    activo.click();
+    expect(activo.classList.contains('pao-acierto')).toBe(true);
+    expect(activo.classList.contains('pao-error')).toBe(false);
+  });
+
+  it('pegarle a un pao apagado le suma la clase pao-error de inmediato', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    cont.querySelector('[data-accion="empezar"]').click();
+    const apagado = [...cont.querySelectorAll('.pao')].find((p) => !p.classList.contains('activo'));
+    apagado.click();
+    expect(apagado.classList.contains('pao-error')).toBe(true);
+    expect(apagado.classList.contains('pao-acierto')).toBe(false);
+  });
+
+  it('clickear de nuevo durante la pausa de feedback no cuenta un segundo golpe', () => {
+    let llamadas = 0;
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => { llamadas += 1; }, onTerminar: () => {} });
+    cont.querySelector('[data-accion="empezar"]').click();
+    const activo = cont.querySelector('.pao.activo');
+    activo.click();
+    // Durante la pausa, ya no queda ningun pao marcado "activo" para
+    // clickear encima (mismo criterio que `resuelto` en barra-precision):
+    // clickear cualquier pao ahora no debe hacer nada.
+    [...cont.querySelectorAll('.pao')].forEach((p) => p.click());
+    vi.advanceTimersByTime(DURACION_FEEDBACK_MS);
+    expect(llamadas).toBe(1);
+  });
+
+  it('detener() durante la pausa de feedback cancela sin disparar onGolpe', () => {
+    let llamadas = 0;
+    const handle = renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => { llamadas += 1; }, onTerminar: () => {} });
+    cont.querySelector('[data-accion="empezar"]').click();
+    cont.querySelector('.pao.activo').click();
+    handle.detener();
+    vi.advanceTimersByTime(DURACION_FEEDBACK_MS);
+    expect(llamadas).toBe(0);
+  });
+
+  it('con prefers-reduced-motion, el golpe se resuelve de inmediato (sin pausa)', () => {
+    const original = window.matchMedia;
+    window.matchMedia = vi.fn().mockReturnValue({ matches: true });
+    try {
+      let evento = null;
+      renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: (e) => { evento = e; }, onTerminar: () => {} });
+      cont.querySelector('[data-accion="empezar"]').click();
+      cont.querySelector('.pao.activo').click();
+      expect(evento).not.toBeNull();
+      expect(evento.acerto).toBe(true);
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+});
+
+// Rework visual v17: los tres contadores en fila (mockup: "x7 COMBO",
+// "0,24s REACCIÓN", "7/10 GOLPES").
+describe('renderSparring — contadores (combo/reaccion/golpes)', () => {
+  const sparring = () => crearSparring(createRng(1), { jugador: jugador() });
+
+  it('arranca en x0 combo y 0/10 golpes', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.textContent).toMatch(/x0/);
+    expect(cont.textContent).toContain('0/10');
+  });
+
+  it('tras un par de golpes muestra la racha y el conteo actualizados', () => {
+    let sp = registrarGolpe(sparring(), { acerto: true, ms: 300 });
+    sp = registrarGolpe(sp, { acerto: true, ms: 300 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.textContent).toMatch(/x2/);
+    expect(cont.textContent).toContain('2/10');
+  });
+});
+
+// Rework visual v17 (pedido central del pedido): "que se vaya 'llenando' una
+// barra a medida que se clickean correctamente las luces y que esa barra
+// tenga una marca de qué ventaja tiene".
+describe('renderSparring — barra de reflejos con marca de tramo', () => {
+  const sparring = () => crearSparring(createRng(1), { jugador: jugador() });
+
+  it('arranca vacia y en el tramo flojo', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    const relleno = cont.querySelector('.sparring-reflejos-pista .barra > i');
+    expect(relleno.style.width).toBe('0%');
+    expect(cont.querySelector('[data-tramo="flojo"]').classList.contains('alcanzado')).toBe(true);
+  });
+
+  it('se va llenando a medida que se acumulan aciertos', () => {
+    let sp = sparring();
+    for (let i = 0; i < 5; i++) sp = registrarGolpe(sp, { acerto: true, ms: 200 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    const relleno = cont.querySelector('.sparring-reflejos-pista .barra > i');
+    expect(relleno.style.width).toBe('50%');
+  });
+
+  it('con una sesion perfecta hasta ahora, el tramo alcanzado es "perfecto" y la barra llega al 100%', () => {
+    let sp = sparring();
+    for (let i = 0; i < 10; i++) sp = registrarGolpe(sp, { acerto: true, ms: 220 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    const relleno = cont.querySelector('.sparring-reflejos-pista .barra > i');
+    expect(relleno.style.width).toBe('100%');
+    expect(cont.querySelector('[data-tramo="perfecto"]').classList.contains('alcanzado')).toBe(true);
+    expect(cont.querySelector('[data-tramo="flojo"]').classList.contains('alcanzado')).toBe(false);
+  });
+
+  it('los tres tramos de recompensa estan siempre presentes, incluso antes de empezar', () => {
+    renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.querySelector('[data-tramo="perfecto"]')).toBeTruthy();
+    expect(cont.querySelector('[data-tramo="bien"]')).toBeTruthy();
+    expect(cont.querySelector('[data-tramo="flojo"]')).toBeTruthy();
+  });
+});
+
+// Rework visual v17: el mockup traía una tarjeta del entrenador, pero el
+// sparring vive DENTRO del tablero y "Tu rincón" (columna izquierda) ya la
+// muestra fija, con los mismos datos. Repetirla acá costaba ~85px y empujaba
+// la barra de reflejos, los tramos y el botón fuera del hueco disponible.
+describe('renderSparring — no repite lo que el tablero ya muestra', () => {
+  it('no vuelve a dibujar la tarjeta del entrenador (ya está en la columna izquierda)', () => {
+    const j = jugador();
+    renderSparring(cont, { sparring: crearSparring(createRng(1), { jugador: j }), jugador: j, onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.querySelector('.rincon-iniciales')).toBeNull();
+    expect(cont.textContent).not.toContain(j.entrenador.frase);
   });
 });
 
@@ -226,8 +393,12 @@ describe('renderSparring — un solo reloj para toda la ronda (Pedido v6)', () =
     montar();
     cont.querySelector('[data-accion="empezar"]').click();
 
+    // Rework v17: cada golpe ahora resuelve tras una pausa breve de
+    // feedback (ver DURACION_FEEDBACK_MS) — hay que dejarla correr entre
+    // click y click para que el próximo pao quede "activo" y clickeable.
     for (let i = 0; i < sp.objetivos; i++) {
       cont.querySelector('.pao.activo').click();
+      vi.advanceTimersByTime(DURACION_FEEDBACK_MS);
     }
 
     expect(sp.terminado).toBe(true);

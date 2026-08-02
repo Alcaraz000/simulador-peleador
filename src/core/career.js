@@ -9,7 +9,8 @@ import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas, recortarSucesos,
 } from './news.js';
 import { cobrarSponsor, tieneStaff } from './money.js';
-import { clamp } from './stats.js';
+import { clamp, LIMITES_ATRIBUTO } from './stats.js';
+import { BONUS_TEMPORAL_MAXIMO } from './sparring.js';
 import { rendimientoDeMejora } from './talento.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
@@ -434,6 +435,52 @@ export function fraseDeEtapa(partida) {
   return FRASES_POR_TAG[tagContenido(etapa.id, partida.jugador)] ?? etapa.frase;
 }
 
+// ---- El envión del sparring ----------------------------------------------
+//
+// Pedido v17: "quiero que este minijuego tenga algún impacto real (¿subida de
+// cardio temporal para esta pelea?)". Hasta acá el sparring solo daba un mod
+// PERMANENTE de agilidad, así que jugarlo bien o mal se sentía igual dentro
+// del ring, que es justo donde tendría que notarse.
+//
+// Vive en la partida y NO en el peleador, a propósito: no es un atributo que
+// el jugador ganó (la ficha no tiene por qué mostrarlo, y no puede quedar
+// pegado para siempre si la partida se guarda entre el campamento y la
+// pelea) — es un envión que dura un combate. Se guarda al cerrar la sesión de
+// sparring y se gasta al armar la pelea.
+export function guardarBonusProximaPelea(partida, bonusTemporal) {
+  const bonus = bonusTemporal ?? {};
+  const claves = Object.keys(bonus);
+  if (claves.length === 0) return partida;
+
+  const acumulado = { ...(partida.bonusProximaPelea ?? {}) };
+  for (const clave of claves) {
+    acumulado[clave] = clamp((acumulado[clave] ?? 0) + bonus[clave], 0, BONUS_TEMPORAL_MAXIMO);
+  }
+  return { ...partida, bonusProximaPelea: acumulado };
+}
+
+// Devuelve el peleador CON el envión aplicado y la partida ya sin él: se gasta
+// en una pelea y nunca en dos. El peleador que sale de acá es de usar y tirar
+// (va derecho a `crearPelea`) — nunca se guarda en la partida, que es lo que
+// mantiene el bonus temporal de verdad temporal.
+export function consumirBonusProximaPelea(partida) {
+  const bonus = partida.bonusProximaPelea ?? {};
+  const claves = Object.keys(bonus);
+  if (claves.length === 0) return { partida, jugador: partida.jugador };
+
+  const atributos = { ...partida.jugador.atributos };
+  for (const clave of claves) {
+    if (!(clave in atributos)) continue;
+    atributos[clave] = clamp(
+      atributos[clave] + bonus[clave], LIMITES_ATRIBUTO.min, LIMITES_ATRIBUTO.max,
+    );
+  }
+  return {
+    partida: { ...partida, bonusProximaPelea: null },
+    jugador: { ...partida.jugador, atributos },
+  };
+}
+
 export function crearPartida({ jugador, semilla }) {
   const rng = createRng(semilla);
   const mundo = crearMundo(rng, {
@@ -458,6 +505,9 @@ export function crearPartida({ jugador, semilla }) {
     noticias: [],
     etapaIndice: 0,
     bloque: 1,
+    // El envión del último sparring, pendiente de gastarse en la próxima
+    // pelea (ver guardarBonusProximaPelea, arriba).
+    bonusProximaPelea: null,
     bloqueGlobal: 1,
     // Calendario del tablero (v2): semana 1-indexada desde el arranque de la
     // carrera (ver calendario.js). `proximaPelea` es SOLO la pelea firmada

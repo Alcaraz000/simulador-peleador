@@ -3,6 +3,7 @@ import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
   crearSparring, registrarGolpe, resultadoSparring, terminarPorTiempo, MS_BIEN,
+  UMBRAL_RATIO_BIEN, UMBRAL_RATIO_PERFECTO,
 } from '../../src/core/sparring.js';
 
 const jugador = () => crearPeleador({
@@ -17,6 +18,14 @@ describe('crearSparring', () => {
     expect(s.aciertos).toBe(0);
     expect(s.terminado).toBe(false);
     expect(s.secuencia.length).toBe(s.objetivos);
+  });
+
+  // Rework visual (mockup: "x7 COMBO" en la fila de contadores): la UI
+  // necesita saber la racha de aciertos SEGUIDOS, no solo el total acumulado
+  // — un error la corta a cero aunque el resto de la sesión venga perfecta.
+  it('arranca con racha en 0', () => {
+    const s = crearSparring(createRng(1), { jugador: jugador() });
+    expect(s.racha).toBe(0);
   });
 
   it('la secuencia usa posiciones de la grilla 0-5', () => {
@@ -45,6 +54,18 @@ describe('registrarGolpe', () => {
     const s = registrarGolpe(crearSparring(createRng(5), { jugador: jugador() }), { acerto: false, ms: 900 });
     expect(s.aciertos).toBe(0);
     expect(s.indice).toBe(1);
+  });
+
+  it('acertar seguido suma la racha; errar la corta a 0', () => {
+    let s = crearSparring(createRng(5), { jugador: jugador() });
+    s = registrarGolpe(s, { acerto: true, ms: 300 });
+    s = registrarGolpe(s, { acerto: true, ms: 300 });
+    s = registrarGolpe(s, { acerto: true, ms: 300 });
+    expect(s.racha).toBe(3);
+    s = registrarGolpe(s, { acerto: false, ms: 900 });
+    expect(s.racha).toBe(0);
+    s = registrarGolpe(s, { acerto: true, ms: 300 });
+    expect(s.racha).toBe(1);
   });
 
   it('termina al completar la secuencia', () => {
@@ -133,6 +154,45 @@ describe('resultadoSparring', () => {
     const totalPerfecto = Object.values(perfecto.mods).reduce((a, v) => a + Math.max(0, v), 0);
     const totalBien = Object.values(bien.mods).reduce((a, v) => a + Math.max(0, v), 0);
     expect(totalPerfecto).toBeGreaterThan(totalBien);
+  });
+
+  // Los umbrales de ratio (90%/50%) ya no viven como literales sueltos
+  // adentro de la función: se exportan para que la barra de "reflejos" de la
+  // UI (ui/screens/sparring.js) pinte sus marcas de tramo EXACTAMENTE donde
+  // esta función decide el nivel — un solo lugar de verdad, nunca dos
+  // números que puedan desalinearse.
+  it('expone los umbrales de ratio que usa para decidir el nivel', () => {
+    expect(UMBRAL_RATIO_PERFECTO).toBe(0.9);
+    expect(UMBRAL_RATIO_BIEN).toBe(0.5);
+  });
+
+  // Pedido del usuario ("¿subida de cardio temporal para esta pelea?"):
+  // además del mod permanente de siempre, el resultado trae un bonus
+  // pensado para aplicarse SOLO a la próxima pelea (la plomería que lo hace
+  // efectivo de verdad vive fuera de este archivo — ver el comentario grande
+  // más abajo). Acá solo se calcula, puro y determinista: mismo criterio de
+  // nivel que ya decide `mods`, nunca un número aparte.
+  it('perfecto trae bonusTemporal de cardio', () => {
+    const r = resultadoSparring(jugar(10, 220), jugador());
+    expect(r.bonusTemporal.cardio).toBeGreaterThan(0);
+  });
+
+  it('bien trae bonusTemporal de cardio, menor que perfecto', () => {
+    const bien = resultadoSparring(jugar(5, MS_BIEN - 50), jugador());
+    const perfecto = resultadoSparring(jugar(10, 220), jugador());
+    expect(bien.bonusTemporal.cardio).toBeGreaterThan(0);
+    expect(bien.bonusTemporal.cardio).toBeLessThan(perfecto.bonusTemporal.cardio);
+  });
+
+  it('flojo no trae bonusTemporal', () => {
+    const r = resultadoSparring(jugar(1, 900), jugador());
+    expect(Object.keys(r.bonusTemporal)).toHaveLength(0);
+  });
+
+  it('bonusTemporal es serializable a JSON (nada de funciones ni referencias circulares)', () => {
+    const r = resultadoSparring(jugar(10, 220), jugador());
+    expect(() => JSON.stringify(r.bonusTemporal)).not.toThrow();
+    expect(JSON.parse(JSON.stringify(r.bonusTemporal))).toEqual(r.bonusTemporal);
   });
 });
 

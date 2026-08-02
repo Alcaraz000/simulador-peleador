@@ -2,6 +2,7 @@ import { createRng } from './core/rng.js';
 import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
   registrarDecision, registrarMuestraMedia,
+  guardarBonusProximaPelea, consumirBonusProximaPelea,
 } from './core/career.js';
 import { tablaRanking, rankingDelJugador } from './core/world.js';
 import { crearPeleador } from './core/fighter.js';
@@ -257,7 +258,35 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   function asegurarShell() {
     if (shellActual && contenedor.contains(shellActual.regiones.centro)) return shellActual;
     shellActual = crearShell(contenedor);
+    observarContenidoCentral(shellActual);
     return shellActual;
+  }
+
+  // El hueco de abajo, resuelto de raíz (v17). `estirarDecisionAlPiso` ya era
+  // genérico —estira lo que sea que esté montado en el centro— pero solo
+  // corría desde `centro()`. Las pantallas que se repintan SOLAS por dentro
+  // (el trámite ronda a ronda, el sparring, el desenlace del trámite) llaman a
+  // `centroContenido()` directo y nunca volvían a pasar por ahí: la primera
+  // pantalla cerraba contra el piso y las siguientes quedaban cortas. De ahí
+  // el "todavía está dejando espacio vacío por debajo" del minijuego.
+  //
+  // En vez de ir agregando llamadas a mano en cada repintado —que es
+  // exactamente lo que ya falló dos veces, y el usuario avisó que "puede haber
+  // más"— se observa el bloque de contenido: cambió el hijo, se re-estira. No
+  // hay forma de montar algo en el centro y olvidarse.
+  //
+  // Se observa la REGIÓN central entera, con subtree: el bloque
+  // `[data-bloque="contenido"]` no existe todavía cuando se crea el shell (lo
+  // arma `montarTablero`, más abajo) y encima se reemplaza en cada
+  // `montarCentro`, así que un observer clavado a ese nodo se quedaba sin
+  // objetivo. La región, en cambio, vive lo que vive el shell.
+  //
+  // No se realimenta: el estirado escribe `style.height`, un cambio de
+  // atributo, y acá se observa solo `childList`.
+  function observarContenidoCentral(shell) {
+    if (typeof MutationObserver !== 'function') return;
+    new MutationObserver(() => estirarDecisionAlPiso())
+      .observe(shell.regiones.centro, { childList: true, subtree: true });
   }
 
   // Arma los props de la columna izquierda del shell. La ficha que se abre
@@ -1039,6 +1068,11 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
+          // El envión de cardio que se gasta en la próxima pelea (v17, "que
+          // este minijuego tenga algún impacto real"). Se guarda ANTES de
+          // aplicarEfectoYSeguir: ese camino repinta y persiste la partida, y
+          // el bonus tiene que viajar en ese mismo guardado.
+          partida = guardarBonusProximaPelea(partida, resultado.bonusTemporal);
           aplicarEfectoYSeguir({ jugador: aplicado.jugador, deltas: aplicado.deltas });
         },
       });
@@ -1126,6 +1160,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         onTerminar: () => {
           const resultado = resultadoSparring(sparring, partida.jugador);
           const aplicado = aplicarCarta(partida.jugador, { mods: resultado.mods });
+          // Igual que en beatSparring: el envión se guarda pase lo que pase,
+          // tanto si esta era la última sesión del campamento (se va derecho
+          // al careo) como si todavía quedan más.
+          partida = guardarBonusProximaPelea(partida, resultado.bonusTemporal);
           if (ultimo) {
             partida = { ...partida, jugador: aplicado.jugador };
             // Resumen de fin de año: mismo motivo que en beatCampCarta — este
@@ -1292,8 +1330,16 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // el primer `avanzar()`.
   function pelear(oferta, plan) {
     const rival = partida.mundo.roster.find((p) => p.id === oferta.rivalId);
+    // Se gasta acá el envión que dejó el sparring: `jugadorEnElRing` es el
+    // peleador con el cardio levantado, y va SOLO a `crearPelea` — nunca
+    // vuelve a `partida.jugador`, así que el envión no sobrevive al combate.
+    // La pelea entera (snapshot incluido) se arma con esos números, que es
+    // exactamente lo pedido: entrenar bien se nota en el ring y en ningún
+    // otro lado.
+    const consumido = consumirBonusProximaPelea(partida);
+    partida = consumido.partida;
     let pelea = crearPelea({
-      jugador: partida.jugador, rival,
+      jugador: consumido.jugador, rival,
       disciplina: partida.jugador.disciplina, nivel: oferta.nivelPelea, plan, rng,
     });
 

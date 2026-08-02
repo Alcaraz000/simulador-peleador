@@ -451,12 +451,33 @@ function pintarRincon(raiz, accionNodo, { pelea, onInstruccion = () => {} }) {
 // uno como una función que devuelve el nodo a montar — separados de
 // `pintarGolpe` para que ésta se ocupe solo de ORQUESTAR (popup, timers,
 // resolución), nunca de armar DOM a mano.
-function contenidoPaso1(info, { onElegirZona }) {
+// La barra que se descarga (pedido v17): hasta ahora la ventana de reacción
+// existía —un `setTimeout` de `ventanaMs`— pero era INVISIBLE. El jugador
+// perdía la chance sin haber tenido nunca forma de saber cuánto le quedaba,
+// que es lo único que vuelve tensa una cuenta regresiva en vez de injusta.
+//
+// Se anima con CSS puro (`transform: scaleX`, ver theme.css), no con un
+// segundo timer en JS: el reloj que MANDA sigue siendo el `setTimeout` de
+// `pintarGolpe` (uno solo decide, como siempre en este proyecto), y la barra
+// es puro reflejo. Además, al vivir dentro del popup, se muere sola cuando el
+// popup se cierra — no hay nada que limpiar ni forma de dejarla colgada.
+function barraDeVentana(ventanaMs) {
+  return el('div', {
+    class: 'golpe-ventana',
+    role: 'timer',
+    'aria-label': 'Tiempo para elegir dónde pegar',
+  }, [
+    el('div', { class: 'golpe-ventana-relleno', style: `--ventana-ms:${ventanaMs}ms` }),
+  ]);
+}
+
+function contenidoPaso1(info, { onElegirZona, ventanaMs }) {
   const svg = dibujarSilueta({ postura: info.postura, zonas: info.zonas, onElegirZona });
   return el('div', { class: 'stack' }, [
     el('div', { class: 'panel' }, [
       el('div', { class: 'etiqueta rojo', text: '¡Lo tenés groggy!' }),
       el('p', { class: 'medio', text: POSTURAS[info.postura]?.descripcion ?? 'Leé dónde quedó abierto y mandala. Rápido.' }),
+      barraDeVentana(ventanaMs),
     ]),
     svg,
   ]);
@@ -562,6 +583,7 @@ function pintarGolpe(raiz, accionNodo, { pelea, onGolpe = () => {}, ventanaMs = 
   popup = abrirPopup({
     titulo: 'Golpe de gracia',
     contenido: contenidoPaso1(info, {
+      ventanaMs,
       onElegirZona: (zonaId) => {
         if (resuelto) return; // ya se resolvió (p. ej. la ventana se cerró justo antes del click)
         pintarPaso2(zonaId);

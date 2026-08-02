@@ -105,20 +105,28 @@ describe('crearTarjeta', () => {
     expect(nodo.textContent).toContain('Te salva de un nocaut.');
   });
 
-  it('la fila de etiqueta es compacta (~18px) y el texto de la etiqueta es chico (~7px), sin tocar el ícono', () => {
+  // v17: la fila de rareza pasó a estar FUERA DEL FLUJO. Antes reservaba 18px
+  // fijos para que el ícono arrancara a la misma altura en toda la fila de
+  // tarjetas, tuviera etiqueta o no; el costo era que esos 18px entraban en el
+  // centrado vertical y empujaban el contenido visible hacia abajo ("no está
+  // centrado todavía", pedido v17). Anclada arriba a la derecha se ve igual
+  // que siempre y ya no desbalancea el eje.
+  //
+  // Se comprueba por `height`/`top` y no por `position`: happy-dom le filtra a
+  // un descendiente de <button> el `position` del padre (devuelve el
+  // `relative` de `.tarjeta`), pero sí resuelve bien el resto de la regla.
+  it('la etiqueta de rareza ya no reserva alto propio, y su texto sigue chico (~7px)', () => {
     const CSS = readFileSync(join(process.cwd(), 'src/ui/theme.css'), 'utf-8');
     document.head.innerHTML = `<style>${CSS}</style>`;
     document.body.innerHTML = '';
     const nodo = crearTarjeta({ icono: icono('pesa'), titulo: 'x', rareza: 'legendaria', efectos: [] });
     document.body.appendChild(nodo);
 
-    const filaEtiqueta = nodo.querySelector('.tarjeta-etiqueta-fila');
-    const etiqueta = nodo.querySelector('.tarjeta-etiqueta');
-    const alturaFila = parseFloat(window.getComputedStyle(filaEtiqueta).height);
-    const fuenteEtiqueta = parseFloat(window.getComputedStyle(etiqueta).fontSize);
+    const estiloFila = window.getComputedStyle(nodo.querySelector('.tarjeta-etiqueta-fila'));
+    const fuenteEtiqueta = parseFloat(window.getComputedStyle(nodo.querySelector('.tarjeta-etiqueta')).fontSize);
 
-    expect(alturaFila).toBeLessThanOrEqual(19);
-    expect(alturaFila).toBeGreaterThanOrEqual(15);
+    expect(estiloFila.height).toBe('auto');
+    expect(estiloFila.top).toBe('10px');
     expect(fuenteEtiqueta).toBeLessThanOrEqual(8);
   });
 });

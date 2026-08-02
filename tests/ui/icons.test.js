@@ -93,6 +93,23 @@ describe('icono("grafico")', () => {
   });
 });
 
+// Rework del sparring (pedido textual: "agregá al centro de cada luz un
+// ícono de un puño cerrado de frente"): no existe en Feather/Lucide (mismo
+// motivo que 'cinturon' más arriba), así que es propio — nudillos arriba +
+// muñeca abajo + pulgar cruzado al frente, mismo trazo grueso/redondeado
+// que el resto del set.
+describe('icono("puno")', () => {
+  it('se dibuja como un <svg> con al menos un <path>', () => {
+    const svg = icono('puno');
+    expect(svg.tagName.toLowerCase()).toBe('svg');
+    expect(svg.querySelectorAll('path').length).toBeGreaterThan(0);
+  });
+
+  it('es visualmente distinto de "mano" (puño cerrado, no mano abierta)', () => {
+    expect(icono('puno').outerHTML).not.toBe(icono('mano').outerHTML);
+  });
+});
+
 describe('icono desconocido', () => {
   it('tira un error legible', () => {
     expect(() => icono('no-existe')).toThrow(/no-existe/);

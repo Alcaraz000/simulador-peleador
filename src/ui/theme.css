@@ -2660,13 +2660,14 @@ input.creacion-control { cursor: text; }
   .panel-decision .panel-decision-grilla > .tarjeta,
   .panel-decision .panel-decision-grilla-2 > .tarjeta {
     height: 100%;
-    justify-content: flex-start;
   }
 
   /* v16: los efectos NO se anclan al pie. Anclarlos ahí (v15) dejaba, con la
      tarjeta ya estirada al alto de la columna, más de 200px de vacío entre el
      ícono y las píldoras. Ahora el contenido entero se centra en su eje y las
      píldoras se separan lo justo — "un poco de espacio", como se pidió. */
+  .panel-decision .panel-decision-grilla > .tarjeta,
+  .panel-decision .panel-decision-grilla-2 > .tarjeta,
   .panel-decision .tarjeta {
     justify-content: center;
   }
@@ -2837,11 +2838,250 @@ input.creacion-control { cursor: text; }
     overflow: hidden;
   }
 
+  /* `flex: 0 1 auto` — puede ACHICARSE si no entra (el line-clamp recorta),
+     pero nunca crecer. Con `flex: 1` se comía todo el sobrante y su texto
+     quedaba pegado arriba con un vacío enorme debajo: la tarjeta "medía"
+     bien pero se veía descentrada, que es justo lo que reportó el usuario.
+     Sin crecer, el sobrante se reparte arriba y abajo por el
+     `justify-content: center` de la tarjeta, y el bloque queda centrado de
+     verdad en su eje. */
   .panel-decision .tarjeta-desc,
   .panel-decision .panel-decision-grilla-2 .tarjeta-desc {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     height: auto;
     min-height: 0;
     overflow: hidden;
   }
+}
+
+/* ============================================================================
+   v17 — el golpe de gracia: ventana visible y zonas legibles
+   ============================================================================
+   Pedido textual: "agregá una barra que se va 'descargando' para mostrar el
+   tiempo de reacción que queda para elegir una opción, además, hacé un poco
+   más grandes los 'círculos' que marcan las zonas del boxeador y acomodá
+   mejor los botones".
+
+   La barra se descarga con una animación de CSS de `--ventana-ms` (la misma
+   duración que el `setTimeout` que de verdad cierra la ventana, ver
+   pintarGolpe en fight.js — acá no se decide nada, solo se muestra).
+   `transform` en vez de `width`: se compone en el GPU y no relayoutea el
+   popup 60 veces por segundo en el momento más tenso de la partida. */
+.golpe-ventana {
+  margin-top: 10px;
+  height: 8px;
+  border-radius: 999px;
+  background: #2a1416;
+  border: 1px solid #4a2c2c;
+  overflow: hidden;
+}
+
+.golpe-ventana-relleno {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--dorado), var(--rojo));
+  transform-origin: left center;
+  animation: golpe-ventana-descarga var(--ventana-ms, 2000ms) linear forwards;
+}
+
+@keyframes golpe-ventana-descarga {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+/* Sin movimiento: la barra se queda llena en vez de descargarse. Quien pidió
+   no ver animaciones no debería perder la referencia de que la ventana
+   existe, y el timer real (fight.js) corre igual. */
+@media (prefers-reduced-motion: reduce) {
+  .golpe-ventana-relleno { animation: none; }
+}
+
+/* Las anclas ahora son círculos grandes sobre una foto: sin este halo oscuro
+   el borde de color se perdía contra las zonas claras del cuerpo. */
+.silueta-ancla {
+  filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.85));
+  transition: transform 0.15s var(--ease-out);
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.silueta-zona:hover .silueta-ancla,
+.silueta-zona:focus-visible .silueta-ancla { transform: scale(1.12); }
+
+/* ============================================================================
+   v17 (segunda ronda) — rework del sparring de reflejos, AL FINAL a
+   propósito (mismo aviso de coordinación que el resto de los bloques "v17"
+   de más arriba: hay otro implementador en paralelo tocando
+   src/ui/screens/fight.js, src/ui/components/silueta-rival.js,
+   src/ui/components/barra-precision.js, src/ui/screens/panel-tramite.js,
+   src/core/legacy.js y este mismo archivo — agregar acá abajo, en vez de
+   editar en el medio, minimiza el choque). Todo lo de acá suma selectores
+   nuevos o pisa `.pao`/`.pao.activo` (mismo selector, gana por cascada);
+   ninguna línea de arriba se tocó.
+
+   Pedido textual del usuario, con mockup en mano:
+     1) Puño centrado en cada luz (icono('puno'), ver src/ui/icons.js) — acá
+        solo tamaño/color; el ícono sigue currentColor, así que cambia solo
+        con el estado de `.pao` sin JS extra.
+     2) "¡YA!" sobre la luz activa — position:absolute, nunca reserva alto
+        propio (regla general: nada empuja nada al aparecer).
+     3) Animación al acertar (impacto: escala + destello verde) y al errar
+        (sacudón + destello rojo), 150ms — misma pausa que espera
+        sparring.js antes de avisar el golpe hacia afuera (ver
+        DURACION_FEEDBACK_MS), así el efecto siempre llega a completarse
+        antes de que el próximo remount lo reemplace.
+     4) Barra "Reflejos de la serie" que se llena de amarillo a verde con su
+        marca de qué tramo vas alcanzando (chip a la derecha + dos marcas
+        fijas en los mismos umbrales que ya usa resultadoSparring).
+     5) Los tres tramos de recompensa (perfecto/bien/flojo) con el
+        alcanzado resaltado.
+   ============================================================================ */
+
+/* El puño sigue currentColor (icono('puno') sin color fijo, ver icons.js):
+   tenue en reposo, oscuro y con contraste de sobra sobre el resplandor
+   dorado/rojo de `.pao.activo`. position:relative es lo que necesita el
+   badge "¡YA!" para anclarse contra ESTE pao y no contra un ancestro. */
+.pao {
+  position: relative;
+  color: var(--texto-sutil);
+  transition: border-color 0.15s ease, transform 0.12s var(--ease-out), color 0.15s ease;
+}
+
+.pao.activo { color: #1a0505; }
+
+.pao-ya {
+  position: absolute;
+  top: -9px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--dorado);
+  color: #1a0505;
+  font-size: 8.5px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: aparecer 0.15s ease both;
+}
+
+/* Golpe de impacto: un pulso de escala corto + el mismo destello dorado que
+   ya usa el resto del juego para "esto se resolvió bien", teñido de verde
+   (mismo truco que .barra-precision.resultado-verde: `--color-destello`). */
+@keyframes pao-impacto {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.16); }
+  100% { transform: scale(1); }
+}
+
+.pao.pao-acierto {
+  animation: pao-impacto 0.15s var(--ease-out) both, destello 0.15s ease-out both;
+  --color-destello: rgba(143, 214, 148, 0.8);
+  border-color: var(--verde);
+}
+
+/* Error: el mismo sacudón que ya usa el nocaut (.pelea-ko) y el golpe de
+   gracia errado, acortado a 150ms — acá se repite 10 veces por sesión, así
+   que tiene que doler rápido y soltar, nunca sentirse lento. */
+.pao.pao-error {
+  animation: sacudon 0.15s ease-out both;
+  border-color: var(--rojo);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+}
+
+/* Reflejos de la serie: reusa `.barra` (mismo alto/base que el resto del
+   juego) — acá solo el contenedor relativo para las dos marcas fijas y el
+   color del relleno según el nivel que ya decide resultadoSparring. */
+.sparring-reflejos-pista { position: relative; }
+.sparring-reflejos-pista .barra > i { background: var(--dorado); }
+.sparring-reflejos-pista.nivel-perfecto .barra > i { background: var(--verde); }
+.sparring-reflejos-pista.nivel-flojo .barra > i { background: var(--texto-sutil); }
+
+.sparring-reflejos-marca {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  pointer-events: none;
+}
+
+/* El chip de nivel a la derecha de la barra (mockup: "AFILADO"): reusa la
+   MISMA paleta que ya distingue positivo/leve/negativo en el resto del
+   juego (.tarjeta-efecto) — nunca un color nuevo. flex:0 0 auto pisa el
+   flex:1 parejo de `.fila > *`: el chip mide su propio texto, la barra se
+   lleva el resto. */
+.sparring-reflejos-etiqueta { flex: 0 0 auto; white-space: nowrap; }
+
+/* Los tres tramos de recompensa (mockup: PERFECTO/BIEN/FLOJO en fila, el
+   alcanzado resaltado): mismo lenguaje que `.tarjeta.tarjeta-elegida`
+   (borde + halo dorado), aplicado sobre `.tile`. */
+.sparring-tramo { border: 1px solid transparent; transition: border-color 0.15s ease, box-shadow 0.15s ease; }
+.sparring-tramo.alcanzado {
+  border-color: var(--dorado);
+  box-shadow: 0 0 0 1px var(--dorado), 0 0 14px rgba(242, 193, 78, 0.28);
+}
+
+/* ============================================================================
+   v17 — el contenido de la tarjeta, centrado de verdad en su eje
+   ============================================================================
+   Pedido textual: "Tarjetas: no está centrado todavía (hablo centrado
+   verticalmente)".
+
+   Dos cosas lo impedían, las dos arregladas acá arriba y acá:
+
+   1) Especificidad. `.panel-decision .panel-decision-grilla > .tarjeta`
+      (v15, 0-3-0) le fijaba `justify-content: flex-start` y le ganaba a
+      `.panel-decision .tarjeta { justify-content: center }` (v16, 0-2-0), así
+      que el centrado de v16 nunca llegó a aplicarse. Ahora las dos reglas
+      viven en el mismo selector.
+
+   2) La fila de rareza. Mide 18px SIEMPRE, tenga etiqueta o no — está para
+      que el ícono quede a la misma altura en todas las tarjetas de la fila,
+      incluso si una es legendaria y la de al lado común. Pero al ser un hijo
+      más del flex, esos 18px entraban en la cuenta del centrado y empujaban
+      el contenido visible hacia abajo. Sacándola del flujo (`absolute`, en el
+      borde superior) sigue cumpliendo su trabajo —la etiqueta se ve donde se
+      veía siempre, y el ícono arranca a la misma altura en todas— pero ya no
+      desbalancea el eje: se centra lo que de verdad se ve. */
+.tarjeta { position: relative; }
+
+.tarjeta-etiqueta-fila {
+  position: absolute;
+  top: 10px;
+  right: 13px;
+  height: auto;
+}
+
+/* ============================================================================
+   v17 — el sparring entra exacto en el hueco, como el resto del tablero
+   ============================================================================
+   El rework le sumó bloques a la pantalla (contadores, barra de reflejos,
+   tramos de recompensa) y con el botón puesto se pasaba del piso de la
+   columna izquierda: la grilla de paos empujaba los tramos y el botón fuera
+   de la pantalla.
+
+   Mismo criterio que ya usa `.tarjeta-desc` en el panel de decisión: el
+   bloque grande y elástico (acá, el panel de los paos) se queda con lo que
+   sobra y se achica si falta, y todo lo demás mide lo suyo. `min-height: 0`
+   es lo que habilita a un hijo de flex a achicarse por debajo de su contenido
+   (sin eso, `flex-shrink` no puede hacer nada). Los paos pasan a medirse en
+   proporción al alto disponible, con un piso cómodo para el dedo. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] > .stack:has(.grilla-paos) {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  [data-bloque="contenido"] > .stack:has(.grilla-paos) > .panel:has(.grilla-paos) {
+    flex: 1 1 auto;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .grilla-paos { width: 100%; }
 }

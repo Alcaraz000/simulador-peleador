@@ -453,6 +453,29 @@ describe('renderPelea — golpe de gracia (popup)', () => {
     expect(accion.querySelector('svg.silueta-rival')).toBeNull();
   });
 
+  // v17: "agregá una barra que se va 'descargando' para mostrar el tiempo de
+  // reacción que queda". El reloj que manda sigue siendo el setTimeout de
+  // pintarGolpe; lo que se prueba acá es que la barra REFLEJE esa misma
+  // ventana y no invente una duración propia.
+  it('la ventana de reacción se ve: hay una barra con la duración real del timer', () => {
+    const pelea = peleaGroggy();
+    renderPelea(cont, { pelea, momentos: [], ventanaMs: 1750 });
+
+    const relleno = document.querySelector('.popup-panel .golpe-ventana-relleno');
+    expect(relleno).toBeTruthy();
+    expect(relleno.style.getPropertyValue('--ventana-ms')).toBe('1750ms');
+  });
+
+  it('la barra de la ventana desaparece al pasar al paso 2 (ya no hay nada que contar)', () => {
+    const pelea = peleaGroggy();
+    renderPelea(cont, { pelea, momentos: [] });
+    const info = abrirGolpeDeGracia(pelea);
+
+    document.querySelector(`[data-zona="${info.zonaAbierta}"]`).dispatchEvent(new Event('click', { bubbles: true }));
+
+    expect(document.querySelector('.golpe-ventana')).toBeNull();
+  });
+
   it('elegir una zona muestra la barra de precision (sigue dentro del mismo popup)', () => {
     const pelea = peleaGroggy();
     renderPelea(cont, { pelea, momentos: [] });

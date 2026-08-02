@@ -458,3 +458,51 @@ describe('calcularLegado', () => {
     });
   });
 });
+
+// Reportado por el usuario con captura (v17): "gané el cinturón regional,
+// después lo perdí, después lo gané nuevamente, y en el historial NO aparece
+// la vez que lo gané por primera vez y lo perdí". Un cinturón puede tener
+// varios reinados y todos son parte de la historia de la carrera.
+describe('un cinturón ganado, perdido y reconquistado', () => {
+  function carreraConReconquista() {
+    const p = partida();
+    p.jugador.historial = [
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: false, fecha: 300, rivalNombre: 'Primero' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: true, fecha: 360, rivalNombre: 'Retador' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'd', esObligatoria: true, fecha: 420, rivalNombre: 'Verdugo' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: false, fecha: 500, rivalNombre: 'Verdugo' },
+    ];
+    return p;
+  }
+
+  it('guarda los DOS reinados, no solo el último', () => {
+    const { titulosDetalle } = calcularLegado(carreraConReconquista());
+    const regionales = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional');
+    expect(regionales).toHaveLength(2);
+  });
+
+  it('el primer reinado conserva su conquista, su defensa y la noche que lo perdio', () => {
+    const { titulosDetalle } = calcularLegado(carreraConReconquista());
+    const primero = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional')[0];
+    expect(primero.fechaGanado).toBeTruthy();
+    expect(primero.defensas).toHaveLength(1);
+    expect(primero.fechaPerdido).toBeTruthy();
+  });
+
+  it('el segundo reinado arranca limpio: no hereda las defensas del primero', () => {
+    const { titulosDetalle } = calcularLegado(carreraConReconquista());
+    const segundo = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional')[1];
+    expect(segundo.fechaGanado).toBeTruthy();
+    expect(segundo.defensas).toHaveLength(0);
+    expect(segundo.fechaPerdido).toBeNull();
+  });
+
+  it('un cinturon con un solo reinado sigue apareciendo una sola vez', () => {
+    const p = partida();
+    p.jugador.historial = [
+      { esTitulo: true, enJuego: 'Cinturón nacional', resultado: 'v', esObligatoria: false, fecha: 300, rivalNombre: 'Uno' },
+    ];
+    const { titulosDetalle } = calcularLegado(p);
+    expect(titulosDetalle.filter((t) => t.nombre === 'Cinturón nacional')).toHaveLength(1);
+  });
+});

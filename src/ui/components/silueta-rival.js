@@ -50,11 +50,24 @@ const ANCLAS = {
 // CUERPO_X_MIN/MAX en el test): los márgenes laterales para las etiquetas
 // son más angostos, así que estos slots son más angostos que los de antes
 // (104/124 vs 132/122) para no invadir la figura ni salirse del viewBox.
-const SLOT_IZQUIERDA = { x: 4, w: 104, h: 42 };
-const SLOTS_DERECHA = [
-  { x: 512, y: 20, w: 124, h: 40 },
-  { x: 512, y: 112, w: 124, h: 40 },
-];
+// v17, "acomodá mejor los botones": antes los slots se REPARTÍAN según el
+// estado — la zona abierta saltaba al slot izquierdo y las otras dos se
+// apilaban arriba a la derecha, así que las tres etiquetas cambiaban de lugar
+// entre postura y postura y las líneas cruzaban media figura para llegar a su
+// ancla. Ahora cada zona tiene SU lugar, siempre el mismo, a la altura de su
+// propia ancla: la sien y el mentón en el margen derecho, el hígado en el
+// izquierdo (que es de qué lado cae su ancla). Las líneas quedan cortas y
+// casi horizontales, y el jugador aprende dónde mirar en vez de releer el
+// cartel cada vez — que es lo que hace jugable una ventana de dos segundos.
+//
+// Los márgenes libres son angostos (el cuerpo ocupa x=112..508 en el viewBox,
+// ver el test): 112px a la izquierda y 132px a la derecha. Estos slots los
+// aprovechan casi enteros sin invadir la figura.
+const SLOTS = {
+  sien: { x: 508, y: 98, w: 128, h: 46, lado: 'derecha' },
+  menton: { x: 508, y: 182, w: 128, h: 46, lado: 'derecha' },
+  higado: { x: 4, y: 334, w: 104, h: 46, lado: 'izquierda' },
+};
 
 // Qué foto va con cada postura: el criterio es la zona que la postura marca
 // `tapado` (pedido textual: "que la imagen sea coherente con qué zona está
@@ -120,18 +133,8 @@ export function dibujarCuerpo(postura) {
 // ---- Zonas: anclas, líneas y etiquetas -----------------------------------
 
 function asignarSlots(zonas) {
-  const abierta = zonas.find((z) => z.estado === 'abierto') ?? zonas[0];
-  const resto = zonas.filter((z) => z.id !== abierta.id).sort((a, b) => ANCLAS[a.id].y - ANCLAS[b.id].y);
-
   const asignaciones = new Map();
-  const anclaAbierta = ANCLAS[abierta.id];
-  const yIzquierda = Math.min(Math.max(anclaAbierta.y - 19, 4), VB_H - SLOT_IZQUIERDA.h - 4);
-  asignaciones.set(abierta.id, { ...SLOT_IZQUIERDA, y: yIzquierda, lado: 'izquierda' });
-
-  resto.forEach((zona, i) => {
-    asignaciones.set(zona.id, { ...SLOTS_DERECHA[i] ?? SLOTS_DERECHA[SLOTS_DERECHA.length - 1], lado: 'derecha' });
-  });
-
+  for (const zona of zonas) asignaciones.set(zona.id, SLOTS[zona.id] ?? SLOTS.menton);
   return asignaciones;
 }
 
@@ -169,10 +172,20 @@ function grupoZona(zona, slot, onElegirZona) {
   const centroX = slot.x + slot.w / 2;
 
   agregar(grupo, [
+    // Área de click, invisible y bien más grande que el círculo dibujado: la
+    // ventana del golpe dura ~2s, así que fallar el click por un par de
+    // píxeles es la peor forma de perder la chance. `pointer-events:all` a
+    // pesar de `fill:none` — sin eso un relleno transparente no recibe clicks.
     svgEl('circle', {
-      cx: ancla.x, cy: ancla.y, r: esAbierto ? 9 : 6,
-      fill: esAbierto ? color : 'none', 'fill-opacity': esAbierto ? 0.2 : null,
-      stroke: color, 'stroke-width': esAbierto ? 2.5 : 2, 'stroke-dasharray': dash,
+      cx: ancla.x, cy: ancla.y, r: 40, fill: 'transparent', 'pointer-events': 'all',
+    }),
+    // v17, "hacé un poco más grandes los círculos que marcan las zonas":
+    // 9/6 quedaban como una marquita sobre una foto de 640px de ancho.
+    svgEl('circle', {
+      class: esAbierto ? 'silueta-ancla silueta-ancla-abierta' : 'silueta-ancla',
+      cx: ancla.x, cy: ancla.y, r: esAbierto ? 20 : 15,
+      fill: esAbierto ? color : '#140809', 'fill-opacity': esAbierto ? 0.22 : 0.45,
+      stroke: color, 'stroke-width': esAbierto ? 3.5 : 2.6, 'stroke-dasharray': dash,
     }),
     svgEl('path', {
       d: `M${ancla.x} ${ancla.y} L${borde.x} ${borde.y}`,
@@ -184,11 +197,11 @@ function grupoZona(zona, slot, onElegirZona) {
     }),
     svgEl('text', {
       x: centroX, y: slot.y + slot.h * 0.42, 'text-anchor': 'middle', fill: color,
-      'font-size': 12.5, 'font-weight': 800, 'letter-spacing': 1,
+      'font-size': 14, 'font-weight': 800, 'letter-spacing': 1,
     }, zona.nombre.toUpperCase()),
     svgEl('text', {
       x: centroX, y: slot.y + slot.h * 0.82, 'text-anchor': 'middle', fill: color, opacity: 0.85,
-      'font-size': 8.5, 'letter-spacing': 1,
+      'font-size': 9.5, 'letter-spacing': 1,
     }, TEXTO_ESTADO[zona.estado] ?? ''),
   ]);
 

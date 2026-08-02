@@ -775,9 +775,11 @@ describe('main.js: el timer del sparring no le puede robar la pantalla al jugado
 
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.querySelector('.grilla-paos')).toBeTruthy();
-    // "Golpes" es el segundo `.tile .valor` del panel de sparring (el
-    // primero es "Aciertos") — ver renderSparring, ui/screens/sparring.js.
-    const golpes = [...cont.querySelectorAll('.tile .valor')][1];
+    // Rework v17: la fila de contadores del sparring pasó de 2 a 3 tiles
+    // (Combo/Reacción/Golpes, mockup) — "Golpes" ahora es el TERCER
+    // `.tile .valor` del panel, no el segundo. Ver renderSparring,
+    // ui/screens/sparring.js.
+    const golpes = [...cont.querySelectorAll('.tile .valor')][2];
     expect(golpes.textContent).toBe('0/10');
   });
 });

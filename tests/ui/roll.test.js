@@ -1,5 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { animarRoll, animarBarajado, DURACION_BARAJADO_MS } from '../../src/ui/components/roll.js';
+import {
+  animarRoll, animarBarajado, DURACION_BARAJADO_MS, PAUSA_ELECCION_RIVAL_MS,
+} from '../../src/ui/components/roll.js';
 
 let cont;
 let matchMediaOriginal;
@@ -140,6 +142,78 @@ describe('animarRoll', () => {
 // `indiceGanador` y nunca deja nada "iluminado" al terminar: es puro clima
 // mientras se resuelve, el resultado de verdad se narra en la pantalla
 // siguiente (texto + marcador), no acá.
+// Pedido v17: "falta una espera cuando elige el contrincante". Antes el
+// barajado marcaba la tarjeta del rival y resolvía la ronda en el mismo tick,
+// así que el remount se comía el fotograma y la jugada del rival no se veía
+// nunca.
+describe('animarBarajado — la espera sobre la elección del rival', () => {
+  // El ciclo del barajado avanza en pasos de duración variable (curva en U),
+  // así que no se puede saltar al aterrizaje con un número fijo de ms: se
+  // corre timer por timer hasta que la tarjeta del rival queda marcada, y ahí
+  // arranca la pausa que se quiere medir.
+  function avanzarHastaAterrizar(nodo) {
+    for (let i = 0; i < 200; i += 1) {
+      if (nodo.classList.contains('tarjeta-rival')) return true;
+      vi.advanceTimersToNextTimer();
+    }
+    return nodo.classList.contains('tarjeta-rival');
+  }
+
+  it('no resuelve la ronda apenas aterriza: deja ver la tarjeta del rival', () => {
+    const nodos = crearTarjetasFalsas(3);
+    const onFin = vi.fn();
+    animarBarajado(nodos, { indiceFinal: 1, onFin });
+
+    expect(avanzarHastaAterrizar(nodos[1])).toBe(true);
+    expect(onFin).not.toHaveBeenCalled();
+  });
+
+  it('resuelve recién al cumplirse la pausa', () => {
+    const nodos = crearTarjetasFalsas(3);
+    const onFin = vi.fn();
+    animarBarajado(nodos, { indiceFinal: 1, onFin });
+
+    avanzarHastaAterrizar(nodos[1]);
+    vi.advanceTimersByTime(PAUSA_ELECCION_RIVAL_MS);
+
+    expect(onFin).toHaveBeenCalledTimes(1);
+  });
+
+  it('sin aterrizaje no espera nada (no hay jugada del rival que mostrar)', () => {
+    const nodos = crearTarjetasFalsas(3);
+    const onFin = vi.fn();
+    animarBarajado(nodos, { indiceFinal: -1, onFin });
+
+    vi.runAllTimers();
+
+    expect(onFin).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('detener() durante la pausa resuelve YA, sin dejar la ronda colgada', () => {
+    const nodos = crearTarjetasFalsas(3);
+    const onFin = vi.fn();
+    const control = animarBarajado(nodos, { indiceFinal: 2, onFin });
+
+    avanzarHastaAterrizar(nodos[2]);
+    control.detener();
+
+    expect(onFin).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('detener() después de que la pausa ya resolvió no dispara onFin dos veces', () => {
+    const nodos = crearTarjetasFalsas(3);
+    const onFin = vi.fn();
+    const control = animarBarajado(nodos, { indiceFinal: 0, onFin });
+
+    vi.runAllTimers();
+    control.detener();
+
+    expect(onFin).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('animarBarajado', () => {
   it('llama a onFin una sola vez', () => {
     const nodos = crearTarjetasFalsas(3);
