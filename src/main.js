@@ -20,7 +20,6 @@ import { comprar } from './core/money.js';
 import { tirarLesion, aplicarLesion, curarConDinero } from './core/injuries.js';
 import { calcularLegado } from './core/legacy.js';
 import { guardar, cargar, borrar } from './core/save.js';
-import { clamp } from './core/stats.js';
 import { estadisticasDeCarrera } from './core/stats-carrera.js';
 import {
   resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
@@ -97,10 +96,12 @@ function fmtDineroSigno(n) {
 }
 
 // Texto completo de una rama de `probabilidades`: los mods (como siempre) más,
-// si esa rama en particular los declara (Task v3, "cartas nuevas con azar"),
-// su propio dinero/fama y el aviso "Se cae la pelea" — todo en la MISMA
-// píldora (que ya lleva el % adelante, puesto por `labelEfecto` en card.js),
-// para que el jugador vea de un vistazo qué arriesga en esa rama puntual.
+// si esa rama en particular lo declara (Task v3, "cartas nuevas con azar"),
+// su propio dinero y el aviso "Se cae la pelea" — todo en la MISMA píldora
+// (que ya lleva el % adelante, puesto por `labelEfecto` en card.js), para que
+// el jugador vea de un vistazo qué arriesga en esa rama puntual. v13: la
+// fama se va del juego (ver stats.js) — ninguna carta declara ya
+// `efectos.fama`, así que esa rama de la píldora se borró con ella.
 function textoDeRama(opcion, rama) {
   const partes = [];
   const modsTexto = formatearMods({ ...(opcion.mods ?? {}), ...rama.mods }).join(' ');
@@ -108,17 +109,14 @@ function textoDeRama(opcion, rama) {
   if (typeof rama.efectos?.dinero === 'number' && rama.efectos.dinero !== 0) {
     partes.push(fmtDineroSigno(rama.efectos.dinero));
   }
-  if (typeof rama.efectos?.fama === 'number' && rama.efectos.fama !== 0) {
-    partes.push(`${rama.efectos.fama > 0 ? '+' : ''}${rama.efectos.fama} Fama`);
-  }
   if (rama.caePelea) partes.push('Se cae la pelea');
   return partes.join(' · ');
 }
 
 // Arma los `efectos` (píldoras) de una opción de evento/redes: si tiene
 // `probabilidades`, una píldora por rama con su porcentaje (via
-// porcentajesDe, Task 3.1); si no, una píldora por mod fijo más las de
-// dinero/fama declaradas aparte en `efectos`.
+// porcentajesDe, Task 3.1); si no, una píldora por mod fijo más la de dinero
+// declarada aparte en `efectos`.
 function efectosDeOpcion(opcion) {
   const porcentajes = porcentajesDe(opcion);
   if (porcentajes.length > 0) {
@@ -132,12 +130,6 @@ function efectosDeOpcion(opcion) {
   const efectos = efectosDeMods(opcion.mods ?? {});
   if (typeof opcion.efectos?.dinero === 'number' && opcion.efectos.dinero !== 0) {
     efectos.push({ texto: fmtDineroSigno(opcion.efectos.dinero), signo: opcion.efectos.dinero > 0 ? 'positivo' : 'negativo' });
-  }
-  if (typeof opcion.efectos?.fama === 'number' && opcion.efectos.fama !== 0) {
-    efectos.push({
-      texto: `${opcion.efectos.fama > 0 ? '+' : ''}${opcion.efectos.fama} Fama`,
-      signo: opcion.efectos.fama > 0 ? 'positivo' : 'negativo',
-    });
   }
   return efectos;
 }
@@ -627,6 +619,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // PROB_DESTACADO_TRAMITE en tramite.js) es un beat APARTE — ver
   // beatTramiteDestacado, más abajo — así que acá nunca hace falta revisar
   // nada de eso.
+  //
+  // Bloque 6 (Task 5.3, "la tarjeta previa a la pelea"): `beat.datos.charla`
+  // es la voz del entrenador avisando contra quién fue la pelea, ANTES del
+  // resultado — career.js la fusiona siempre que este beat existe (ver el
+  // comentario grande de `armarCola`, career.js), así que acá solo hace
+  // falta pasarla como `previa` de `renderDesenlace` para que aparezca
+  // arriba del resumen, en el mismo "Seguir".
   const METODO_TEXTO_TRAMITE = {
     ko: 'KO', tko: 'TKO', decision: 'decisión', sumision: 'sumisión',
   };
@@ -641,10 +640,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   function beatPeleasResueltas(beat) {
-    const { titulo, texto, resultados } = beat.datos;
+    const {
+      titulo, texto, resultados, charla,
+    } = beat.datos;
     centro(() => renderDesenlace(centroContenido(), {
       titulo,
       texto,
+      previa: charla ?? '',
       deltasTexto: deltasTextoTramite(resultados),
       onContinuar: () => siguiente(),
     }));
@@ -1111,12 +1113,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // como cualquier otro beat de decisión, reusando `renderOferta` tal cual
   // (no le importa si `contenedor` es la pantalla entera o una región: solo
   // monta un `.stack`). Rechazar (Task v3: sin pantalla de "Seguir", como
-  // cualquier otra decisión) resuelve derecho al estado ocioso; el único
-  // efecto de rechazar es en Fama, que no vive en el panel de atributos, así
-  // que no hay nada para animar/destacar acá. Al ACEPTAR es cuando arranca
-  // la pipeline a pantalla completa (negociación → careo → plan → pelea):
-  // esa sí sigue siendo pantallas grandes con su propia puesta en escena,
-  // decisión ya tomada.
+  // cualquier otra decisión) resuelve derecho al estado ocioso; rechazar no
+  // toca ningún atributo (v13: ya no cuesta fama, ver rechazarOferta,
+  // offers.js), así que no hay nada para animar/destacar acá. Al ACEPTAR es
+  // cuando arranca la pipeline a pantalla completa (negociación → careo →
+  // plan → pelea): esa sí sigue siendo pantallas grandes con su propia
+  // puesta en escena, decisión ya tomada.
   function beatOferta(beat) {
     const { oferta } = beat.datos;
     centro(() => renderOferta(centroContenido(), {
@@ -1181,8 +1183,8 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       // Rechazar la pelea DESDE la negociación (Task v3, pedido textual: el
       // botón "tiene que estar siempre disponible", incluso con la
       // negociación bloqueada por un apriete fallido). Misma consecuencia
-      // que rechazar la oferta antes de negociar (ver beatOferta): pierde
-      // fama y vuelve al tablero, sin firmar nada.
+      // que rechazar la oferta antes de negociar (ver beatOferta): vuelve al
+      // tablero, sin firmar nada.
       onRechazar: () => {
         const paso = rechazarOferta(partida.jugador, oferta);
         partida = { ...partida, jugador: paso.jugador, ofertaPendiente: null };
@@ -1210,15 +1212,17 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
         pintar();
       },
       onTerminar: () => {
+        // v13: el careo ya no toca fama ni moral del jugador —ninguno de los
+        // dos existe más, ver stats.js— así que `bonusFama`/`bonusMoral`
+        // (resultadoCareo, presser.js) se quedan como el resultado "en vivo"
+        // que ya se ve en la propia pantalla del careo (bloqueResumen,
+        // ui/screens/presser.js): hype y ventaja mental narran cómo quedó
+        // PARADO el careo, no algo que haya que guardarle al jugador. Lo
+        // único que de verdad se aplica es la calentura del rival, que sigue
+        // alimentando el sistema de rivalidades.
         const r = resultadoCareo(estado);
-        const jugador = {
-          ...partida.jugador,
-          fama: clamp(partida.jugador.fama + r.bonusFama, 0, 100),
-          estado: { ...partida.jugador.estado, moral: clamp(partida.jugador.estado.moral + r.bonusMoral, 0, 100) },
-        };
         partida = {
           ...partida,
-          jugador,
           rivalidades: subirHeat(partida.rivalidades, oferta.rivalId, r.heatRival),
         };
         elegirPlan(oferta);
@@ -1302,7 +1306,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   }
 
   // Calcula las consecuencias de la pelea ya terminada (récord, dinero,
-  // fama, lesión, título, rivalidades) y actualiza `partida` — pero NO
+  // lesión, título, rivalidades) y actualiza `partida` — pero NO
   // pinta nada: quien llama (`pelear`) es responsable de mostrar el resumen
   // dentro de la propia pantalla de pelea. Devuelve el resumen para eso.
   function cerrarPelea(oferta, pelea) {

@@ -70,7 +70,13 @@ describe('renderCareo', () => {
     expect(tonoElegido).toBe('frio');
   });
 
-  it('al terminar, muestra un resumen con una fila por ronda y las consecuencias finales', () => {
+  // v13 (simplificación de atributos): fama y moral se van del juego, así
+  // que el resumen ya no promete esas dos consecuencias — main.js dejó de
+  // aplicarlas (careo/onTerminar, main.js) y mostrarlas acá sería mentirle
+  // al jugador un efecto que no pasa de verdad. Lo único que sigue siendo
+  // consecuencia real es la calentura del rival (alimenta el sistema de
+  // rivalidades).
+  it('al terminar, muestra un resumen con una fila por ronda y la calentura del rival (sin fama ni moral)', () => {
     let careo = crearCareo(createRng(2), { oferta });
     const tonos = ['provocador', 'frio', 'humilde'];
     for (let i = 0; i < 3; i++) careo = responderCareo(careo, tonos[i], createRng(i)).careo;
@@ -80,9 +86,9 @@ describe('renderCareo', () => {
 
     const filas = cont.querySelectorAll('.careo-resumen-fila');
     expect(filas).toHaveLength(3);
-    expect(cont.textContent).toContain('Fama');
-    expect(cont.textContent).toContain('Moral');
     expect(cont.textContent).toContain('Calentura');
+    expect(cont.textContent).not.toContain('Fama');
+    expect(cont.textContent).not.toContain('Moral');
     // Ya no se ofrecen mas respuestas ni pregunta nueva.
     expect(cont.querySelectorAll('.panel-decision-grilla-2 .tarjeta')).toHaveLength(0);
     expect(cont.querySelector('[data-accion="terminar"]')).toBeTruthy();
