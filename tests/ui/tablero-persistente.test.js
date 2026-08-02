@@ -403,8 +403,16 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
     // Avanza varios bloques de verdad (a nivel núcleo) para que semanaGlobal
     // se mueva un buen trecho del arranque, dejando CUALQUIER beat pendiente
     // a la cabeza de la cola (no importa cuál: lo que importa acá es la
-    // semana, no el tipo de beat).
-    while (partida.bloqueGlobal < 6 && guardia < 500) {
+    // semana, no el tipo de beat). `|| partida.cola.length === 0`: parar
+    // justo cuando un bloque nuevo vació la cola de nuevo (bloque de un solo
+    // beat) dejaría la partida guardada SIN nada pendiente — `arrancar()`
+    // (main.js) llama a `siguiente()` una vez al cargar, y sobre una cola
+    // vacía eso arma Y CONSUME el próximo bloque entero, adelantando el
+    // calendario más allá de lo que este test capturó como "la semana
+    // guardada". Exigir cola no vacía al salir garantiza que ese primer
+    // `siguiente()` de la carga solo desapila el beat que ya estaba ahí, sin
+    // tocar semanaGlobal de nuevo.
+    while ((partida.bloqueGlobal < 6 || partida.cola.length === 0) && guardia < 500) {
       guardia += 1;
       const paso = siguienteBeat(partida);
       partida = paso.partida;

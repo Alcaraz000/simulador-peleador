@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
-import { crearPeleador } from '../../src/core/fighter.js';
+import { crearPeleador, mediaDe } from '../../src/core/fighter.js';
 import { crearPartida, siguienteBeat, firmarPelea } from '../../src/core/career.js';
 import { crearPelea } from '../../src/core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, abrirGolpeDeGracia, resolverGolpeDeGracia } from '../../src/core/fight-interactive.js';
 import { aplicarCarta } from '../../src/core/cards.js';
 import { resolverOpcion } from '../../src/core/events.js';
 import { aplicarResultado } from '../../src/core/offers.js';
+import {
+  ACCIONES_MINIJUEGO, resolverRondaMinijuego, resultadoDeMarcador, roundDeCierreMinijuego, rondasParaGanar,
+} from '../../src/core/tramite.js';
 import { registrarCruce, elegirArchirrival } from '../../src/core/rivalry.js';
 import { calcularLegado } from '../../src/core/legacy.js';
 import { serializar, deserializar } from '../../src/core/save.js';
@@ -48,12 +51,39 @@ function jugarPeleaDeVerdad(partida, oferta, rng, contarPelea) {
   return { ...partida, jugador: resultado.jugador, rivalidades };
 }
 
+// El destacado de un lote de trámite (a lo sumo uno por año, ver
+// PROB_DESTACADO_TRAMITE en tramite.js) se juega con el minijuego —no el
+// motor de fight.js— igual que `beatTramiteDestacado` en main.js: rondas
+// hasta que alguno llegue a las necesarias, después se cierra con
+// aplicarResultado (modo 'tramite', mismo criterio que el resto del lote de
+// trámite). No pasa por `contarPelea`: no corre el motor de pelea real, así
+// que no es una de las "peleas jugadas de verdad" que cuenta esta suite.
+function jugarTramiteDestacado(partida, beat, rng) {
+  const { oferta, alMejorDe } = beat.datos;
+  const necesarias = rondasParaGanar(alMejorDe);
+  let puntosJugador = 0;
+  let puntosRival = 0;
+  while (puntosJugador < necesarias && puntosRival < necesarias) {
+    const accionId = rng.pick(ACCIONES_MINIJUEGO);
+    const { resultado } = resolverRondaMinijuego(rng, {
+      jugador: partida.jugador, rivalMedia: oferta.rivalMedia, eleccionJugador: accionId,
+    });
+    if (resultado === 'jugador') puntosJugador += 1; else puntosRival += 1;
+  }
+  const { metodo, ganador } = resultadoDeMarcador({ jugador: puntosJugador, rival: puntosRival }, alMejorDe);
+  const round = roundDeCierreMinijuego(rng, { jugador: partida.jugador, oferta, metodo });
+  const resultado = aplicarResultado(partida.jugador, {
+    oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: partida.semanaGlobal,
+  });
+  return { ...partida, jugador: resultado.jugador };
+}
+
 function jugarCarrera(semilla) {
   const jugador = crearPeleador({
     nombre: 'Lucas Ortiz', apodo: 'El Relámpago', nacionalidad: 'AR', disciplina: 'boxeo',
     estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 38, esJugador: true,
   });
-  const tecnicaInicial = jugador.atributos.tecnica;
+  const mediaInicial = mediaDe(jugador);
   let partida = crearPartida({ jugador, semilla });
   const rng = createRng(semilla + 1000);
   let peleas = 0;
@@ -107,14 +137,23 @@ function jugarCarrera(semilla) {
         ...partida,
         jugador: {
           ...partida.jugador,
-          atributos: { ...partida.jugador.atributos, velocidad: Math.min(99, partida.jugador.atributos.velocidad + 1) },
+          atributos: { ...partida.jugador.atributos, agilidad: Math.min(99, partida.jugador.atributos.agilidad + 1) },
         },
       };
       if (ultimo) partida = jugarPeleaDeVerdad(partida, oferta, rng, () => { peleas += 1; });
     }
+
+    // El destacado de trámite (PROB_DESTACADO_TRAMITE, tramite.js) es su
+    // propio beat, separado de 'peleasResueltas' — sin resolverlo acá, esa
+    // pelea (récord incluido) directamente no ocurría, subcontando el total
+    // profesional de la carrera contra el objetivo de balance (~30-32,
+    // Bloque 6).
+    if (beat.tipo === 'tramiteDestacado') {
+      partida = jugarTramiteDestacado(partida, beat, rng);
+    }
   }
 
-  return { partida, peleas, tecnicaInicial };
+  return { partida, peleas, mediaInicial };
 }
 
 describe('carrera completa de punta a punta', () => {
@@ -150,8 +189,8 @@ describe('carrera completa de punta a punta', () => {
   });
 
   it('el peleador mejora respecto del arranque', () => {
-    const { partida, tecnicaInicial } = jugarCarrera(5);
-    expect(partida.jugador.atributos.tecnica).toBeGreaterThan(tecnicaInicial);
+    const { partida, mediaInicial } = jugarCarrera(5);
+    expect(mediaDe(partida.jugador)).toBeGreaterThan(mediaInicial);
     expect(partida.jugador.historial.length).toBeGreaterThan(5);
   });
 
