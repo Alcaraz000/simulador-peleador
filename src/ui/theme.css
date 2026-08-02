@@ -2489,3 +2489,29 @@ input.creacion-control { cursor: text; }
     overflow-y: visible;
   }
 }
+
+/* --- Pedido 2b: el panel de noticias, alineado de verdad con el piso de la
+   izquierda -------------------------------------------------------------
+   BUG REAL (verificado con Playwright, con captura en mano): el
+   `height:480px` de este módulo vivía INLINE (panel-noticias.js), puesto
+   por ese archivo; `limitarAlAltoDeIzquierda` (sincronizar-alturas.js)
+   ajustaba un `max-height` aparte encima para que la columna derecha
+   cerrara exacto al piso de la izquierda. Confirmado a mano: un
+   `max-height` MAYOR que un `height` ya fijado no hace nada — el elemento
+   se queda en su `height` de siempre, nunca crece. Mientras la izquierda
+   medía MENOS que el resto de la columna derecha + estos 480px, achicar
+   funcionaba bien (por eso el bug pasaba desapercibido en la mayoría de las
+   capturas) — pero apenas la izquierda medía MÁS (cinturones + rincón +
+   historial de peleas, todo junto), la columna derecha se quedaba corta:
+   "no cierra a la misma altura", tal cual reportó el usuario.
+   La solución: el default de 480px pasa a esta hoja de estilos (antes
+   inline) y `limitarAlAltoDeIzquierda` ahora pisa DIRECTO el `height` acá
+   (ver `propiedad:'height'`, sincronizar-alturas.js/main.js) — nunca un
+   `max-height` aparte que no puede ganarle a este `height` cuando hace
+   falta CRECER. En celular (sincronizar-alturas.js no toca nada ahí, no
+   hay "piso de la izquierda" que perseguir con columnas apiladas) este
+   default de 480px queda tal cual, igual que siempre. */
+.panel-noticias-lista {
+  height: 480px;
+  overflow-y: auto;
+}

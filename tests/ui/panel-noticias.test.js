@@ -48,43 +48,51 @@ describe('renderPanelNoticias', () => {
     expect(boton.textContent).not.toContain('ÚLTIMO MOMENTO');
   });
 
-  it('el panel tiene alto fijo con scroll interno, no crece indefinidamente', () => {
+  // v14 (Pedido 2b, bug real con captura: "el panel de noticias no cierra a
+  // la misma altura que la columna izquierda"): el alto fijo de 480px se
+  // mudó de acá (era un `style` inline) a la hoja de estilos
+  // (`.panel-noticias-lista`, bloque "v14" al final de theme.css) — es lo
+  // que le permite a `limitarAlAltoDeIzquierda` (sincronizar-alturas.js,
+  // llamado desde main.js con `propiedad:'height'`) pisarlo tanto para
+  // CRECER como para achicar (un `max-height` puesto encima de un `height`
+  // inline más chico nunca lograba hacerlo crecer, comprobado a mano — ver
+  // el comentario grande de sincronizar-alturas.js). Este componente, en
+  // AISLAMIENTO (sin pasar por el tablero real), ya no fija ningún alto:
+  // depende enteramente de la hoja de estilos (celular) o de main.js
+  // (escritorio) — por eso estos tests verifican que NO haya un estilo
+  // inline que vuelva a acoplar el alto al contenido (la causa original del
+  // bug, v9), no un valor en píxeles puntual (ese queda del lado de
+  // theme.css + la verificación visual con Playwright, ver el informe de
+  // esta ronda).
+  it('no fija su propio alto inline (depende de la hoja de estilos / de main.js, nunca del contenido)', () => {
     const noticias = Array.from({ length: 20 }, (_, i) => noticia({ id: `n${i}` }));
     renderPanelNoticias(cont, { noticias });
     const lista = cont.querySelector('.panel-noticias-lista');
     expect(lista).toBeTruthy();
-    expect(lista.style.height).toMatch(/^\d+px$/);
-    expect(lista.style.overflowY).toBe('auto');
+    expect(lista.classList.contains('panel-noticias-lista')).toBe(true);
+    expect(lista.style.height).toBe('');
+    expect(lista.style.maxHeight).toBe('');
   });
 
   // Pedido 1 (v9, causa real de los huecos reportados al pie de las
-  // columnas izquierda y central): tenía que ser `height`, no `max-height` —
-  // con `max-height` el panel medía chico con pocas noticias y solo llegaba
-  // al tope cuando se llenaba, así que el alto de la columna derecha (y con
-  // él, el hueco que dejaban las otras dos) variaba con la carrera. Ahora es
-  // SIEMPRE el mismo, haya 0 noticias o 20.
-  it('el alto es fijo de verdad: el mismo con el feed vacío que con el feed lleno', () => {
+  // columnas izquierda y central): el markup no puede variar con la
+  // cantidad de noticias de un modo que le agregue un alto propio (inline)
+  // a la lista — eso es justo lo que hacía que la columna derecha creciera
+  // con la carrera. Con 0 noticias o con 20, la lista sigue sin ningún
+  // estilo inline propio: el alto de verdad (siempre el mismo) es 100%
+  // responsabilidad de la hoja de estilos / de main.js.
+  it('ni con el feed vacío ni con el feed lleno agrega un alto inline propio', () => {
     renderPanelNoticias(cont, { noticias: [] });
-    const altoVacio = cont.querySelector('.panel-noticias-lista').style.height;
+    const listaVacia = cont.querySelector('.panel-noticias-lista');
 
     document.body.innerHTML = '<div id="region2"></div>';
     const cont2 = document.getElementById('region2');
     const noticias = Array.from({ length: 20 }, (_, i) => noticia({ id: `n${i}` }));
     renderPanelNoticias(cont2, { noticias });
-    const altoLleno = cont2.querySelector('.panel-noticias-lista').style.height;
+    const listaLlena = cont2.querySelector('.panel-noticias-lista');
 
-    expect(altoLleno).toBe(altoVacio);
-  });
-
-  // Feedback textual del usuario: "el módulo, al menos en PC, no es lo
-  // suficientemente alto como para acompañar al resto de la interfaz" (antes
-  // 320px, muy corto comparado con la columna izquierda del tablero).
-  it('el alto fijo es notablemente más alto que el tamaño original (320px)', () => {
-    const noticias = [noticia({ id: 'n1' })];
-    renderPanelNoticias(cont, { noticias });
-    const lista = cont.querySelector('.panel-noticias-lista');
-    const alto = Number.parseInt(lista.style.height, 10);
-    expect(alto).toBeGreaterThanOrEqual(420);
+    expect(listaVacia.style.height).toBe(listaLlena.style.height);
+    expect(listaVacia.style.height).toBe('');
   });
 
   it('con el feed vacio, avisa que no pasó nada en vez de quedar en blanco', () => {

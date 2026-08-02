@@ -153,6 +153,58 @@ describe('limitarAlAltoDeIzquierda (DOM)', () => {
     })).not.toThrow();
   });
 
+  // Pedido 2b (v14, bug real con captura: "el panel de noticias no cierra a
+  // la misma altura que la columna izquierda"). Causa raíz verificada con
+  // Playwright real (no en este archivo, que usa DOM sintético): en el
+  // navegador, `height:480px` (inline, panel-noticias.js) más
+  // `max-height:600px` (lo que esta función ponía antes) sigue midiendo
+  // 480px — `max-height` nunca hace CRECER un elemento por encima de su
+  // propio `height` ya fijado. Acá se prueba el nuevo modo
+  // (`propiedad:'height'`) contra el DOM sintético de siempre: el contrato
+  // (agranda/achica/nunca por debajo del mínimo/nunca por encima del techo)
+  // es EXACTAMENTE el mismo que con `maxHeight`, solo cambia qué propiedad
+  // CSS recibe el valor calculado.
+  describe('con propiedad:"height" (panel de noticias: alto FORZADO, no content-hugging)', () => {
+    it('en escritorio, si la columna se pasa del piso de la izquierda, fija un height mas chico (nunca max-height)', () => {
+      const izquierda = nodoConAlto(600);
+      const columna = nodoConAlto(700);
+      const elemento = nodoConAlto(480, 900);
+
+      limitarAlAltoDeIzquierda({
+        izquierda, columna, elemento, escritorio: () => true, propiedad: 'height',
+      });
+
+      expect(elemento.style.height).toBe('380px');
+      expect(elemento.style.maxHeight).toBe('');
+    });
+
+    it('agranda el height por encima de su propio default cuando la izquierda da lugar de sobra (esto es justo lo que max-height no podía hacer)', () => {
+      const izquierda = nodoConAlto(900);
+      const columna = nodoConAlto(600); // 480 (elemento) + 120 del resto de la columna
+      const elemento = nodoConAlto(480, 1000); // scrollHeight generoso: hay contenido de sobra para crecer
+
+      limitarAlAltoDeIzquierda({
+        izquierda, columna, elemento, escritorio: () => true, propiedad: 'height',
+      });
+
+      // ideal = 480 + (900-600) = 780, tope generoso (1000) no lo recorta.
+      expect(elemento.style.height).toBe('780px');
+    });
+
+    it('en celular, limpia el height (nunca el maxHeight) y no toca nada más', () => {
+      const izquierda = nodoConAlto(600);
+      const columna = nodoConAlto(2000);
+      const elemento = nodoConAlto(480);
+      elemento.style.height = '480px';
+
+      limitarAlAltoDeIzquierda({
+        izquierda, columna, elemento, escritorio: () => false, propiedad: 'height',
+      });
+
+      expect(elemento.style.height).toBe('');
+    });
+  });
+
   describe('con matchMedia real (sin pasar `escritorio` a mano)', () => {
     let original;
     beforeEach(() => { original = window.matchMedia; });

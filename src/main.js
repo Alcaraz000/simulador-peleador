@@ -387,10 +387,19 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     // el jugador tiene historial de peleas, ver el comentario grande de
     // sincronizar-alturas.js). Corre en cada montarTablero(), así que sigue
     // valiendo beat tras beat, no solo al arrancar la carrera.
+    //
+    // `propiedad:'height'` (v14, Pedido 2b: "el panel de noticias no cierra
+    // a la misma altura que la columna izquierda"): panel-noticias-lista
+    // quiere un alto FORZADO (no content-hugging, ver su propio comentario
+    // grande) — pisar `max-height` (el default de esta función, pensado
+    // para `.resumen-anio-cuerpo`) nunca alcanza para CRECER por encima del
+    // `height` fijo de la hoja de estilos, así que acá se pisa esa misma
+    // propiedad directo. Ver sincronizar-alturas.js para el detalle.
     limitarAlAltoDeIzquierda({
       izquierda: shell.regiones.izquierda,
       columna: shell.regiones.derecha,
       elemento: shell.regiones.derecha.querySelector('.panel-noticias-lista'),
+      propiedad: 'height',
     });
 
     return shell;
