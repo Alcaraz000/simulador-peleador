@@ -224,11 +224,14 @@ describe('renderSparring — contadores (combo/reaccion/golpes)', () => {
 describe('renderSparring — barra de reflejos con marca de tramo', () => {
   const sparring = () => crearSparring(createRng(1), { jugador: jugador() });
 
-  it('arranca vacia y en el tramo flojo', () => {
+  // v17.5: con cero aciertos el tramo alcanzado ya no es "flojo" sino
+  // "desastre" — el de abajo de todo, el único que resta. Arrancar ahí es lo
+  // que hace que la barra tenga algo en juego desde el primer golpe.
+  it('arranca vacia y en el tramo de desastre', () => {
     renderSparring(cont, { sparring: sparring(), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
     const relleno = cont.querySelector('.sparring-reflejos-pista .barra > i');
     expect(relleno.style.width).toBe('0%');
-    expect(cont.querySelector('[data-tramo="flojo"]').classList.contains('alcanzado')).toBe(true);
+    expect(cont.querySelector('[data-tramo="malo"]').classList.contains('alcanzado')).toBe(true);
   });
 
   it('se va llenando a medida que se acumulan aciertos', () => {
@@ -530,10 +533,25 @@ describe('renderSparring — al terminar dice qué se llevó', () => {
   it('una sesión floja lo dice y no promete premios que no hay', () => {
     const cont2 = document.createElement('div');
     document.body.appendChild(cont2);
-    renderSparring(cont2, { sparring: terminada(2, 900), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    // 5 de 10 y lento: floja, pero no un desastre (que sí tiene castigo).
+    renderSparring(cont2, { sparring: terminada(5, 900), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
 
     const bloque = cont2.querySelector('[data-bloque="resultado-sparring"]');
     expect(bloque.textContent).toContain('floja');
     expect(bloque.querySelectorAll('.tarjeta-efecto')).toHaveLength(0);
+  });
+
+  // v17.5: el tramo de abajo de todo ahora cuesta.
+  it('una sesión desastrosa muestra el castigo, no un premio', () => {
+    const cont2 = document.createElement('div');
+    document.body.appendChild(cont2);
+    renderSparring(cont2, { sparring: terminada(1, 900), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    const bloque = cont2.querySelector('[data-bloque="resultado-sparring"]');
+    expect(bloque.textContent).toContain('Desastre');
+    const pills = [...bloque.querySelectorAll('.tarjeta-efecto')];
+    expect(pills).toHaveLength(1);
+    expect(pills[0].textContent).toContain('Cardio');
+    expect(pills[0].textContent).toContain('-');
   });
 });

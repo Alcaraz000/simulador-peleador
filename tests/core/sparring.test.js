@@ -3,8 +3,11 @@ import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
 import {
   crearSparring, registrarGolpe, resultadoSparring, terminarPorTiempo, MS_BIEN,
-  UMBRAL_RATIO_BIEN, UMBRAL_RATIO_PERFECTO,
+  UMBRAL_RATIO_BIEN, UMBRAL_RATIO_PERFECTO, BONUS_SERIE_IMPECABLE, CASTIGO_TEMPORAL_CARDIO,
 } from '../../src/core/sparring.js';
+import {
+  crearPartida, guardarBonusProximaPelea, consumirBonusProximaPelea,
+} from '../../src/core/career.js';
 
 const jugador = () => crearPeleador({
   nombre: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
@@ -107,8 +110,8 @@ describe('resultadoSparring', () => {
     expect(['bien', 'flojo']).toContain(r.nivel);
   });
 
-  it('casi nada acertado es flojo y no da mods', () => {
-    const r = resultadoSparring(jugar(1, 900), jugador());
+  it('acertar la mitad pero lento es flojo y no da mods', () => {
+    const r = resultadoSparring(jugar(5, 900), jugador());
     expect(r.nivel).toBe('flojo');
     expect(Object.keys(r.mods)).toHaveLength(0);
   });
@@ -184,8 +187,8 @@ describe('resultadoSparring', () => {
     expect(bien.bonusTemporal.cardio).toBeLessThan(perfecto.bonusTemporal.cardio);
   });
 
-  it('flojo no trae bonusTemporal', () => {
-    const r = resultadoSparring(jugar(1, 900), jugador());
+  it('flojo no trae bonusTemporal (ni premio ni castigo)', () => {
+    const r = resultadoSparring(jugar(5, 900), jugador());
     expect(Object.keys(r.bonusTemporal)).toHaveLength(0);
   });
 
@@ -239,5 +242,56 @@ describe('terminarPorTiempo', () => {
     const r = resultadoSparring(cortado, jugador());
     expect(r.texto.length).toBeGreaterThan(0);
     expect(['perfecto', 'bien', 'flojo']).toContain(r.nivel);
+  });
+});
+
+// Pedido v17.5: "¿influye en algo clickear correctamente las 10 veces? Si lo
+// hago muy mal, ¿podremos poner que pase algo negativo?". Las dos cosas
+// faltaban: 9/10 y 10/10 valían idéntico (el umbral de perfecto es 90%) y una
+// sesión mala no tenía ninguna consecuencia.
+describe('resultadoSparring — la serie impecable y el desastre', () => {
+  // Mismo ayudante que el describe de arriba: `jugar` es local a aquel bloque.
+  function jugar(aciertos, ms) {
+    let s = crearSparring(createRng(9), { jugador: jugador() });
+    for (let i = 0; i < s.objetivos; i += 1) s = registrarGolpe(s, { acerto: i < aciertos, ms });
+    return s;
+  }
+
+  it('no fallar ni una vale MÁS que fallar una, con la misma reacción', () => {
+    const impecable = resultadoSparring(jugar(10, 250), jugador());
+    const casi = resultadoSparring(jugar(9, 250), jugador());
+
+    expect(impecable.nivel).toBe('perfecto');
+    expect(casi.nivel).toBe('perfecto');
+    expect(impecable.impecable).toBe(true);
+    expect(casi.impecable).toBe(false);
+    expect(impecable.bonusTemporal.cardio).toBe(casi.bonusTemporal.cardio + BONUS_SERIE_IMPECABLE);
+  });
+
+  it('una sesión desastrosa deja un envión NEGATIVO para la próxima pelea', () => {
+    const r = resultadoSparring(jugar(1, 900), jugador());
+
+    expect(r.nivel).toBe('malo');
+    expect(r.bonusTemporal.cardio).toBe(CASTIGO_TEMPORAL_CARDIO);
+    expect(r.bonusTemporal.cardio).toBeLessThan(0);
+  });
+
+  it('el desastre NO toca la ficha: castiga la pelea que viene, no la carrera', () => {
+    const r = resultadoSparring(jugar(0, 900), jugador());
+    expect(Object.keys(r.mods)).toHaveLength(0);
+  });
+
+  it('el castigo llega de verdad al peleador que sale al ring', () => {
+    const base = crearPeleador({
+      apellido: 'X', apodo: 'Y', nacionalidad: 'AR', disciplina: 'boxeo', estilo: 'tecnico',
+      categoria: 'pluma', origen: 'barrio', media: 60, esJugador: true, rng: createRng(2),
+    });
+    const partida = crearPartida({ jugador: base, semilla: 2 });
+    const desastre = resultadoSparring(jugar(1, 900), jugador());
+
+    const guardada = guardarBonusProximaPelea(partida, desastre.bonusTemporal);
+    const { jugador: enElRing } = consumirBonusProximaPelea(guardada);
+
+    expect(enElRing.atributos.cardio).toBe(partida.jugador.atributos.cardio + CASTIGO_TEMPORAL_CARDIO);
   });
 });

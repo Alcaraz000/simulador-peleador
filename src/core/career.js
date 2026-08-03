@@ -459,7 +459,12 @@ export function guardarBonusProximaPelea(partida, bonusTemporal) {
 
   const acumulado = { ...(partida.bonusProximaPelea ?? {}) };
   for (const clave of claves) {
-    acumulado[clave] = clamp((acumulado[clave] ?? 0) + bonus[clave], 0, BONUS_TEMPORAL_MAXIMO);
+    // El rango es simétrico: el sparring ahora también puede dejar un envión
+    // NEGATIVO (una sesión desastrosa, ver CASTIGO_TEMPORAL_CARDIO), y con el
+    // piso en 0 ese castigo se perdía en silencio.
+    acumulado[clave] = clamp(
+      (acumulado[clave] ?? 0) + bonus[clave], -BONUS_TEMPORAL_MAXIMO, BONUS_TEMPORAL_MAXIMO,
+    );
   }
   return { ...partida, bonusProximaPelea: acumulado };
 }

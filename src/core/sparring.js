@@ -117,30 +117,68 @@ export const BONUS_TEMPORAL_MAXIMO = BONUS_TEMPORAL_CARDIO.perfecto;
 // copiado a mano aparte.
 export const AGILIDAD_BONUS = { perfecto: 4, bien: 2 };
 
+// Sesión DESASTROSA: por debajo de este ratio de aciertos, entrenar mal
+// cuesta. Pedido v17.5, textual: "si lo hago muy mal, ¿podremos poner que
+// pase algo negativo?". El castigo es el espejo exacto del premio —un envión
+// de cardio, pero al revés, y solo para la próxima pelea— y no un mod
+// permanente: una tarde mala en el gimnasio no te arruina la carrera, te
+// llega flojo a la pelea que viene. Nunca toca la ficha.
+export const UMBRAL_RATIO_DESASTRE = 0.4;
+export const CASTIGO_TEMPORAL_CARDIO = -4;
+
+// Premio por la serie IMPECABLE. Antes 10/10 y 9/10 valían exactamente lo
+// mismo (el umbral de "perfecto" es 90%), así que no fallar ni una no tenía
+// ninguna recompensa — pedido v17.5: "¿influye en algo clickear correctamente
+// las 10 veces?". Ahora sí: no fallar ni una suma este extra al envión.
+export const BONUS_SERIE_IMPECABLE = 2;
+
 export function resultadoSparring(sparring, jugador) {
   const ratio = sparring.objetivos === 0 ? 0 : sparring.aciertos / sparring.objetivos;
   const promedio = promedioReaccion(sparring);
+  const marcador = `${sparring.aciertos}/${sparring.objetivos}`;
+  const reaccion = `${(promedio / 1000).toFixed(2).replace('.', ',')}s`;
+  const impecable = sparring.objetivos > 0 && sparring.aciertos === sparring.objetivos;
 
   if (ratio >= UMBRAL_RATIO_PERFECTO && promedio <= MS_PERFECTO) {
     return {
       nivel: 'perfecto',
+      impecable,
       mods: { agilidad: AGILIDAD_BONUS.perfecto },
-      bonusTemporal: { cardio: BONUS_TEMPORAL_CARDIO.perfecto },
-      texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2).replace('.', ',')}s de reacción. El entrenador casi sonríe.`,
+      bonusTemporal: {
+        cardio: BONUS_TEMPORAL_CARDIO.perfecto + (impecable ? BONUS_SERIE_IMPECABLE : 0),
+      },
+      texto: impecable
+        ? `Serie impecable: ${marcador}, ni una sola fallada, y ${reaccion} de reacción. El entrenador no dice nada, pero se queda mirando.`
+        : `Sesión perfecta: ${marcador} y ${reaccion} de reacción. El entrenador casi sonríe.`,
     };
   }
   if (ratio >= UMBRAL_RATIO_BIEN && promedio <= MS_BIEN) {
     return {
       nivel: 'bien',
+      impecable,
       mods: { agilidad: AGILIDAD_BONUS.bien },
-      bonusTemporal: { cardio: BONUS_TEMPORAL_CARDIO.bien },
-      texto: `Buena sesión: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2).replace('.', ',')}s de reacción. Todavía te falta filo.`,
+      bonusTemporal: {
+        cardio: BONUS_TEMPORAL_CARDIO.bien + (impecable ? BONUS_SERIE_IMPECABLE : 0),
+      },
+      texto: `Buena sesión: ${marcador} y ${reaccion} de reacción. Todavía te falta filo.`,
+    };
+  }
+  // Desastre: no es "no ganaste nada", es que llegás peor a la pelea. Espejo
+  // del premio, y por el mismo camino (envión temporal, nunca la ficha).
+  if (ratio < UMBRAL_RATIO_DESASTRE) {
+    return {
+      nivel: 'malo',
+      impecable: false,
+      mods: {},
+      bonusTemporal: { cardio: CASTIGO_TEMPORAL_CARDIO },
+      texto: `Desastre: ${marcador}. Te fuiste del gimnasio con más dudas que aire, y así vas a llegar a la pelea.`,
     };
   }
   return {
     nivel: 'flojo',
+    impecable,
     mods: {},
     bonusTemporal: {},
-    texto: `Sesión floja: ${sparring.aciertos}/${sparring.objetivos}. "Así en el ring te comen", te dice el entrenador.`,
+    texto: `Sesión floja: ${marcador}. "Así en el ring te comen", te dice el entrenador.`,
   };
 }

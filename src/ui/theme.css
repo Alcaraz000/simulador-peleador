@@ -3380,3 +3380,123 @@ input.creacion-control { cursor: text; }
      entra en la misma línea, baja. */
   .resumen-anio-listas .resumen-anio-fila { flex-wrap: wrap; row-gap: 2px; }
 }
+
+/* Paos más anchos (pedido v17.5: "hacé un poco más anchos los botones en el
+   minijuego de sparring, es muy difícil llegar al mejor tiempo de reacción").
+   El costo de una luz chica no es solo apuntar: es el VIAJE del mouse, que en
+   una grilla de círculos de 72px es casi todo el tiempo de reacción. Con
+   círculos que llenan su celda, la distancia a recorrer baja y el tiempo pasa
+   a depender de ver la luz, que es lo que el minijuego quiere medir. */
+.grilla-paos {
+  gap: 12px;
+  height: 100%;
+  grid-template-rows: 1fr 1fr;
+  align-items: center;
+}
+
+/* El círculo se acota por el ALTO de su celda, no por el ancho: con
+   `width:100%` + `aspect-ratio` se hacía tan alto como ancho (~180px en tres
+   columnas) y las dos filas se pasaban del panel, que las recortaba. Midiendo
+   desde el alto, el pao es siempre el círculo más grande que entra. */
+.pao {
+  height: 100%;
+  width: auto;
+  aspect-ratio: 1;
+  max-width: 100%;
+  max-height: 132px;
+  margin: 0 auto;
+}
+
+/* El tramo de desastre, en rojo: es el único que resta. */
+.sparring-tramo[data-tramo="malo"].alcanzado {
+  border-color: var(--rojo);
+  box-shadow: 0 0 0 1px var(--rojo), 0 0 16px rgba(239, 68, 68, 0.25);
+}
+
+/* El puño escala con el botón: con los paos más anchos, un ícono de 30px
+   fijos quedaba perdido en el medio de un círculo de 130. En porcentaje, la
+   luz se lee igual de bien sea cual sea el tamaño que le toque a la grilla. */
+.pao svg {
+  width: 42%;
+  height: 42%;
+}
+
+/* El "¡YA!" del pao activo, anclado adentro del círculo: con los botones
+   grandes, colgado del borde superior se salía de la celda y se recortaba. */
+.pao.activo .pao-ya {
+  top: 14%;
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%);
+}
+
+/* ============================================================================
+   v17.5 — el pao: botón del tamaño de la celda, círculo adentro
+   ============================================================================
+   Todo lo visual del pao se muda del <button> a `.pao-luz`. El botón pasa a
+   ser una caja transparente que ocupa la celda entera de la grilla, así que
+   el área clickeable es ~3x más grande sin que el dibujo cambie. */
+.pao {
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+  aspect-ratio: auto;
+  margin: 0;
+  background: none;
+  border: 0;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+
+.pao-luz {
+  height: 100%;
+  max-height: 118px;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--superficie-alta);
+  border: 2px solid var(--borde);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, transform 0.12s var(--ease-out);
+}
+
+.pao svg { width: 42%; height: 42%; }
+
+@media (hover: hover) and (pointer: fine) {
+  .pao:hover { border-color: transparent; }
+  .pao:hover .pao-luz { border-color: var(--borde-fuerte); }
+}
+
+.pao:active { transform: none; }
+.pao:active .pao-luz { transform: scale(0.94); }
+
+.pao.activo { background: none; border-color: transparent; box-shadow: none; }
+
+.pao.activo .pao-luz {
+  background: radial-gradient(circle, var(--dorado), var(--rojo));
+  border-color: #ffd76b;
+  box-shadow: 0 0 24px rgba(242, 193, 78, 0.55);
+}
+
+.pao.pao-acierto { animation: none; border-color: transparent; box-shadow: none; }
+.pao.pao-error { animation: none; border-color: transparent; box-shadow: none; }
+
+.pao.pao-acierto .pao-luz {
+  animation: pao-impacto 0.15s var(--ease-out) both, destello 0.15s ease-out both;
+  --color-destello: rgba(143, 214, 148, 0.8);
+  border-color: var(--verde);
+}
+
+.pao.pao-error .pao-luz {
+  animation: sacudon 0.15s ease-out both;
+  border-color: var(--rojo);
+  box-shadow: 0 0 14px rgba(239, 68, 68, 0.5);
+}
+
+/* El "¡YA!" cuelga del círculo, no de la celda. */
+.pao.activo .pao-ya { top: 6px; }

@@ -3,6 +3,7 @@ import { icono } from '../icons.js';
 import { ETIQUETAS } from '../../core/stats.js';
 import {
   resultadoSparring, promedioReaccion, UMBRAL_RATIO_BIEN, UMBRAL_RATIO_PERFECTO, AGILIDAD_BONUS,
+  UMBRAL_RATIO_DESASTRE, CASTIGO_TEMPORAL_CARDIO,
 } from '../../core/sparring.js';
 
 // Presupuesto total de la RONDA (Pedido v6: "quiero que el timer sea por
@@ -120,8 +121,12 @@ function bloqueContadores(sparring) {
 // vista previa correcta. Dos marcas fijas (50%/90%) señalan dónde arrancan
 // "bien"/"perfecto" — los mismos umbrales exportados por core/sparring.js,
 // nunca copiados a mano.
-const NIVEL_ETIQUETA = { flojo: 'Flojo', bien: 'Ajustado', perfecto: 'Afilado' };
-const NIVEL_CHIP_CLASE = { flojo: 'negativo', bien: 'leve', perfecto: 'positivo' };
+const NIVEL_ETIQUETA = {
+  malo: 'Desastre', flojo: 'Flojo', bien: 'Ajustado', perfecto: 'Afilado',
+};
+const NIVEL_CHIP_CLASE = {
+  malo: 'negativo', flojo: 'leve', bien: 'leve', perfecto: 'positivo',
+};
 
 function bloqueReflejos(sparring, jugador) {
   const fraccion = sparring.objetivos === 0 ? 0 : sparring.aciertos / sparring.objetivos;
@@ -133,6 +138,7 @@ function bloqueReflejos(sparring, jugador) {
         el('div', { class: 'barra' }, [
           el('i', { style: `width:${Math.round(fraccion * 100)}%` }),
         ]),
+        el('span', { class: 'sparring-reflejos-marca', style: `left:${UMBRAL_RATIO_DESASTRE * 100}%` }),
         el('span', { class: 'sparring-reflejos-marca', style: `left:${UMBRAL_RATIO_BIEN * 100}%` }),
         el('span', { class: 'sparring-reflejos-marca', style: `left:${UMBRAL_RATIO_PERFECTO * 100}%` }),
       ]),
@@ -150,10 +156,14 @@ function bloqueReflejos(sparring, jugador) {
 // (antes de "Empezar" incluida), nunca solo al terminar: si aparecieran
 // recién al final empujarían el botón de abajo, y "nada de la interfaz se
 // mueve solo" es una regla general del proyecto.
+// Cuatro tramos, no tres: el de abajo de todo ahora CUESTA (v17.5, "si lo
+// hago muy mal, ¿podremos poner que pase algo negativo?"). Mostrarlo antes de
+// empezar es lo que lo vuelve tensión en vez de una sorpresa injusta.
 const TRAMOS = [
   { id: 'perfecto', nombre: 'Perfecto', texto: `${fmtDelta(AGILIDAD_BONUS.perfecto)} ${ETIQUETAS.agilidad.corta}` },
   { id: 'bien', nombre: 'Bien', texto: `${fmtDelta(AGILIDAD_BONUS.bien)} ${ETIQUETAS.agilidad.corta}` },
   { id: 'flojo', nombre: 'Flojo', texto: 'Nada' },
+  { id: 'malo', nombre: 'Desastre', texto: `${fmtDelta(CASTIGO_TEMPORAL_CARDIO)} ${ETIQUETAS.cardio.corta}` },
 ];
 
 function bloqueTramos(sparring, jugador) {
@@ -165,7 +175,10 @@ function bloqueTramos(sparring, jugador) {
       'data-tramo': t.id,
     }, [
       el('div', { class: 'nombre', text: t.nombre }),
-      el('div', { class: `valor${alcanzado ? ' dorado' : ''}`, text: t.texto }),
+      el('div', {
+        class: `valor${alcanzado ? (t.id === 'malo' ? ' rojo' : ' dorado') : ''}`,
+        text: t.texto,
+      }),
     ]);
   }));
 }
@@ -226,11 +239,23 @@ export function renderSparring(contenedor, {
   // lector de pantalla no ve el resplandor dorado. El ícono de puño (v17,
   // pedido textual) va adentro como cualquier otro hijo — no cambia nada de
   // esto.
+  // El BOTÓN ocupa la celda entera de la grilla; el círculo es un hijo suyo
+  // (`.pao-luz`). Pedido v17.5: "hacé un poco más anchos los botones, es muy
+  // difícil llegar al mejor tiempo de reacción" — y lo que de verdad cuesta
+  // no es apuntar al círculo, es el VIAJE del mouse hasta él. Agrandar el
+  // círculo solo no alcanzaba: el panel da ~190px de alto para dos filas, así
+  // que el círculo no puede crecer mucho más. Con el área clickeable extendida
+  // a toda la celda (unas tres veces más grande) el tiempo pasa a depender de
+  // VER la luz, que es lo que el minijuego quiere medir.
+  //
+  // Las clases de estado (`activo`, `pao-acierto`, `pao-error`) siguen en el
+  // botón: el CSS las baja al círculo por descendencia, así que nada de lo que
+  // ya funcionaba cambió de lugar.
   const paos = Array.from({ length: 6 }, (_, i) => el('button', {
     type: 'button',
     class: 'pao', 'data-pao': String(i), 'aria-label': `Pao ${i + 1}`,
     onClick: () => golpear(i),
-  }, [icono('puno', { tamano: 30 })]));
+  }, [el('span', { class: 'pao-luz' }, [icono('puno', { tamano: 30 })])]));
 
   // v17: pegarle a un pao ya NO avisa `onGolpe` en el mismo instante del
   // click (ver DURACION_FEEDBACK_MS más arriba). Lo que SÍ es sincrónico,
