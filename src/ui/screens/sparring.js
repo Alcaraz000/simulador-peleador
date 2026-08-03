@@ -13,17 +13,19 @@ import {
 // sin cortes hasta que se completan los OBJETIVOS_POR_DEFECTO golpes (ver
 // core/sparring.js) o se acaba el tiempo.
 //
-// Por qué 7000ms es justo (balance verificado con una simulación de
-// reacciones, no a ojo): con 10 golpes, 7000ms da 700ms de presupuesto
-// promedio por golpe — EXACTO el umbral de "bien" (MS_BIEN, core/sparring.js)
-// y con margen de sobra para "perfecto" (320ms×10 = 3200ms, o sea 3800ms de
-// aire). Simulando reacciones con dispersión realista: un jugador "bueno"
-// (~450ms de media) completa los 10 casi siempre y saca "bien" o mejor; uno
-// "al límite" de MS_BIEN (~700ms de media) llega en el margen y el resultado
-// queda partido entre "bien" y "flojo" — borderline, como corresponde a
-// alguien justo en el límite; uno genuinamente lento (900ms+ de media) no
-// llega a completarlos y sale "flojo". No hace falta ajustar el número.
-export const DURACION_RONDA_MS = 7000;
+// El presupuesto era 7000ms: con 10 golpes, 700ms por golpe — exacto el umbral
+// de "bien" (MS_BIEN, core/sparring.js). Ese número se calibró cuando pegarle
+// a una luz avisaba en el acto.
+//
+// El rework v17 metió una pausa de feedback de DURACION_FEEDBACK_MS por golpe
+// (para que el acierto y el error se VEAN antes de que la pantalla se repinte)
+// y esa pausa sale del MISMO reloj de ronda: 10 golpes × 150ms = 1,5s que
+// antes no se gastaban. El presupuesto real por golpe se había caído de 700ms
+// a 550ms sin que nadie lo decidiera, y se notaba jugando — "fue justo sobre
+// la hora" con 10/10. Los 8500ms devuelven los 700ms por golpe de la
+// calibración original (7000 + 10×150 = 8500), no aflojan el minijuego: lo
+// dejan donde estaba antes de que las animaciones se comieran el margen.
+export const DURACION_RONDA_MS = 8500;
 
 // Rework visual v17 (pedido textual: "faltan animaciones cuando se clickea
 // bien la luz, faltan animaciones cuando se clickea MAL la luz [...]

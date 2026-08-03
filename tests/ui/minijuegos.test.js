@@ -309,7 +309,7 @@ describe('renderSparring — un solo reloj para toda la ronda (Pedido v6)', () =
     expect(relleno.style.width).toBe('100%');
   });
 
-  it('un golpe NO reinicia el reloj: la duración restante de la barra baja, no vuelve a los 7000ms totales', () => {
+  it('un golpe NO reinicia el reloj: la duración restante de la barra baja, no vuelve al total', () => {
     let sp = sparring();
     renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
     cont.querySelector('[data-accion="empezar"]').click();
@@ -326,11 +326,15 @@ describe('renderSparring — un solo reloj para toda la ronda (Pedido v6)', () =
     const match = relleno.style.transition.match(/width (\d+)ms/);
     expect(match).toBeTruthy();
     const msRestante = Number(match[1]);
-    // Si el reloj se hubiera reiniciado con el golpe, esto volvería a leer
-    // ~7000ms. Como es uno solo para toda la ronda, tiene que reflejar lo
-    // que de verdad queda de los 7000ms originales (~5000, con margen).
-    expect(msRestante).toBeLessThan(6000);
-    expect(msRestante).toBeGreaterThan(3000);
+    // Si el reloj se hubiera reiniciado con el golpe, esto volvería a leer el
+    // presupuesto entero. Como es uno solo para toda la ronda, tiene que
+    // reflejar lo que de verdad queda. Expresado CONTRA la constante y no
+    // contra un número escrito a mano: el presupuesto se recalibró en v17
+    // (los 150ms de feedback por golpe salen del mismo reloj) y estas dos
+    // aserciones se rompían por el cambio de número sin que el invariante que
+    // prueban —"el reloj no se reinicia"— hubiera dejado de valer.
+    expect(msRestante).toBeLessThan(DURACION_RONDA_MS - 1000);
+    expect(msRestante).toBeGreaterThan(DURACION_RONDA_MS - 3000);
   });
 
   it('pegarle a un pao no corta el reloj de la ronda: si se agota el tiempo total, igual termina', () => {
@@ -351,10 +355,10 @@ describe('renderSparring — un solo reloj para toda la ronda (Pedido v6)', () =
     vi.advanceTimersByTime(3000);
     cont.querySelector('.pao.activo').click(); // acierta un golpe: vuelve a montar, el reloj sigue
 
-    // Del presupuesto total (7000ms) ya se gastaron 3000ms antes del golpe;
-    // si el reloj se hubiera reiniciado harían falta otros 7000ms enteros.
-    // Como es uno solo, con lo que resta del original alcanza.
-    vi.advanceTimersByTime(4001);
+    // Ya se gastaron 3000ms del presupuesto antes del golpe; si el reloj se
+    // hubiera reiniciado harían falta otros DURACION_RONDA_MS enteros. Como es
+    // uno solo, con lo que resta del original alcanza.
+    vi.advanceTimersByTime(DURACION_RONDA_MS - 3000 + 1);
     expect(tiempoAgotado).toBe(true);
   });
 

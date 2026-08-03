@@ -1,7 +1,15 @@
 import { clamp } from './stats.js';
 
 export const OBJETIVOS_POR_DEFECTO = 10;
-export const MS_PERFECTO = 320;
+// v17, medido jugando: 320ms era inalcanzable para una persona. El tiempo de
+// reacción visual simple ronda los 250ms, y acá encima hay que ELEGIR entre
+// seis luces y mover el mouse hasta una posición al azar — eso agrega
+// fácilmente 200ms más. Una partida real de 10/10 (o sea, sin fallar una)
+// promedió 0,51s y quedó en "bien": el tramo "perfecto" no era exigente, era
+// imposible, y un tramo que nadie puede alcanzar no es una meta, es un cartel
+// decorativo. 420ms sigue pidiendo estar bien afilado —hay que sacarle ~90ms
+// a una partida ya buena— pero se puede.
+export const MS_PERFECTO = 420;
 export const MS_BIEN = 700;
 
 // Rework visual (pedido textual: "que se parezca mucho más a lo que se

@@ -300,3 +300,50 @@ describe('renderResumenAnio', () => {
     }))).not.toThrow();
   });
 });
+
+// v17: una chance de título perdida aparecía en la lista, pero marcada solo
+// con un " · título" del mismo tamaño y color que el método — indistinguible
+// de cualquier otra derrota. Ahora lleva el nombre del cinturón en una chapa
+// propia, tanto si se ganó como si se perdió.
+describe('resumen del año — las peleas por un cinturón se leen como tales', () => {
+  const pelea = (extra) => ({
+    rivalNombre: 'Sosa', rivalApodo: 'El Pulpo', metodo: 'decision', round: 12,
+    fecha: 60, ...extra,
+  });
+
+  it('una chance de título PERDIDA nombra el cinturón que se dejó pasar', () => {
+    const cont = document.createElement('div');
+    renderResumenAnio(cont, {
+      anio: 2027, muestrasMedia: [], decisiones: [], narrativa: '',
+      peleas: [pelea({ resultado: 'd', esTitulo: true, enJuego: 'Cinturón mundial' })],
+      onContinuar: () => {},
+    });
+
+    const chapa = cont.querySelector('.resumen-anio-fila-cinturon');
+    expect(chapa).toBeTruthy();
+    expect(chapa.textContent).toBe('Cinturón mundial');
+    expect(cont.textContent).toContain('Perdió');
+  });
+
+  it('una pelea ganada por un cinturón también lo nombra', () => {
+    const cont = document.createElement('div');
+    renderResumenAnio(cont, {
+      anio: 2027, muestrasMedia: [], decisiones: [], narrativa: '',
+      peleas: [pelea({ resultado: 'v', esTitulo: true, enJuego: 'Cinturón regional' })],
+      onContinuar: () => {},
+    });
+
+    expect(cont.querySelector('.resumen-anio-fila-cinturon').textContent).toBe('Cinturón regional');
+  });
+
+  it('una pelea comun no lleva chapa de cinturón', () => {
+    const cont = document.createElement('div');
+    renderResumenAnio(cont, {
+      anio: 2027, muestrasMedia: [], decisiones: [], narrativa: '',
+      peleas: [pelea({ resultado: 'v', esTitulo: false, enJuego: 'Subís al ranking si ganás' })],
+      onContinuar: () => {},
+    });
+
+    expect(cont.querySelector('.resumen-anio-fila-cinturon')).toBeNull();
+  });
+});

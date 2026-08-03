@@ -3047,11 +3047,22 @@ input.creacion-control { cursor: text; }
       desbalancea el eje: se centra lo que de verdad se ve. */
 .tarjeta { position: relative; }
 
-.tarjeta-etiqueta-fila {
+/* Los dos selectores, y con `.legendaria` nombrada: `.tarjeta.legendaria > *`
+   (el que levanta el contenido por encima del barrido dorado) es 0-2-0 y le
+   ganaba a un `.tarjeta-etiqueta-fila` suelto, así que en las legendarias
+   —y SOLO en ellas— la etiqueta se quedaba en el flujo: ocupaba alto, empujaba
+   el contenido hacia abajo y, con el `align-items: center` de la tarjeta, se
+   dibujaba centrada en vez de arriba a la derecha. De ahí que la legendaria se
+   viera distinta de la rara teniendo el mismo marcado. El `z-index` se repite
+   acá porque al pisar `position` hay que volver a ponerla por encima del
+   barrido. */
+.tarjeta > .tarjeta-etiqueta-fila,
+.tarjeta.legendaria > .tarjeta-etiqueta-fila {
   position: absolute;
   top: 10px;
   right: 13px;
   height: auto;
+  z-index: 1;
 }
 
 /* ============================================================================
@@ -3084,4 +3095,23 @@ input.creacion-control { cursor: text; }
   }
 
   .grilla-paos { width: 100%; }
+}
+
+/* El cinturón en juego, en la fila de una pelea del resumen del año: dorado,
+   como todo lo que en este juego significa "título" (los cinturones de la
+   columna izquierda, la etiqueta legendaria, el nivel máximo del legado).
+   `flex: 0 0 auto` + `white-space: nowrap` para que no se parta ni le robe
+   ancho al nombre del rival. */
+.resumen-anio-fila-cinturon {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  font-size: 8.5px;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--dorado);
+  background: #2a2008;
+  border: 1px solid var(--dorado);
+  border-radius: 20px;
+  padding: 2px 7px;
 }

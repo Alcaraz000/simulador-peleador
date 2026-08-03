@@ -69,14 +69,24 @@ function itemDecision(d) {
 // peleas no guarda la nacionalidad — ver el comentario en beatResumenAnio).
 function itemPelea(p) {
   const rival = p.rivalApodo ?? p.rivalNombre;
-  const metodo = `${METODOS[p.metodo] ?? p.metodo}${p.esTitulo ? ' · título' : ''}`;
+  const metodo = METODOS[p.metodo] ?? p.metodo;
   const mes = p.fecha !== null && p.fecha !== undefined ? mesDe(p.fecha) : '';
+  // Las peleas por un cinturón llevan el nombre del cinturón, con chapa
+  // dorada propia. Antes se distinguían con un " · título" pegado al método,
+  // del mismo tamaño y color que el resto de la fila: una chance de título
+  // perdida quedaba indistinguible de cualquier otra derrota, hasta el punto
+  // de que el usuario reportó que directamente "no aparecía" (aparecía —
+  // simplemente no se leía). Estas son las peleas que definen una carrera:
+  // la que se ganó y también la que se dejó pasar merecen verse de un
+  // vistazo, y saber POR CUÁL cinturón era.
+  const cinturon = p.esTitulo && p.enJuego ? p.enJuego : null;
   return el('div', { class: 'resumen-anio-fila' }, [
     el('span', { class: 'resumen-anio-fila-tag', text: mes }),
     el('span', { class: 'resumen-anio-fila-rival' }, [
       bandera(p.rivalNacionalidad, { ancho: 15 }),
       el('span', { text: rival }),
     ]),
+    cinturon ? el('span', { class: 'resumen-anio-fila-cinturon', text: cinturon }) : null,
     el('span', { class: 'resumen-anio-fila-metodo medio', text: metodo }),
     el('span', {
       // Pedido 6 (v9, "columnas alineadas"): ancho fijo (ver
