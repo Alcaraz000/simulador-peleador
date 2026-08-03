@@ -64,6 +64,21 @@ function bandaPorMomento(jugador) {
   return { min: 2, max: 2 }; // prime, sin cinturón.
 }
 
+// El tope de peleas que puede tener un año, mirando todas las bandas de
+// arriba. Lo usa el resumen del año para dibujar la lista de peleas SIEMPRE
+// del mismo alto (pedido v17.5: "si ya sabemos cuántas decisiones y peleas
+// hay al año como máximo, deberían verse como un listado... habrá casos donde
+// tengan filas en blanco"). Derivado, no escrito a mano: si mañana se cambia
+// una banda, el tope se mueve solo.
+export const PELEAS_MAX_POR_ANIO = Math.max(
+  ...[
+    { titulos: ['x'], edad: 30 }, // campeón
+    { titulos: [], edad: 40 }, // veterano
+    { titulos: [], edad: 22 }, // joven
+    { titulos: [], edad: 30 }, // prime
+  ].map((caso) => bandaPorMomento(caso).max),
+);
+
 export function intentosDePelea(rng, jugador) {
   const banda = bandaPorMomento(jugador);
   return rng.int(banda.min, banda.max);

@@ -328,6 +328,11 @@ function declivePorEdadJugador(jugador) {
 // en el Bloque 6 — ver el comentario grande de ahí, más abajo.
 const BLOQUES_POR_ANIO = 3;
 
+// Un bloque = un cuatrimestre = una decisión. Exportado con nombre propio
+// porque el resumen del año necesita el tope para dibujar la lista de
+// decisiones siempre del mismo alto.
+export const DECISIONES_POR_ANIO = BLOQUES_POR_ANIO;
+
 export const ETAPAS = [
   {
     id: 'juvenil', nombre: 'Juvenil', bloques: 3 * BLOQUES_POR_ANIO, edadDesde: 15,

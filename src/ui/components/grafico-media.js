@@ -75,7 +75,20 @@ const TEXTO_CLARO = '#f1e2e2';
 // con Playwright real en cada paso, y el tamaño de fuente también baja uno
 // (ver más abajo).
 const VB_W = 340;
+// Alto por defecto del viewBox. Achatado a propósito en v10 ("los gráficos
+// son lo que más lugar ocupa"), y ahora además FLEXIBLE: cuando el resumen de
+// un año flaco deja lugar de sobra, `graficoMedia`/`graficoRanking` reciben un
+// `alto` mayor y el gráfico se dibuja más alto de verdad —más resolución
+// vertical, no una imagen estirada— en vez de dejar el hueco. Cuando el año
+// viene cargado se queda en este mínimo, que es el que se calibró.
 const VB_H = 84;
+export const ALTO_GRAFICO_MIN = VB_H;
+// El ancho del viewBox, para poder convertir píxeles de pantalla a unidades
+// de viewBox: un SVG con viewBox y sin alto explícito se dibuja con
+// `altoEnPx = anchoEnPx * (vbAlto / VB_W)`, así que para que ocupe N píxeles
+// de alto hay que pedirle `vbAlto = N * VB_W / anchoEnPx`.
+export const ANCHO_GRAFICO = VB_W;
+export const ALTO_GRAFICO_MAX = 190;
 const PAD_LEFT = 30;
 const PAD_RIGHT = 6;
 const PAD_TOP = 11;
@@ -233,8 +246,12 @@ function mesCortoDe(semana) {
  */
 function construirGraficoLinea({
   muestras, anio, obtenerValor, invertido, formatoValor, tituloDe, ariaDe, textoVacio,
-  claseContenedor, claseSvg, claseVacio,
+  claseContenedor, claseSvg, claseVacio, alto = VB_H,
 }) {
+  // El alto pedido, acotado: por debajo del mínimo las etiquetas del eje se
+  // pisan (ver MAX_TICKS_EJE_Y) y por encima del máximo el gráfico deja de
+  // ser una franja y pasa a competir con el resto del resumen.
+  const vbAlto = Math.round(Math.min(Math.max(alto, ALTO_GRAFICO_MIN), ALTO_GRAFICO_MAX));
   const puntosReales = puntosDe(muestras, obtenerValor);
 
   // Único caso legítimo de "sin gráfico": CERO muestras con dato válido (ni
@@ -258,7 +275,7 @@ function construirGraficoLinea({
   const rango = valorMax - valorMin || 2;
 
   const anchoUtil = VB_W - PAD_LEFT - PAD_RIGHT;
-  const altoUtil = VB_H - PAD_TOP - PAD_BOTTOM;
+  const altoUtil = vbAlto - PAD_TOP - PAD_BOTTOM;
 
   function xDe(semana) {
     if (semanaMax === semanaMin) return PAD_LEFT + anchoUtil / 2;
@@ -281,7 +298,7 @@ function construirGraficoLinea({
   const ultimo = coords[coords.length - 1];
 
   const svg = svgEl('svg', {
-    viewBox: `0 0 ${VB_W} ${VB_H}`,
+    viewBox: `0 0 ${VB_W} ${vbAlto}`,
     class: claseSvg,
     role: 'img',
     'aria-label': ariaDe(primero, ultimo),
@@ -462,10 +479,10 @@ function construirGraficoLinea({
       });
       return texto;
     };
-    const textoPrimero = etiquetaValor(primero, primero.y > VB_H / 2, 'start');
+    const textoPrimero = etiquetaValor(primero, primero.y > vbAlto / 2, 'start');
     textoPrimero.textContent = formatoValor(primero.valor);
     svg.appendChild(textoPrimero);
-    const textoUltimo = etiquetaValor(ultimo, ultimo.y > VB_H / 2, 'end');
+    const textoUltimo = etiquetaValor(ultimo, ultimo.y > vbAlto / 2, 'end');
     textoUltimo.textContent = formatoValor(ultimo.valor);
     svg.appendChild(textoUltimo);
   }
@@ -489,10 +506,11 @@ function fechaTextoDe(semana) {
  * @returns {HTMLElement} un <div> con el SVG (o la lectura simple SOLO si no
  *   hay ni un solo dato) y una lista accesible de respaldo.
  */
-export function graficoMedia({ muestras = [], anio = null } = {}) {
+export function graficoMedia({ muestras = [], anio = null, alto } = {}) {
   return construirGraficoLinea({
     muestras,
     anio,
+    alto,
     obtenerValor: (m) => m.media,
     invertido: false,
     formatoValor: (valor) => String(redondearMedia(valor)),
@@ -518,10 +536,11 @@ function formatoPuesto(valor) {
  * arriba hacia abajo) — ya no hace falta un cartel aparte explicándolo.
  * @param {{ muestras: Array<{semana:number, ranking:number|null}>, anio?: number }} opciones
  */
-export function graficoRanking({ muestras = [], anio = null } = {}) {
+export function graficoRanking({ muestras = [], anio = null, alto } = {}) {
   return construirGraficoLinea({
     muestras,
     anio,
+    alto,
     obtenerValor: (m) => m.ranking,
     invertido: true,
     formatoValor: formatoPuesto,

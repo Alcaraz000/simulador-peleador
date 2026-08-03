@@ -20,9 +20,13 @@
 import { el, mount } from '../dom.js';
 import { icono } from '../icons.js';
 import { bandera } from '../flags.js';
-import { graficoMedia, graficoRanking } from '../components/grafico-media.js';
+import {
+  graficoMedia, graficoRanking, ALTO_GRAFICO_MIN, ALTO_GRAFICO_MAX, ANCHO_GRAFICO,
+} from '../components/grafico-media.js';
 import { fechaDe } from '../../core/calendario.js';
 import { ANIO_INICIAL } from '../../core/world.js';
+import { DECISIONES_POR_ANIO } from '../../core/career.js';
+import { PELEAS_MAX_POR_ANIO } from '../../core/tramite.js';
 
 // "Modo de victoria (puntos, tko, etc.)" — pedido textual: 'decision' se
 // muestra como "Puntos" (no "Decisión" a secas), la palabra que el usuario
@@ -86,7 +90,6 @@ function itemPelea(p) {
       bandera(p.rivalNacionalidad, { ancho: 15 }),
       el('span', { text: rival }),
     ]),
-    cinturon ? el('span', { class: 'resumen-anio-fila-cinturon', text: cinturon }) : null,
     el('span', { class: 'resumen-anio-fila-metodo medio', text: metodo }),
     el('span', {
       // Pedido 6 (v9, "columnas alineadas"): ancho fijo (ver
@@ -95,6 +98,11 @@ function itemPelea(p) {
       class: `resumen-anio-fila-resultado ${RESULTADO_CLASE[p.resultado] ?? 'sutil'}`,
       text: RESULTADO_TEXTO[p.resultado] ?? p.resultado,
     }),
+    // El cinturón va ÚLTIMO en el DOM: con las listas en dos columnas la fila
+    // puede envolver, y si el cinturón estuviera en el medio empujaría el
+    // método y el resultado a la segunda línea. Al final, cuando no entra
+    // baja solo él y las columnas de siempre quedan donde estaban.
+    cinturon ? el('span', { class: 'resumen-anio-fila-cinturon', text: cinturon }) : null,
   ]);
 }
 
@@ -102,11 +110,37 @@ function itemPelea(p) {
 // separadas por un hairline (ver `.resumen-anio-fila + .resumen-anio-fila`,
 // theme.css) — antes cada item era su PROPIO panel con borde y padding
 // completo; ahora el borde solo rodea la sección, no cada fila.
-function seccion(titulo, items) {
-  if (items.length === 0) return null;
+// Una fila vacía: el renglón que todavía no pasó. Mismo alto y mismo
+// hairline que una fila con datos — es lo que hace que la lista mida SIEMPRE
+// lo mismo, tenga el año una decisión o las tres.
+function filaVacia(indice) {
+  return el('div', { class: 'resumen-anio-fila resumen-anio-fila-vacia', dataset: { vacia: 'si' } }, [
+    el('span', { class: 'resumen-anio-fila-tag', text: '—' }),
+    el('span', { class: 'resumen-anio-fila-rival sutil', text: indice === 0 ? 'Todavía nada' : '' }),
+  ]);
+}
+
+/**
+ * Una sección de lista, SIEMPRE del mismo alto.
+ *
+ * Pedido v17.5: "los módulos de peleas y decisiones siempre deben aparecer;
+ * si ya sabemos cuántas hay al año como máximo, deberían verse como un
+ * listado... habrá casos donde tengan filas en blanco y años en los cuales
+ * estén completos. Básicamente, debería ser un tamaño fijo".
+ *
+ * Antes la sección desaparecía entera cuando no había items (un año sin
+ * peleas no mostraba "Peleas del año" en ningún lado) y, cuando aparecía,
+ * medía según cuántas filas tuviera: el resumen cambiaba de forma de un año
+ * al otro. Ahora el alto es el mismo siempre y lo que cambia es cuántos
+ * renglones están escritos — que además cuenta una historia: se ve de un
+ * vistazo si el año estuvo lleno o vacío.
+ */
+function seccion(titulo, items, filas) {
+  const completas = items.slice(0, filas);
+  const vacias = Array.from({ length: Math.max(0, filas - completas.length) }, (_, i) => filaVacia(i));
   return el('div', { class: 'stack resumen-anio-seccion' }, [
     el('div', { class: 'etiqueta', text: titulo }),
-    el('div', { class: 'panel resumen-anio-filas' }, items),
+    el('div', { class: 'panel resumen-anio-filas' }, [...completas, ...vacias]),
   ]);
 }
 
@@ -126,6 +160,11 @@ function seccion(titulo, items) {
 // grafico-media.js (viewBox más chato), esto recorta el AIRE alrededor
 // (padding + margen de la etiqueta) que antes era el mismo que cualquier
 // panel del tablero, pensado para contenido con más aire para dar.
+// Lo que el panel de un gráfico gasta en cosas que NO son el gráfico: su
+// etiqueta ("Media"/"Ranking"), el margen debajo y el padding propio del
+// panel. Se descuenta al repartir el alto disponible.
+const ALTO_CABECERA_GRAFICO = 34;
+
 function bloqueGrafico(titulo, nodoGrafico) {
   return el('div', { class: 'panel resumen-anio-grafico-panel' }, [
     el('span', { class: 'etiqueta', style: 'display:block;margin-bottom:2px', text: titulo }),
@@ -195,8 +234,17 @@ export function renderResumenAnio(region, {
       el('p', { class: 'medio', style: 'margin:0;flex:1;min-width:0', text: narrativa }),
     ]) : null,
     graficos,
-    seccion('Decisiones', decisiones.map(itemDecision)),
-    seccion('Peleas del año', peleas.map(itemPelea)),
+    // Las dos listas van LADO A LADO, igual que los dos gráficos de arriba.
+    // Apiladas no entraban: con ambas siempre completas (tres renglones cada
+    // una, en blanco los que falten) el resumen se pasaba 71px del hueco y
+    // había que scrollear — y "no quiero que el jugador tenga que scrollear
+    // para ver el resto del resumen" es un pedido viejo que sigue valiendo.
+    // En dos columnas ocupan la mitad de alto, entran holgadas y el resumen
+    // queda simétrico: dos gráficos arriba, dos listas abajo.
+    el('div', { class: 'resumen-anio-listas' }, [
+      seccion('Decisiones', decisiones.map(itemDecision), DECISIONES_POR_ANIO),
+      seccion('Peleas del año', peleas.map(itemPelea), PELEAS_MAX_POR_ANIO),
+    ]),
   ]);
 
   const cuerpo = el('div', { class: 'stack resumen-anio' }, [
@@ -208,4 +256,56 @@ export function renderResumenAnio(region, {
   ]);
 
   mount(region, cuerpo);
+  estirarGraficos(graficos, { muestrasMedia, anio });
+}
+
+// Los gráficos, flexibles (pedido v17.5: "los gráficos deberían ser flexibles
+// para que sean un poco más altos cuando sobra espacio").
+//
+// No se puede decidir el alto al construirlos: en ese momento el resumen
+// todavía no fue estirado al piso de la columna izquierda (lo hace main.js
+// después de montar), así que no se sabe cuánto lugar va a haber. Se mide
+// DESPUÉS, con un ResizeObserver sobre la fila de gráficos, y si el lugar
+// alcanza para dibujarlos más altos se los redibuja con un viewBox mayor —
+// más resolución vertical de verdad, no un SVG estirado.
+//
+// El redibujo no se realimenta: `alto` sale del alto que la FILA ya tiene
+// (que lo fija el flex del cuerpo, no el gráfico), y solo se redibuja cuando
+// el objetivo cambia de verdad respecto del último usado.
+function estirarGraficos(fila, { muestrasMedia, anio }) {
+  if (typeof ResizeObserver !== 'function') return;
+  let ultimoAlto = null;
+
+  const ajustar = () => {
+    const caja = fila.getBoundingClientRect();
+    if (caja.height <= 0) return;
+    const svg = fila.querySelector('svg');
+    const anchoSvg = svg ? svg.getBoundingClientRect().width : 0;
+    if (anchoSvg <= 0) return;
+
+    // Lo que le queda al SVG dentro de su panel, en PÍXELES: el alto de la
+    // fila menos la etiqueta ("Media"/"Ranking") y el padding del panel.
+    const disponiblePx = caja.height - ALTO_CABECERA_GRAFICO;
+    // Y de píxeles a unidades de viewBox. Pasarle los píxeles derecho (primer
+    // intento) rompía el layout: el SVG conserva su relación de aspecto y se
+    // dibujaba mucho más alto que la fila, tapando las listas de abajo.
+    const objetivo = Math.round(
+      Math.min(Math.max((disponiblePx * ANCHO_GRAFICO) / anchoSvg, ALTO_GRAFICO_MIN), ALTO_GRAFICO_MAX),
+    );
+    if (ultimoAlto !== null && Math.abs(objetivo - ultimoAlto) < 8) return;
+    ultimoAlto = objetivo;
+
+    const paneles = [...fila.children];
+    const nuevos = [
+      graficoMedia({ muestras: muestrasMedia, anio, alto: objetivo }),
+      graficoRanking({ muestras: muestrasMedia, anio, alto: objetivo }),
+    ];
+    paneles.forEach((panel, i) => {
+      const viejo = panel.lastElementChild;
+      if (viejo && nuevos[i]) panel.replaceChild(nuevos[i], viejo);
+    });
+  };
+
+  new ResizeObserver(ajustar).observe(fila);
+  ajustar();
 }

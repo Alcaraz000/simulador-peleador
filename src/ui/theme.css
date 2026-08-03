@@ -3263,9 +3263,22 @@ input.creacion-control { cursor: text; }
      arriba y abajo del cuerpo entero: un bloque centrado con aire parejo se
      lee como una decisión de diseño, el mismo aire amontonado al pie se lee
      como que falta algo. */
-  .resumen-anio .resumen-anio-cuerpo { justify-content: center; }
+  /* Ahora que los listados miden SIEMPRE lo mismo (3 renglones cada uno,
+     con los que faltan en blanco) y los gráficos se redibujan al alto que
+     les toque, el sobrante lo absorbe la fila de gráficos y ya no hace falta
+     centrar el cuerpo para disimular. */
+  /* La fila de gráficos se lleva lo que sobre, pero NUNCA desaparece: con las
+     dos listas ahora siempre completas (tres renglones cada una, en blanco
+     los que falten) el contenido fijo ya casi llena el hueco, y sin este piso
+     la fila se encogía a 0 y los gráficos se dibujaban encima de las listas. */
+  .resumen-anio .resumen-anio-graficos {
+    flex: 1 1 auto;
+    min-height: 104px;
+  }
 
-  .resumen-anio .resumen-anio-fila { min-height: 44px; }
+  /* Renglón compacto: con DOS listas siempre completas, cada píxel de más por
+     renglón se multiplica por seis y se lo saca a los gráficos. */
+  .resumen-anio .resumen-anio-fila { min-height: 30px; }
 }
 
 /* Los dos gráficos van lado a lado, así que la fila mide lo que mide el más
@@ -3304,4 +3317,66 @@ input.creacion-control { cursor: text; }
   [data-bloque="contenido"] > .panel-decision-desenlace > :first-child {
     margin-top: auto;
   }
+}
+
+/* Las dos listas del resumen (Decisiones / Peleas del año), lado a lado —
+   mismo tratamiento que los dos gráficos de arriba y por el mismo motivo:
+   apiladas se pasaban del hueco y obligaban a scrollear, que es justo lo que
+   este resumen no puede hacer. En celular se apilan, donde el ancho no da
+   para partirlas a la mitad. */
+.resumen-anio-listas {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+@media (min-width: 960px) {
+  .resumen-anio-listas {
+    flex-direction: row;
+    align-items: stretch;
+  }
+
+  .resumen-anio-listas > .resumen-anio-seccion {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+
+  /* Las dos listas miden lo mismo aunque una tenga textos más largos: el
+     panel de filas se estira al alto de la columna más alta. */
+  .resumen-anio-listas > .resumen-anio-seccion > .resumen-anio-filas {
+    flex: 1 1 auto;
+  }
+}
+
+/* Columnas de la fila, recalibradas para las listas en DOS columnas. Los
+   anchos fijos de antes (tag 92, título 120, método 78, resultado 58) se
+   pensaron para una fila que ocupaba el ancho completo del resumen; en media
+   pantalla no entran y el texto de la decisión quedaba reducido a una letra.
+   Adentro de `.resumen-anio-listas` mandan estos, más chicos, y el texto
+   variable (la opción elegida, el nombre del rival) se queda con lo que sobra
+   en vez de ser lo primero que se sacrifica. */
+@media (min-width: 960px) {
+  .resumen-anio-listas .resumen-anio-fila-tag { flex: 0 0 72px; }
+
+  /* Sin tope de ancho: con `max-width` el título se recortaba con "…" ("Las
+     cinco de la m…"), y en este proyecto el texto nunca se recorta — envuelve.
+     Se queda con lo que necesite y la opción elegida usa el resto. */
+  .resumen-anio-listas .resumen-anio-fila-titulo {
+    flex: 0 1 auto;
+    min-width: 0;
+    overflow-wrap: break-word;
+  }
+
+  .resumen-anio-listas .resumen-anio-fila-desc {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .resumen-anio-listas .resumen-anio-fila-rival { flex: 1 1 auto; min-width: 0; }
+  .resumen-anio-listas .resumen-anio-fila-metodo { flex: 0 0 58px; }
+  .resumen-anio-listas .resumen-anio-fila-resultado { flex: 0 0 48px; }
+
+  /* El cinturón en juego no compite por ancho con el nombre del rival: si no
+     entra en la misma línea, baja. */
+  .resumen-anio-listas .resumen-anio-fila { flex-wrap: wrap; row-gap: 2px; }
 }

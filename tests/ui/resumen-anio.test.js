@@ -7,6 +7,7 @@
 // un solo click, sin animaciones.
 import { describe, it, expect, vi } from 'vitest';
 import { renderResumenAnio } from '../../src/ui/screens/resumen-anio.js';
+import { PELEAS_MAX_POR_ANIO } from '../../src/core/tramite.js';
 
 function region() {
   return document.createElement('div');
@@ -221,8 +222,11 @@ describe('renderResumenAnio', () => {
       decisiones: [decisionDePrueba(), decisionDePrueba({ titulo: 'El biomecánico', opcion: 'Hacer la sesión completa.' })],
       peleas: [peleaDePrueba(), peleaDePrueba({ rivalApodo: 'La Bala', fecha: 30 })],
     }));
+    // v17.5: cada lista mide SIEMPRE lo mismo (3 renglones), así que con 2
+    // decisiones y 2 peleas hay 4 filas escritas y 2 en blanco.
     const filas = r.querySelectorAll('.resumen-anio-fila');
-    expect(filas.length).toBe(4); // 2 decisiones + 2 peleas
+    const escritas = [...filas].filter((f) => f.dataset.vacia !== 'si');
+    expect(escritas.length).toBe(4); // 2 decisiones + 2 peleas
     // Cada fila vive dentro de un contenedor .resumen-anio-filas (un solo
     // panel por sección), no dentro de su propio .panel individual.
     filas.forEach((fila) => expect(fila.classList.contains('panel')).toBe(false));
@@ -345,5 +349,52 @@ describe('resumen del año — las peleas por un cinturón se leen como tales', 
     });
 
     expect(cont.querySelector('.resumen-anio-fila-cinturon')).toBeNull();
+  });
+});
+
+// Pedido v17.5: "los módulos de peleas y decisiones siempre deben aparecer...
+// debería ser un tamaño fijo". Antes la sección desaparecía entera si no
+// había items, así que un año sin peleas no mostraba "Peleas del año" en
+// ningún lado y el resumen cambiaba de forma de un año al otro.
+describe('resumen del año — los listados miden siempre lo mismo', () => {
+  function filasDe(r, titulo) {
+    const seccion = [...r.querySelectorAll('.resumen-anio-seccion')]
+      .find((s) => s.textContent.startsWith(titulo));
+    return seccion ? [...seccion.querySelectorAll('.resumen-anio-fila')] : null;
+  }
+
+  it('"Peleas del año" aparece incluso en un año sin ninguna pelea', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({ decisiones: [], peleas: [] }));
+    expect(filasDe(r, 'Peleas del año')).not.toBeNull();
+  });
+
+  it('un año vacío y uno lleno tienen la misma cantidad de renglones', () => {
+    const vacio = region();
+    renderResumenAnio(vacio, propsBase({ decisiones: [], peleas: [] }));
+    const lleno = region();
+    renderResumenAnio(lleno, propsBase({
+      decisiones: [decisionDePrueba(), decisionDePrueba(), decisionDePrueba()],
+      peleas: [peleaDePrueba(), peleaDePrueba(), peleaDePrueba()],
+    }));
+
+    expect(filasDe(vacio, 'Decisiones')).toHaveLength(filasDe(lleno, 'Decisiones').length);
+    expect(filasDe(vacio, 'Peleas del año')).toHaveLength(filasDe(lleno, 'Peleas del año').length);
+  });
+
+  it('los renglones que faltan quedan marcados como vacíos, no inventan datos', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({ decisiones: [decisionDePrueba()], peleas: [] }));
+
+    const filas = filasDe(r, 'Decisiones');
+    expect(filas.filter((f) => f.dataset.vacia === 'si')).toHaveLength(filas.length - 1);
+  });
+
+  it('nunca dibuja más renglones que el tope del año, aunque lleguen de más', () => {
+    const r = region();
+    renderResumenAnio(r, propsBase({
+      decisiones: [], peleas: [peleaDePrueba(), peleaDePrueba(), peleaDePrueba(), peleaDePrueba(), peleaDePrueba()],
+    }));
+    expect(filasDe(r, 'Peleas del año')).toHaveLength(PELEAS_MAX_POR_ANIO);
   });
 });
