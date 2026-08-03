@@ -3103,7 +3103,8 @@ input.creacion-control { cursor: text; }
    `flex: 0 0 auto` + `white-space: nowrap` para que no se parta ni le robe
    ancho al nombre del rival. */
 .resumen-anio-fila-cinturon {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
   white-space: nowrap;
   font-size: 8.5px;
   letter-spacing: 0.4px;
@@ -3278,7 +3279,9 @@ input.creacion-control { cursor: text; }
 
   /* Renglón compacto: con DOS listas siempre completas, cada píxel de más por
      renglón se multiplica por seis y se lo saca a los gráficos. */
-  .resumen-anio .resumen-anio-fila { min-height: 30px; }
+  /* Renglón compacto: con DOS listas siempre completas (seis renglones en
+     total) cada píxel de más se multiplica por seis y sale del gráfico. */
+  .resumen-anio .resumen-anio-fila { min-height: 26px; }
 }
 
 /* Los dos gráficos van lado a lado, así que la fila mide lo que mide el más
@@ -3330,54 +3333,16 @@ input.creacion-control { cursor: text; }
   gap: 6px;
 }
 
+/* v17.7: vuelven a apilarse, una sobre la otra, por pedido explícito. Lo que
+   las había mandado a dos columnas era la falta de alto; la solución correcta
+   era achicar los gráficos, no partir las listas — con el ancho completo cada
+   fila respira y no hay que pelear por cada píxel de columna. */
+
+/* Con las listas de nuevo a ancho completo, las columnas vuelven a sus anchos
+   de siempre (los que ya alineaban "Mejora" con "CAMPAMENTO"). Lo único que
+   se conserva de la etapa en dos columnas es el `flex-wrap`: si el cinturón
+   en juego no entra, baja solo él sin arrastrar método ni resultado. */
 @media (min-width: 960px) {
-  .resumen-anio-listas {
-    flex-direction: row;
-    align-items: stretch;
-  }
-
-  .resumen-anio-listas > .resumen-anio-seccion {
-    flex: 1 1 0;
-    min-width: 0;
-  }
-
-  /* Las dos listas miden lo mismo aunque una tenga textos más largos: el
-     panel de filas se estira al alto de la columna más alta. */
-  .resumen-anio-listas > .resumen-anio-seccion > .resumen-anio-filas {
-    flex: 1 1 auto;
-  }
-}
-
-/* Columnas de la fila, recalibradas para las listas en DOS columnas. Los
-   anchos fijos de antes (tag 92, título 120, método 78, resultado 58) se
-   pensaron para una fila que ocupaba el ancho completo del resumen; en media
-   pantalla no entran y el texto de la decisión quedaba reducido a una letra.
-   Adentro de `.resumen-anio-listas` mandan estos, más chicos, y el texto
-   variable (la opción elegida, el nombre del rival) se queda con lo que sobra
-   en vez de ser lo primero que se sacrifica. */
-@media (min-width: 960px) {
-  .resumen-anio-listas .resumen-anio-fila-tag { flex: 0 0 72px; }
-
-  /* Sin tope de ancho: con `max-width` el título se recortaba con "…" ("Las
-     cinco de la m…"), y en este proyecto el texto nunca se recorta — envuelve.
-     Se queda con lo que necesite y la opción elegida usa el resto. */
-  .resumen-anio-listas .resumen-anio-fila-titulo {
-    flex: 0 1 auto;
-    min-width: 0;
-    overflow-wrap: break-word;
-  }
-
-  .resumen-anio-listas .resumen-anio-fila-desc {
-    flex: 1 1 auto;
-    min-width: 0;
-  }
-
-  .resumen-anio-listas .resumen-anio-fila-rival { flex: 1 1 auto; min-width: 0; }
-  .resumen-anio-listas .resumen-anio-fila-metodo { flex: 0 0 58px; }
-  .resumen-anio-listas .resumen-anio-fila-resultado { flex: 0 0 48px; }
-
-  /* El cinturón en juego no compite por ancho con el nombre del rival: si no
-     entra en la misma línea, baja. */
   .resumen-anio-listas .resumen-anio-fila { flex-wrap: wrap; row-gap: 2px; }
 }
 
@@ -3500,3 +3465,60 @@ input.creacion-control { cursor: text; }
 
 /* El "¡YA!" cuelga del círculo, no de la celda. */
 .pao.activo .pao-ya { top: 6px; }
+
+/* ============================================================================
+   v17.7 — el pao: foco redondo, y las luces no se achican al terminar
+   ============================================================================
+   "El minijuego del sparring hace las luces de forma cuadrada con bordes
+   redondeados": era el ANILLO DE FOCO. Desde que el botón ocupa la celda
+   entera (v17.6, para agrandar el área clickeable), el `outline` genérico de
+   `button:focus-visible` dibujaba un rectángulo redondeado de 235x76 alrededor
+   de toda la celda — la luz seguía siendo un círculo, lo cuadrado era el
+   recuadro del foco. Ahora el foco se dibuja sobre el círculo. */
+.pao:focus-visible {
+  outline: none;
+}
+
+.pao:focus-visible .pao-luz {
+  outline: 2px solid var(--dorado);
+  outline-offset: 3px;
+}
+
+/* "Cuando terminó el minijuego el tamaño de las luces volvió a ser pequeño":
+   al terminar, el panel de paos deja de ser el bloque elástico (le cede el
+   lugar al resultado) y se encogía hasta dejar las luces en 34px. Con este
+   piso siguen siendo luces, no puntitos. El número está medido, no elegido a
+   ojo: es el mayor que deja entrar la pantalla terminada entera (contadores +
+   luces + resultado + botón) dentro del hueco del tablero. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] > .stack:has(.grilla-paos) > .panel:has(.grilla-paos) {
+    min-height: 120px;
+  }
+}
+
+.pao-luz { min-height: 56px; min-width: 56px; }
+
+/* Aire entre los tramos de recompensa y el botón: pegado se leía como parte
+   de la misma fila de cajas. */
+[data-bloque="contenido"] > .stack:has(.grilla-paos) > .boton:last-child {
+  margin-top: 14px;
+}
+
+/* El resumen entero, más compacto: con las dos listas apiladas y siempre
+   completas (seis renglones) el contenido fijo se pasaba 71px del hueco. Se
+   recorta el aire —padding del renglón, del panel de filas y separación entre
+   bloques— en vez de sacrificar contenido o volver a scrollear. */
+@media (min-width: 960px) {
+  .resumen-anio .resumen-anio-fila {
+    min-height: 24px;
+    padding: 3px 1px;
+  }
+
+  .resumen-anio .resumen-anio-filas {
+    padding: 6px 10px;
+  }
+
+  .resumen-anio .resumen-anio-seccion.stack > * + * { margin-top: 3px; }
+
+  .resumen-anio-listas { gap: 8px; }
+}

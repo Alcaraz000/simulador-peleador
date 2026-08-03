@@ -88,7 +88,12 @@ export const ALTO_GRAFICO_MIN = VB_H;
 // `altoEnPx = anchoEnPx * (vbAlto / VB_W)`, así que para que ocupe N píxeles
 // de alto hay que pedirle `vbAlto = N * VB_W / anchoEnPx`.
 export const ANCHO_GRAFICO = VB_W;
-export const ALTO_GRAFICO_MAX = 190;
+// Techo del crecimiento. 190 daba gráficos de ~210px de alto cada uno: se
+// comían media pantalla del resumen y por eso las listas no entraban apiladas
+// ("los gráficos ocupan más espacio del que deberían", v17.7). 118 los deja
+// crecer lo justo para aprovechar el aire sobrante sin pasar a ser el
+// protagonista de una pantalla que es, sobre todo, dos listas.
+export const ALTO_GRAFICO_MAX = 118;
 const PAD_LEFT = 30;
 const PAD_RIGHT = 6;
 const PAD_TOP = 11;

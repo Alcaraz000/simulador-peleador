@@ -86,9 +86,14 @@ function itemPelea(p) {
   const cinturon = p.esTitulo && p.enJuego ? p.enJuego : null;
   return el('div', { class: 'resumen-anio-fila' }, [
     el('span', { class: 'resumen-anio-fila-tag', text: mes }),
+    // El cinturón viaja DENTRO de la columna del rival (la única flexible):
+    // como hermano suelto le robaba ancho a la fila y corría las columnas
+    // fijas de método y resultado, así que una pelea de título no quedaba
+    // alineada con las de al lado.
     el('span', { class: 'resumen-anio-fila-rival' }, [
       bandera(p.rivalNacionalidad, { ancho: 15 }),
       el('span', { text: rival }),
+      cinturon ? el('span', { class: 'resumen-anio-fila-cinturon', text: cinturon }) : null,
     ]),
     el('span', { class: 'resumen-anio-fila-metodo medio', text: metodo }),
     el('span', {
@@ -98,11 +103,6 @@ function itemPelea(p) {
       class: `resumen-anio-fila-resultado ${RESULTADO_CLASE[p.resultado] ?? 'sutil'}`,
       text: RESULTADO_TEXTO[p.resultado] ?? p.resultado,
     }),
-    // El cinturón va ÚLTIMO en el DOM: con las listas en dos columnas la fila
-    // puede envolver, y si el cinturón estuviera en el medio empujaría el
-    // método y el resultado a la segunda línea. Al final, cuando no entra
-    // baja solo él y las columnas de siempre quedan donde estaban.
-    cinturon ? el('span', { class: 'resumen-anio-fila-cinturon', text: cinturon }) : null,
   ]);
 }
 
