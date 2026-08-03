@@ -1,6 +1,7 @@
 import { crearPeleador, peleadorAleatorio, mediaDe } from './fighter.js';
 import { PARODIAS } from '../content/parodies.js';
 import { clamp } from './stats.js';
+import { puntosInicialesDe } from './puntos-ranking.js';
 
 export const PERSONALIDADES = [
   'respetuoso', 'provocador', 'tramposo', 'showman', 'mentor', 'agresivo', 'mercenario',
@@ -160,6 +161,13 @@ export function crearRoster(rng, {
     peleador.record = {
       ...peleador.record, v, d: peleas - v, e: 0, ko: Math.round(v * rng.float(0.2, 0.55)),
     };
+  }
+
+  // Puntos de ranking de arranque: el mundo no nace en cero, nace con una
+  // historia. De acá en adelante solo se mueven peleando (ver
+  // puntos-ranking.js).
+  for (const peleador of roster) {
+    peleador.puntosRanking = puntosInicialesDe(peleador, mediaDe(peleador));
   }
 
   roster.sort((a, b) => mediaDe(b) - mediaDe(a));

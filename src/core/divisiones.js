@@ -43,6 +43,7 @@
 // tabla — es historia, y hay que recordarla.
 
 import { mediaDe } from './fighter.js';
+import { puntosEn } from './puntos-ranking.js';
 
 export const DIVISIONES = ['amateur', 'regional', 'nacional', 'mundial'];
 
@@ -54,9 +55,20 @@ export const DIVISIONES = ['amateur', 'regional', 'nacional', 'mundial'];
 // ("deberían ser muchos más"), con su propia punta para decir quién es de
 // nivel mundial de verdad.
 export const CUPO_ELITE_NACIONAL = 10;
-export const CUPO_MUNDIAL = 60;
+// 30 y no 60: con ~100 activos y ~48 locales, un mundial de 60 lugares (60%
+// del planeta) resultaba MÁS FÁCIL de alcanzar que el top-20 del propio país
+// (42%), y salían peleadores rankeados en el mundo pero no en su casa. Con 30
+// la escalera vuelve a ordenar: primero tu país, después el mundo. Sigue
+// siendo casi el doble de los 16 de la primera versión.
+export const CUPO_MUNDIAL = 30;
 export const CUPO_ELITE_MUNDIAL = 15;
 
+// El ranking regional es el TOP 20 del país, y el nacional el TOP 10 — o sea
+// que el nacional está CONTENIDO en el regional. Un peleador puede figurar en
+// varios rankings a la vez, que es como funciona de verdad: el campeón
+// nacional también está rankeado regionalmente, y si es bueno, además en el
+// mundial. Las versiones anteriores los hacían disjuntos (el regional era "del
+// 11 al 30") y eso producía el absurdo de que ascender te BORRARA del regional.
 export const CUPO_REGIONAL = 20;
 
 // Cuánto pesa lo que HICISTE frente a lo que SOS.
@@ -101,6 +113,19 @@ function yaDebuto(peleador) {
   return (record.v ?? 0) + (record.d ?? 0) + (record.e ?? 0) > 0;
 }
 
+/**
+ * Ordena por PUNTOS de una división (v18): el puesto lo dan los resultados
+ * contra gente de esa tabla, no una fórmula sobre atributos. Empate de puntos
+ * se rompe por id, para que el orden sea estable entre llamadas.
+ */
+function ordenarPorPuntos(peleadores, division) {
+  return [...peleadores].sort((a, b) => {
+    const dif = puntosEn(b, division) - puntosEn(a, division);
+    if (dif !== 0) return dif;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
 function ordenar(peleadores, clave = 'record') {
   // Desempate por id para que dos peleadores con el mismo puntaje no se
   // intercambien de puesto entre dos llamadas: el orden tiene que ser estable
@@ -123,29 +148,46 @@ function ordenar(peleadores, clave = 'record') {
  */
 export function rankingsProfesionales(mundo, jugador = null) {
   const local = mundo.nacionalidadLocal ?? jugador?.nacionalidad ?? null;
-  // El filtro de "ya debutó" es SOLO para el jugador: un peleador del roster
-  // es un profesional en actividad por definición, tenga el récord que tenga.
-  // Aplicárselo también a ellos vaciaba el mundo con los años — los que se
-  // retiraban eran reemplazados por debutantes 0-0 que quedaban invisibles, y
-  // medido a veinte temporadas el ranking mundial se caía de 60 peleadores a
-  // 6. El jugador sí tiene que debutar: no ocupa un puesto que no se ganó.
   const pool = [
     ...(mundo.roster ?? []).filter((p) => !p.retirado),
     ...(jugador && yaDebuto(jugador) ? [jugador] : []),
   ];
 
-  // El mundo entero, de cualquier país.
-  const mundial = ordenar(pool).slice(0, CUPO_MUNDIAL);
-  // Todo el país: la elite Y la escalera de abajo.
-  const nacionalCompleto = ordenar(pool.filter((p) => p.nacionalidad === local));
-  const nacional = nacionalCompleto.slice(0, CUPO_ELITE_NACIONAL);
-  // El escalón de abajo: los del país que siguen a la elite. Es un
-  // SUBCONJUNTO del nacional (su #1 figura también ahí, más abajo), y se entra
-  // y se sale por nivel — eso es justamente lo que el juego ahora avisa como
-  // hito (ver `hitosDeDivision`, career.js): "entraste en el ranking
-  // regional", "descendiste del nacional". Por debajo del regional no se
-  // vuelve al amateur: simplemente no se tiene rango.
-  const regional = nacionalCompleto.slice(CUPO_ELITE_NACIONAL, CUPO_ELITE_NACIONAL + CUPO_REGIONAL);
+  // La cadena, tal como la pidió el usuario: "si estás en el top X del
+  // regional entrás en el ranking nacional, y si estás en el top X del
+  // nacional entrás en el mundial".
+  //
+  // REGIONAL: el top del país. NACIONAL: el top del regional. MUNDIAL: las
+  // elites nacionales de TODOS los países, juntadas y reordenadas entre sí.
+  //
+  // La consecuencia importante es la que el usuario marcó como innegociable:
+  // "no le veo sentido a que alguien pueda ser top 30 del mundo y NO top 10 de
+  // su propio país". Con el mundial armado desde los rankings nacionales, eso
+  // es imposible por construcción — para entrar al mundo hay que estar primero
+  // en la elite de tu casa.
+  const delPais = pool.filter((p) => p.nacionalidad === local);
+  // Cada tabla se ordena por SUS puntos: se puede subir en el mundial sin
+  // moverse en el nacional (ganándole a un extranjero) y al revés. El nacional
+  // sale del regional, y solo entran los que además tienen puntos ahí.
+  const regional = ordenarPorPuntos(delPais, 'regional')
+    .filter((p) => puntosEn(p, 'regional') > 0)
+    .slice(0, CUPO_REGIONAL);
+  const nacional = ordenarPorPuntos(regional, 'nacional')
+    .filter((p) => puntosEn(p, 'nacional') > 0)
+    .slice(0, CUPO_ELITE_NACIONAL);
+
+  const porPais = new Map();
+  for (const peleador of pool) {
+    const pais = peleador.nacionalidad ?? '??';
+    if (!porPais.has(pais)) porPais.set(pais, []);
+    porPais.get(pais).push(peleador);
+  }
+  const eliteDeCadaPais = [...porPais.values()].flatMap((peleadores) => ordenarPorPuntos(
+    ordenarPorPuntos(peleadores, 'regional').slice(0, CUPO_REGIONAL), 'nacional',
+  ).filter((p) => puntosEn(p, 'nacional') > 0).slice(0, CUPO_ELITE_NACIONAL));
+  const mundial = ordenarPorPuntos(eliteDeCadaPais, 'mundial')
+    .filter((p) => puntosEn(p, 'mundial') > 0)
+    .slice(0, CUPO_MUNDIAL);
 
   return { regional, nacional, mundial };
 }
@@ -195,11 +237,17 @@ export function divisionDe(rankings, id) {
   // La división donde está parado hoy, de arriba hacia abajo. `null` no es un
   // error: es "sin rango" — todavía no entró a ninguna tabla, o se cayó de
   // todas. Del regional no se baja al amateur; se baja a no tener rango.
-  const puestoMundial = puestoEn(rankings, 'mundial', id);
-  if (puestoMundial !== null && puestoMundial <= CUPO_ELITE_MUNDIAL) return 'mundial';
-  if (puestoEn(rankings, 'nacional', id) !== null) return 'nacional';
-  if (puestoEn(rankings, 'regional', id) !== null) return 'regional';
-  return null;
+  const donde = rankingsDondeEsta(rankings, id);
+  return donde.length === 0 ? null : donde[donde.length - 1];
+}
+
+/**
+ * En qué rankings figura hoy este peleador. Puede ser más de uno: el regional
+ * contiene al nacional, y el mundial es una tabla aparte que cruza países.
+ * Devuelve los ids en orden de menor a mayor, y `[]` si no tiene rango.
+ */
+export function rankingsDondeEsta(rankings, id) {
+  return ESCALERA.filter((division) => puestoEn(rankings, division, id) !== null);
 }
 
 // El orden de las divisiones, de menor a mayor. `null` (sin rango) es el

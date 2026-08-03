@@ -12,7 +12,9 @@ import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp, LIMITES_ATRIBUTO } from './stats.js';
 import { BONUS_TEMPORAL_MAXIMO } from './sparring.js';
 import { rendimientoDeMejora } from './talento.js';
-import { campeonDe, coronarCampeon } from './divisiones.js';
+import {
+  campeonDe, coronarCampeon, rankingsProfesionales, rankingsDondeEsta,
+} from './divisiones.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
@@ -930,11 +932,53 @@ export function registrarDecision(partida, { tipo, titulo, opcion }) {
  * (aplicarEfectoYSeguir) — así que cubre mejora/evento/redes/sparring/
  * campamento de una sola vez, sin tener que tocar cada beat. */
 export function registrarMuestraMedia(partida) {
-  return {
+  return registrarHitosDeRanking({
     ...partida,
     registroAnioActual: registrarMuestraMediaEnRegistro(
       partida.registroAnioActual, partida.semanaGlobal, partida.jugador, partida.mundo,
     ),
+  });
+}
+
+/**
+ * Entrar y salir de un ranking son momentos de la carrera, y hasta ahora
+ * pasaban en silencio: el jugador subía al ranking nacional o se caía del
+ * mundial sin enterarse nunca (pedido v17.13, textual: "el jugador nunca se
+ * entera y puede entrar y salir constantemente").
+ *
+ * Se compara la lista de rankings donde está HOY contra la del último chequeo
+ * y se anota la diferencia, con la fecha. Se puede estar en varios a la vez
+ * (el regional contiene al nacional), así que se mira ranking por ranking: se
+ * puede entrar al mundial el mismo año que se sale del nacional.
+ *
+ * Vive en el jugador (viaja en el guardado) y lo lee la pantalla de cierre.
+ */
+export function registrarHitosDeRanking(partida) {
+  const rankings = rankingsProfesionales(partida.mundo, partida.jugador);
+  const ahora = rankingsDondeEsta(rankings, partida.jugador.id);
+  const antes = partida.jugador.rankingsActuales ?? null;
+
+  // Primer chequeo de la carrera: se toma como foto inicial, sin narrar nada.
+  // Sin esto, debutar generaría "entraste al ranking regional" en el mismo
+  // instante en que el jugador aparece por primera vez, que no es un hito
+  // sino el punto de partida.
+  if (antes === null) {
+    return { ...partida, jugador: { ...partida.jugador, rankingsActuales: ahora } };
+  }
+  if (antes.join() === ahora.join()) return partida;
+
+  const nuevos = [
+    ...ahora.filter((d) => !antes.includes(d)).map((division) => ({ division, entro: true })),
+    ...antes.filter((d) => !ahora.includes(d)).map((division) => ({ division, entro: false })),
+  ].map((h) => ({ ...h, fecha: partida.semanaGlobal }));
+
+  return {
+    ...partida,
+    jugador: {
+      ...partida.jugador,
+      rankingsActuales: ahora,
+      hitosRanking: [...(partida.jugador.hitosRanking ?? []), ...nuevos],
+    },
   };
 }
 

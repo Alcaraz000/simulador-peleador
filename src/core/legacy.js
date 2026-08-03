@@ -9,7 +9,9 @@ import { ANIO_INICIAL } from './world.js';
 import { CINTURONES } from './offers.js';
 import { edadDeDeclive, EDAD_DECLIVE_JUGADOR } from './career.js';
 import { estadisticasDeCarrera } from './stats-carrera.js';
-import { MOMENTOS, EMOJI_MOMENTO, CIERRE } from '../content/legacy-lines.js';
+import {
+  MOMENTOS, EMOJI_MOMENTO, CIERRE, NOMBRE_DIVISION,
+} from '../content/legacy-lines.js';
 
 const ESCALA = [
   [85, 'Leyenda'],
@@ -122,11 +124,24 @@ function momentosDe(jugador) {
       momentos.push(conEmoji('koPrimerRound', fraseDe(MOMENTOS.koPrimerRound, `${semilla}|ko1`, datos)));
     }
   }
+  // Los ascensos y descensos de ranking (v17.13, pedido textual: "estos
+  // momentos son hitos que deberían señalarse y mostrarse en los momentos de
+  // la carrera al final de la partida, también si uno desciende"). Se
+  // registran bloque a bloque durante la carrera (registrarHitosDeRanking,
+  // career.js); acá solo se los cuenta.
+  for (const hito of jugador.hitosRanking ?? []) {
+    const nombre = NOMBRE_DIVISION[hito.division] ?? hito.division;
+    momentos.push(conEmoji(
+      hito.entro ? 'rankingEntra' : 'rankingSale',
+      hito.entro ? `Entró al ${nombre}.` : `Se cayó del ${nombre}.`,
+    ));
+  }
+
   if (momentos.length === 0 && (jugador.historial ?? []).length > 0) {
     const primera = jugador.historial[0];
     momentos.push(conEmoji('debut', fraseDe(MOMENTOS.debut, `${primera.rivalNombre}|debut`, { rival: primera.rivalNombre })));
   }
-  return momentos.slice(0, 6);
+  return momentos.slice(0, 8);
 }
 
 // Fecha legible del hito (ver calendario.js): `pelea.fecha` es la

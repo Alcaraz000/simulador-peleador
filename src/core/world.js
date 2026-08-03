@@ -1,7 +1,9 @@
 import { crearRoster, generarDebutantes, FRACCION_LOCAL_AMATEUR } from './roster.js';
 import {
   campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES, CUPO_ELITE_NACIONAL,
+  rankingsProfesionales, puestoEn,
 } from './divisiones.js';
+import { aplicarPuntos, decaerPuntos, DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 import { rendimientoDeMejora } from './talento.js';
@@ -328,6 +330,16 @@ export function avanzarMundo(mundo, rng, {
     const elite = new Set(
       [...activos].sort((x, y) => mediaDe(y) - mediaDe(x)).slice(0, TAMANO_ELITE).map((p) => p.id),
     );
+    // Foto de los rankings ANTES de la tanda de peleas del año: todos los
+    // cruces se puntúan contra la misma tabla.
+    const fotoRankings = rankingsProfesionales({ roster, nacionalidadLocal: mundo.nacionalidadLocal ?? null });
+    const puestosDe = (id) => Object.fromEntries(
+      DIVISIONES_PUNTUABLES
+        .map((division) => [division, puestoEn(fotoRankings, division, id)])
+        .filter(([, puesto]) => puesto !== null),
+    );
+    const pelearonEsteAnio = new Set();
+
     const mezclados = rng.shuffle(activos);
     for (let i = 0; i + 1 < mezclados.length; i += 2) {
       const a = mezclados[i];
@@ -340,6 +352,24 @@ export function avanzarMundo(mundo, rng, {
       ganador.record.v += 1;
       if (porKo) ganador.record.ko += 1; else ganador.record.dec += 1;
       perdedor.record.d += 1;
+
+      // Los puntos de ranking de los NPC se mueven igual que los del jugador
+      // (v18): según en qué divisiones estaba CADA UNO y en qué puesto. Por eso
+      // el mundo se reordena solo — un peleador que encadena victorias contra
+      // rankeados sube de verdad, y uno que pierde contra cualquiera se cae.
+      // Se calcula con la foto de puestos tomada ANTES de la tanda, para que
+      // todos los cruces del año se resuelvan contra el mismo ranking y no
+      // dependa del orden en que salieron sorteados.
+      const puestosGanador = puestosDe(ganador.id);
+      const puestosPerdedor = puestosDe(perdedor.id);
+      ganador.puntosRanking = aplicarPuntos(ganador, {
+        resultado: 'v', misPuestos: puestosGanador, puestosRival: puestosPerdedor,
+      });
+      perdedor.puntosRanking = aplicarPuntos(perdedor, {
+        resultado: 'd', misPuestos: puestosPerdedor, puestosRival: puestosGanador,
+      });
+      pelearonEsteAnio.add(ganador.id);
+      pelearonEsteAnio.add(perdedor.id);
       if (elite.has(a.id) || elite.has(b.id)) {
         sucesos.push({
           tipo: 'victoria',
@@ -364,6 +394,14 @@ export function avanzarMundo(mundo, rng, {
           texto: `¡${ganador.nombre} es el nuevo campeón: le arrebató el cinturón a ${perdedor.nombre}!`,
         });
       }
+    }
+
+    // El ranking no perdona la inactividad (pedido del usuario): el que no
+    // peleó este año pierde puntos en todas sus divisiones. Sin esto, un
+    // peleador podía quedarse arriba para siempre sin subirse al ring.
+    for (const peleador of roster) {
+      if (peleador.retirado || pelearonEsteAnio.has(peleador.id)) continue;
+      peleador.puntosRanking = decaerPuntos(peleador.puntosRanking, []);
     }
   }
 

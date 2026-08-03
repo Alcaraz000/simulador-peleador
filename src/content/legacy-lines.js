@@ -17,11 +17,22 @@
 // interfaz: es la lista de recuerdos del cierre de carrera, donde el emoji
 // hace de viñeta y le da a cada línea una cara reconocible de un vistazo.
 export const EMOJI_MOMENTO = {
+  rankingEntra: '📈',
+  rankingSale: '📉',
   tituloGanado: '🏆',
   tituloDefendido: '🛡️',
   tituloPerdido: '💔',
   koPrimerRound: '💥',
   debut: '🥊',
+};
+
+// Entrar y salir de un ranking (v17.13). Una sola variante por caso a
+// propósito: son hitos de estado, no anécdotas — repetirlos con sinónimos los
+// volvería difíciles de leer en una lista donde pueden aparecer varias veces.
+export const NOMBRE_DIVISION = {
+  regional: 'ranking regional',
+  nacional: 'ranking nacional',
+  mundial: 'ranking mundial',
 };
 
 export const MOMENTOS = {

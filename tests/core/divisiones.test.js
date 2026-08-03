@@ -43,9 +43,29 @@ describe('las cuatro divisiones', () => {
 
   // La coherencia que pidió el usuario, textual: "estar primero en el regional
   // no significa estar primero en el nacional".
-  it('el #1 regional NUNCA es también el #1 nacional', () => {
+  // v17.13: la cadena que pidió el usuario — "si estás en el top X del
+  // regional entrás al nacional, y si estás en el top X del nacional entrás al
+  // mundial". Cada uno es el top del anterior, así que el #1 es el mismo en
+  // los tres: lo que cambia es CUÁNTOS entran, no quién manda.
+  it('el nacional es el top del regional, y el mundial sale de los nacionales', () => {
     const { regional, nacional } = rankingsProfesionales(mundo());
-    expect(regional[0].id).not.toBe(nacional[0].id);
+    const enRegional = new Set(regional.map((p) => p.id));
+
+    expect(nacional.every((p) => enRegional.has(p.id))).toBe(true);
+    expect(nacional.length).toBeLessThan(regional.length);
+  });
+
+  // La condición que el usuario marcó como innegociable: "no le veo sentido a
+  // que alguien pueda ser top 30 del mundo y NO top 10 de su propio país".
+  it('nadie está en el mundial sin estar en la elite de su propio país', () => {
+    const m = mundo();
+    const { mundial } = rankingsProfesionales(m);
+    const locales = mundial.filter((p) => p.nacionalidad === NAC);
+    const { nacional } = rankingsProfesionales(m);
+    const enNacional = new Set(nacional.map((p) => p.id));
+
+    expect(locales.length).toBeGreaterThan(0);
+    expect(locales.every((p) => enNacional.has(p.id))).toBe(true);
   });
 
   it('el mundial es la tabla más grande de las tres', () => {
@@ -58,12 +78,10 @@ describe('las cuatro divisiones', () => {
   // mundial), con un piso nuevo: por debajo del regional no se vuelve al
   // amateur, simplemente no se tiene rango. Entrar y salir de cada escalón es
   // justamente lo que el juego avisa como hito.
-  it('el regional es el escalón que sigue a la elite nacional', () => {
+  it('cada escalón respeta su cupo', () => {
     const { regional, nacional } = rankingsProfesionales(mundo());
     expect(nacional.length).toBeLessThanOrEqual(CUPO_ELITE_NACIONAL);
     expect(regional.length).toBeLessThanOrEqual(CUPO_REGIONAL);
-    const enNacional = new Set(nacional.map((p) => p.id));
-    expect(regional.some((p) => enNacional.has(p.id))).toBe(false);
   });
 
   it('por debajo del regional no hay rango, y no se vuelve al amateur', () => {
@@ -86,13 +104,6 @@ describe('las cuatro divisiones', () => {
     expect(mundial.length).toBeLessThanOrEqual(CUPO_MUNDIAL);
   });
 
-  it('el regional es el escalón que sigue a la elite nacional', () => {
-    const { regional, nacional } = rankingsProfesionales(mundo());
-    expect(nacional.length).toBeLessThanOrEqual(CUPO_ELITE_NACIONAL);
-    expect(regional.length).toBeLessThanOrEqual(CUPO_REGIONAL);
-    const enNacional = new Set(nacional.map((p) => p.id));
-    expect(regional.some((p) => enNacional.has(p.id))).toBe(false);
-  });
 
   it('por debajo del regional no hay rango, y no se vuelve al amateur', () => {
     const m = mundo();
