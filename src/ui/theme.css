@@ -3231,3 +3231,77 @@ input.creacion-control { cursor: text; }
     min-height: auto;
   }
 }
+
+/* ============================================================================
+   v17.4 — el resumen del año llena su hueco POR DENTRO
+   ============================================================================
+   El cuerpo del resumen ya llegaba al piso (v17.3), pero sus secciones se
+   apilaban arriba y el vacío quedaba adentro: mismo hueco, una caja más
+   abajo. El error de verificación fue mío — medí los hijos del stack raíz y
+   di el resumen por bueno cuando el hueco estaba un nivel más adentro.
+
+   Lo que se lleva el sobrante es la ÚLTIMA sección de lista (Decisiones, o
+   Peleas del año si el año tuvo peleas) y, dentro de ella, sus filas se
+   reparten el alto en partes iguales. Es la opción que usa el espacio para
+   MOSTRAR contenido en vez de inflar una caja vacía: la lista pasa a leerse
+   como una tabla con renglones cómodos, que es exactamente lo que es.
+
+   No se estiran los gráficos: se achicaron a pedido en v10/v14 ("son lo que
+   más lugar ocupa") y volver a agrandarlos deshace ese pedido. */
+@media (min-width: 960px) {
+  .resumen-anio .resumen-anio-cuerpo {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  /* Nada de estirar la última sección hasta el piso: con tres decisiones y
+     ninguna pelea, repartir 300px entre tres renglones los dejaba de 136px
+     cada uno — el espacio quedaba ocupado, pero de "prolijo y proporcionado"
+     no tenía nada, y el aire simplemente se mudaba adentro de la lista.
+     Los renglones tienen un alto cómodo y fijo, y lo que sobre se reparte
+     arriba y abajo del cuerpo entero: un bloque centrado con aire parejo se
+     lee como una decisión de diseño, el mismo aire amontonado al pie se lee
+     como que falta algo. */
+  .resumen-anio .resumen-anio-cuerpo { justify-content: center; }
+
+  .resumen-anio .resumen-anio-fila { min-height: 44px; }
+}
+
+/* Los dos gráficos van lado a lado, así que la fila mide lo que mide el más
+   alto. Cuando uno de los dos no tiene datos (típico en los primeros años:
+   el ranking todavía no existe porque no se debutó como profesional), su
+   panel quedaba con el texto pegado arriba y ~67px de aire abajo, contra el
+   gráfico lleno de al lado. Ahora el mensaje se centra en el alto que le
+   toca: el panel se ve intencional, no a medio dibujar. */
+.resumen-anio-grafico-panel {
+  display: flex;
+  flex-direction: column;
+}
+
+/* SOLO el contenedor que trae el mensaje de "sin datos" se vuelve flex y lo
+   centra. Aplicárselo también al que tiene gráfico le rompía la proporción al
+   SVG: la línea de la media quedaba aplastada contra el techo y los puntos
+   amontonados a la izquierda. Un gráfico se dibuja con su viewBox y nadie más
+   le toca la caja. */
+.resumen-anio-grafico-panel > .grafico-media:has(.grafico-media-vacio),
+.resumen-anio-grafico-panel > .grafico-ranking:has(.grafico-ranking-vacio) {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+/* Desenlace: contenido centrado en el hueco, botón al pie. El truco son los
+   DOS márgenes automáticos — uno antes del contenido y otro antes del botón
+   (este último ya venía de la regla genérica). El espacio libre se reparte en
+   partes iguales entre ambos, así que el bloque de texto queda centrado en el
+   área que hay por encima del botón y el botón sigue pegado abajo. Sin el
+   primero, todo el sobrante se acumulaba arriba del botón y el texto quedaba
+   pegado al techo. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] > .panel-decision-desenlace > :first-child {
+    margin-top: auto;
+  }
+}
