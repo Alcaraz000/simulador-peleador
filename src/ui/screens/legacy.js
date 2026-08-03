@@ -25,13 +25,44 @@ function filaFecha(fecha, texto, clase = '') {
   ]);
 }
 
-function bloqueTitulo(t) {
-  return el('div', { style: 'margin-top:10px' }, [
-    el('div', { style: 'font-weight:800', text: `🏆 ${t.nombre}` }),
-    filaFecha(t.fechaGanado, 'Conquistado', 'dorado'),
-    ...t.defensas.map((d) => filaFecha(d.fecha, `Defendido ante ${d.rivalNombre}`)),
-    t.fechaPerdido ? filaFecha(t.fechaPerdido, 'Perdido', 'rojo') : null,
+// Un cinturón, con TODOS sus reinados adentro (v17.10, reportado con captura:
+// "fijate cómo aparece dos veces el cinturón mundial, ¿no debería estar
+// agrupado?"). Antes cada reinado era su propio bloque con el título repetido
+// arriba, así que una reconquista se leía como dos cinturones distintos.
+//
+// Cuando hay más de un reinado se numeran ("1er reinado", "2do reinado"): sin
+// eso, dos listas de fechas pegadas una debajo de la otra no dicen dónde
+// termina una y empieza la siguiente. Con uno solo no se numera nada — poner
+// "1er reinado" en el 90% de los casos sería ruido.
+function bloqueReinado(reinado, indice, total) {
+  return el('div', { style: total > 1 ? 'margin-top:6px' : null }, [
+    total > 1
+      ? el('div', { class: 'etiqueta', style: 'margin-bottom:2px', text: `${indice + 1}º reinado` })
+      : null,
+    filaFecha(reinado.fechaGanado, 'Conquistado', 'dorado'),
+    ...reinado.defensas.map((d) => filaFecha(d.fecha, `Defendido ante ${d.rivalNombre}`)),
+    reinado.fechaPerdido ? filaFecha(reinado.fechaPerdido, 'Perdido', 'rojo') : null,
   ]);
+}
+
+function bloqueTitulo(t) {
+  const reinados = t.reinados ?? [];
+  return el('div', { style: 'margin-top:10px', dataset: { cinturon: t.nombre } }, [
+    el('div', { style: 'font-weight:800' }, [
+      el('span', { text: `🏆 ${t.nombre}` }),
+      reinados.length > 1
+        ? el('span', { class: 'etiqueta dorado', style: 'margin-left:8px', text: `${reinados.length} reinados` })
+        : null,
+    ]),
+    ...reinados.map((r, i) => bloqueReinado(r, i, reinados.length)),
+  ]);
+}
+
+// Export para inspección visual del panel de títulos por separado (no lo usa
+// el juego): renderLegado necesita un legado completo, y para mirar cómo
+// quedan los reinados agrupados alcanza con este bloque.
+export function panelTitulosParaPrueba(titulosDetalle) {
+  return panelTitulos(titulosDetalle);
 }
 
 function panelTitulos(titulosDetalle) {

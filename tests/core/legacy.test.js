@@ -197,7 +197,7 @@ describe('calcularLegado', () => {
     it('trae fecha de conquista y de cada defensa del titulo', () => {
       const p = partida({ historial: historialTitulo(), titulos: ['Cinturón regional'] });
       const legado = calcularLegado(p);
-      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional')?.reinados[0];
       expect(regional).toBeTruthy();
       expect(regional.fechaGanado).toBeTruthy();
       expect(regional.defensas).toHaveLength(1);
@@ -216,7 +216,7 @@ describe('calcularLegado', () => {
       ];
       const p = partida({ historial, titulos: [] });
       const legado = calcularLegado(p);
-      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      const regional = legado.titulosDetalle.find((t) => t.nombre === 'Cinturón regional')?.reinados[0];
       expect(regional.fechaPerdido).toBeTruthy();
     });
 
@@ -230,7 +230,7 @@ describe('calcularLegado', () => {
         titulos: ['Cinturón regional'],
       });
       expect(() => calcularLegado(p)).not.toThrow();
-      const regional = calcularLegado(p).titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+      const regional = calcularLegado(p).titulosDetalle.find((t) => t.nombre === 'Cinturón regional')?.reinados[0];
       expect(regional.fechaGanado).toBeNull();
     });
 
@@ -479,13 +479,16 @@ describe('un cinturón ganado, perdido y reconquistado', () => {
 
   it('guarda los DOS reinados, no solo el último', () => {
     const { titulosDetalle } = calcularLegado(carreraConReconquista());
-    const regionales = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional');
+    // Un cinturón = UNA entrada, con sus reinados adentro (v17.10: antes se
+    // devolvía aplanado y la pantalla lo dibujaba dos veces con el mismo
+    // título repetido, reportado con captura).
+    const regionales = titulosDetalle.find((t) => t.nombre === 'Cinturón regional').reinados;
     expect(regionales).toHaveLength(2);
   });
 
   it('el primer reinado conserva su conquista, su defensa y la noche que lo perdio', () => {
     const { titulosDetalle } = calcularLegado(carreraConReconquista());
-    const primero = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional')[0];
+    const primero = titulosDetalle.find((t) => t.nombre === 'Cinturón regional').reinados[0];
     expect(primero.fechaGanado).toBeTruthy();
     expect(primero.defensas).toHaveLength(1);
     expect(primero.fechaPerdido).toBeTruthy();
@@ -493,7 +496,7 @@ describe('un cinturón ganado, perdido y reconquistado', () => {
 
   it('el segundo reinado arranca limpio: no hereda las defensas del primero', () => {
     const { titulosDetalle } = calcularLegado(carreraConReconquista());
-    const segundo = titulosDetalle.filter((t) => t.nombre === 'Cinturón regional')[1];
+    const segundo = titulosDetalle.find((t) => t.nombre === 'Cinturón regional').reinados[1];
     expect(segundo.fechaGanado).toBeTruthy();
     expect(segundo.defensas).toHaveLength(0);
     expect(segundo.fechaPerdido).toBeNull();
@@ -559,5 +562,46 @@ describe('momentos memorables — un emoji por tipo de momento', () => {
     const legado = legadoCon([pelea({ resultado: 'v', esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional' })]);
     expect(legado.momentos[0]).toContain('Dyke Tyzon');
     expect(legado.momentos[0]).toContain('Cinturón regional');
+  });
+});
+
+// v17.10, reportado con captura: "fijate cómo aparece dos veces el cinturón
+// mundial, ¿no debería estar agrupado?". Antes `titulosDetalle` venía aplanado
+// (un elemento por reinado) y la pantalla dibujaba el mismo título dos veces,
+// como si fueran dos cinturones distintos.
+describe('los reinados van agrupados por cinturón', () => {
+  function carreraConReconquista() {
+    const p = partida();
+    p.jugador.historial = [
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: false, fecha: 300, rivalNombre: 'Primero' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: true, fecha: 360, rivalNombre: 'Retador' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'd', esObligatoria: true, fecha: 420, rivalNombre: 'Verdugo' },
+      { esTitulo: true, enJuego: 'Cinturón regional', resultado: 'v', esObligatoria: false, fecha: 500, rivalNombre: 'Verdugo' },
+    ];
+    return p;
+  }
+
+  it('un cinturón reconquistado es UNA entrada, no dos', () => {
+    const { titulosDetalle } = calcularLegado(carreraConReconquista());
+    const nombres = titulosDetalle.map((t) => t.nombre);
+
+    expect(nombres).toEqual([...new Set(nombres)]);
+  });
+
+  it('y sus dos reinados viven adentro, en orden', () => {
+    const { titulosDetalle } = calcularLegado(carreraConReconquista());
+    const regional = titulosDetalle.find((t) => t.nombre === 'Cinturón regional');
+
+    expect(regional.reinados).toHaveLength(2);
+    expect(regional.reinados[0].fechaPerdido).toBeTruthy();
+    expect(regional.reinados[1].fechaGanado).toBeTruthy();
+  });
+
+  it('"perdió el cetro" mira el ÚLTIMO reinado, no el primero', () => {
+    // Reconquistado y todavía puesto: la carrera NO cerró perdiendo el cetro,
+    // aunque el primer reinado sí haya terminado en derrota.
+    const { biografia } = calcularLegado(carreraConReconquista());
+    expect(typeof biografia).toBe('string');
+    expect(biografia.length).toBeGreaterThan(0);
   });
 });

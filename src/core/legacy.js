@@ -171,9 +171,14 @@ function titulosDetalleDe(jugador) {
       actual.fechaPerdido = fechaTextoDe(pelea);
     }
   }
-  // Aplanado en orden cronológico: todos los reinados de todos los
-  // cinturones, tal como sucedieron.
-  return [...porCinturon.values()].flat();
+  // AGRUPADO POR CINTURÓN (v17.10, reportado con captura: "fijate cómo
+  // aparece dos veces el cinturón mundial, ¿no debería estar agrupado?").
+  // Antes se devolvía aplanado y la pantalla dibujaba un bloque por reinado,
+  // así que un cinturón reconquistado salía dos veces con el mismo título
+  // repetido. Ahora cada cinturón es UNA entrada con todos sus reinados
+  // adentro, en orden: la reconquista se lee como lo que es —el mismo
+  // cinturón, dos veces— y no como dos cinturones distintos.
+  return [...porCinturon.entries()].map(([nombre, reinados]) => ({ nombre, reinados }));
 }
 
 // Task 6.2 ("La carrera que no llegó también se cuenta"): con el nuevo
@@ -216,9 +221,14 @@ function hechosDeCierre(jugador, nivelMaximo, titulosDetalle, estadisticas) {
   const tituloMaximoNombre = nivelMaximo
     ? CINTURONES.find((c) => c.id === nivelMaximo).nombre
     : null;
-  const reinadoMaximo = tituloMaximoNombre
+  // El ÚLTIMO reinado de ese cinturón: lo que decide si la carrera cerró con
+  // el cetro puesto o si se le escapó. Con la agrupación por cinturón
+  // (v17.10) un título puede tener varios reinados, y el que cuenta para el
+  // cierre es cómo terminó el último.
+  const cinturonMaximo = tituloMaximoNombre
     ? titulosDetalle.find((t) => t.nombre === tituloMaximoNombre)
     : null;
+  const reinadoMaximo = cinturonMaximo?.reinados?.[cinturonMaximo.reinados.length - 1] ?? null;
   const mejorVictoria = estadisticas.mejorVictoria;
 
   return {
