@@ -29,37 +29,92 @@ import { nombreConApodo } from '../../core/fighter.js';
 // que el puesto no diga) se paga cien veces en alto de scroll. La fila baja
 // a una sola línea de verdad (antes tenía nombre arriba + "MEDIA · récord"
 // abajo): puesto, bandera, nombre y récord comparten la misma fila.
+// v17.8: cada fila puede llevar la marca de campeon. No siempre es el #1 - se
+// puede tener el cinturon puesto y haber bajado en la tabla, y ver eso es
+// media gracia del asunto: el que te tiene que dar la revancha no es el mejor
+// rankeado, es el que lo tiene.
 function filaRanking(fila) {
   return el('div', {
-    class: `tabla-ranking-fila${fila.esJugador ? ' tabla-ranking-fila-jugador' : ''}`,
-    dataset: { peleador: fila.id },
+    class: `tabla-ranking-fila${fila.esJugador ? ' tabla-ranking-fila-jugador' : ''}${fila.esCampeon ? ' tabla-ranking-fila-campeon' : ''}`,
+    dataset: { peleador: fila.id, campeon: fila.esCampeon ? 'si' : null },
   }, [
     el('span', { class: 'tabla-ranking-puesto', text: `#${fila.ranking}` }),
     bandera(fila.nacionalidad, { ancho: 20 }),
     el('span', { class: 'tabla-ranking-nombre', text: nombreConApodo(fila) }),
+    fila.esCampeon ? el('span', { class: 'tabla-ranking-cinturon', text: 'campeon' }) : null,
     el('span', { class: 'tabla-ranking-record etiqueta', text: fila.record }),
   ]);
 }
 
+// Las cuatro divisiones, con el nombre que ve el jugador y una linea que
+// explica QUE es cada una - sin eso, "regional" y "nacional" se leen como dos
+// palabras para lo mismo.
+const DIVISIONES_VISIBLES = [
+  { id: 'amateur', nombre: 'Amateur', bajada: 'El circuito de formacion. Nada de esto cuenta como profesional.' },
+  { id: 'regional', nombre: 'Regional', bajada: 'La escalera de entrada de tu pais: los que todavia no llegaron a la elite nacional.' },
+  { id: 'nacional', nombre: 'Nacional', bajada: 'La elite de tu pais.' },
+  { id: 'mundial', nombre: 'Mundial', bajada: 'Los mejores del mundo, sin importar de donde vengan.' },
+];
+
 /**
- * @param {{ filas: Array, onCerrar?: () => void }} props
+ * Cuatro rankings independientes en un solo popup, uno por pestana.
+ *
+ * `tablas` viene de `tablasDeDivisiones` (core/world.js): cada division es su
+ * propia lista numerada desde 1. Se abre en la division donde el jugador esta
+ * parado hoy, que es la que le importa - si todavia no entro a ninguna, en la
+ * primera con gente.
+ *
+ * @param {{ tablas: object, division?: string, onCerrar?: () => void }} props
  * @returns el handle de abrirPopup (mismo contrato que renderTienda).
  */
-export function renderRanking({ filas = [], onCerrar = () => {} } = {}) {
-  const lista = el('div', { class: 'stack tabla-ranking-lista' }, filas.length > 0
-    ? filas.map(filaRanking)
-    : [el('p', { class: 'medio', text: 'Todavía no hay ranking para mostrar.' })]);
-  const contenido = el('div', { class: 'tabla-ranking' }, [lista]);
+export function renderRanking({ tablas = {}, division = null, onCerrar = () => {} } = {}) {
+  const disponibles = DIVISIONES_VISIBLES.filter((d) => (tablas[d.id] ?? []).length > 0);
+  const tieneAlJugador = (id) => (tablas[id] ?? []).some((f) => f.esJugador);
+  // Abre en la división MÁS ALTA donde esté el jugador, no en la primera que
+  // lo tenga: un profesional que además figura en el ranking amateur (porque
+  // peleó ahí de pibe) quiere ver el mundial, no el circuito del que ya se
+  // fue. De ahí el recorrido al revés.
+  const inicial = disponibles.find((d) => d.id === division)
+    ?? [...disponibles].reverse().find((d) => tieneAlJugador(d.id))
+    ?? disponibles[0]
+    ?? null;
 
-  const popup = abrirPopup({ titulo: 'Ranking', contenido, onCerrar });
+  const lista = el('div', { class: 'stack tabla-ranking-lista' });
+  const bajada = el('p', { class: 'medio tabla-ranking-bajada' });
+  const pestanas = el('div', { class: 'tabla-ranking-pestanas' });
 
-  // Deja al jugador visible de entrada, sin que tenga que scrollear para
-  // encontrarse (pedido textual: "si está en el puesto 9, que se vea sin
-  // tener que buscarlo"). Sin `behavior: 'smooth'` a propósito: es la
-  // posición inicial del popup recién abierto, no algo que se mueve solo
-  // después de que el jugador ya lo está mirando.
-  const filaJugador = lista.querySelector('.tabla-ranking-fila-jugador');
-  if (filaJugador) filaJugador.scrollIntoView({ block: 'center' });
+  function pintar(def) {
+    const filas = tablas[def.id] ?? [];
+    lista.replaceChildren(...(filas.length > 0
+      ? filas.map(filaRanking)
+      : [el('p', { class: 'medio', text: 'Todavia no hay ranking para mostrar.' })]));
+    bajada.textContent = def.bajada;
+    for (const boton of pestanas.children) {
+      const activa = boton.dataset.division === def.id;
+      boton.classList.toggle('activa', activa);
+      boton.setAttribute('aria-selected', activa ? 'true' : 'false');
+    }
+    // Deja al jugador visible de entrada, sin que tenga que scrollear para
+    // encontrarse (pedido viejo: "si esta en el puesto 9, que se vea sin
+    // tener que buscarlo"). Sin `smooth`: es la posicion inicial de la
+    // pestana recien pintada, no algo que se mueve solo mientras la mira.
+    const filaJugador = lista.querySelector('.tabla-ranking-fila-jugador');
+    if (filaJugador) filaJugador.scrollIntoView({ block: 'center' });
+  }
 
+  for (const def of disponibles) {
+    pestanas.appendChild(el('button', {
+      class: 'tabla-ranking-pestana',
+      type: 'button',
+      role: 'tab',
+      dataset: { division: def.id },
+      text: def.nombre,
+      onClick: () => pintar(def),
+    }));
+  }
+
+  const contenido = el('div', { class: 'tabla-ranking' }, [pestanas, bajada, lista]);
+  const popup = abrirPopup({ titulo: 'Rankings', contenido, onCerrar });
+  if (inicial) pintar(inicial);
   return popup;
 }

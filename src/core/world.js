@@ -1,4 +1,5 @@
 import { crearRoster, generarDebutantes } from './roster.js';
+import { campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES } from './divisiones.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 import { rendimientoDeMejora } from './talento.js';
@@ -15,15 +16,47 @@ export const ANIO_INICIAL = 2026;
 // "Cinturón regional"): es la misma "parte alta" que le importa al jugador.
 export const TAMANO_ELITE = 20;
 
-export function crearMundo(rng, { disciplina, categoria, cantidad = 10, apodosReservados = [] }) {
-  const roster = crearRoster(rng, { disciplina, categoria, cantidad, apodosReservados });
+// El circuito amateur es chico a propósito: son tres años de formación, no
+// una carrera paralela. Alcanza para que el ranking amateur tenga cuerpo sin
+// inflar el guardado.
+export const CANTIDAD_AMATEUR = 24;
+
+export function crearMundo(rng, {
+  disciplina, categoria, cantidad = 10, apodosReservados = [], nacionalidadLocal = null,
+}) {
+  const roster = crearRoster(rng, {
+    disciplina, categoria, cantidad, apodosReservados, nacionalidadLocal,
+  });
+  // El circuito amateur: pool propio, más chico y más flojo, SIN un solo
+  // nombre en común con el profesional (pedido v17.5). No se cruza nunca con
+  // `roster`: son dos mundos distintos, y el jugador pasa del primero al
+  // segundo cuando debuta.
+  const rosterAmateur = crearRoster(rng, {
+    disciplina,
+    categoria,
+    cantidad: CANTIDAD_AMATEUR,
+    apodosReservados: [...apodosReservados, ...roster.map((p) => p.apodo).filter(Boolean)],
+    nombresReservados: roster.map((p) => p.nombre),
+    nacionalidadLocal,
+    usarParodias: false,
+  });
   return {
     disciplina,
     categoria,
     roster,
+    rosterAmateur,
     anio: ANIO_INICIAL,
+    // El país del jugador: lo necesitan las divisiones regional y nacional,
+    // que son rankings DE SU PAÍS (ver divisiones.js).
+    nacionalidadLocal,
     campeonId: roster[0]?.id ?? null,
     titulares: [],
+    // Quién tiene puesto cada cinturón. Antes esto no existía: `campeonId`
+    // era uno solo y solo alimentaba noticias, así que se podía disputar "el
+    // mundial" contra alguien que jamás lo había ganado (bug reportado). Se
+    // arranca con el #1 de cada división y a partir de ahí solo cambia
+    // peleando.
+    campeones: campeonesIniciales({ roster, nacionalidadLocal }),
   };
 }
 
@@ -261,6 +294,9 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
       anio: anio ?? mundo.anio + Math.round(aniosPasados),
       campeonId,
       titulares: [...mundo.titulares],
+      campeones: { ...(mundo.campeones ?? {}) },
+      rosterAmateur: mundo.rosterAmateur,
+      nacionalidadLocal: mundo.nacionalidadLocal ?? null,
     },
     sucesos,
   };
@@ -359,15 +395,18 @@ function yaDebutoProfesional(jugador) {
  */
 export function rankingDelJugador(mundo, jugador) {
   if (!yaDebutoProfesional(jugador)) return null;
-  const activos = mundo.roster.filter((p) => !p.retirado);
+  const activos = (mundo.roster ?? []).filter((p) => !p.retirado);
   if (activos.length === 0) return 1;
-  const miMedia = mediaDe(jugador);
-  const bonusRecordCrudo = jugador.record.v - jugador.record.d * 2;
-  const tope = Math.max(TOPE_BONUS_RECORD_MINIMO, Math.round(activos.length * FRACCION_TOPE_BONUS_RECORD));
-  const puntaje = miMedia + bonusRecordSuavizado(bonusRecordCrudo, tope);
-  const mejores = activos.filter((p) => mediaDe(p) > puntaje).length;
+  // v17.8: el puesto lo da `puntajeDe` (divisiones.js) — media Y récord, con
+  // el récord pesando de verdad. Antes era la media con un ajuste chiquito por
+  // récord, y por eso un 0-2 aparecía #58 de 100: entrabas a mitad de tabla
+  // por lo bueno que eras entrenando, sin haber ganado una sola pelea. En
+  // boxeo el puesto se gana peleando.
+  const mio = puntajeDe(jugador);
+  const mejores = activos.filter((p) => puntajeDe(p) > mio).length;
   return clamp(mejores + 1, 1, activos.length + 1);
 }
+
 
 function filaDe(peleador, esJugador) {
   return {
@@ -405,6 +444,42 @@ export function tablaRanking(mundo, jugador) {
   }
 
   return filas.map((fila, indice) => ({ ...fila, ranking: indice + 1 }));
+}
+
+/**
+ * Las cuatro tablas listas para pintar (pedido v17.5, punto 7). Cada división
+ * es su propia lista numerada desde 1: el puesto que se ve es el puesto EN ESA
+ * división, no una posición global recortada — que es lo que hace que "primero
+ * en el regional" y "primero en el nacional" sean cosas distintas.
+ *
+ * Cada fila trae además `esCampeon`: quién tiene ese cinturón puesto hoy
+ * (`mundo.campeones`, divisiones.js). No siempre es el #1 — se puede ser
+ * campeón y haber bajado en la tabla, que es justo lo que hace que defender
+ * signifique algo.
+ */
+export function tablasDeDivisiones(mundo, jugador) {
+  const rankings = rankingsDe(mundo, jugador);
+  const campeones = mundo.campeones ?? {};
+  const tablas = {};
+  for (const division of DIVISIONES) {
+    tablas[division] = (rankings[division] ?? []).map((peleador, indice) => {
+      const esJugador = peleador.id === jugador?.id;
+      // En la tabla amateur el récord que corresponde es el AMATEUR. El
+      // jugador arrastra los dos (las peleas amateurs nunca tocan
+      // `record` — ver aplicarResultado, offers.js), y sin esto un
+      // profesional 14-2 aparecía con ese récord en el circuito de
+      // formación, que es un torneo del que ya se fue.
+      const conRecordDeLaDivision = division === 'amateur' && esJugador
+        ? { ...peleador, record: peleador.recordAmateur ?? peleador.record }
+        : peleador;
+      return {
+        ...filaDe(conRecordDeLaDivision, esJugador),
+        ranking: indice + 1,
+        esCampeon: campeones[division] === peleador.id,
+      };
+    });
+  }
+  return tablas;
 }
 
 export function buscarRival(mundo, { excluirIds = [], rankingCerca = null } = {}) {

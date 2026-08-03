@@ -3522,3 +3522,60 @@ input.creacion-control { cursor: text; }
 
   .resumen-anio-listas { gap: 8px; }
 }
+
+/* ============================================================================
+   v17.8 — cuatro rankings en un popup, uno por pestaña
+   ============================================================================ */
+.tabla-ranking-pestanas {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.tabla-ranking-pestana {
+  flex: 1 1 auto;
+  padding: 7px 10px;
+  border-radius: 8px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+  color: var(--texto-sutil);
+  font-family: var(--fuente);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tabla-ranking-pestana:hover { border-color: var(--borde-fuerte); color: var(--texto); }
+}
+
+.tabla-ranking-pestana.activa {
+  background: #2a2008;
+  border-color: var(--dorado);
+  color: var(--dorado);
+}
+
+.tabla-ranking-bajada { margin: 0 0 8px; font-size: 11.5px; }
+
+/* El campeón vigente de la división. Dorado, como todo lo que en este juego
+   significa "cinturón". No siempre es el #1: se puede tener el título puesto
+   y haber bajado en la tabla. */
+.tabla-ranking-fila-campeon { border-left: 2px solid var(--dorado); }
+
+.tabla-ranking-cinturon {
+  flex: 0 0 auto;
+  font-size: 8px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  font-weight: 800;
+  color: var(--dorado);
+  background: #2a2008;
+  border: 1px solid var(--dorado);
+  border-radius: 20px;
+  padding: 1px 6px;
+  white-space: nowrap;
+}

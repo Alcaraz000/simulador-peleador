@@ -9,6 +9,14 @@ function fila({
   };
 }
 
+// v17.8: el popup pasó de UNA lista a CUATRO rankings independientes, uno por
+// pestaña (amateur / regional / nacional / mundial). Estos tests siguen
+// probando lo mismo de siempre sobre una sola división; los de la pestaña
+// están al final del archivo.
+function tabla(filas, division = 'nacional') {
+  return { [division]: filas };
+}
+
 beforeEach(() => {
   document.body.innerHTML = '<div id="app"></div>';
 });
@@ -20,10 +28,10 @@ describe('renderRanking — se abre como popup', () => {
       fila({ id: 'b', ranking: 2, esJugador: true }),
       fila({ id: 'c', ranking: 3 }),
     ];
-    renderRanking({ filas });
+    renderRanking({ tablas: tabla(filas) });
 
     expect(document.querySelector('.popup-overlay')).toBeTruthy();
-    expect(document.body.textContent).toContain('Ranking');
+    expect(document.body.textContent).toContain('Rankings');
     expect(document.querySelectorAll('[data-peleador]')).toHaveLength(3);
   });
 
@@ -35,7 +43,7 @@ describe('renderRanking — se abre como popup', () => {
     const filas = [fila({
       id: 'a', nombre: 'Tyrell Carter', apodo: 'El Tanque', ranking: 4, media: 61, record: '10-2',
     })];
-    renderRanking({ filas });
+    renderRanking({ tablas: tabla(filas) });
 
     const texto = document.body.textContent;
     expect(texto).toContain('Tyrell Carter');
@@ -51,7 +59,7 @@ describe('renderRanking — se abre como popup', () => {
   // lo que hace que la lista entera scrollee liviana.
   it('la fila es una sola línea (puesto, bandera, nombre y récord al mismo nivel)', () => {
     const filas = [fila({ id: 'a', ranking: 4 })];
-    renderRanking({ filas });
+    renderRanking({ tablas: tabla(filas) });
     const filaNodo = document.querySelector('[data-peleador="a"]');
     expect(filaNodo.querySelector('.tabla-ranking-puesto')).toBeTruthy();
     expect(filaNodo.querySelector('svg.bandera-svg')).toBeTruthy();
@@ -60,7 +68,7 @@ describe('renderRanking — se abre como popup', () => {
   });
 
   it('usa la bandera SVG, nunca el emoji', () => {
-    renderRanking({ filas: [fila({ id: 'a', nacionalidad: 'MX' })] });
+    renderRanking({ tablas: tabla([fila({ id: 'a', nacionalidad: 'MX' })]) });
     expect(document.querySelector('svg.bandera-svg')).toBeTruthy();
     expect(document.body.textContent).not.toContain('🇲🇽');
   });
@@ -71,7 +79,7 @@ describe('renderRanking — se abre como popup', () => {
       fila({ id: 'b', esJugador: true }),
       fila({ id: 'c', esJugador: false }),
     ];
-    renderRanking({ filas });
+    renderRanking({ tablas: tabla(filas) });
 
     const destacadas = document.querySelectorAll('.tabla-ranking-fila-jugador');
     expect(destacadas).toHaveLength(1);
@@ -80,14 +88,14 @@ describe('renderRanking — se abre como popup', () => {
 
   it('la X cierra el popup y dispara onCerrar', () => {
     let cerrado = false;
-    renderRanking({ filas: [fila({ id: 'a' })], onCerrar: () => { cerrado = true; } });
+    renderRanking({ tablas: tabla([fila({ id: 'a' })]), onCerrar: () => { cerrado = true; } });
     document.querySelector('.popup-cerrar').click();
     expect(cerrado).toBe(true);
     expect(document.querySelector('.popup-overlay')).toBeNull();
   });
 
   it('con la tabla vacía no rompe', () => {
-    expect(() => renderRanking({ filas: [] })).not.toThrow();
+    expect(() => renderRanking({ tablas: tabla([]) })).not.toThrow();
   });
 
   // Bug reportado por el usuario: "no sé cómo, pero en el ranking ahora solo
@@ -98,7 +106,7 @@ describe('renderRanking — se abre como popup', () => {
   // cabecera y todo) se desborde: mismo patrón que panel-noticias.js.
   it('con muchas filas, todas quedan en el DOM dentro de un contenedor con scroll propio', () => {
     const filas = Array.from({ length: 15 }, (_, i) => fila({ id: `f${i}`, ranking: i + 1 }));
-    renderRanking({ filas });
+    renderRanking({ tablas: tabla(filas) });
 
     const lista = document.querySelector('.tabla-ranking-lista');
     expect(lista).toBeTruthy();
@@ -118,7 +126,7 @@ describe('renderRanking — se abre como popup', () => {
       llamadas.push({ nodo: this, args });
     };
     try {
-      renderRanking({ filas });
+      renderRanking({ tablas: tabla(filas) });
     } finally {
       Element.prototype.scrollIntoView = original;
     }
@@ -133,10 +141,78 @@ describe('renderRanking — se abre como popup', () => {
     let llamado = false;
     Element.prototype.scrollIntoView = function scrollIntoViewStub() { llamado = true; };
     try {
-      expect(() => renderRanking({ filas: [fila({ id: 'a', esJugador: false })] })).not.toThrow();
+      expect(() => renderRanking({ tablas: tabla([fila({ id: 'a', esJugador: false })]) })).not.toThrow();
     } finally {
       Element.prototype.scrollIntoView = original;
     }
     expect(llamado).toBe(false);
+  });
+});
+
+// v17.8: cuatro rankings independientes, uno por pestaña.
+describe('renderRanking — las cuatro divisiones', () => {
+  const cuatro = () => ({
+    amateur: [fila({ id: 'am1', nombre: 'Amateur Uno' })],
+    regional: [fila({ id: 'r1', nombre: 'Regional Uno' })],
+    nacional: [fila({ id: 'n1', nombre: 'Nacional Uno' })],
+    mundial: [fila({ id: 'm1', nombre: 'Mundial Uno' })],
+  });
+
+  it('hay una pestaña por división con contenido', () => {
+    renderRanking({ tablas: cuatro() });
+    const pestanas = [...document.querySelectorAll('.tabla-ranking-pestana')];
+    expect(pestanas.map((b) => b.dataset.division)).toEqual(['amateur', 'regional', 'nacional', 'mundial']);
+  });
+
+  it('una división vacía no genera pestaña', () => {
+    renderRanking({ tablas: { ...cuatro(), amateur: [] } });
+    const pestanas = [...document.querySelectorAll('.tabla-ranking-pestana')];
+    expect(pestanas.map((b) => b.dataset.division)).not.toContain('amateur');
+  });
+
+  it('abre en la división donde está el jugador', () => {
+    const tablas = cuatro();
+    tablas.mundial = [fila({ id: 'm1', nombre: 'Mundial Uno', esJugador: true })];
+    renderRanking({ tablas });
+
+    expect(document.querySelector('.tabla-ranking-pestana.activa').dataset.division).toBe('mundial');
+    expect(document.body.textContent).toContain('Mundial Uno');
+  });
+
+  it('cambiar de pestaña cambia la lista', () => {
+    renderRanking({ tablas: cuatro() });
+    const regional = [...document.querySelectorAll('.tabla-ranking-pestana')]
+      .find((b) => b.dataset.division === 'regional');
+    regional.click();
+
+    expect(document.body.textContent).toContain('Regional Uno');
+    expect(document.querySelectorAll('[data-peleador]')).toHaveLength(1);
+    expect(regional.classList.contains('activa')).toBe(true);
+  });
+
+  it('cada división numera desde 1: el puesto es EN esa división', () => {
+    renderRanking({
+      tablas: { nacional: [fila({ id: 'a', ranking: 1 }), fila({ id: 'b', ranking: 2 })] },
+    });
+    const puestos = [...document.querySelectorAll('.tabla-ranking-puesto')].map((n) => n.textContent);
+    expect(puestos).toEqual(['#1', '#2']);
+  });
+
+  // El campeón vigente no siempre es el #1: se puede tener el cinturón puesto
+  // y haber bajado en la tabla.
+  it('marca al campeón vigente aunque no sea el primero', () => {
+    renderRanking({
+      tablas: {
+        nacional: [
+          fila({ id: 'a', ranking: 1 }),
+          { ...fila({ id: 'b', ranking: 2, nombre: 'El Campeon' }), esCampeon: true },
+        ],
+      },
+    });
+
+    const marcados = [...document.querySelectorAll('[data-campeon="si"]')];
+    expect(marcados).toHaveLength(1);
+    expect(marcados[0].dataset.peleador).toBe('b');
+    expect(marcados[0].textContent.toLowerCase()).toContain('campeon');
   });
 });

@@ -1,5 +1,6 @@
 import { crearPeleador, peleadorAleatorio, mediaDe } from './fighter.js';
 import { PARODIAS } from '../content/parodies.js';
+import { clamp } from './stats.js';
 
 export const PERSONALIDADES = [
   'respetuoso', 'provocador', 'tramposo', 'showman', 'mentor', 'agresivo', 'mercenario',
@@ -66,11 +67,27 @@ export function crearDesdeParodia(parodia) {
 // rival aleatorio no termine compartiendo apodo con el propio jugador (el
 // pool "normal" de NICKNAMES, que arma el apodo del jugador, se superpone
 // case por caso con el pool APODOS de los rivales).
+// Qué proporción del roster comparte nacionalidad con el jugador. Sin esto
+// las nacionalidades salían repartidas parejo (medido con 100 rivales: 18 del
+// país del jugador contra 19+19+16+16+12 del resto), y una escalera NACIONAL
+// de 18 peleadores no da para partirla en "elite del país" y "el resto" con
+// sentido. Con ~40% local, el ranking nacional y el regional tienen cuerpo
+// propio y el mundial sigue siendo mayoría extranjeros — que es exactamente
+// el reparto que pidió el usuario para las cuatro divisiones.
+export const FRACCION_LOCAL = 0.4;
+
 export function crearRoster(rng, {
-  disciplina, categoria, cantidad = 10, apodosReservados = [],
+  disciplina, categoria, cantidad = 10, apodosReservados = [], nacionalidadLocal = null,
+  // Nombres que este roster NO puede usar. Lo usa el roster AMATEUR para no
+  // compartir un solo nombre con el profesional (pedido v17.5: "en el ranking
+  // amateur no se comparten nombres con ninguno de los otros tres").
+  nombresReservados = [],
+  // Las parodias (leyendas y activos con nombre propio) son del circuito
+  // profesional: el amateur se arma solo con peleadores generados.
+  usarParodias = true,
 }) {
   const roster = [];
-  const nombresUsados = new Set();
+  const nombresUsados = new Set(nombresReservados.filter(Boolean));
   // El pool de APODOS (names.js) es chico (16) frente a un roster típico de
   // 10-12: sin este control, dos rivales activos con el MISMO apodo ("La
   // Bestia" Fulano contra "La Bestia" Mengano) salía en ~97% de las carreras
@@ -79,8 +96,9 @@ export function crearRoster(rng, {
   // al apodo.
   const apodosUsados = new Set(apodosReservados.filter(Boolean));
 
-  for (const parodia of parodiasDe(disciplina, categoria, 'activo')) {
+  for (const parodia of usarParodias ? parodiasDe(disciplina, categoria, 'activo') : []) {
     if (roster.length >= cantidad) break;
+    if (nombresUsados.has(parodia.nombre)) continue;
     const peleador = crearDesdeParodia(parodia);
     roster.push(peleador);
     nombresUsados.add(peleador.nombre);
@@ -90,11 +108,16 @@ export function crearRoster(rng, {
   let intentos = 0;
   while (roster.length < cantidad && intentos < cantidad * 50) {
     intentos += 1;
+    // La tirada de nacionalidad se consume SIEMPRE (aunque no haya país local),
+    // para que el rng avance igual y una partida vieja no cambie de rumbo por
+    // el simple hecho de existir esta rama.
+    const tiradaLocal = rng.next();
     const candidato = peleadorAleatorio(rng, {
       disciplina,
       categoria,
       media: rng.int(45, 75),
       personalidad: rng.pick(PERSONALIDADES),
+      nacionalidad: nacionalidadLocal && tiradaLocal < FRACCION_LOCAL ? nacionalidadLocal : undefined,
     });
     // Pedido 1 (v6, "el ranking tiene que ser una montaña", cantidad 12->100):
     // el pool de APODOS (names.js) tiene solo 16 entradas. Rechazar (continue)
@@ -105,6 +128,29 @@ export function crearRoster(rng, {
     // al tamaño del roster: realista además, no todo boxeador en actividad
     // tiene un mote que lo siga. Solo el nombre repetido sigue rechazando.
     intentarSumar(candidato, { roster, nombresUsados, apodosUsados });
+  }
+
+  // Récord de arranque. Antes todo el roster nacía 0-0-0: un mundo entero de
+  // profesionales sin una sola pelea, y con las divisiones nuevas (que ordenan
+  // por media Y récord, ver divisiones.js) eso dejaba el puntaje reducido otra
+  // vez a los atributos. Se deriva del peleador, no se sortea a lo loco: los
+  // años sobre el ring dan la cantidad de peleas y la media manda el porcentaje
+  // de victorias, así que el que es mejor tiene mejor récord y el veterano
+  // tiene más historia. Determinista con la semilla, como todo acá.
+  for (const peleador of roster) {
+    if (!peleador.record) continue;
+    const anios = Math.max(0, (peleador.edad ?? 22) - 20);
+    const peleas = Math.min(42, Math.round(anios * rng.float(2.0, 3.4)));
+    // Tasa de victorias de un profesional en actividad: un peleador de media
+    // 70 anda por el 70%, uno de 85 casi no pierde y uno de 50 pierde más de
+    // lo que gana. Con la tasa anterior (~53% en la media del roster) el
+    // mundo entero quedaba cerca del 50%, y un jugador 3-0 se les ponía
+    // arriba a todos de una: nadie tenía un récord que defender.
+    const tasa = clamp(0.55 + (mediaDe(peleador) - 60) / 70, 0.42, 0.93);
+    const v = Math.round(peleas * tasa);
+    peleador.record = {
+      ...peleador.record, v, d: peleas - v, e: 0, ko: Math.round(v * rng.float(0.2, 0.55)),
+    };
   }
 
   roster.sort((a, b) => mediaDe(b) - mediaDe(a));

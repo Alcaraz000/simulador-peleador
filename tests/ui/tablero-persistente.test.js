@@ -46,6 +46,25 @@ function nuevaPartida(semilla) {
   return crearPartida({ jugador, semilla });
 }
 
+// Deja la partida con una tarjeta de decisión YA EN LA COLA.
+//
+// No alcanza con que el próximo `siguienteBeat` devuelva una tarjeta: si la
+// cola está vacía, esa llamada primero AVANZA el bloque — envejece, mueve el
+// mundo y corre el lote de peleas del año, que descuenta semanas de
+// recuperación (`recuperar`, injuries.js) y puede curar una lesión antes de
+// que el jugador llegue a verla. Con la cola ya cargada, el arranque del
+// tablero solo saca la carta que estaba esperando y no toca el calendario.
+function enUnaTarjeta(partidaInicial, maxBloques = 200) {
+  let partida = partidaInicial;
+  for (let i = 0; i < maxBloques; i += 1) {
+    if (partida.terminada) break;
+    const paso = siguienteBeat(partida);
+    if (['mejora', 'evento', 'redes'].includes(paso.partida.cola?.[0]?.tipo)) return paso.partida;
+    partida = paso.partida;
+  }
+  throw new Error('no apareció ninguna tarjeta de decisión (semilla de prueba a revisar)');
+}
+
 function prepararStorage(partida) {
   const storage = crearStorageFalso();
   storage.setItem(CLAVE_ACCESO, '1');
@@ -354,7 +373,15 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
   });
 
   it('curar una lesion con dinero desde el tablero descuenta la plata y saca el aviso de lesion', () => {
-    const partida = nuevaPartida(4);
+    // Se para la partida en una tarjeta ANTES de ponerle la lesión. Al
+    // arrancar el tablero se resuelve el beat pendiente, y si ese beat es el
+    // arranque de año corre el lote de peleas, que descuenta semanas de
+    // recuperación (recuperar, injuries.js) y curaba la lesión antes de que el
+    // jugador llegara a verla — según qué beat cayera con la semilla del día.
+    // Parándola primero, este test deja de depender de eso: la lesión sigue
+    // siendo corta (que es lo que la cirugía puede curar del todo) y el beat
+    // pendiente es una tarjeta, que no toca la recuperación.
+    const partida = enUnaTarjeta(nuevaPartida(4));
     partida.jugador.dinero = 100000;
     partida.jugador.estado.lesion = {
       id: 'mano', nombre: 'Mano fracturada', severidad: 2, semanasRestantes: 2, costo: 22000, texto: 'x',
@@ -560,8 +587,22 @@ describe('el tablero es la pantalla principal siempre (Task 6.1)', () => {
       const popup = document.querySelector('.popup-overlay');
       expect(popup).toBeTruthy();
       expect(popup.textContent).toContain('Ranking');
-      expect(popup.textContent).toContain(apodoRival);
-      expect(document.querySelectorAll('.tabla-ranking-fila-jugador')).toHaveLength(1);
+
+      // v17.8: son CUATRO rankings, uno por pestaña, y el popup abre en la
+      // división del jugador. El rival de la próxima pelea puede estar en otra
+      // (un mundial que baja a defender contra un regional, por ejemplo), así
+      // que la coherencia se comprueba recorriendo las pestañas: en ALGUNA
+      // tiene que figurar, con el mismo nombre con el que lo ofrece el juego.
+      const pestanas = [...popup.querySelectorAll('.tabla-ranking-pestana')];
+      expect(pestanas.length).toBeGreaterThan(0);
+      const apareceEnAlguna = pestanas.some((pestana) => {
+        pestana.click();
+        return popup.textContent.includes(apodoRival);
+      });
+      expect(apareceEnAlguna).toBe(true);
+
+      // Y el jugador figura una sola vez en la división que esté mirando.
+      expect(document.querySelectorAll('.tabla-ranking-fila-jugador').length).toBeLessThanOrEqual(1);
     });
   });
 

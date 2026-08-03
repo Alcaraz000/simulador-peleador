@@ -2,9 +2,9 @@ import { createRng } from './core/rng.js';
 import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
   registrarDecision, registrarMuestraMedia,
-  guardarBonusProximaPelea, consumirBonusProximaPelea,
+  guardarBonusProximaPelea, consumirBonusProximaPelea, aplicarCambioDeCampeon,
 } from './core/career.js';
-import { tablaRanking, rankingDelJugador } from './core/world.js';
+import { tablasDeDivisiones, rankingDelJugador } from './core/world.js';
 import { crearPeleador } from './core/fighter.js';
 import { hitosDePelea, hitoDeEtapa, noticiaDeHitoJugador } from './core/hitos.js';
 import { generarNoticia, agregarNoticias } from './core/news.js';
@@ -341,7 +341,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // puesto real, coherente con los rivales que ofrece buscarRival — mismo
   // popup que la tienda: el tablero sigue montado y visible detrás.
   function abrirRanking() {
-    renderRanking({ filas: tablaRanking(partida.mundo, partida.jugador) });
+    renderRanking({ tablas: tablasDeDivisiones(partida.mundo, partida.jugador) });
   }
 
   // Asegura el shell y REFRESCA los tres paneles del tablero con la partida
@@ -1428,6 +1428,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     // después — ver el comentario en aplicarResultado (offers.js).
     const paso = aplicarResultado(partida.jugador, {
       oferta, resultado: pelea.resultado, semanaGlobal: partida.semanaGlobal,
+    });
+    // El cinturón cambia de dueño en el mundo, no solo en la ficha del
+    // jugador: si lo perdió, el rival queda anotado como campeón y la próxima
+    // pelea por ese título va a ser contra ÉL (ver divisiones.js).
+    partida = aplicarCambioDeCampeon(partida, {
+      oferta, gano: pelea.resultado.ganador === 'jugador',
     });
     let jugador = paso.jugador;
 

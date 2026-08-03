@@ -12,6 +12,7 @@ import { cobrarSponsor, tieneStaff } from './money.js';
 import { clamp, LIMITES_ATRIBUTO } from './stats.js';
 import { BONUS_TEMPORAL_MAXIMO } from './sparring.js';
 import { rendimientoDeMejora } from './talento.js';
+import { campeonDe, coronarCampeon } from './divisiones.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
@@ -491,11 +492,43 @@ export function consumirBonusProximaPelea(partida) {
   };
 }
 
+// El cinturón cambia de manos cuando alguien lo gana arriba del ring, y solo
+// entonces. Esto es lo que faltaba para que el mundo fuera coherente: antes,
+// al perder un título, el rival se llevaba el cinturón en la ficha del jugador
+// (se le sacaba de `titulos`) pero NADIE quedaba anotado como campeón, así que
+// la próxima pelea "por ese cinturón" podía tocarle a cualquiera.
+//
+// Solo se llama para peleas de título de verdad (`esTitulo`), y solo cambia
+// algo cuando el cinturón efectivamente cambió de dueño:
+//   - el jugador gana un título que no era suyo -> el jugador es el campeón;
+//   - el jugador pierde el que tenía puesto -> el rival es el campeón;
+//   - defensa exitosa o challenge fallido -> no cambia nada.
+export function aplicarCambioDeCampeon(partida, { oferta, gano }) {
+  if (!oferta?.esTitulo || !oferta.cinturonId) return partida;
+
+  const eraDelJugador = campeonDe(partida.mundo, oferta.cinturonId) === partida.jugador.id;
+  let nuevoCampeonId = null;
+  if (gano && !eraDelJugador) nuevoCampeonId = partida.jugador.id;
+  else if (!gano && eraDelJugador) nuevoCampeonId = oferta.rivalId;
+  if (!nuevoCampeonId) return partida;
+
+  return {
+    ...partida,
+    mundo: {
+      ...partida.mundo,
+      campeones: coronarCampeon(partida.mundo.campeones, oferta.cinturonId, nuevoCampeonId),
+    },
+  };
+}
+
 export function crearPartida({ jugador, semilla }) {
   const rng = createRng(semilla);
   const mundo = crearMundo(rng, {
     disciplina: jugador.disciplina,
     categoria: jugador.categoria,
+    // El país del jugador define las divisiones regional y nacional, que son
+    // rankings DE SU PAÍS (ver divisiones.js).
+    nacionalidadLocal: jugador.nacionalidad,
     // Pedido 1 (v6, "el ranking está muy pobre, debe de haber al menos 100
     // peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
     cantidad: CANTIDAD_MUNDO,

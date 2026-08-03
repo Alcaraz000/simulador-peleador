@@ -216,9 +216,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     // reeligió varias veces por el mismo motivo (cualquier cambio de
     // contenido que consuma rng en el camino corre la secuencia entera):
     // 6->10 (v7, "más parodias"), 10->16 (cartas de condiciones
-    // situacionales) y ahora 16->11 (v13, simplificación de atributos:
-    // cards-events.js se reescribió entero, Bloque 4.3).
-    iniciar(cont, prepararPartidaGuardada('evento', 11));
+    // situacionales), 16->11 (v13, simplificación de atributos) y ahora
+    // 11->30 (v17.8, las cuatro divisiones: crearRoster consume tiradas
+    // nuevas por nacionalidad y récord de arranque, más el roster amateur).
+    iniciar(cont, prepararPartidaGuardada('evento', 30));
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
     // del rediseño (spec: "el tablero nunca desaparece"). Si el shell se
@@ -288,7 +289,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   // cota SUPERIOR para que la lectura no se vuelva tediosa (el roll se repite
   // varias veces por carrera).
   it('la pausa de lectura tras el roll dura bastante más que antes (1100ms), sin volverse tediosa', () => {
-    iniciar(cont, prepararPartidaGuardada('evento', 11));
+    iniciar(cont, prepararPartidaGuardada('evento', 30));
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
 
@@ -663,7 +664,7 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     // semilla 11 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
     // roll — ver el comentario grande ahí).
-    iniciar(cont, prepararPartidaGuardada('evento', 11));
+    iniciar(cont, prepararPartidaGuardada('evento', 30));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
@@ -703,7 +704,7 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
     // semilla 11: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 11));
+    iniciar(cont, prepararPartidaGuardada('evento', 30));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();

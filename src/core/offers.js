@@ -4,6 +4,7 @@ import {
 } from './fighter.js';
 import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
+import { campeonDe } from './divisiones.js';
 
 export const NIVELES = {
   local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4 },
@@ -37,7 +38,14 @@ export const NIVELES = {
 export const CINTURONES = [
   { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, defensasObligatorias: 2 },
   { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, defensasObligatorias: 3 },
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 7, multiplicador: 3.5, defensasObligatorias: 4 },
+  // v17.8: 7 -> 4. Con el ranking nuevo (donde el récord pesa de verdad, ver
+  // puntajeDe en divisiones.js) un jugador que gana todo trepa al top-7 mucho
+  // antes que antes, y las chances de mundial se multiplicaban: la tasa medida
+  // saltó de ~23% a 36%, muy por encima del "una de cada cuatro o cinco" que
+  // fijó el usuario. Con el tope en 4 vuelve al rango de la spec sin tocar el
+  // resto del balance (al menos un cinturón, media final y dispersión siguen
+  // dentro de sus umbrales).
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 4, multiplicador: 3.5, defensasObligatorias: 4 },
 ];
 
 // v7 (pedido textual del usuario: "un debutante NO puede pelear por el
@@ -328,7 +336,22 @@ export function generarOferta(rng, {
   const rankingObjetivo = disputaAlgoGrande
     ? clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12)
     : clamp((jugador.ranking ?? Math.round(mundo.roster.length / 2)) + rng.int(0, 6), 1, mundo.roster.length);
-  const rival = (archirrival && !archirrivalEsElUltimo && !soloRegional && !excluirIdsExtra.includes(archirrival.rivalId) && rng.chance(0.3)
+  // Una pelea POR un cinturón se pelea contra QUIEN LO TIENE PUESTO. Antes el
+  // rival de un título salía del mismo matchmaking que cualquier otra pelea
+  // (alguien bien rankeado), así que se podía "disputar el mundial" contra un
+  // peleador que nunca lo había ganado — el bug que reportó el usuario. El
+  // campeón vive en `mundo.campeones` (divisiones.js) y cambia solo peleando.
+  //
+  // Si el campeón no está disponible (se retiró, o es el propio jugador que ya
+  // lo tiene puesto), se cae al matchmaking de siempre: mejor una pelea que
+  // una oferta rota.
+  const campeonDelCinturon = nivel.id === 'titulo' && cinturon
+    ? (mundo.roster ?? []).find((p) => (
+      p.id === campeonDe(mundo, cinturon.id) && !p.retirado && p.id !== jugador.id
+    ))
+    : null;
+
+  const rival = campeonDelCinturon ?? (archirrival && !archirrivalEsElUltimo && !soloRegional && !excluirIdsExtra.includes(archirrival.rivalId) && rng.chance(0.3)
     ? mundo.roster.find((p) => p.id === archirrival.rivalId && !p.retirado)
     : null) ?? buscarRival(mundo, {
     excluirIds: [jugador.id, ultimoRivalId, ...excluirIdsExtra].filter(Boolean),
@@ -365,7 +388,7 @@ export function generarOferta(rng, {
   const gancho = nivel.id === 'defensa'
     ? `Defensa obligatoria del ${cinturon.nombre.toLowerCase()}. ${mote} es el retador oficial.`
     : nivel.id === 'titulo'
-      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${mote} tiene lo que querés.`
+      ? `Es por el ${cinturon.nombre.toLowerCase()}. ${mote} lo tiene puesto${campeonDelCinturon ? ' y no lo piensa soltar' : ''}.`
       : esRevancha
         ? `${mote} quiere la revancha. Vos sabés lo que pasó la última vez.`
         : rival.esParodia
