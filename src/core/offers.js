@@ -36,8 +36,8 @@ export const NIVELES = {
  * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 28, multiplicador: 1, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 15, multiplicador: 1.8, defensasObligatorias: 3 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 20, multiplicador: 1, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 10, multiplicador: 1.8, defensasObligatorias: 3 },
   // v17.8: 7 -> 4. Con el ranking nuevo (donde el récord pesa de verdad, ver
   // puntajeDe en divisiones.js) un jugador que gana todo trepa al top-7 mucho
   // antes que antes, y las chances de mundial se multiplicaban: la tasa medida
@@ -45,7 +45,7 @@ export const CINTURONES = [
   // fijó el usuario. Con el tope en 4 vuelve al rango de la spec sin tocar el
   // resto del balance (al menos un cinturón, media final y dispersión siguen
   // dentro de sus umbrales).
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 4, multiplicador: 3.5, defensasObligatorias: 4 },
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 3, multiplicador: 3.5, defensasObligatorias: 4 },
 ];
 
 // v7 (pedido textual del usuario: "un debutante NO puede pelear por el
@@ -83,7 +83,15 @@ export const CINTURONES = [
 // semillas del jugador más débil del proyecto (career.test.js, "progresión
 // de cinturones") también se mantiene — ver el informe de balance entregado
 // con esta ronda.
-export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 13, mundial: 18 };
+// v17.11: mundial 18 -> 28, y los rankingMax de arriba 28/15/7 -> 20/10/3.
+// Con el ranking nuevo (donde el récord manda: ver puntajeDe, divisiones.js)
+// un jugador que gana todo llega al #1 del mundo con la mitad de la carrera
+// por delante, y la tasa de cinturón mundial se disparó de ~23% a 49%. Ajustar
+// solo el puesto no alcanzaba (con rankingMax 2 seguía en 33% y el eje de "al
+// menos un cinturón" se derrumbaba): lo que faltaba era EXPERIENCIA. Con 28
+// peleas profesionales exigidas, el mundial vuelve a ser el techo de una
+// carrera larga y no un trámite de mitad de camino.
+export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 13, mundial: 28 };
 
 function peleasProfesionales(jugador) {
   const record = jugador.record ?? { v: 0, d: 0, e: 0 };

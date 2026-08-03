@@ -27,14 +27,42 @@ export const NACIONALIDADES = [
   { codigo: 'JP', nombre: 'Japón', gentilicio: 'japonés', escuela: 'Disciplina absoluta y precisión de relojero.' },
 ];
 
-/** Nombres típicos por nacionalidad, para que los rivales suenen creíbles. */
+/**
+ * Nombres típicos por nacionalidad, para que los rivales suenen creíbles.
+ *
+ * Doce por doce = 144 combinaciones por país. Antes eran cinco por cinco = 25,
+ * y eso traía dos problemas medidos: con ~26 peleadores de un mismo país vivos
+ * a la vez, el ranking nacional se llenaba de "Ramiro Ledesma / Matías Ledesma
+ * / Lucas Ledesma" (reportado con captura), y peor — el generador de
+ * debutantes rechaza nombres repetidos, así que con el pool agotado la camada
+ * nueva no entraba y el pool local se secaba de 25 a 1 en veinte temporadas,
+ * desarmando las divisiones regional y nacional.
+ */
 export const NOMBRES_POR_PAIS = {
-  AR: { nombres: ['Lucas', 'Matías', 'Nahuel', 'Facundo', 'Ramiro'], apellidos: ['Ortiz', 'Sosa', 'Quiroga', 'Peralta', 'Ledesma'] },
-  MX: { nombres: ['Julio', 'Rafa', 'Ernesto', 'Salvador', 'Ramón'], apellidos: ['Vargas', 'Chávez', 'Montoya', 'Barrera', 'Zúñiga'] },
-  US: { nombres: ['Ray', 'Tyrell', 'Marcus', 'Jayden', 'Dontrell'], apellidos: ['Carter', 'Brooks', 'Hayes', 'Wallace', 'Freeman'] },
-  ES: { nombres: ['Álvaro', 'Iker', 'Sergio', 'Rubén', 'Nacho'], apellidos: ['Cifuentes', 'Bermúdez', 'Olmedo', 'Cortés', 'Rueda'] },
-  IT: { nombres: ['Marco', 'Salvatore', 'Enzo', 'Nico', 'Gianni'], apellidos: ['Ricci', 'Fontana', 'Moretti', 'Bellini', 'Rizzo'] },
-  JP: { nombres: ['Kenji', 'Hiro', 'Takumi', 'Ryo', 'Daiki'], apellidos: ['Takeda', 'Yamamoto', 'Ishida', 'Kurosawa', 'Nakano'] },
+  AR: {
+    nombres: ['Lucas', 'Matías', 'Nahuel', 'Facundo', 'Ramiro', 'Bruno', 'Thiago', 'Ezequiel', 'Joaquín', 'Iván', 'Gonzalo', 'Damián'],
+    apellidos: ['Ortiz', 'Sosa', 'Quiroga', 'Peralta', 'Ledesma', 'Aguirre', 'Barrios', 'Cabrera', 'Maidana', 'Vergara', 'Miranda', 'Ferreyra'],
+  },
+  MX: {
+    nombres: ['Julio', 'Rafa', 'Ernesto', 'Salvador', 'Ramón', 'Alfonso', 'Cuauhtémoc', 'Lalo', 'Beto', 'Everardo', 'Mauro', 'Ismael'],
+    apellidos: ['Vargas', 'Chávez', 'Montoya', 'Barrera', 'Zúñiga', 'Ibarra', 'Guzmán', 'Salcedo', 'Rentería', 'Cuevas', 'Valdez', 'Nájera'],
+  },
+  US: {
+    nombres: ['Ray', 'Tyrell', 'Marcus', 'Jayden', 'Dontrell', 'Darnell', 'Kevon', 'Malik', 'Trey', 'Deshawn', 'Rashad', 'Terrence'],
+    apellidos: ['Carter', 'Brooks', 'Hayes', 'Wallace', 'Freeman', 'Whitfield', 'Sanders', 'Pryor', 'Boyd', 'Ellison', 'Marsh', 'Vaughn'],
+  },
+  ES: {
+    nombres: ['Álvaro', 'Iker', 'Sergio', 'Rubén', 'Nacho', 'Unai', 'Borja', 'Aitor', 'Hugo', 'Marcos', 'Jorge', 'Óscar'],
+    apellidos: ['Cifuentes', 'Bermúdez', 'Olmedo', 'Cortés', 'Rueda', 'Escudero', 'Arana', 'Gallardo', 'Serrano', 'Pardo', 'Quintana', 'Lozano'],
+  },
+  IT: {
+    nombres: ['Marco', 'Salvatore', 'Enzo', 'Nico', 'Gianni', 'Dario', 'Fabio', 'Luca', 'Pietro', 'Sandro', 'Matteo', 'Corrado'],
+    apellidos: ['Ricci', 'Fontana', 'Moretti', 'Bellini', 'Rizzo', 'Caruso', 'Ferrara', 'Lombardi', 'Vitale', 'Bruno', 'Marchetti', 'Gallo'],
+  },
+  JP: {
+    nombres: ['Kenji', 'Hiro', 'Takumi', 'Ryo', 'Daiki', 'Sota', 'Haruki', 'Kaito', 'Ren', 'Yuto', 'Shinji', 'Naoki'],
+    apellidos: ['Takeda', 'Yamamoto', 'Ishida', 'Kurosawa', 'Nakano', 'Fujimoto', 'Okada', 'Sakamoto', 'Mori', 'Hasegawa', 'Ueda', 'Kimura'],
+  },
 };
 
 export const GIMNASIOS = [

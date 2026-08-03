@@ -799,6 +799,9 @@ export function avanzarBloque(partida) {
   const paso = avanzarMundo(nueva.mundo, rng, {
     aniosPasados: 1,
     jugadorEsCampeon: nueva.jugador.titulos.includes(NOMBRE_CINTURON_MUNDIAL),
+    // El cinturón que tenga PUESTO el jugador no se simula acá: sus defensas
+    // se juegan (ver defenderCinturonesNpc, world.js).
+    jugadorId: nueva.jugador.id,
     // El año lo manda el calendario, no el conteo del mundo: `avanzarBloque`
     // corre una vez por año (ver `esInicioDeAnio`), pero el año calendario
     // real sale de `semanaGlobal`, no de contar cuántas veces se llamó.

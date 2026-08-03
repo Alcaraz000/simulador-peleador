@@ -218,8 +218,9 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     // 6->10 (v7, "más parodias"), 10->16 (cartas de condiciones
     // situacionales), 16->11 (v13, simplificación de atributos) y ahora
     // 11->30 (v17.8, las cuatro divisiones: crearRoster consume tiradas
-    // nuevas por nacionalidad y récord de arranque, más el roster amateur).
-    iniciar(cont, prepararPartidaGuardada('evento', 30));
+    // nuevas por nacionalidad y récord de arranque, más el roster amateur) y
+    // 30->12 (v17.11, el pool de nombres por país pasó de 5x5 a 12x12).
+    iniciar(cont, prepararPartidaGuardada('evento', 12));
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
     // del rediseño (spec: "el tablero nunca desaparece"). Si el shell se
@@ -289,7 +290,7 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   // cota SUPERIOR para que la lectura no se vuelva tediosa (el roll se repite
   // varias veces por carrera).
   it('la pausa de lectura tras el roll dura bastante más que antes (1100ms), sin volverse tediosa', () => {
-    iniciar(cont, prepararPartidaGuardada('evento', 30));
+    iniciar(cont, prepararPartidaGuardada('evento', 12));
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
 
@@ -664,7 +665,7 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     // semilla 11 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
     // roll — ver el comentario grande ahí).
-    iniciar(cont, prepararPartidaGuardada('evento', 30));
+    iniciar(cont, prepararPartidaGuardada('evento', 12));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     expect(tarjetaAzar).toBeTruthy();
@@ -703,8 +704,8 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // semilla 11: mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 30));
+    // Mismo caso que arriba ("desafio_de_la_vereda" con roll).
+    iniciar(cont, prepararPartidaGuardada('evento', 12));
 
     const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
     tarjetaAzar.click();
@@ -715,11 +716,16 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
 
     cont.querySelector('[data-accion="cerrar"]').click();
 
-    // De vuelta en el tablero: directo a la próxima tarjeta (no las 3
-    // tarjetas de la carta de nuevo).
+    // De vuelta en el tablero: la carta que ya se resolvió NO vuelve a
+    // aparecer, y lo que se muestra es el beat siguiente.
+    //
+    // La comprobación es por identidad de nodo, no por "no hay una grilla de
+    // tarjetas": el beat que sigue puede ser perfectamente una mejora (tres
+    // tarjetas), y de hecho lo es con la semilla actual. Lo que no puede pasar
+    // es volver a la MISMA carta.
     expect(cont.querySelector('.shell')).toBeTruthy();
-    expect(cont.querySelector('.panel-decision-grilla')).toBeNull();
     expect(cont.contains(tarjetaAzar)).toBe(false);
+    expect(cont.querySelector('[data-opcion="aceptar"]')).toBeNull();
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 });

@@ -16,18 +16,26 @@
 //
 // El modelo nuevo:
 //
-//   - AMATEUR: pool aparte, sin un solo nombre en común con los otros tres.
-//     Es la etapa de formación y muere ahí.
-//   - REGIONAL: peleadores del país del jugador que todavía NO entraron a la
-//     elite nacional. La escalera de entrada.
-//   - NACIONAL: los `CUPO_NACIONAL` mejores del país.
-//   - MUNDIAL: los `CUPO_MUNDIAL` mejores del mundo, de cualquier país (con
-//      los locales que califiquen, si califican).
+//   - AMATEUR: pool aparte, sin un solo nombre en común con los otros tres, y
+//     ordenado por el récord AMATEUR de cada uno.
+//   - REGIONAL: la escalera de entrada de tu país — los que todavía no
+//     llegaron a la elite nacional.
+//   - NACIONAL: TODO tu país, la escalera regional incluida.
+//   - MUNDIAL: todos los profesionales del mundo.
 //
-// De ahí sale sola la coherencia que pidió el usuario: el #1 regional es, por
-// construcción, el que quedó JUSTO afuera de la elite nacional — nunca es
-// también el #1 nacional. Y el #1 nacional solo es #1 mundial si de verdad no
-// hay extranjero mejor.
+// Las tres profesionales son ANIDADAS: regional ⊂ nacional ⊂ mundial. Eso es
+// lo que hace que los tamaños crezcan (una región tiene menos gente que un
+// país, y un país menos que el mundo) y, sobre todo, que el #1 del regional
+// APAREZCA en la tabla nacional — más abajo, porque adelante suyo está la
+// elite que todavía no alcanzó, pero aparece. La primera versión (v17.8) las
+// hacía excluyentes: el regional era "el país menos la elite", así que su #1
+// no figuraba en el nacional y el nacional tenía menos gente que el regional.
+// Las dos cosas fueron reportadas, y las dos venían del mismo error.
+//
+// Sigue valiendo lo pedido: estar primero en el regional no es estar primero
+// en el nacional (adelante están todos los de la elite), y estar primero en el
+// nacional no es estarlo en el mundial (adelante están los extranjeros
+// mejores).
 //
 // Todo puro y determinista: se calcula desde el roster, no se guarda ninguna
 // posición en el peleador. Lo único que sí vive en el mundo es quién tiene
@@ -42,44 +50,56 @@ export const DIVISIONES = ['amateur', 'regional', 'nacional', 'mundial'];
 // propósito: ser top-12 de tu país tiene que costar más que ser top-16 del
 // mundo entero medido en cantidad de rivales, porque el pool local es una
 // fracción del global (ver FRACCION_LOCAL, roster.js).
-export const CUPO_NACIONAL = 12;
-export const CUPO_MUNDIAL = 16;
+// Cuántos entran a la ELITE nacional: los que ya se graduaron de la escalera
+// regional. No es el tamaño del ranking nacional (ese los incluye a todos),
+// es dónde se corta "todavía estás subiendo" de "ya llegaste".
+export const CUPO_ELITE_NACIONAL = 10;
 
-// Cuánto pesa el récord frente a los atributos.
+// Techo de la tabla mundial. Grande a propósito: "en el mundial deberían
+// estar los mejores y deberían ser muchos más" (pedido v17.11). Antes eran 16
+// y el ranking del mundo se leía más chico que el de un país.
+export const CUPO_MUNDIAL = 60;
+
+// La punta del ranking mundial: estar en la tabla del mundo (60 lugares) no es
+// lo mismo que ser "de nivel mundial". `divisionDe` usa esto para decir dónde
+// está parado alguien de verdad.
+export const CUPO_ELITE_MUNDIAL = 15;
+
+// Cuánto pesa lo que HICISTE frente a lo que SOS.
 //
-// Antes el puesto era `media + tanh(v - 2d)` con un tope que en la práctica
-// valía unos pocos puntos: un debutante con buenos atributos entraba a mitad
-// de tabla sin haber ganado una sola pelea. Con esto, el récord mueve hasta
-// ±ESCALA_RECORD puntos de puntaje — suficiente para que un invicto suba de
-// verdad y para que una racha de derrotas se pague, sin que deje de importar
-// lo bueno que sea el peleador.
-//
-// `tanh` en vez de un tope duro por el mismo motivo de siempre en este
-// proyecto: nunca es perfectamente plana, así que CUALQUIER derrota mueve el
-// puntaje aunque el historial ya esté saturado (ver el comentario de
-// bonusRecordSuavizado, world.js, que resolvió eso mismo para el ranking
+// Primera versión (v17.8): el récord movía ±25 sobre una media que va de ~48 a
+// ~88, así que los atributos seguían mandando — un debutante 0-2 con buena
+// media aparecía por encima de veteranos con 25-18. Reportado con capturas.
+// Ahora el récord manda: mueve casi lo mismo que TODO el rango de media.
+export const ESCALA_RECORD = 45;
+const SUAVIZADO_RECORD = 8;
+
+// Una pizca lineal que nunca satura, para que cualquier derrota baje el
+// puntaje siempre — por más ganador que sea el historial (ver el comentario
+// de bonusRecordSuavizado, world.js, que resolvió esto mismo para el ranking
 // viejo).
-export const ESCALA_RECORD = 25;
-const SUAVIZADO_RECORD = 6;
-
-// Una pizca LINEAL que nunca satura. `tanh` sola tiene un problema conocido en
-// este proyecto (ya resuelto una vez para el ranking viejo): con un historial
-// muy ganador queda tan pegada a 1 que sumar derrotas no mueve nada — un 40-0
-// y un 40-7 daban prácticamente el mismo puntaje. Este término, chico frente
-// al resto, garantiza que CUALQUIER derrota baje el puntaje siempre, por más
-// saturado que esté el récord: perder cuesta, sin excepciones.
-const PENDIENTE_LINEAL = 0.15;
+const PENDIENTE_LINEAL = 0.3;
 
 /**
- * El puntaje que ordena a un peleador dentro de su división: lo que es
- * (media) más lo que hizo (récord). Puro, sin rng.
+ * El puntaje que ordena a un peleador: lo que es (media) más lo que hizo
+ * (récord). Puro, sin rng.
+ *
+ * `clave` elige QUÉ récord mirar: el profesional (`record`) o el amateur
+ * (`recordAmateur`). Sin esto, el ranking amateur ordenaba a todos por su
+ * récord profesional y el jugador —recién ascendido, con media de pro—
+ * aparecía a mitad de la tabla amateur sin haber ganado nunca.
+ *
+ * El saldo es `victorias - derrotas`, no `victorias - 2*derrotas`: con el
+ * doble castigo, un veterano 25-18 (un peleador de oficio, con más de cuarenta
+ * peleas encima) quedaba por debajo de un debutante 0-2, que es exactamente al
+ * revés de lo que dice el sentido común del boxeo.
  */
-export function puntajeDe(peleador) {
-  const record = peleador.record ?? { v: 0, d: 0, e: 0 };
-  const crudo = (record.v ?? 0) - (record.d ?? 0) * 2;
+export function puntajeDe(peleador, clave = 'record') {
+  const record = peleador?.[clave] ?? { v: 0, d: 0, e: 0 };
+  const saldo = (record.v ?? 0) - (record.d ?? 0);
   return mediaDe(peleador)
-    + ESCALA_RECORD * Math.tanh(crudo / SUAVIZADO_RECORD)
-    + PENDIENTE_LINEAL * crudo;
+    + ESCALA_RECORD * Math.tanh(saldo / SUAVIZADO_RECORD)
+    + PENDIENTE_LINEAL * saldo;
 }
 
 function yaDebuto(peleador) {
@@ -87,12 +107,12 @@ function yaDebuto(peleador) {
   return (record.v ?? 0) + (record.d ?? 0) + (record.e ?? 0) > 0;
 }
 
-function ordenar(peleadores) {
+function ordenar(peleadores, clave = 'record') {
   // Desempate por id para que dos peleadores con el mismo puntaje no se
   // intercambien de puesto entre dos llamadas: el orden tiene que ser estable
   // aunque el array de entrada venga distinto.
   return [...peleadores].sort((a, b) => {
-    const dif = puntajeDe(b) - puntajeDe(a);
+    const dif = puntajeDe(b, clave) - puntajeDe(a, clave);
     if (dif !== 0) return dif;
     return String(a.id).localeCompare(String(b.id));
   });
@@ -109,19 +129,25 @@ function ordenar(peleadores) {
  */
 export function rankingsProfesionales(mundo, jugador = null) {
   const local = mundo.nacionalidadLocal ?? jugador?.nacionalidad ?? null;
+  // El filtro de "ya debutó" es SOLO para el jugador: un peleador del roster
+  // es un profesional en actividad por definición, tenga el récord que tenga.
+  // Aplicárselo también a ellos vaciaba el mundo con los años — los que se
+  // retiraban eran reemplazados por debutantes 0-0 que quedaban invisibles, y
+  // medido a veinte temporadas el ranking mundial se caía de 60 peleadores a
+  // 6. El jugador sí tiene que debutar: no ocupa un puesto que no se ganó.
   const pool = [
-    ...(mundo.roster ?? []).filter((p) => !p.retirado && yaDebuto(p)),
+    ...(mundo.roster ?? []).filter((p) => !p.retirado),
     ...(jugador && yaDebuto(jugador) ? [jugador] : []),
   ];
 
+  // El mundo entero, de cualquier país.
   const mundial = ordenar(pool).slice(0, CUPO_MUNDIAL);
-
-  const delPais = ordenar(pool.filter((p) => p.nacionalidad === local));
-  const nacional = delPais.slice(0, CUPO_NACIONAL);
-  // El regional es el resto del país: los que todavía no entraron a la elite
-  // nacional. Por eso el #1 regional NUNCA es el #1 nacional — es el primero
-  // de los que quedaron afuera, que es justo la coherencia pedida.
-  const regional = delPais.slice(CUPO_NACIONAL);
+  // Todo el país: la elite Y la escalera de abajo.
+  const nacional = ordenar(pool.filter((p) => p.nacionalidad === local));
+  // La escalera de entrada: los del país que todavía no llegaron a la elite.
+  // Es un SUBCONJUNTO del nacional, no una lista aparte — por eso su #1
+  // también figura en el nacional, unos cuantos puestos más abajo.
+  const regional = nacional.slice(CUPO_ELITE_NACIONAL);
 
   return { regional, nacional, mundial };
 }
@@ -136,7 +162,11 @@ export function rankingAmateur(mundo, jugador = null) {
     ...(mundo.rosterAmateur ?? []),
     ...(enAmateur ? [jugador] : []),
   ];
-  return ordenar(pool);
+  // Ordenado por el récord AMATEUR. Antes se ordenaba por el profesional, y
+  // como el jugador recién ascendido tiene media de pro pero nunca peleó de
+  // amateur más que un par de veces, aparecía a mitad de la tabla amateur con
+  // un 0-2 por encima de peleadores con 30-7. Reportado con captura.
+  return ordenar(pool, 'recordAmateur');
 }
 
 /**
@@ -159,10 +189,18 @@ export function puestoEn(rankings, division, id) {
  * define su lugar en el mundo es el techo, no el piso.
  */
 export function divisionDe(rankings, id) {
-  if (puestoEn(rankings, 'mundial', id)) return 'mundial';
-  if (puestoEn(rankings, 'nacional', id)) return 'nacional';
-  if (puestoEn(rankings, 'regional', id)) return 'regional';
-  return null;
+  // Con las divisiones anidadas, "estar en el nacional" ya no distingue nada:
+  // todo el país está ahí, la escalera regional incluida. Lo que ubica a
+  // alguien es hasta dónde LLEGÓ:
+  //   - mundial, si está en la punta de la tabla del mundo;
+  //   - nacional, si llegó a la elite de su país (o sea, ya no está en la
+  //     escalera regional);
+  //   - regional, si todavía está subiéndola.
+  const puestoMundial = puestoEn(rankings, 'mundial', id);
+  if (puestoMundial !== null && puestoMundial <= CUPO_ELITE_MUNDIAL) return 'mundial';
+  const enNacional = puestoEn(rankings, 'nacional', id);
+  if (enNacional === null) return null;
+  return puestoEn(rankings, 'regional', id) === null ? 'nacional' : 'regional';
 }
 
 // ---- Los cinturones y sus dueños -----------------------------------------

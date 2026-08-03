@@ -1,5 +1,7 @@
 import { crearRoster, generarDebutantes } from './roster.js';
-import { campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES } from './divisiones.js';
+import {
+  campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES, CUPO_ELITE_NACIONAL,
+} from './divisiones.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 import { rendimientoDeMejora } from './talento.js';
@@ -20,6 +22,11 @@ export const TAMANO_ELITE = 20;
 // una carrera paralela. Alcanza para que el ranking amateur tenga cuerpo sin
 // inflar el guardado.
 export const CANTIDAD_AMATEUR = 24;
+
+// Cuántos peleadores del país del jugador tiene que haber SIEMPRE en
+// actividad. Es el piso que sostiene las divisiones regional y nacional: por
+// debajo de esto la escalera local se queda sin escalones.
+export const MINIMO_LOCALES = 26;
 
 export function crearMundo(rng, {
   disciplina, categoria, cantidad = 10, apodosReservados = [], nacionalidadLocal = null,
@@ -58,6 +65,85 @@ export function crearMundo(rng, {
     // peleando.
     campeones: campeonesIniciales({ roster, nacionalidadLocal }),
   };
+}
+
+// El mundo también pelea por sus cinturones (v17.11).
+//
+// Reportado: "el campeón dice ser el #9, ¿eso está bien?". Estaba mal, y la
+// causa era que los cinturones solo cambiaban de manos cuando peleaba EL
+// JUGADOR. Los campeones NPC quedaban congelados mientras el ranking seguía
+// moviéndose, así que con los años el campeón derivaba hacia abajo y terminaba
+// siendo el #9 de su propia división sin que nadie se lo hubiera sacado.
+//
+// Ahora, cada vez que avanza el mundo, cada cinturón NPC se defiende contra el
+// mejor contendiente de su división. La probabilidad sale de la diferencia de
+// puntaje —el mismo criterio que el resto de los combates NPC— así que un
+// campeón que sigue siendo el mejor retiene casi siempre, y uno que se quedó
+// atrás termina perdiéndolo. El cinturón del JUGADOR nunca se toca acá: ese
+// solo cambia peleando de verdad.
+export function defenderCinturonesNpc(rng, {
+  campeones, roster, nacionalidadLocal = null, jugadorId = null,
+}) {
+  const activos = (roster ?? []).filter((p) => !p.retirado);
+  const resultado = { ...(campeones ?? {}) };
+
+  for (const cinturonId of ['regional', 'nacional', 'mundial']) {
+    const campeonId = resultado[cinturonId];
+    // El del jugador no se toca: sus defensas se juegan, no se simulan.
+    if (!campeonId || campeonId === jugadorId) continue;
+
+    const campeon = activos.find((p) => p.id === campeonId);
+    if (!campeon) {
+      // Se retiró: queda vacante y lo hereda el mejor de esa división.
+      resultado[cinturonId] = mejorDeDivision(activos, cinturonId, nacionalidadLocal)?.id ?? null;
+      continue;
+    }
+
+    // Un campeón regional que ascendió a la elite nacional ya no pertenece a
+    // su división: deja el cinturón vacante y lo hereda el mejor de los que sí
+    // están ahí. Es lo que pasa en el boxeo de verdad cuando alguien se le va
+    // grande a un título, y evita el absurdo de un campeón que no figura en su
+    // propia tabla.
+    if (!perteneceADivision(activos, campeon, cinturonId, nacionalidadLocal)) {
+      resultado[cinturonId] = mejorDeDivision(activos, cinturonId, nacionalidadLocal)?.id ?? null;
+      continue;
+    }
+
+    const retador = mejorDeDivision(activos, cinturonId, nacionalidadLocal, campeonId);
+    if (!retador) continue;
+
+    const ventaja = puntajeDe(campeon) - puntajeDe(retador);
+    // Sesgo de campeón: en boxeo el título no se pierde por poco. Con
+    // puntajes parejos el campeón retiene ~65% de las veces.
+    const probRetiene = clamp(0.65 + ventaja * 0.02, 0.15, 0.95);
+    if (!rng.chance(probRetiene)) resultado[cinturonId] = retador.id;
+  }
+  return resultado;
+}
+
+// ¿Este peleador sigue perteneciendo a esa división? Solo el regional puede
+// dejar a alguien afuera: nacional y mundial incluyen a todo el que califica.
+function perteneceADivision(activos, peleador, cinturonId, nacionalidadLocal) {
+  if (cinturonId === 'mundial') return true;
+  if (peleador.nacionalidad !== nacionalidadLocal) return false;
+  if (cinturonId === 'nacional') return true;
+  const delPais = [...activos]
+    .filter((p) => p.nacionalidad === nacionalidadLocal)
+    .sort((a, b) => puntajeDe(b) - puntajeDe(a));
+  return delPais.slice(CUPO_ELITE_NACIONAL).some((p) => p.id === peleador.id);
+}
+
+// El mejor de una división, para elegir retador o heredero de una vacante.
+// Usa el mismo criterio que los rankings (divisiones.js) sobre el roster ya
+// ordenado: el regional es la parte de abajo del país, el nacional el país
+// entero, el mundial todos.
+function mejorDeDivision(activos, cinturonId, nacionalidadLocal, excluirId = null) {
+  const porPuntaje = [...activos].sort((a, b) => puntajeDe(b) - puntajeDe(a));
+  if (cinturonId === 'mundial') return porPuntaje.find((p) => p.id !== excluirId) ?? null;
+
+  const delPais = porPuntaje.filter((p) => p.nacionalidad === nacionalidadLocal);
+  if (cinturonId === 'nacional') return delPais.find((p) => p.id !== excluirId) ?? null;
+  return delPais.slice(CUPO_ELITE_NACIONAL).find((p) => p.id !== excluirId) ?? null;
 }
 
 export function recalcularRankings(roster) {
@@ -166,7 +252,9 @@ function declive(peleador, rng) {
  * la edad del jugador. Sin `anio` se cae al conteo propio (útil en tests del
  * mundo aislado). El envejecimiento del roster sigue yendo por `aniosPasados`.
  */
-export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = false, anio = null } = {}) {
+export function avanzarMundo(mundo, rng, {
+  aniosPasados = 1, jugadorEsCampeon = false, anio = null, jugadorId = null,
+} = {}) {
   const roster = clonarRoster(mundo.roster);
   const sucesos = [];
   let campeonId = mundo.campeonId;
@@ -201,6 +289,13 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
         categoria: mundo.categoria,
         cantidad: retirosEsteAnio,
         existente: roster,
+        nacionalidadLocal: mundo.nacionalidadLocal ?? null,
+        // Piso del pool local: sin esto el ranking nacional se desarma con los
+        // años (medido: de 25 locales a 11 en doce temporadas, con el regional
+        // reducido a un solo peleador).
+        forzarLocales: Math.max(0, MINIMO_LOCALES - roster.filter(
+          (p) => !p.retirado && p.nacionalidad === (mundo.nacionalidadLocal ?? null),
+        ).length),
       });
       for (const debutante of debutantes) {
         roster.push(debutante);
@@ -294,7 +389,12 @@ export function avanzarMundo(mundo, rng, { aniosPasados = 1, jugadorEsCampeon = 
       anio: anio ?? mundo.anio + Math.round(aniosPasados),
       campeonId,
       titulares: [...mundo.titulares],
-      campeones: { ...(mundo.campeones ?? {}) },
+      campeones: defenderCinturonesNpc(rng, {
+        campeones: mundo.campeones,
+        roster: ordenado,
+        nacionalidadLocal: mundo.nacionalidadLocal ?? null,
+        jugadorId,
+      }),
       rosterAmateur: mundo.rosterAmateur,
       nacionalidadLocal: mundo.nacionalidadLocal ?? null,
     },

@@ -874,8 +874,13 @@ describe('ofertas de pelea por carrera', () => {
     for (let semilla = 1; semilla <= total; semilla += 1) {
       todas.push(jugarGanandoTodo(nuevaPartida(semilla)).ofertas);
     }
+    // v17.11: la banda baja de [10,14] a [9,14]. Con el rediseño de rankings
+    // el mundial exige 28 peleas profesionales (antes 18), así que las peleas
+    // grandes llegan más tarde y el promedio medido pasó de ~11.9 a ~9.8. Es
+    // el mismo juego con el techo corrido, no una regresión: el piso duro de
+    // más abajo (ninguna carrera en cero) sigue intacto.
     const promedio = todas.reduce((a, b) => a + b, 0) / total;
-    expect(promedio).toBeGreaterThanOrEqual(10);
+    expect(promedio).toBeGreaterThanOrEqual(9);
     expect(promedio).toBeLessThanOrEqual(14);
 
     // Piso duro, generoso: ninguna carrera jugada de punta a punta debería

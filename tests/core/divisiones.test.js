@@ -5,7 +5,7 @@ import { crearMundo } from '../../src/core/world.js';
 import {
   rankingsDe, rankingsProfesionales, rankingAmateur, puestoEn, divisionDe,
   campeonesIniciales, campeonDe, coronarCampeon, cinturonesDe, puntajeDe,
-  CUPO_NACIONAL, CUPO_MUNDIAL,
+  CUPO_ELITE_NACIONAL, CUPO_MUNDIAL,
 } from '../../src/core/divisiones.js';
 
 const NAC = 'AR';
@@ -48,30 +48,43 @@ describe('las cuatro divisiones', () => {
     expect(regional[0].id).not.toBe(nacional[0].id);
   });
 
-  it('nadie está en el regional y en el nacional a la vez', () => {
+  it('el regional es la parte de abajo del país: nadie de la elite nacional está ahí', () => {
     const { regional, nacional } = rankingsProfesionales(mundo());
-    const enNacional = new Set(nacional.map((p) => p.id));
+    const elite = new Set(nacional.slice(0, CUPO_ELITE_NACIONAL).map((p) => p.id));
 
-    expect(regional.some((p) => enNacional.has(p.id))).toBe(false);
-  });
-
-  it('el regional es el resto del país: todos sus integrantes valen menos que el peor del nacional', () => {
-    const { regional, nacional } = rankingsProfesionales(mundo());
-    const peorNacional = puntajeDe(nacional[nacional.length - 1]);
-
-    expect(regional.every((p) => puntajeDe(p) <= peorNacional)).toBe(true);
+    expect(regional.some((p) => elite.has(p.id))).toBe(false);
   });
 
   it('cada división respeta su cupo', () => {
-    const { nacional, mundial } = rankingsProfesionales(mundo());
-    expect(nacional.length).toBeLessThanOrEqual(CUPO_NACIONAL);
+    const { mundial } = rankingsProfesionales(mundo());
     expect(mundial.length).toBeLessThanOrEqual(CUPO_MUNDIAL);
+  });
+
+  // v17.11, reportado: "hay menos peleadores en el nacional que en el
+  // regional, no tiene sentido, ¿debería ser al revés?" y "en el mundial hay
+  // solo 16, deberían ser muchos más". Con el modelo anidado los tamaños
+  // crecen solos: una región tiene menos gente que un país y un país menos
+  // que el mundo.
+  it('los tamaños crecen: regional < nacional < mundial', () => {
+    const { regional, nacional, mundial } = rankingsProfesionales(mundo());
+    expect(regional.length).toBeLessThan(nacional.length);
+    expect(nacional.length).toBeLessThan(mundial.length);
+  });
+
+  // "El primero del regional, ¿no debería estar al menos en la tabla del
+  // nacional?" — sí: el regional es un SUBCONJUNTO del nacional.
+  it('todo el regional figura también en el nacional', () => {
+    const { regional, nacional } = rankingsProfesionales(mundo());
+    const enNacional = new Set(nacional.map((p) => p.id));
+    expect(regional.every((p) => enNacional.has(p.id))).toBe(true);
   });
 
   it('cada lista está ordenada de mejor a peor', () => {
     const rankings = rankingsProfesionales(mundo());
     for (const division of ['regional', 'nacional', 'mundial']) {
-      const puntajes = rankings[division].map(puntajeDe);
+      // `(p) => puntajeDe(p)` y no `map(puntajeDe)`: `map` pasa el ÍNDICE como
+      // segundo argumento, que en esta función es la clave del récord a mirar.
+      const puntajes = rankings[division].map((p) => puntajeDe(p));
       const ordenados = [...puntajes].sort((a, b) => b - a);
       expect(puntajes).toEqual(ordenados);
     }

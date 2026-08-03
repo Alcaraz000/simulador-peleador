@@ -180,7 +180,13 @@ const MEDIA_DEBUT_MAX = 48;
  * sobre el roster completo después) ni retira a nadie: son altas, no bajas.
  */
 export function generarDebutantes(rng, {
-  disciplina, categoria, cantidad, existente = [],
+  disciplina, categoria, cantidad, existente = [], nacionalidadLocal = null,
+  // Cuántos de esta camada TIENEN que ser del país local, pase lo que pase.
+  // El sesgo probabilístico solo no alcanza: los locales se retiran en camada
+  // (entraron juntos, envejecen juntos) y medido a 12 años el pool local se
+  // caía de 25 a 11, con lo que el ranking nacional se desarmaba. Quien llama
+  // (world.js) calcula cuántos faltan para el piso y los pide explícitos.
+  forzarLocales = 0,
 }) {
   const nuevos = [];
   const nombresUsados = new Set(existente.map((p) => p.nombre));
@@ -189,12 +195,27 @@ export function generarDebutantes(rng, {
   let intentos = 0;
   while (nuevos.length < cantidad && intentos < Math.max(cantidad, 1) * 50) {
     intentos += 1;
+    // Mismo sesgo local que el roster inicial (FRACCION_LOCAL). Sin esto la
+    // camada nueva salía de cualquier país y, con los años, el pool local se
+    // secaba: medido a 14 años, el ranking nacional se caía de 22 peleadores a
+    // 11 y el regional quedaba con uno solo.
+    const tiradaLocal = rng.next();
+    // Insistir con el país local tiene un límite: el pool de nombres por país
+    // es finito y, con el roster lleno, los candidatos repetidos se rechazan
+    // uno tras otro. Pasada la mitad de los intentos se afloja y se acepta
+    // cualquier nacionalidad — que el mundo NO se quede sin peleadores importa
+    // más que el reparto por país (medido: sin esta salida, el roster activo
+    // se caía de 100 a 6 en veinte temporadas).
+    const insistiendo = intentos < Math.max(cantidad, 1) * 25;
+    const debeSerLocal = Boolean(nacionalidadLocal) && insistiendo
+      && (nuevos.length < forzarLocales || tiradaLocal < FRACCION_LOCAL);
     const candidato = peleadorAleatorio(rng, {
       disciplina,
       categoria,
       edad: rng.int(EDAD_DEBUT_MIN, EDAD_DEBUT_MAX),
       media: rng.int(MEDIA_DEBUT_MIN, MEDIA_DEBUT_MAX),
       personalidad: rng.pick(PERSONALIDADES),
+      nacionalidad: debeSerLocal ? nacionalidadLocal : undefined,
     });
     intentarSumar(candidato, { roster: nuevos, nombresUsados, apodosUsados });
   }
