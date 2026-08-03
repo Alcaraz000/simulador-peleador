@@ -735,7 +735,13 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       titulo,
       texto,
       previa: charla ?? '',
-      deltasTexto: deltasTextoTramite(resultados),
+      // El lote se muestra como una fila de emblemas (uno por pelea) en vez
+      // de la línea de texto corrida de antes — pedido v17.9, punto 3.
+      resultados: resultados.map((r) => ({
+        rival: r.rivalApodo ?? r.rivalNombre,
+        resultado: r.resultado,
+        metodo: r.metodo,
+      })),
       onContinuar: () => siguiente(),
     }));
   }
@@ -846,7 +852,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
               oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: partida.semanaGlobal,
             });
             partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
-            resultadoFinal = { detalle, resultadoLetra: ganador === 'jugador' ? 'v' : 'd' };
+            resultadoFinal = { detalle, metodo, resultadoLetra: ganador === 'jugador' ? 'v' : 'd' };
             fase = 'resultado';
             centro(pintarTramite);
           },
@@ -862,10 +868,14 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       }
       // fase === 'resultado': `proximaPelea` ya se limpió y el resultado ya
       // se aplicó al jugador (arriba) — solo queda narrar el desenlace.
-      const { detalle, resultadoLetra } = resultadoFinal;
+      const { detalle, metodo: metodoFinal, resultadoLetra } = resultadoFinal;
       const restoTexto = resumenResto ? ` ${resumenResto.texto}` : '';
       renderDesenlace(centroContenido(), {
         titulo: resultadoLetra === 'v' ? 'Ganaste' : 'Perdiste',
+        // El desenlace de una pelea se corona con el emblema del método
+        // (v17.9): el dibujo dice cómo terminó y el color si ganaste.
+        resultado: resultadoLetra,
+        metodo: metodoFinal ?? 'decision',
         texto: `${textoResultadoDestacado({
           detalle,
           resultado: resultadoLetra,
@@ -1322,6 +1332,12 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
           ...partida,
           rivalidades: subirHeat(partida.rivalidades, oferta.rivalId, r.heatRival),
         };
+        // v17.9: la ventaja mental del careo YA NO muere en su propia
+        // pantalla. Viaja a la pelea que viene —que es ésta— como envión
+        // temporal de agilidad, y puede ser negativa si el rival te ganó la
+        // cabeza. Mismo camino que el sparring: se gasta en un combate y
+        // nunca toca la ficha.
+        partida = guardarBonusProximaPelea(partida, r.bonusTemporal);
         elegirPlan(oferta);
       },
     });

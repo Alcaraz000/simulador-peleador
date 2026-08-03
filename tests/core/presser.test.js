@@ -3,6 +3,7 @@ import { createRng } from '../../src/core/rng.js';
 import { PREGUNTAS_CAREO } from '../../src/content/cards-presser.js';
 import {
   TONOS, TELLS, crearCareo, responderCareo, resultadoCareo,
+  bonusDeVentajaMental, VENTAJA_MAXIMA_AL_RING,
 } from '../../src/core/presser.js';
 
 const oferta = {
@@ -185,5 +186,42 @@ describe('resultadoCareo', () => {
     let careo = crearCareo(createRng(22), { oferta });
     for (let i = 0; i < 3; i++) careo = responderCareo(careo, careo.tell.incomoda, createRng(i)).careo;
     expect(resultadoCareo(careo).bonusMoral).toBeGreaterThan(0);
+  });
+});
+
+// Reportado, textual: "la conferencia está ok de momento, pero no siento que
+// importe para nada el tema de las respuestas". Y era cierto: `resultadoCareo`
+// devolvía hype y ventaja mental, pero lo único que el juego aplicaba era la
+// calentura del rival — los dos números morían en la pantalla que los mostraba.
+describe('el careo se lleva al ring', () => {
+  it('ganar la guerra psicológica deja un envión POSITIVO de agilidad', () => {
+    expect(bonusDeVentajaMental(36)).toBeGreaterThan(0);
+  });
+
+  it('perderla deja un envión NEGATIVO: si te comieron la cabeza, salís peor', () => {
+    expect(bonusDeVentajaMental(-36)).toBeLessThan(0);
+  });
+
+  it('un careo parejo no deja nada', () => {
+    expect(bonusDeVentajaMental(0)).toBe(0);
+    expect(resultadoCareo({ hype: 50, ventajaMental: 0 }).bonusTemporal).toEqual({});
+  });
+
+  it('tiene techo y piso: el careo inclina la pelea, nunca la decide', () => {
+    expect(bonusDeVentajaMental(9999)).toBe(VENTAJA_MAXIMA_AL_RING);
+    expect(bonusDeVentajaMental(-9999)).toBe(-VENTAJA_MAXIMA_AL_RING);
+  });
+
+  it('el envión sale en `bonusTemporal`, con la misma forma que el del sparring', () => {
+    const r = resultadoCareo({ hype: 60, ventajaMental: 40 });
+    expect(Object.keys(r.bonusTemporal)).toEqual(['agilidad']);
+    expect(r.bonusTemporal.agilidad).toBeGreaterThan(0);
+  });
+
+  it('es monótono: más ventaja mental nunca da menos envión', () => {
+    const valores = [-40, -20, -5, 0, 5, 20, 40].map(bonusDeVentajaMental);
+    for (let i = 1; i < valores.length; i += 1) {
+      expect(valores[i]).toBeGreaterThanOrEqual(valores[i - 1]);
+    }
   });
 });

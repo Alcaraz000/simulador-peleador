@@ -101,12 +101,39 @@ export function responderCareo(careo, tonoId, rng) {
   return { careo: nuevo, evento };
 }
 
+// Cuánto se lleva al ring el que gana la guerra psicológica, como MÁXIMO.
+//
+// Reportado, textual: "la conferencia está ok de momento, pero no siento que
+// importe para nada el tema de las respuestas". Y era cierto: `resultadoCareo`
+// devolvía hype y ventaja mental, pero lo único que el juego aplicaba de
+// verdad era la calentura del rival. Las respuestas movían dos números que
+// morían en la misma pantalla donde se mostraban.
+//
+// Ahora la ventaja mental viaja a la pelea como un envión temporal de
+// AGILIDAD — leer al rival y reaccionar es exactamente lo que se gana ganando
+// el careo — y puede ser NEGATIVA: si el rival te comió la cabeza, salís
+// peor. Mismo camino que el envión del sparring (guardarBonusProximaPelea,
+// career.js): se gasta en un combate y nunca toca la ficha. Distinto atributo
+// a propósito, para que se lean como dos preparaciones distintas: el gimnasio
+// da aire, el careo da lucidez.
+export const VENTAJA_MAXIMA_AL_RING = 4;
+const VENTAJA_POR_PUNTO = 12;
+
+export function bonusDeVentajaMental(ventajaMental) {
+  const bruto = Math.round((ventajaMental ?? 0) / VENTAJA_POR_PUNTO);
+  return clamp(bruto, -VENTAJA_MAXIMA_AL_RING, VENTAJA_MAXIMA_AL_RING);
+}
+
 export function resultadoCareo(careo) {
+  const agilidad = bonusDeVentajaMental(careo.ventajaMental);
   return {
     hype: careo.hype,
     ventajaMental: careo.ventajaMental,
     bonusFama: Math.round(careo.hype / 12),
     bonusMoral: Math.round(careo.ventajaMental / 6),
     heatRival: Math.round(careo.hype / 5),
+    // Vacío cuando el careo quedó parejo: sin esto, "no pasó nada" se
+    // guardaría como un cero que igual hay que consumir.
+    bonusTemporal: agilidad === 0 ? {} : { agilidad },
   };
 }

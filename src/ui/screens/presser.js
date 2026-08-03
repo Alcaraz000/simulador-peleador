@@ -1,4 +1,4 @@
-import { el, mount } from '../dom.js';
+import { fmtDelta, el, mount } from '../dom.js';
 import { icono } from '../icons.js';
 import { crearTarjeta } from '../components/card.js';
 import { TONOS, resultadoCareo } from '../../core/presser.js';
@@ -58,6 +58,7 @@ function filaResumen(h) {
 // hace falta repetirlos acá con otro nombre.
 function bloqueResumen(careo) {
   const resultado = resultadoCareo(careo);
+  const ventaja = resultado.bonusTemporal?.agilidad ?? 0;
   return el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta', text: 'Cómo quedó el careo' }),
     ...careo.historial.map(filaResumen),
@@ -72,6 +73,20 @@ function bloqueResumen(careo) {
         el('div', { class: 'tile' }, [
           el('div', { class: 'valor rojo', text: `+${resultado.heatRival}` }),
           el('div', { class: 'nombre', text: `Calentura de ${careo.rivalApodo}` }),
+        ]),
+        // Lo que te llevás al ring. Antes esta pantalla mostraba hype y
+        // ventaja mental y ahí morían los dos: el jugador reportó, textual,
+        // que "no siento que importe para nada el tema de las respuestas".
+        // Ahora hay un número concreto y se dice cuánto dura.
+        el('div', { class: 'tile' }, [
+          el('div', {
+            class: `valor ${ventaja > 0 ? 'verde' : ventaja < 0 ? 'rojo' : 'sutil'}`,
+            text: ventaja === 0 ? 'Sin ventaja' : `${fmtDelta(ventaja)} AGI`,
+          }),
+          el('div', {
+            class: 'nombre',
+            text: ventaja === 0 ? 'Careo parejo' : 'Agilidad, solo en esta pelea',
+          }),
         ]),
       ]),
     ]),

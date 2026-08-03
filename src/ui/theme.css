@@ -3579,3 +3579,91 @@ input.creacion-control { cursor: text; }
   padding: 1px 6px;
   white-space: nowrap;
 }
+
+/* ============================================================================
+   v17.9 — el desenlace de una pelea, con emblema
+   ============================================================================
+   "Esto cumple con lo de ocupar espacio, pero podría hacerse más estético,
+   ¿no?". El desenlace era dos líneas de texto en un panel. Ahora lo corona un
+   emblema dibujado por código (emblema-resultado.js): el dibujo dice CÓMO
+   terminó y el color dice si ganaste. */
+.desenlace-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+}
+
+.desenlace-hero-v { border-color: #2c4a30; }
+.desenlace-hero-d { border-color: #4a2c2c; }
+.desenlace-hero-e { border-color: #4a3a12; }
+
+.emblema-resultado {
+  flex: 0 0 auto;
+  width: 84px;
+  height: 84px;
+}
+
+.desenlace-hero-texto { flex: 1 1 auto; min-width: 0; }
+
+.desenlace-veredicto {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  line-height: 1.1;
+}
+
+.desenlace-hero-v .desenlace-veredicto { color: var(--verde); }
+.desenlace-hero-d .desenlace-veredicto { color: var(--rojo); }
+.desenlace-hero-e .desenlace-veredicto { color: var(--dorado); }
+
+.desenlace-metodo {
+  margin-top: 3px;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  font-weight: 700;
+  color: var(--texto-sutil);
+}
+
+/* En celular el emblema se achica y el bloque sigue en una sola fila: partirlo
+   en dos líneas dejaría el veredicto lejos del dibujo que lo explica. */
+@media (max-width: 620px) {
+  .emblema-resultado { width: 60px; height: 60px; }
+  .desenlace-veredicto { font-size: 21px; }
+}
+
+/* El lote de peleas del año: una tarjeta por combate, con su emblema chico.
+   Antes eran los tres resultados apretados en una línea de texto corrida. */
+.desenlace-lote {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.desenlace-lote-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: var(--superficie);
+  border: 1px solid var(--borde);
+}
+
+.desenlace-lote-item .emblema-resultado { width: 44px; height: 44px; }
+
+.desenlace-lote-texto { flex: 1 1 auto; min-width: 0; }
+.desenlace-lote-rival { font-weight: 800; font-size: 13px; }
+
+.desenlace-lote-metodo {
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--texto-sutil);
+  margin-top: 2px;
+}

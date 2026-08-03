@@ -1,5 +1,6 @@
 import { el, mount } from '../dom.js';
 import { crearTarjeta, RAREZAS } from '../components/card.js';
+import { emblemaResultado, NOMBRE_METODO, VEREDICTO } from '../components/emblema-resultado.js';
 
 // Panel de decisión (v2): vive DENTRO de la región central del shell, nunca
 // reemplaza la pantalla. Es una capa fina de DOM — no decide nada de juego,
@@ -80,11 +81,45 @@ export function renderPanelDecision(region, {
  *
  * @param {HTMLElement} region - normalmente `shell.regiones.centro`.
  */
+/**
+ * El desenlace de una pelea o de un beat.
+ *
+ * `resultado` ('v'|'d'|'e') y `metodo` ('ko'|'tko'|'decision'|...) son
+ * OPCIONALES: cuando vienen los dos, el desenlace deja de ser un panel de
+ * texto y se corona con el emblema del método pintado del color del veredicto
+ * (ver emblema-resultado.js) — el pedido v17.5, punto 3. Cuando no vienen (un
+ * desenlace que no es una pelea: un lote de trámite, el cierre de un
+ * campamento), sigue siendo el mismo panel de siempre.
+ */
 export function renderDesenlace(region, {
   titulo = 'Resultado', texto = '', previa = '', deltasTexto = [], onContinuar = () => {},
+  resultado = null, metodo = null, resultados = null,
 }) {
+  const conEmblema = Boolean(resultado && metodo);
+  // Un LOTE de peleas (el año de trámite: dos o tres combates resueltos de
+  // una) no tiene un solo veredicto que coronar, así que en vez del emblema
+  // grande van los chicos, uno por pelea, con el rival y cómo terminó. Era la
+  // pantalla de la captura del usuario: tres resultados apretados en una
+  // línea de texto corrida.
+  const lote = Array.isArray(resultados) && resultados.length > 0 ? resultados : null;
   mount(region, el('div', { class: 'stack panel-decision-desenlace' }, [
-    el('div', { class: 'etiqueta', text: titulo }),
+    conEmblema ? el('div', { class: `desenlace-hero desenlace-hero-${resultado}` }, [
+      emblemaResultado({ resultado, metodo }),
+      el('div', { class: 'desenlace-hero-texto' }, [
+        el('div', { class: 'desenlace-veredicto', text: VEREDICTO[resultado] ?? titulo }),
+        el('div', { class: 'desenlace-metodo', text: NOMBRE_METODO[metodo] ?? metodo }),
+      ]),
+    ]) : null,
+    conEmblema ? null : el('div', { class: 'etiqueta', text: titulo }),
+    lote ? el('div', { class: 'desenlace-lote' }, lote.map((r) => el('div', {
+      class: `desenlace-lote-item desenlace-hero-${r.resultado}`,
+    }, [
+      emblemaResultado({ resultado: r.resultado, metodo: r.metodo }),
+      el('div', { class: 'desenlace-lote-texto' }, [
+        el('div', { class: 'desenlace-lote-rival', text: r.rival }),
+        el('div', { class: 'desenlace-lote-metodo', text: NOMBRE_METODO[r.metodo] ?? r.metodo }),
+      ]),
+    ]))) : null,
     // El panel NO se estira: un desenlace son dos líneas de texto, y una caja
     // de 600px con dos líneas en el medio es tan vacía como el hueco que venía
     // a tapar, solo que con borde. El panel se queda compacto y lo que se
