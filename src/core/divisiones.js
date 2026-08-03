@@ -46,24 +46,18 @@ import { mediaDe } from './fighter.js';
 
 export const DIVISIONES = ['amateur', 'regional', 'nacional', 'mundial'];
 
-// Cuántos entran a cada elite. El nacional es más chico que el mundial a
-// propósito: ser top-12 de tu país tiene que costar más que ser top-16 del
-// mundo entero medido en cantidad de rivales, porque el pool local es una
-// fracción del global (ver FRACCION_LOCAL, roster.js).
-// Cuántos entran a la ELITE nacional: los que ya se graduaron de la escalera
-// regional. No es el tamaño del ranking nacional (ese los incluye a todos),
-// es dónde se corta "todavía estás subiendo" de "ya llegaste".
+// Dónde se corta cada escalón de la escalera profesional.
+//
+// NACIONAL: la elite de tu país. REGIONAL: los que la siguen. Por debajo de
+// los dos no hay rango — se sigue peleando, pero todavía no se entró a
+// ninguna tabla. MUNDIAL: la tabla del mundo entero, grande a propósito
+// ("deberían ser muchos más"), con su propia punta para decir quién es de
+// nivel mundial de verdad.
 export const CUPO_ELITE_NACIONAL = 10;
-
-// Techo de la tabla mundial. Grande a propósito: "en el mundial deberían
-// estar los mejores y deberían ser muchos más" (pedido v17.11). Antes eran 16
-// y el ranking del mundo se leía más chico que el de un país.
 export const CUPO_MUNDIAL = 60;
-
-// La punta del ranking mundial: estar en la tabla del mundo (60 lugares) no es
-// lo mismo que ser "de nivel mundial". `divisionDe` usa esto para decir dónde
-// está parado alguien de verdad.
 export const CUPO_ELITE_MUNDIAL = 15;
+
+export const CUPO_REGIONAL = 20;
 
 // Cuánto pesa lo que HICISTE frente a lo que SOS.
 //
@@ -143,11 +137,15 @@ export function rankingsProfesionales(mundo, jugador = null) {
   // El mundo entero, de cualquier país.
   const mundial = ordenar(pool).slice(0, CUPO_MUNDIAL);
   // Todo el país: la elite Y la escalera de abajo.
-  const nacional = ordenar(pool.filter((p) => p.nacionalidad === local));
-  // La escalera de entrada: los del país que todavía no llegaron a la elite.
-  // Es un SUBCONJUNTO del nacional, no una lista aparte — por eso su #1
-  // también figura en el nacional, unos cuantos puestos más abajo.
-  const regional = nacional.slice(CUPO_ELITE_NACIONAL);
+  const nacionalCompleto = ordenar(pool.filter((p) => p.nacionalidad === local));
+  const nacional = nacionalCompleto.slice(0, CUPO_ELITE_NACIONAL);
+  // El escalón de abajo: los del país que siguen a la elite. Es un
+  // SUBCONJUNTO del nacional (su #1 figura también ahí, más abajo), y se entra
+  // y se sale por nivel — eso es justamente lo que el juego ahora avisa como
+  // hito (ver `hitosDeDivision`, career.js): "entraste en el ranking
+  // regional", "descendiste del nacional". Por debajo del regional no se
+  // vuelve al amateur: simplemente no se tiene rango.
+  const regional = nacionalCompleto.slice(CUPO_ELITE_NACIONAL, CUPO_ELITE_NACIONAL + CUPO_REGIONAL);
 
   return { regional, nacional, mundial };
 }
@@ -157,6 +155,11 @@ export function rankingsProfesionales(mundo, jugador = null) {
  * profesionales (pedido textual). Vive en `mundo.rosterAmateur`.
  */
 export function rankingAmateur(mundo, jugador = null) {
+  // El circuito amateur deja de existir cuando el jugador se hace profesional
+  // (pedido v17.12: "solo debe verse cuando uno es amateur, después
+  // desaparece; no es necesario mantenerlo"). Es una etapa de formación, no
+  // una tabla que se siga mirando desde arriba.
+  if (jugador && yaDebuto(jugador)) return [];
   const enAmateur = jugador && (jugador.recordAmateur?.v ?? 0) + (jugador.recordAmateur?.d ?? 0) > 0;
   const pool = [
     ...(mundo.rosterAmateur ?? []),
@@ -189,18 +192,22 @@ export function puestoEn(rankings, division, id) {
  * define su lugar en el mundo es el techo, no el piso.
  */
 export function divisionDe(rankings, id) {
-  // Con las divisiones anidadas, "estar en el nacional" ya no distingue nada:
-  // todo el país está ahí, la escalera regional incluida. Lo que ubica a
-  // alguien es hasta dónde LLEGÓ:
-  //   - mundial, si está en la punta de la tabla del mundo;
-  //   - nacional, si llegó a la elite de su país (o sea, ya no está en la
-  //     escalera regional);
-  //   - regional, si todavía está subiéndola.
+  // La división donde está parado hoy, de arriba hacia abajo. `null` no es un
+  // error: es "sin rango" — todavía no entró a ninguna tabla, o se cayó de
+  // todas. Del regional no se baja al amateur; se baja a no tener rango.
   const puestoMundial = puestoEn(rankings, 'mundial', id);
   if (puestoMundial !== null && puestoMundial <= CUPO_ELITE_MUNDIAL) return 'mundial';
-  const enNacional = puestoEn(rankings, 'nacional', id);
-  if (enNacional === null) return null;
-  return puestoEn(rankings, 'regional', id) === null ? 'nacional' : 'regional';
+  if (puestoEn(rankings, 'nacional', id) !== null) return 'nacional';
+  if (puestoEn(rankings, 'regional', id) !== null) return 'regional';
+  return null;
+}
+
+// El orden de las divisiones, de menor a mayor. `null` (sin rango) es el
+// escalón cero: sirve para decidir si un cambio fue ascenso o descenso.
+export const ESCALERA = ['regional', 'nacional', 'mundial'];
+
+export function alturaDeDivision(division) {
+  return division === null || division === undefined ? 0 : ESCALERA.indexOf(division) + 1;
 }
 
 // ---- Los cinturones y sus dueños -----------------------------------------

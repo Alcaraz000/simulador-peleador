@@ -5,7 +5,7 @@ import { crearMundo } from '../../src/core/world.js';
 import {
   rankingsDe, rankingsProfesionales, rankingAmateur, puestoEn, divisionDe,
   campeonesIniciales, campeonDe, coronarCampeon, cinturonesDe, puntajeDe,
-  CUPO_ELITE_NACIONAL, CUPO_MUNDIAL,
+  CUPO_ELITE_NACIONAL, CUPO_MUNDIAL, CUPO_REGIONAL, alturaDeDivision,
 } from '../../src/core/divisiones.js';
 
 const NAC = 'AR';
@@ -48,11 +48,65 @@ describe('las cuatro divisiones', () => {
     expect(regional[0].id).not.toBe(nacional[0].id);
   });
 
-  it('el regional es la parte de abajo del país: nadie de la elite nacional está ahí', () => {
-    const { regional, nacional } = rankingsProfesionales(mundo());
-    const elite = new Set(nacional.slice(0, CUPO_ELITE_NACIONAL).map((p) => p.id));
+  it('el mundial es la tabla más grande de las tres', () => {
+    const { regional, nacional, mundial } = rankingsProfesionales(mundo());
+    expect(mundial.length).toBeGreaterThan(nacional.length);
+    expect(mundial.length).toBeGreaterThan(regional.length);
+  });
 
-    expect(regional.some((p) => elite.has(p.id))).toBe(false);
+  // v17.12: la escalera vuelve a ser por NIVEL (regional -> nacional ->
+  // mundial), con un piso nuevo: por debajo del regional no se vuelve al
+  // amateur, simplemente no se tiene rango. Entrar y salir de cada escalón es
+  // justamente lo que el juego avisa como hito.
+  it('el regional es el escalón que sigue a la elite nacional', () => {
+    const { regional, nacional } = rankingsProfesionales(mundo());
+    expect(nacional.length).toBeLessThanOrEqual(CUPO_ELITE_NACIONAL);
+    expect(regional.length).toBeLessThanOrEqual(CUPO_REGIONAL);
+    const enNacional = new Set(nacional.map((p) => p.id));
+    expect(regional.some((p) => enNacional.has(p.id))).toBe(false);
+  });
+
+  it('por debajo del regional no hay rango, y no se vuelve al amateur', () => {
+    const m = mundo();
+    const nadie = jugador({ media: 50, record: { v: 0, d: 6, e: 0, ko: 0 } });
+    const rankings = rankingsProfesionales(m, nadie);
+
+    expect(divisionDe(rankings, nadie.id)).toBeNull();
+    expect(alturaDeDivision(null)).toBe(0);
+    expect(alturaDeDivision('regional')).toBeGreaterThan(alturaDeDivision(null));
+  });
+
+  it('la escalera está ordenada: regional < nacional < mundial', () => {
+    expect(alturaDeDivision('regional')).toBeLessThan(alturaDeDivision('nacional'));
+    expect(alturaDeDivision('nacional')).toBeLessThan(alturaDeDivision('mundial'));
+  });
+
+  it('cada división respeta su cupo', () => {
+    const { mundial } = rankingsProfesionales(mundo());
+    expect(mundial.length).toBeLessThanOrEqual(CUPO_MUNDIAL);
+  });
+
+  it('el regional es el escalón que sigue a la elite nacional', () => {
+    const { regional, nacional } = rankingsProfesionales(mundo());
+    expect(nacional.length).toBeLessThanOrEqual(CUPO_ELITE_NACIONAL);
+    expect(regional.length).toBeLessThanOrEqual(CUPO_REGIONAL);
+    const enNacional = new Set(nacional.map((p) => p.id));
+    expect(regional.some((p) => enNacional.has(p.id))).toBe(false);
+  });
+
+  it('por debajo del regional no hay rango, y no se vuelve al amateur', () => {
+    const m = mundo();
+    const nadie = jugador({ media: 50, record: { v: 0, d: 6, e: 0, ko: 0 } });
+    const rankings = rankingsProfesionales(m, nadie);
+
+    expect(divisionDe(rankings, nadie.id)).toBeNull();
+    expect(alturaDeDivision(null)).toBe(0);
+    expect(alturaDeDivision('regional')).toBeGreaterThan(alturaDeDivision(null));
+  });
+
+  it('la escalera está ordenada: regional < nacional < mundial', () => {
+    expect(alturaDeDivision('regional')).toBeLessThan(alturaDeDivision('nacional'));
+    expect(alturaDeDivision('nacional')).toBeLessThan(alturaDeDivision('mundial'));
   });
 
   it('cada división respeta su cupo', () => {
@@ -65,19 +119,11 @@ describe('las cuatro divisiones', () => {
   // solo 16, deberían ser muchos más". Con el modelo anidado los tamaños
   // crecen solos: una región tiene menos gente que un país y un país menos
   // que el mundo.
-  it('los tamaños crecen: regional < nacional < mundial', () => {
-    const { regional, nacional, mundial } = rankingsProfesionales(mundo());
-    expect(regional.length).toBeLessThan(nacional.length);
-    expect(nacional.length).toBeLessThan(mundial.length);
-  });
+
 
   // "El primero del regional, ¿no debería estar al menos en la tabla del
   // nacional?" — sí: el regional es un SUBCONJUNTO del nacional.
-  it('todo el regional figura también en el nacional', () => {
-    const { regional, nacional } = rankingsProfesionales(mundo());
-    const enNacional = new Set(nacional.map((p) => p.id));
-    expect(regional.every((p) => enNacional.has(p.id))).toBe(true);
-  });
+
 
   it('cada lista está ordenada de mejor a peor', () => {
     const rankings = rankingsProfesionales(mundo());
@@ -137,10 +183,10 @@ describe('el jugador dentro de las divisiones', () => {
   });
 
   // El caso reportado: "voy 0-2 y estoy #62 en el ranking, no tiene sentido".
-  it('un 0-2 arranca en el regional, no en la elite nacional', () => {
+  it('un 0-2 no está en la elite nacional', () => {
     const m = mundo();
     const perdedor = jugador({ media: 64, record: { v: 0, d: 2, e: 0, ko: 0 } });
-    expect(divisionDe(rankingsProfesionales(m, perdedor), perdedor.id)).toBe('regional');
+    expect(divisionDe(rankingsProfesionales(m, perdedor), perdedor.id)).not.toBe('nacional');
   });
 
   it('ganar sube de división y perder baja: el puesto se gana peleando', () => {
@@ -196,5 +242,24 @@ describe('los cinturones tienen dueño', () => {
     const campeones = { regional: 'x', nacional: 'x', mundial: 'otro' };
     expect(cinturonesDe(campeones, 'x').sort()).toEqual(['nacional', 'regional']);
     expect(cinturonesDe(campeones, 'nadie')).toEqual([]);
+  });
+});
+
+// v17.12: el circuito amateur es una etapa, no una tabla permanente.
+describe('el circuito amateur se cierra al debutar', () => {
+  it('mientras es amateur, el ranking existe', () => {
+    const am = { ...jugador({ record: { v: 0, d: 0, e: 0, ko: 0 } }), recordAmateur: { v: 3, d: 1, e: 0, ko: 1 } };
+    expect(rankingAmateur(mundo(), am).length).toBeGreaterThan(0);
+  });
+
+  it('una vez profesional, desaparece', () => {
+    const pro = { ...jugador({ record: { v: 2, d: 1, e: 0, ko: 1 } }), recordAmateur: { v: 3, d: 1, e: 0, ko: 1 } };
+    expect(rankingAmateur(mundo(), pro)).toEqual([]);
+  });
+
+  it('es casi todo local: unos pocos extranjeros, no la mitad', () => {
+    const m = mundo();
+    const locales = m.rosterAmateur.filter((p) => p.nacionalidad === NAC).length;
+    expect(locales / m.rosterAmateur.length).toBeGreaterThanOrEqual(0.7);
   });
 });

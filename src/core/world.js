@@ -1,4 +1,4 @@
-import { crearRoster, generarDebutantes } from './roster.js';
+import { crearRoster, generarDebutantes, FRACCION_LOCAL_AMATEUR } from './roster.js';
 import {
   campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES, CUPO_ELITE_NACIONAL,
 } from './divisiones.js';
@@ -45,6 +45,9 @@ export function crearMundo(rng, {
     apodosReservados: [...apodosReservados, ...roster.map((p) => p.apodo).filter(Boolean)],
     nombresReservados: roster.map((p) => p.nombre),
     nacionalidadLocal,
+    // Casi todo local: el circuito amateur es el torneo de tu país, con algún
+    // extranjero suelto (relación 6 a 1, pedido v17.12).
+    fraccionLocal: FRACCION_LOCAL_AMATEUR,
     usarParodias: false,
   });
   return {

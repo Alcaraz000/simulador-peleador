@@ -76,12 +76,21 @@ export function crearDesdeParodia(parodia) {
 // el reparto que pidió el usuario para las cuatro divisiones.
 export const FRACCION_LOCAL = 0.4;
 
+// El circuito amateur es casi todo local: "la mayoría deben ser del país
+// local, pero puede haber unos pocos extranjeros... digamos, una relación 6
+// a 1" (pedido v17.12). Seis de cada siete = 0.857.
+export const FRACCION_LOCAL_AMATEUR = 6 / 7;
+
 export function crearRoster(rng, {
   disciplina, categoria, cantidad = 10, apodosReservados = [], nacionalidadLocal = null,
   // Nombres que este roster NO puede usar. Lo usa el roster AMATEUR para no
   // compartir un solo nombre con el profesional (pedido v17.5: "en el ranking
   // amateur no se comparten nombres con ninguno de los otros tres").
   nombresReservados = [],
+  // Qué proporción del relleno comparte nacionalidad con el jugador. El
+  // circuito amateur usa una mucho más alta que el profesional: es el torneo
+  // del barrio, no el circuito internacional.
+  fraccionLocal = FRACCION_LOCAL,
   // Las parodias (leyendas y activos con nombre propio) son del circuito
   // profesional: el amateur se arma solo con peleadores generados.
   usarParodias = true,
@@ -117,7 +126,7 @@ export function crearRoster(rng, {
       categoria,
       media: rng.int(45, 75),
       personalidad: rng.pick(PERSONALIDADES),
-      nacionalidad: nacionalidadLocal && tiradaLocal < FRACCION_LOCAL ? nacionalidadLocal : undefined,
+      nacionalidad: nacionalidadLocal && tiradaLocal < fraccionLocal ? nacionalidadLocal : undefined,
     });
     // Pedido 1 (v6, "el ranking tiene que ser una montaña", cantidad 12->100):
     // el pool de APODOS (names.js) tiene solo 16 entradas. Rechazar (continue)
