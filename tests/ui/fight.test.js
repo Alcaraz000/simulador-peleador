@@ -51,11 +51,50 @@ describe('renderOferta', () => {
 
   it('aceptar y rechazar disparan sus callbacks', () => {
     let aceptado = false; let rechazado = false;
-    renderOferta(cont, { oferta, jugador, onAceptar: () => { aceptado = true; }, onRechazar: () => { rechazado = true; } });
+    // Pelea común: la chance de título tiene su propia regla (más abajo, no
+    // se puede rechazar), así que el caso general se prueba con una oferta
+    // que no sea por un cinturón.
+    const comun = { ...oferta, nivel: 'regional', esTitulo: false, enJuego: 'Subís al ranking si ganás' };
+    renderOferta(cont, { oferta: comun, jugador, onAceptar: () => { aceptado = true; }, onRechazar: () => { rechazado = true; } });
     cont.querySelector('[data-accion="aceptar"]').click();
     cont.querySelector('[data-accion="rechazar"]').click();
     expect(aceptado).toBe(true);
     expect(rechazado).toBe(true);
+  });
+
+  // Pedido v17.3: "si es una pelea PARA GANAR el título no se debería poder
+  // rechazar". Es la pelea que la carrera venía a buscar.
+  describe('la chance de título no se rechaza', () => {
+    it('el botón de rechazar queda deshabilitado y dice por qué', () => {
+      renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
+      const rechazar = cont.querySelector('[data-accion="rechazar"]');
+      expect(rechazar.disabled).toBe(true);
+      expect(rechazar.textContent.toLowerCase()).toContain('título');
+    });
+
+    it('clickearlo no dispara onRechazar', () => {
+      let rechazado = false;
+      renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: () => { rechazado = true; } });
+      cont.querySelector('[data-accion="rechazar"]').click();
+      expect(rechazado).toBe(false);
+    });
+
+    it('aceptar sigue funcionando igual', () => {
+      let aceptado = false;
+      renderOferta(cont, { oferta, jugador, onAceptar: () => { aceptado = true; }, onRechazar: noop });
+      cont.querySelector('[data-accion="aceptar"]').click();
+      expect(aceptado).toBe(true);
+    });
+
+    it('una defensa obligatoria SÍ se puede rechazar (rechazar ahí tiene su propia consecuencia)', () => {
+      let rechazado = false;
+      const defensa = { ...oferta, nivel: 'defensa', esObligatoria: true };
+      renderOferta(cont, { oferta: defensa, jugador, onAceptar: noop, onRechazar: () => { rechazado = true; } });
+      const rechazar = cont.querySelector('[data-accion="rechazar"]');
+      expect(rechazar.disabled).toBe(false);
+      rechazar.click();
+      expect(rechazado).toBe(true);
+    });
   });
 
   it('muestra el puesto del rival en el ranking', () => {

@@ -85,7 +85,10 @@ export function renderDesenlace(region, {
 }) {
   mount(region, el('div', { class: 'stack panel-decision-desenlace' }, [
     el('div', { class: 'etiqueta', text: titulo }),
-    el('div', { class: 'panel' }, [
+    // El desenlace es texto corto en una pantalla que se estira al piso: el
+    // panel se queda con todo el alto y centra lo suyo, en vez de dejar medio
+    // metro de vacío entre el resultado y el botón.
+    el('div', { class: 'panel', dataset: { crece: 'centrado' } }, [
       previa ? el('p', { class: 'medio desenlace-previa', style: 'font-style:italic;margin:0 0 8px', text: previa }) : null,
       texto ? el('p', { class: 'medio', text: texto }) : null,
       deltasTexto.length > 0 ? el('div', { class: 'mods', text: deltasTexto.join(' · ') }) : null,

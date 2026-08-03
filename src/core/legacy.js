@@ -9,7 +9,7 @@ import { ANIO_INICIAL } from './world.js';
 import { CINTURONES } from './offers.js';
 import { edadDeDeclive, EDAD_DECLIVE_JUGADOR } from './career.js';
 import { estadisticasDeCarrera } from './stats-carrera.js';
-import { MOMENTOS, CIERRE } from '../content/legacy-lines.js';
+import { MOMENTOS, EMOJI_MOMENTO, CIERRE } from '../content/legacy-lines.js';
 
 const ESCALA = [
   [85, 'Leyenda'],
@@ -97,24 +97,34 @@ function fraseDe(pool, semilla, datos) {
 // quedó con el cinturón" aunque la segunda fuera, en realidad, una defensa.
 // `esObligatoria` (guardado en el historial por offers.js) es lo que
 // distingue un hito del otro.
+// Cada momento sale con el emoji de SU tipo adelante (pedido v17.3: "agregá
+// emojis en las frases de Momentos memorables según el momento"): un título
+// ganado y uno perdido ya no se leen igual de un vistazo. El emoji lo elige
+// el tipo de hito, nunca el texto — dos variantes del mismo tipo llevan el
+// mismo emoji, que es justo lo que lo vuelve una viñeta y no un adorno.
+function conEmoji(tipo, frase) {
+  const emoji = EMOJI_MOMENTO[tipo];
+  return emoji ? `${emoji} ${frase}` : frase;
+}
+
 function momentosDe(jugador) {
   const momentos = [];
   for (const pelea of jugador.historial ?? []) {
     const datos = { rival: pelea.rivalNombre, enJuego: pelea.enJuego };
     const semilla = `${pelea.rivalNombre}|${pelea.enJuego}|${pelea.fecha ?? ''}`;
     if (pelea.esTitulo && pelea.resultado === 'v' && pelea.esObligatoria) {
-      momentos.push(fraseDe(MOMENTOS.tituloDefendido, `${semilla}|defendido`, datos));
+      momentos.push(conEmoji('tituloDefendido', fraseDe(MOMENTOS.tituloDefendido, `${semilla}|defendido`, datos)));
     } else if (pelea.esTitulo && pelea.resultado === 'v') {
-      momentos.push(fraseDe(MOMENTOS.tituloGanado, `${semilla}|ganado`, datos));
+      momentos.push(conEmoji('tituloGanado', fraseDe(MOMENTOS.tituloGanado, `${semilla}|ganado`, datos)));
     } else if (pelea.esTitulo && pelea.resultado === 'd') {
-      momentos.push(fraseDe(MOMENTOS.tituloPerdido, `${semilla}|perdido`, datos));
+      momentos.push(conEmoji('tituloPerdido', fraseDe(MOMENTOS.tituloPerdido, `${semilla}|perdido`, datos)));
     } else if (pelea.metodo === 'ko' && pelea.round === 1 && pelea.resultado === 'v') {
-      momentos.push(fraseDe(MOMENTOS.koPrimerRound, `${semilla}|ko1`, datos));
+      momentos.push(conEmoji('koPrimerRound', fraseDe(MOMENTOS.koPrimerRound, `${semilla}|ko1`, datos)));
     }
   }
   if (momentos.length === 0 && (jugador.historial ?? []).length > 0) {
     const primera = jugador.historial[0];
-    momentos.push(fraseDe(MOMENTOS.debut, `${primera.rivalNombre}|debut`, { rival: primera.rivalNombre }));
+    momentos.push(conEmoji('debut', fraseDe(MOMENTOS.debut, `${primera.rivalNombre}|debut`, { rival: primera.rivalNombre })));
   }
   return momentos.slice(0, 6);
 }

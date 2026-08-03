@@ -170,6 +170,40 @@ function bloqueTramos(sparring, jugador) {
   }));
 }
 
+// Qué se llevó la sesión, dicho con todas las letras al terminarla.
+//
+// Hasta acá no se mostraba NADA concreto: `resultadoSparring` devolvía un
+// `texto` ("Sesión perfecta: 9/10 y 0,31s de reacción...") que nadie pintaba,
+// y el envión de cardio para la próxima pelea se guardaba en silencio. El
+// jugador terminaba el minijuego, clickeaba Continuar y no tenía forma de
+// saber si había servido de algo — de ahí el reporte, textual: "el minijuego
+// del sparring, ¿de verdad hace algún efecto? No parece". Hacía efecto; no se
+// veía, que a los fines prácticos es lo mismo.
+//
+// Los dos premios se muestran distinto porque son distintos: el de agilidad
+// queda para siempre (va a la ficha), el de cardio dura UNA pelea. Decirlo
+// con esas palabras evita que el segundo se lea como un aumento permanente
+// que después "desaparece".
+function bloqueResultado(sparring, jugador) {
+  const { texto, mods, bonusTemporal } = resultadoSparring(sparring, jugador);
+  const premios = [
+    ...Object.entries(mods ?? {}).map(([clave, valor]) => ({
+      texto: `${fmtDelta(valor)} ${ETIQUETAS[clave]?.larga ?? clave}`, signo: 'positivo',
+    })),
+    ...Object.entries(bonusTemporal ?? {}).map(([clave, valor]) => ({
+      texto: `${fmtDelta(valor)} ${ETIQUETAS[clave]?.larga ?? clave} en la próxima pelea`, signo: 'leve',
+    })),
+  ];
+  return el('div', { class: 'panel', dataset: { crece: 'centrado', bloque: 'resultado-sparring' } }, [
+    el('p', { class: 'medio', style: 'margin:0', text: texto }),
+    premios.length > 0
+      ? el('div', { class: 'tarjeta-efectos', style: 'margin-top:10px' }, premios.map((p) => el('div', {
+        class: `tarjeta-efecto ${p.signo}`, text: p.texto,
+      })))
+      : null,
+  ]);
+}
+
 export function renderSparring(contenedor, {
   sparring, jugador, onGolpe, onTiempoAgotado = () => {}, onTerminar,
   titulo = `Entrenamiento · ${jugador.gimnasio}`, bajada = 'Sparring de reflejos',
@@ -303,8 +337,13 @@ export function renderSparring(contenedor, {
     bloqueContadores(sparring),
     sparring.terminado ? null : barraTiempo,
     el('div', { class: 'panel' }, [el('div', { class: 'grilla-paos' }, paos)]),
-    bloqueReflejos(sparring, jugador),
-    bloqueTramos(sparring, jugador),
+    // Mientras se juega: la barra en vivo + la vista previa de los tramos.
+    // Cuando terminó: el veredicto, que dice lo mismo con todas las letras
+    // ("Sesión perfecta: 10/10 y 0,25s") y además los premios concretos.
+    // Mantener las tres cosas juntas al final repetía la información y, peor,
+    // no entraba: la pantalla se pasaba del piso de la columna izquierda.
+    sparring.terminado ? null : bloqueReflejos(sparring, jugador),
+    sparring.terminado ? bloqueResultado(sparring, jugador) : bloqueTramos(sparring, jugador),
     boton,
   ]));
 

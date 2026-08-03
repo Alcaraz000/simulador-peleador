@@ -9,6 +9,21 @@
 // legacy.js les ponía la MISMA frase a los dos. La variedad de acá es la
 // segunda parte del pedido ("dale variedad a la redacción") una vez que la
 // causa de fondo ya está separada en categorías distintas.
+// Un emoji por TIPO de momento (pedido v17.3). Va acá, junto a las frases,
+// porque es contenido: qué cara tiene cada hito, no cómo se dibuja.
+//
+// Es la única excepción a "nunca emojis en la interfaz" de este proyecto —
+// el resto de la UI sigue con íconos SVG (Lucide). Acá funciona porque no es
+// interfaz: es la lista de recuerdos del cierre de carrera, donde el emoji
+// hace de viñeta y le da a cada línea una cara reconocible de un vistazo.
+export const EMOJI_MOMENTO = {
+  tituloGanado: '🏆',
+  tituloDefendido: '🛡️',
+  tituloPerdido: '💔',
+  koPrimerRound: '💥',
+  debut: '🥊',
+};
+
 export const MOMENTOS = {
   tituloGanado: [
     'Le ganó a {rival} y se colgó el {enJuego}.',

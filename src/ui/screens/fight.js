@@ -31,11 +31,23 @@ function tileConIcono({ nombreIcono, color, valorTexto, valorClase = '', etiquet
 }
 
 export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechazar }) {
+  // Pedido v17.3: "si es una pelea PARA GANAR el título no se debería poder
+  // rechazar". Es la pelea que la carrera entera venía a buscar — dejar que
+  // se escape por un click en el botón de al lado no es una decisión
+  // interesante, es un accidente. Solo aplica a la CHANCE de título (nivel
+  // 'titulo'); la defensa obligatoria (`esObligatoria`) se sigue pudiendo
+  // rechazar, porque ahí rechazar tiene su propia consecuencia (se pierde el
+  // cinturón) y eso sí es una decisión.
+  const esChanceDeTitulo = Boolean(oferta.esTitulo) && !oferta.esObligatoria;
   mount(contenedor, el('div', { class: 'stack' }, [
     el('div', { class: 'etiqueta rojo', text: 'Oferta de pelea' }),
     el('h1', { text: oferta.esTitulo ? 'Pelea de título' : 'Te ofrecen una pelea' }),
     el('p', { class: 'medio', text: oferta.textoGancho }),
-    el('div', { class: 'panel' }, [
+    // `data-crece` (ver theme.css): el panel del rival es el que se queda con
+    // el alto que sobre. Sin esto el sobrante caía al final, y como el botón
+    // de acción se ancla al pie, "Aceptar" quedaba pegado al contenido y
+    // "Rechazar" contra el piso, con un vacío enorme entre los dos.
+    el('div', { class: 'panel', dataset: { crece: 'repartido' } }, [
       el('div', { class: 'fila', style: 'align-items:baseline;gap:6px' }, [
         // Con el roster de 100 (Pedido 1), la mayoría de los rivales de
         // relleno no tienen apodo (null): sin este resguardo mostraba
@@ -81,7 +93,16 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
       el('p', { class: 'medio', style: 'font-style:italic;margin-top:6px', text: `"${oferta.fraseEntrenador}"` }),
     ]) : null,
     el('button', { class: 'boton', dataset: { accion: 'aceptar' }, text: 'Aceptar la pelea', onClick: onAceptar }),
-    el('button', { class: 'boton secundario', dataset: { accion: 'rechazar' }, text: 'Rechazar', onClick: onRechazar }),
+    // Deshabilitado (no escondido): que el botón siga estando y diga POR QUÉ
+    // no se puede es lo que convierte "esto no anda" en "esto es así".
+    esChanceDeTitulo
+      ? el('button', {
+        class: 'boton secundario',
+        dataset: { accion: 'rechazar' },
+        disabled: true,
+        text: 'Una chance de título no se rechaza',
+      })
+      : el('button', { class: 'boton secundario', dataset: { accion: 'rechazar' }, text: 'Rechazar', onClick: onRechazar }),
   ]));
 }
 

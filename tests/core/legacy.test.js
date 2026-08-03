@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
 import { crearPartida } from '../../src/core/career.js';
 import { calcularLegado } from '../../src/core/legacy.js';
+import { EMOJI_MOMENTO } from '../../src/content/legacy-lines.js';
+import { createRng } from '../../src/core/rng.js';
 
 function partida(overrides = {}) {
   const jugador = {
@@ -504,5 +506,58 @@ describe('un cinturón ganado, perdido y reconquistado', () => {
     ];
     const { titulosDetalle } = calcularLegado(p);
     expect(titulosDetalle.filter((t) => t.nombre === 'Cinturón nacional')).toHaveLength(1);
+  });
+});
+
+// Pedido v17.3: "agregá emojis en las frases de Momentos memorables según el
+// momento". El emoji lo elige el TIPO de hito, no el texto: dos variantes del
+// mismo tipo llevan el mismo emoji — eso es lo que lo vuelve una viñeta que
+// se lee de un vistazo y no un adorno al azar.
+describe('momentos memorables — un emoji por tipo de momento', () => {
+  function legadoCon(historial) {
+    const jugador = crearPeleador({
+      apellido: 'Test', apodo: 'El Test', nacionalidad: 'AR', disciplina: 'boxeo',
+      estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 70, esJugador: true,
+      rng: createRng(1),
+    });
+    jugador.historial = historial;
+    jugador.record = { v: historial.filter((p) => p.resultado === 'v').length, d: 1, e: 0, ko: 1 };
+    const partida = crearPartida({ jugador, semilla: 1 });
+    return calcularLegado({ ...partida, jugador });
+  }
+
+  const pelea = (extra) => ({
+    rivalId: 'p1', rivalNombre: 'Dyke Tyzon', metodo: 'decision', round: 12,
+    bolsa: 1000, fecha: 60, ...extra,
+  });
+
+  it('un título ganado y uno perdido no llevan el mismo emoji', () => {
+    const ganado = legadoCon([pelea({ resultado: 'v', esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional' })]);
+    const perdido = legadoCon([pelea({ resultado: 'd', esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional' })]);
+
+    expect(ganado.momentos[0].startsWith(EMOJI_MOMENTO.tituloGanado)).toBe(true);
+    expect(perdido.momentos[0].startsWith(EMOJI_MOMENTO.tituloPerdido)).toBe(true);
+    expect(EMOJI_MOMENTO.tituloGanado).not.toBe(EMOJI_MOMENTO.tituloPerdido);
+  });
+
+  it('una defensa lleva el suyo, distinto del de conquistar', () => {
+    const legado = legadoCon([pelea({ resultado: 'v', esTitulo: true, esObligatoria: true, enJuego: 'Cinturón regional' })]);
+    expect(legado.momentos[0].startsWith(EMOJI_MOMENTO.tituloDefendido)).toBe(true);
+  });
+
+  it('un nocaut en el primer round lleva el suyo', () => {
+    const legado = legadoCon([pelea({ resultado: 'v', metodo: 'ko', round: 1, esTitulo: false, enJuego: null })]);
+    expect(legado.momentos[0].startsWith(EMOJI_MOMENTO.koPrimerRound)).toBe(true);
+  });
+
+  it('el debut (resguardo cuando no hubo ningún hito) también lo lleva', () => {
+    const legado = legadoCon([pelea({ resultado: 'v', metodo: 'decision', round: 10, esTitulo: false, enJuego: null })]);
+    expect(legado.momentos[0].startsWith(EMOJI_MOMENTO.debut)).toBe(true);
+  });
+
+  it('el texto de la frase sigue intacto detrás del emoji', () => {
+    const legado = legadoCon([pelea({ resultado: 'v', esTitulo: true, esObligatoria: false, enJuego: 'Cinturón regional' })]);
+    expect(legado.momentos[0]).toContain('Dyke Tyzon');
+    expect(legado.momentos[0]).toContain('Cinturón regional');
   });
 });

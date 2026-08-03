@@ -239,14 +239,34 @@ describe('renderSparring — barra de reflejos con marca de tramo', () => {
     expect(relleno.style.width).toBe('50%');
   });
 
-  it('con una sesion perfecta hasta ahora, el tramo alcanzado es "perfecto" y la barra llega al 100%', () => {
+  it('con la sesion casi perfecta, el tramo alcanzado es "perfecto"', () => {
+    // 9 de 10: la sesión todavía NO terminó, así que los tramos siguen
+    // haciendo de vista previa (al terminar los reemplaza el resultado
+    // concreto — ver el describe de más abajo).
+    let sp = sparring();
+    for (let i = 0; i < 9; i++) sp = registrarGolpe(sp, { acerto: true, ms: 220 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.querySelector('[data-tramo="perfecto"]').classList.contains('alcanzado')).toBe(true);
+    expect(cont.querySelector('[data-tramo="flojo"]').classList.contains('alcanzado')).toBe(false);
+  });
+
+  it('con 9 de 10 la barra va al 90%: se llena con los aciertos', () => {
+    let sp = sparring();
+    for (let i = 0; i < 9; i++) sp = registrarGolpe(sp, { acerto: true, ms: 220 });
+    renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+    expect(cont.querySelector('.sparring-reflejos-pista .barra > i').style.width).toBe('90%');
+  });
+
+  // Al terminar, la barra en vivo y la vista previa de tramos se van: el
+  // bloque de resultado dice lo mismo con todas las letras ("Sesión perfecta:
+  // 10/10 y 0,25s") y encima los premios. Mantener las tres cosas repetía la
+  // información y no entraba en el hueco del tablero.
+  it('terminada la sesión, la barra en vivo deja lugar al resultado', () => {
     let sp = sparring();
     for (let i = 0; i < 10; i++) sp = registrarGolpe(sp, { acerto: true, ms: 220 });
     renderSparring(cont, { sparring: sp, jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
-    const relleno = cont.querySelector('.sparring-reflejos-pista .barra > i');
-    expect(relleno.style.width).toBe('100%');
-    expect(cont.querySelector('[data-tramo="perfecto"]').classList.contains('alcanzado')).toBe(true);
-    expect(cont.querySelector('[data-tramo="flojo"]').classList.contains('alcanzado')).toBe(false);
+    expect(cont.querySelector('.sparring-reflejos-pista')).toBeNull();
+    expect(cont.querySelector('[data-bloque="resultado-sparring"]')).toBeTruthy();
   });
 
   it('los tres tramos de recompensa estan siempre presentes, incluso antes de empezar', () => {
@@ -464,5 +484,56 @@ describe('renderNegociacion', () => {
     const perdida = { ...negociacion(), perdida: true };
     renderNegociacion(cont, { negociacion: perdida, oferta, onMovida: () => {}, onCerrar: () => {} });
     expect(cont.textContent).toMatch(/levant|perdi/i);
+  });
+});
+
+// Reportado: "el minijuego del sparring, ¿de verdad hace algún efecto? No
+// parece". Hacía efecto —agilidad permanente y un envión de cardio para la
+// próxima pelea— pero no se mostraba nada al terminar: ni el texto del
+// resultado ni los premios. Invisible y "no hace nada" son lo mismo para
+// quien juega.
+describe('renderSparring — al terminar dice qué se llevó', () => {
+  function terminada(aciertos, ms) {
+    let sp = crearSparring(createRng(1), { jugador: jugador() });
+    for (let i = 0; i < 10; i += 1) sp = registrarGolpe(sp, { acerto: i < aciertos, ms });
+    return sp;
+  }
+
+  it('muestra el texto del resultado, que antes no se pintaba en ningún lado', () => {
+    const cont2 = document.createElement('div');
+    document.body.appendChild(cont2);
+    renderSparring(cont2, { sparring: terminada(10, 250), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    const bloque = cont2.querySelector('[data-bloque="resultado-sparring"]');
+    expect(bloque).toBeTruthy();
+    expect(bloque.textContent).toContain('10/10');
+  });
+
+  it('nombra el envión de cardio Y aclara que dura solo la próxima pelea', () => {
+    const cont2 = document.createElement('div');
+    document.body.appendChild(cont2);
+    renderSparring(cont2, { sparring: terminada(10, 250), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    const texto = cont2.querySelector('[data-bloque="resultado-sparring"]').textContent;
+    expect(texto).toContain('Cardio');
+    expect(texto).toContain('próxima pelea');
+  });
+
+  it('también nombra la mejora permanente de agilidad', () => {
+    const cont2 = document.createElement('div');
+    document.body.appendChild(cont2);
+    renderSparring(cont2, { sparring: terminada(10, 250), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    expect(cont2.querySelector('[data-bloque="resultado-sparring"]').textContent).toContain('Agilidad');
+  });
+
+  it('una sesión floja lo dice y no promete premios que no hay', () => {
+    const cont2 = document.createElement('div');
+    document.body.appendChild(cont2);
+    renderSparring(cont2, { sparring: terminada(2, 900), jugador: jugador(), onGolpe: () => {}, onTerminar: () => {} });
+
+    const bloque = cont2.querySelector('[data-bloque="resultado-sparring"]');
+    expect(bloque.textContent).toContain('floja');
+    expect(bloque.querySelectorAll('.tarjeta-efecto')).toHaveLength(0);
   });
 });

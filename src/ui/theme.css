@@ -3132,3 +3132,102 @@ input.creacion-control { cursor: text; }
   padding: 1px 4px;
   vertical-align: middle;
 }
+
+/* ============================================================================
+   v17.3 — "siempre debe ocuparse TODO el espacio, no puede haber huecos"
+   ============================================================================
+   El mecanismo de v16 ya estaba: el contenedor central se estira al piso de
+   la izquierda, el botón de acción se ancla al pie con `margin-top:auto` y
+   `[data-crece]` se queda con el sobrante. El problema es que casi ninguna
+   pantalla declaraba su bloque `[data-crece]`, así que el sobrante caía
+   entero justo antes del botón — y en la oferta, con DOS botones al pie,
+   partía "Aceptar" de "Rechazar" con 234px en el medio.
+
+   Ahora cada pantalla marca cuál es su bloque elástico. `centrado` además
+   centra el contenido adentro de ese bloque: un panel estirado con tres
+   líneas de texto pegadas arriba no es "sin hueco", es el mismo hueco
+   adentro de una caja más grande. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] [data-crece="centrado"],
+  [data-bloque="contenido"] [data-crece="espaciado"],
+  [data-bloque="contenido"] [data-crece="repartido"] {
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* `centrado` para un bloque de texto corto (el desenlace): centrarlo lee
+     como un momento, no como un panel a medio llenar. */
+  [data-bloque="contenido"] [data-crece="centrado"] { justify-content: center; }
+
+  /* `repartido` para un bloque con VARIAS partes (la ficha del rival: nombre,
+     tiles, chip). Acá no alcanza con centrar ni con repartir a secas: lo
+     primero apelotona todo en el medio y deja el panel vacío arriba y abajo,
+     lo segundo despega el nombre de su propio subtítulo. Lo que crece es la
+     FILA DE TILES — cajas con un número adentro, que es lo único de esta
+     pantalla que se puede agrandar sin verse deformado — y el resto se queda
+     en su tamaño natural, arriba y abajo de ella. */
+  /* `espaciado`: las partes se separan entre sí y cada una conserva su
+     tamaño. Para un bloque cuyas piezas ya tienen la altura que les
+     corresponde (la ficha del rival de trámite: nombre, atributos, bolsa) —
+     estirar los tiles ahí los deja cuatro veces más altos que los MISMOS
+     tiles del panel de atributos de arriba, y esa inconsistencia se nota más
+     que el espacio que venía a tapar. */
+  [data-bloque="contenido"] [data-crece="espaciado"] { justify-content: space-between; }
+
+  [data-bloque="contenido"] [data-crece="repartido"] > .fila:has(.tile),
+  [data-bloque="contenido"] [data-crece="repartido"] > .panel-peleador-atributos {
+    flex: 1 1 auto;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  [data-bloque="contenido"] [data-crece="repartido"] > .fila:has(.tile) > .tile,
+  [data-bloque="contenido"] [data-crece="repartido"] > .panel-peleador-atributos > * {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  /* El resguardo de `max-height: 60vh` (por si el ajuste dinámico no llegara
+     a correr) le ganaba al `flex: 1 1 auto` del cuerpo del resumen y lo
+     dejaba 75px corto del botón. En escritorio manda el estirado real; el
+     scroll propio se mantiene por si el año viene muy cargado. */
+  .resumen-anio .resumen-anio-cuerpo {
+    max-height: none;
+  }
+}
+
+/* Ritmo vertical parejo en las pantallas centrales: un <p> suelto como hijo
+   directo del stack sumaba su margen inferior propio (~14px) AL gap del
+   stack, así que el aire después de la bajada era casi el triple que entre
+   los demás bloques. En columna flex los márgenes no colapsan, así que se
+   notaba. El gap lo pone el stack y nada más. */
+[data-bloque="contenido"] > .stack > p,
+[data-bloque="contenido"] > .stack > h1 {
+  margin-bottom: 0;
+}
+
+/* Sesión de sparring TERMINADA: el panel de paos deja de ser el bloque
+   elástico. Mientras se juega es el protagonista y se queda con el sobrante;
+   una vez que terminó, las luces ya no importan y el que tiene algo que decir
+   es el resultado. Con los dos creciendo se repartían el alto y, cuando el
+   espacio venía justo, el bloque de resultado se recortaba: la última píldora
+   (el envión de cardio, justo lo que se venía a mostrar) quedaba cortada
+   contra el botón. */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] > .stack:has([data-bloque="resultado-sparring"]) > .panel:has(.grilla-paos) {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+}
+
+/* El bloque de resultado nunca se achica por debajo de su contenido. La regla
+   genérica de `[data-crece]` le pone `min-height: 0` para poder repartir el
+   alto; acá eso lo dejaba encogerse y pintar las píldoras por encima del
+   botón. `min-height: auto` devuelve el mínimo automático de un ítem flex,
+   que es exactamente "lo que mida mi contenido". */
+@media (min-width: 960px) {
+  [data-bloque="contenido"] [data-bloque="resultado-sparring"] {
+    min-height: auto;
+  }
+}

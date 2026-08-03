@@ -93,7 +93,10 @@ export function renderCardTramite(region, {
       apertura ? el('p', { class: 'medio', style: 'margin:0 0 4px', text: apertura }) : null,
       el('p', { class: 'medio', style: 'margin:0', text: oferta.fraseEntrenador }),
     ]),
-    el('div', { class: 'panel' }, [
+    // El panel del rival es el elástico de esta pantalla (ver `data-crece` en
+    // theme.css): con el centro estirado al piso, sin esto quedaban ~366px de
+    // vacío entre la ficha del rival y el botón de simular.
+    el('div', { class: 'panel', dataset: { crece: 'espaciado' } }, [
       el('div', { class: 'fila', style: 'align-items:center;gap:10px' }, [
         rival ? bandera(rival.nacionalidad, { ancho: 24 }) : null,
         el('div', { style: 'flex:3;min-width:0' }, [

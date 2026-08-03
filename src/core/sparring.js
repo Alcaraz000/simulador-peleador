@@ -126,7 +126,7 @@ export function resultadoSparring(sparring, jugador) {
       nivel: 'perfecto',
       mods: { agilidad: AGILIDAD_BONUS.perfecto },
       bonusTemporal: { cardio: BONUS_TEMPORAL_CARDIO.perfecto },
-      texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. El entrenador casi sonríe.`,
+      texto: `Sesión perfecta: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2).replace('.', ',')}s de reacción. El entrenador casi sonríe.`,
     };
   }
   if (ratio >= UMBRAL_RATIO_BIEN && promedio <= MS_BIEN) {
@@ -134,7 +134,7 @@ export function resultadoSparring(sparring, jugador) {
       nivel: 'bien',
       mods: { agilidad: AGILIDAD_BONUS.bien },
       bonusTemporal: { cardio: BONUS_TEMPORAL_CARDIO.bien },
-      texto: `Buena sesión: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2)}s de reacción. Todavía te falta filo.`,
+      texto: `Buena sesión: ${sparring.aciertos}/${sparring.objetivos} y ${(promedio / 1000).toFixed(2).replace('.', ',')}s de reacción. Todavía te falta filo.`,
     };
   }
   return {
