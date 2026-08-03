@@ -3,6 +3,7 @@ import {
   crearPartida, siguienteBeat, firmarPelea, cancelarProximaPelea, etapaActual,
   registrarDecision, registrarMuestraMedia,
   guardarBonusProximaPelea, consumirBonusProximaPelea, aplicarCambioDeCampeon,
+  aplicarPuntosDePelea,
 } from './core/career.js';
 import { tablasDeDivisiones, rankingDelJugador } from './core/world.js';
 import { crearPeleador } from './core/fighter.js';
@@ -1451,7 +1452,15 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
     partida = aplicarCambioDeCampeon(partida, {
       oferta, gano: pelea.resultado.ganador === 'jugador',
     });
-    let jugador = paso.jugador;
+    // Los puntos de ranking, para el jugador Y para el rival. Se aplican ANTES
+    // de reemplazar `partida.jugador` con el resultado: el delta depende de en
+    // qué puesto estaba cada uno al subir al ring, no de cómo quedaron después.
+    partida = aplicarPuntosDePelea(partida, {
+      rivalId: oferta.rivalId,
+      resultado: pelea.resultado.ganador === 'jugador' ? 'v'
+        : pelea.resultado.ganador === 'empate' ? 'e' : 'd',
+    });
+    let jugador = { ...paso.jugador, puntosRanking: partida.jugador.puntosRanking };
 
     const danoRecibido = 100 - pelea.aguante.jugador;
     const lesion = tirarLesion(rng, { peleador: jugador, contexto: 'pelea', danoRecibido });

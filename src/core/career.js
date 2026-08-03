@@ -13,8 +13,9 @@ import { clamp, LIMITES_ATRIBUTO } from './stats.js';
 import { BONUS_TEMPORAL_MAXIMO } from './sparring.js';
 import { rendimientoDeMejora } from './talento.js';
 import {
-  campeonDe, coronarCampeon, rankingsProfesionales, rankingsDondeEsta,
+  campeonDe, coronarCampeon, rankingsProfesionales, rankingsDondeEsta, puestoEn,
 } from './divisiones.js';
+import { aplicarPuntos, DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
@@ -521,6 +522,46 @@ export function aplicarCambioDeCampeon(partida, { oferta, gano }) {
       campeones: coronarCampeon(partida.mundo.campeones, oferta.cinturonId, nuevoCampeonId),
     },
   };
+}
+
+/**
+ * Aplica los puntos de ranking de una pelea del JUGADOR, a él y al rival.
+ *
+ * Los puestos se toman ANTES de tocar nada (foto previa), porque el delta
+ * depende de en qué puesto estaba cada uno cuando se subieron al ring. Se
+ * mueven SOLO las divisiones donde el rival figura: si está en el regional y
+ * en el nacional se mueven las dos, si está solo en el mundial solo esa, y si
+ * no está en ninguna, ganarle no suma nada (pero perder sí cuesta).
+ */
+export function aplicarPuntosDePelea(partida, { rivalId, resultado }) {
+  const rankings = rankingsProfesionales(partida.mundo, partida.jugador);
+  const puestosDe = (id) => Object.fromEntries(
+    DIVISIONES_PUNTUABLES
+      .map((division) => [division, puestoEn(rankings, division, id)])
+      .filter(([, puesto]) => puesto !== null),
+  );
+
+  const misPuestos = puestosDe(partida.jugador.id);
+  const puestosRival = puestosDe(rivalId);
+  const resultadoRival = resultado === 'v' ? 'd' : resultado === 'd' ? 'v' : 'e';
+
+  const jugador = {
+    ...partida.jugador,
+    puntosRanking: aplicarPuntos(partida.jugador, { resultado, misPuestos, puestosRival }),
+  };
+
+  // El rival vive en el roster del mundo: su carrera también se mueve con este
+  // resultado. Sin esto, ganarle al #1 lo dejaría intacto en la cima.
+  const roster = (partida.mundo.roster ?? []).map((p) => (p.id === rivalId
+    ? {
+      ...p,
+      puntosRanking: aplicarPuntos(p, {
+        resultado: resultadoRival, misPuestos: puestosRival, puestosRival: misPuestos,
+      }),
+    }
+    : p));
+
+  return { ...partida, jugador, mundo: { ...partida.mundo, roster } };
 }
 
 export function crearPartida({ jugador, semilla }) {

@@ -1,6 +1,6 @@
 # Rankings por puntos (v18) — estado y plan para retomar
 
-**Última actualización:** 2026-08-03 · **Avance: ~45%** · Rama `v17`
+**Última actualización:** 2026-08-03 · **Avance: ~60%** · Rama `v17`
 
 ---
 
@@ -71,6 +71,8 @@ mostraría rankings a medio hacer.
 | Amateur ~6:1 local | `FRACCION_LOCAL_AMATEUR`, `roster.js` |
 | Registro de hitos de ranking | `registrarHitosDeRanking`, `src/core/career.js` |
 | Hitos en el cierre | `momentosDe`, `src/core/legacy.js` + `legacy-lines.js` |
+| **Puntos en las peleas del jugador** | `aplicarPuntosDePelea`, `career.js`, llamado en `cerrarPelea` (`main.js`) |
+| Tests del sistema de puntos | `tests/core/puntos-ranking.test.js` (14) |
 
 **Escala de puntos** (verificada a mano):
 
@@ -91,7 +93,8 @@ mundial sin estar en la elite de su país.
 
 ### Pendiente
 
-1. **Puntos en las peleas del jugador** ← *próximo paso concreto*
+1. **Puntos en el camino de trámite** (`src/core/tramite.js`, `armarLotePeleas`)
+   — las peleas jugadas ya puntúan; las de trámite todavía no. ← *próximo paso*
 2. Renglón de campeón fuera de la numeración
 3. Más países (de 6 a 10-12) y ampliar `NOMBRES_POR_PAIS`
 4. Puesto(s) del rival en la pantalla de oferta
@@ -101,30 +104,19 @@ mundial sin estar en la elite de su país.
 
 ## Próximo paso, con detalle
 
-En `src/main.js`, función `cerrarPelea` (donde ya se llama a
-`aplicarResultado` y a `aplicarCambioDeCampeon`):
+Las peleas JUGADAS ya puntúan (`aplicarPuntosDePelea` en `cerrarPelea`).
+Falta el camino de TRÁMITE: `armarLotePeleas` en `src/core/tramite.js` resuelve
+varias peleas del jugador por año sin pasar por `cerrarPelea`, así que hoy esas
+no mueven puntos.
 
-```js
-// 1. Foto de los rankings ANTES de aplicar el resultado
-const rankingsAntes = rankingsProfesionales(partida.mundo, partida.jugador);
-const puestosDe = (id) => Object.fromEntries(
-  DIVISIONES_PUNTUABLES
-    .map((d) => [d, puestoEn(rankingsAntes, d, id)])
-    .filter(([, puesto]) => puesto !== null),
-);
+Ahí hay que hacer lo mismo que en `cerrarPelea`: tomar la foto de rankings
+antes del lote y, por cada pelea resuelta, llamar a `aplicarPuntosDePelea` (o
+directamente a `aplicarPuntos` si conviene no reconstruir los rankings en cada
+iteración — el lote es de hasta 3 peleas).
 
-// 2. Aplicar puntos al jugador Y al rival (el rival vive en mundo.roster)
-const resultadoLetra = /* 'v' | 'd' | 'e' */;
-jugador.puntosRanking = aplicarPuntos(jugador, {
-  resultado: resultadoLetra,
-  misPuestos: puestosDe(jugador.id),
-  puestosRival: puestosDe(oferta.rivalId),
-});
-// idem para el rival, con el resultado invertido, escribiendo en mundo.roster
-```
-
-Hacer lo mismo en el camino de trámite (`src/core/tramite.js`,
-`armarLotePeleas`), que también resuelve peleas del jugador.
+Ojo: `armarLotePeleas` vive en el núcleo y recibe el jugador, no la partida
+entera. Puede hacer falta pasarle el mundo o devolver los deltas para que
+`career.js` los aplique.
 
 ---
 
@@ -160,7 +152,7 @@ Palancas para el balance: `CINTURONES[].rankingMax` y
 ## Cómo verificar
 
 ```bash
-npm test                    # suite completa (~4 min, 1683 tests)
+npm test                    # suite completa (~4 min, 1698 tests)
 npm run dev                 # dev server en :5173
 ```
 
