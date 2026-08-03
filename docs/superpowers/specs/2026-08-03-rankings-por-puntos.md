@@ -53,7 +53,9 @@ esté EN esa división.
 
 ## Estado del código
 
-Todo vive en la rama `v17`, **sin commitear y con tests rotos** (ver abajo).
+Todo vive en la rama `v17`, commiteado y **con la suite en verde (1684 tests)**.
+No está publicado: falta la mitad del sistema, así que subirlo a `master`
+mostraría rankings a medio hacer.
 
 ### Hecho
 
@@ -93,8 +95,7 @@ mundial sin estar en la elite de su país.
 2. Renglón de campeón fuera de la numeración
 3. Más países (de 6 a 10-12) y ampliar `NOMBRES_POR_PAIS`
 4. Puesto(s) del rival en la pantalla de oferta
-5. Arreglar los tests rotos
-6. **Rebalanceo completo** (lo más pesado)
+5. **Rebalanceo completo** (lo más pesado)
 
 ---
 
@@ -127,20 +128,22 @@ Hacer lo mismo en el camino de trámite (`src/core/tramite.js`,
 
 ---
 
-## Tests rotos (y por qué)
+## Los tests que se van a volver a romper
 
-Son tests **atados a semillas**. Cambiar la generación del mundo corre la
-secuencia de rng y esas semillas dejan de caer en la carta/estado que el test
-espera. Ya pasó cinco veces en este proyecto; está documentado en los propios
-comentarios de los tests.
+Hay tests **atados a semillas**: cambiar la generación del mundo corre la
+secuencia de rng y esas semillas dejan de caer en la carta que el test espera.
+Ya pasó seis veces en este proyecto y está documentado en los comentarios de
+los propios tests. **No es una regresión.**
 
-Los que suelen romperse:
 - `tests/ui/main-shell.test.js` — los cuatro del "evento con azar". Necesitan
   una semilla cuyo primer beat `evento` sea la carta `desafio_de_la_vereda`.
-  Buscarla con un test temporal que recorra semillas y filtre por
-  `beat.datos.carta.id`.
-- `tests/core/career.test.js` — "Bloque 6: el eje de rejugabilidad". Es
-  BALANCE, no deriva: hay que retunear.
+  Buscarla con un test temporal que recorra semillas filtrando por
+  `beat.datos.carta.id` (hoy: semilla 83).
+- `tests/core/career.test.js` — "Bloque 6". Ese NO es deriva sino BALANCE: si
+  falla, hay que retunear de verdad.
+
+Cuando un test se rompe por un número escrito a mano y no por el invariante que
+prueba, conviene hacerlo robusto en vez de perseguir semillas.
 
 **Rangos de balance a respetar** (`tests/core/career.test.js`):
 - al menos un cinturón: 83–92 %

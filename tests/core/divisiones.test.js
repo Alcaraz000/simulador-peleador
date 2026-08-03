@@ -5,8 +5,9 @@ import { crearMundo } from '../../src/core/world.js';
 import {
   rankingsDe, rankingsProfesionales, rankingAmateur, puestoEn, divisionDe,
   campeonesIniciales, campeonDe, coronarCampeon, cinturonesDe, puntajeDe,
-  CUPO_ELITE_NACIONAL, CUPO_MUNDIAL, CUPO_REGIONAL, alturaDeDivision,
+  CUPO_ELITE_NACIONAL, CUPO_REGIONAL, CUPO_MUNDIAL, alturaDeDivision,
 } from '../../src/core/divisiones.js';
+import { puntosEn } from '../../src/core/puntos-ranking.js';
 
 const NAC = 'AR';
 
@@ -68,10 +69,9 @@ describe('las cuatro divisiones', () => {
     expect(locales.every((p) => enNacional.has(p.id))).toBe(true);
   });
 
-  it('el mundial es la tabla más grande de las tres', () => {
-    const { regional, nacional, mundial } = rankingsProfesionales(mundo());
-    expect(mundial.length).toBeGreaterThan(nacional.length);
-    expect(mundial.length).toBeGreaterThan(regional.length);
+  it('el mundial junta gente de varios países, no solo del local', () => {
+    const { mundial } = rankingsProfesionales(mundo());
+    expect(new Set(mundial.map((p) => p.nacionalidad)).size).toBeGreaterThan(1);
   });
 
   // v17.12: la escalera vuelve a ser por NIVEL (regional -> nacional ->
@@ -136,14 +136,13 @@ describe('las cuatro divisiones', () => {
   // nacional?" — sí: el regional es un SUBCONJUNTO del nacional.
 
 
-  it('cada lista está ordenada de mejor a peor', () => {
+  // v18: cada tabla se ordena por SUS puntos, no por una fórmula global.
+  it('cada lista está ordenada por los puntos de ESA división', () => {
     const rankings = rankingsProfesionales(mundo());
     for (const division of ['regional', 'nacional', 'mundial']) {
-      // `(p) => puntajeDe(p)` y no `map(puntajeDe)`: `map` pasa el ÍNDICE como
-      // segundo argumento, que en esta función es la clave del récord a mirar.
-      const puntajes = rankings[division].map((p) => puntajeDe(p));
-      const ordenados = [...puntajes].sort((a, b) => b - a);
-      expect(puntajes).toEqual(ordenados);
+      const puntos = rankings[division].map((p) => puntosEn(p, division));
+      const ordenados = [...puntos].sort((a, b) => b - a);
+      expect(puntos).toEqual(ordenados);
     }
   });
 
@@ -200,21 +199,36 @@ describe('el jugador dentro de las divisiones', () => {
     expect(divisionDe(rankingsProfesionales(m, perdedor), perdedor.id)).not.toBe('nacional');
   });
 
-  it('ganar sube de división y perder baja: el puesto se gana peleando', () => {
+  // v18: el puesto lo dan los PUNTOS, y los puntos se ganan peleando contra
+  // gente de esa tabla. Un peleador sin puntos no entra por más media que
+  // tenga, que es justo lo que se venía a arreglar.
+  it('sin puntos no se entra a ninguna tabla, por más media que se tenga', () => {
     const m = mundo();
-    const flojo = jugador({ media: 78, record: { v: 1, d: 6, e: 0, ko: 0 } });
-    const crack = jugador({ media: 78, record: { v: 22, d: 1, e: 0, ko: 12 } });
+    const talentosoSinHistoria = jugador({ media: 95, record: { v: 1, d: 0, e: 0, ko: 1 } });
 
-    expect(puntajeDe(crack)).toBeGreaterThan(puntajeDe(flojo));
-    const puestoCrack = puestoEn(rankingsProfesionales(m, crack), 'nacional', crack.id);
-    const puestoFlojo = puestoEn(rankingsProfesionales(m, flojo), 'nacional', flojo.id);
-    expect(puestoCrack).not.toBeNull();
-    if (puestoFlojo !== null) expect(puestoCrack).toBeLessThan(puestoFlojo);
+    expect(divisionDe(rankingsProfesionales(m, talentosoSinHistoria), talentosoSinHistoria.id))
+      .toBeNull();
+  });
+
+  it('con puntos suficientes se entra, y más puntos dan mejor puesto', () => {
+    const m = mundo();
+    const base = jugador({ media: 70, record: { v: 10, d: 2, e: 0, ko: 5 } });
+    const modesto = { ...base, puntosRanking: { regional: 400, nacional: 0, mundial: 0 } };
+    const fuerte = { ...base, puntosRanking: { regional: 3000, nacional: 0, mundial: 0 } };
+
+    const puestoModesto = puestoEn(rankingsProfesionales(m, modesto), 'regional', modesto.id);
+    const puestoFuerte = puestoEn(rankingsProfesionales(m, fuerte), 'regional', fuerte.id);
+
+    expect(puestoFuerte).not.toBeNull();
+    expect(puestoFuerte).toBeLessThan(puestoModesto ?? 999);
   });
 
   it('la división es la MÁS ALTA en la que aparece', () => {
     const m = mundo();
-    const crack = jugador({ media: 95, record: { v: 30, d: 0, e: 0, ko: 20 } });
+    const crack = {
+      ...jugador({ media: 95, record: { v: 30, d: 0, e: 0, ko: 20 } }),
+      puntosRanking: { regional: 3500, nacional: 3500, mundial: 3500 },
+    };
     const rankings = rankingsProfesionales(m, crack);
 
     expect(puestoEn(rankings, 'mundial', crack.id)).not.toBeNull();
