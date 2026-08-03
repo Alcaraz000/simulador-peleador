@@ -5,7 +5,7 @@ import {
   mediaDe, recordTexto, CATEGORIAS,
 } from '../../core/fighter.js';
 import {
-  ATRIBUTOS, ETIQUETAS, rangoDeMedia,
+  ATRIBUTOS, ETIQUETAS, rangoDeMedia, LIMITES_ATRIBUTO,
 } from '../../core/stats.js';
 import { atributosConEntrenador, senalDeTalento } from '../../core/coach.js';
 import { rankingDelJugador, ANIO_INICIAL } from '../../core/world.js';
@@ -304,9 +304,17 @@ function etiquetaAtributo(clave) {
 // cuadro: nunca participa del alto/ancho del cuadro, así que un cuadro CON
 // aporte y uno SIN aporte ocupan exactamente el mismo espacio.
 function filaAtributo(clave, { base, aporte }) {
+  // El atributo llegó al máximo que el juego permite (99, contando el aporte
+  // del entrenador). Sin este aviso el número simplemente dejaba de moverse:
+  // el jugador elegía una carta de "+4 Fuerza", veía el mismo 93 de siempre y
+  // no tenía forma de saber que el tope ya estaba alcanzado — el 93 es la
+  // BASE y el entrenador pone los otros 6, así que el total ya era 99 y no
+  // entraba nada más. Reportado como bug, y con razón: la interfaz no decía
+  // en ningún lado que ese número no podía subir.
+  const enTope = base + aporte >= LIMITES_ATRIBUTO.max;
   return el('div', {
-    class: `panel-peleador-atributo${aporte ? ' con-aporte' : ''}`,
-    dataset: { atributo: clave },
+    class: `panel-peleador-atributo${aporte ? ' con-aporte' : ''}${enTope ? ' en-tope' : ''}`,
+    dataset: { atributo: clave, tope: enTope ? 'si' : null },
   }, [
     // Un aporte negativo se escribe "−2", no "+-2" (un entrenador puede
     // restar en algún atributo: es parte de su carácter).
@@ -319,7 +327,10 @@ function filaAtributo(clave, { base, aporte }) {
     // coincide con el visual a propósito — invertirlo solo por CSS deja a
     // quien navega con lector de pantalla leyendo otra cosa que la pantalla.
     el('b', { class: 'valor', text: String(base) }),
-    el('span', { class: 'nombre sutil', text: etiquetaAtributo(clave) }),
+    el('span', { class: 'nombre sutil' }, [
+      el('span', { text: etiquetaAtributo(clave) }),
+      enTope ? el('span', { class: 'atributo-tope', text: 'tope' }) : null,
+    ]),
   ]);
 }
 

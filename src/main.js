@@ -11,6 +11,7 @@ import { generarNoticia, agregarNoticias } from './core/news.js';
 import { crearPelea } from './core/fight.js';
 import { avanzarPelea, aplicarInstruccionRincon, resolverGolpeDeGracia, VENTANA_MS } from './core/fight-interactive.js';
 import { aplicarCarta, formatearMods, porcentajesDe } from './core/cards.js';
+import { ETIQUETAS, LIMITES_ATRIBUTO } from './core/stats.js';
 import { resolverOpcion } from './core/events.js';
 import { aplicarResultado, rechazarOferta } from './core/offers.js';
 import { crearNegociacion, jugarMovida, resultadoNegociacion } from './core/negotiation.js';
@@ -69,11 +70,28 @@ function signoDeMod(clave, valor) {
   return valor > 0 ? 'positivo' : 'negativo';
 }
 
-function efectosDeMods(mods = {}) {
-  return Object.entries(mods).map(([clave, valor]) => ({
-    texto: formatearMods({ [clave]: valor })[0],
-    signo: signoDeMod(clave, valor),
-  }));
+// `jugador` es opcional: con él, un mod POSITIVO que caiga sobre un atributo
+// que ya está en el tope (LIMITES_ATRIBUTO.max) se muestra como "Fuerza al
+// tope" en vez de "+9 Fuerza". El tope existía desde siempre y la carta se
+// aplicaba igual, sin efecto: prometía nueve puntos y daba cero, sin decir
+// por qué. `repartirMejoras` (cards.js) ya evita ofrecer estas cartas mientras
+// quede alguna que rinda; esto cubre el caso en el que no queda ninguna —
+// entonces la carta se ofrece igual, pero no miente.
+//
+// Solo se avisa del TOPE, nunca de cuánto va a rendir de verdad: el talento
+// escala las mejoras y es, por diseño, algo que el jugador intuye y nunca lee
+// como número (ver talento.js).
+function efectosDeMods(mods = {}, jugador = null) {
+  const atributos = jugador?.atributos ?? null;
+  return Object.entries(mods).map(([clave, valor]) => {
+    if (atributos && valor > 0 && atributos[clave] >= LIMITES_ATRIBUTO.max) {
+      return { texto: `${ETIQUETAS[clave]?.larga ?? clave} al tope`, signo: 'leve' };
+    }
+    return {
+      texto: formatearMods({ [clave]: valor })[0],
+      signo: signoDeMod(clave, valor),
+    };
+  });
 }
 
 // Para una rama de azar (varios mods juntos bajo un mismo porcentaje), el
@@ -135,10 +153,10 @@ function efectosDeOpcion(opcion) {
   return efectos;
 }
 
-function cartaMejoraAOpcion(carta) {
+function cartaMejoraAOpcion(carta, jugador) {
   return {
     id: carta.id, titulo: carta.titulo, descripcion: carta.texto, rareza: carta.rareza,
-    efectos: efectosDeMods(carta.mods), icono: icono('pesa'),
+    efectos: efectosDeMods(carta.mods, jugador), icono: icono('pesa'),
   };
 }
 
@@ -903,7 +921,7 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
       titulo: 'Campamento',
       bajada: 'El trabajo rindió',
       texto: textoCantidadMejoras(cartas.length),
-      opciones: cartas.map(cartaMejoraAOpcion),
+      opciones: cartas.map((c) => cartaMejoraAOpcion(c, partida.jugador)),
       onElegir: (id) => {
         const carta = cartas.find((c) => c.id === id);
         const aplicado = aplicarCarta(partida.jugador, carta);

@@ -3115,3 +3115,20 @@ input.creacion-control { cursor: text; }
   border-radius: 20px;
   padding: 2px 7px;
 }
+
+/* Un atributo que ya llegó al máximo del juego (99, contando el aporte del
+   entrenador). Dorado y chiquito, al lado del nombre: no compite con el
+   número —que es lo que manda en el cuadro— pero explica de un vistazo por
+   qué ese número dejó de moverse aunque las cartas sigan prometiendo puntos. */
+.atributo-tope {
+  margin-left: 5px;
+  font-size: 7px;
+  letter-spacing: 0.6px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--dorado);
+  border: 1px solid var(--dorado);
+  border-radius: 20px;
+  padding: 1px 4px;
+  vertical-align: middle;
+}

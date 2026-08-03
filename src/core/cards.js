@@ -114,6 +114,28 @@ export function conSalvaguardaDeCondiciones(pool, jugador, contexto = {}) {
   return filtrado.length > 0 ? filtrado : pool.filter((carta) => hayPelea || !puedeVoltearUnaPelea(carta));
 }
 
+/**
+ * ¿Esta carta le cambia algo a ESTE peleador, o el tope se la come entera?
+ *
+ * Un atributo no pasa de LIMITES_ATRIBUTO.max (99). Con un atributo ya en el
+ * tope, una carta que le suma queda en cero: se aplica, no rompe nada, y no
+ * pasa absolutamente nada — el jugador gasta una decisión de las tres que
+ * tiene por año a cambio de nada. Eso fue exactamente lo reportado ("tengo 93
+ * de fuerza y al elegir cualquier tarjeta que aumente la fuerza no hace
+ * nada": 93 era la BASE, el entrenador ponía los otros 6, y el total ya
+ * estaba en 99).
+ *
+ * Se pregunta corriendo la carta de verdad contra una copia del peleador, no
+ * reimplementando la cuenta: así incluye el clamp, el talento y cualquier
+ * regla que `aplicarCarta` agregue mañana, sin quedar nunca desincronizada.
+ *
+ * Una carta que solo RESTA sí hace algo (algo malo, pero algo): es una
+ * decisión legítima, no una carta muerta, y por eso también pasa este filtro.
+ */
+export function cartaRindeAlgo(jugador, carta) {
+  return Object.keys(aplicarCarta(jugador, carta).deltas).length > 0;
+}
+
 // Pesos de rareza para el sorteo de mejoras: normal ~70%, rara ~25%, legendaria ~5%.
 // El peso es por RAREZA, no por carta: si hay cinco cartas normales y una rara, la
 // rara sigue valiendo 25% en total (no 25% dividido entre cinco competidoras).
@@ -466,7 +488,15 @@ export function repartirMejoras(rng, { jugador, etapa, cantidad = null, catalogo
   const pesos = pesosCompensados(cantidadBase, totalQueHubieraSalido);
   const estado = jugador.estado?.lesion ? 'lesionado' : 'sano';
   const elegiblesBase = fuente.filter((c) => cartaAplica(c, { etapa, disciplina: jugador.disciplina, estado }));
-  const elegibles = conSalvaguardaDeCondiciones(elegiblesBase, jugador);
+  const porCondiciones = conSalvaguardaDeCondiciones(elegiblesBase, jugador);
+  // Las cartas que el tope se comería enteras salen del sorteo. Con la misma
+  // salvaguarda que el resto de los filtros de este archivo: si NINGUNA rinde
+  // (un peleador con los cuatro atributos en 99 — existe, y es el final feliz
+  // de una carrera muy buena), se vuelve al pool entero en vez de dejar la
+  // pantalla sin nada. Para ese caso la píldora de la tarjeta avisa "al tope"
+  // (ver efectosDeMods, main.js): la carta ya no miente aunque toque ofrecerla.
+  const rinden = porCondiciones.filter((c) => cartaRindeAlgo(jugador, c));
+  const elegibles = rinden.length > 0 ? rinden : porCondiciones;
 
   const bonusEtapa = BONUS_ETAPA_TEMPRANA[etapa] ?? 0;
   // El bono (entrenador de elite y/o etapa temprana) se define ACÁ como una

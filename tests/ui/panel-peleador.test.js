@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { crearPeleador } from '../../src/core/fighter.js';
+import { createRng } from '../../src/core/rng.js';
 import { crearPartida } from '../../src/core/career.js';
 import { rankingDelJugador, tablaRanking } from '../../src/core/world.js';
 import { STAFF } from '../../src/core/money.js';
@@ -537,5 +538,61 @@ describe('renderPanelDinero (columna derecha, junto al calendario)', () => {
     p.jugador.staff = [STAFF[0].id];
     renderPanelDinero(cont, { jugador: p.jugador });
     expect(cont.querySelector('[data-accion="tienda"]').classList.contains('brillo')).toBe(false);
+  });
+});
+
+// El bug reportado en v17.1: "tengo 93 de fuerza, elijo una tarjeta que suma 4
+// y sigue mostrando 93". El 93 era la BASE — el entrenador ponía +6 y el total
+// ya estaba en el tope de 99, así que la carta se aplicaba y no entraba nada.
+// La interfaz no decía en ningún lado que ese número no podía subir más.
+describe('panel de atributos — el tope', () => {
+  function jugadorCon(atributos, entrenador = null) {
+    return {
+      ...crearPeleador({
+        apellido: 'X', apodo: 'Y', nacionalidad: 'AR', disciplina: 'boxeo',
+        estilo: 'tecnico', categoria: 'pluma', origen: 'barrio', media: 80, esJugador: true,
+        rng: createRng(1),
+      }),
+      atributos,
+      entrenador,
+    };
+  }
+
+  it('avisa "tope" en el atributo que llegó a 99 contando el aporte del entrenador', () => {
+    const cont = document.createElement('div');
+    renderPanelAtributos(cont, {
+      jugador: jugadorCon({ fuerza: 99, defensa: 90, cardio: 88, agilidad: 85 }),
+    });
+
+    const fuerza = cont.querySelector('[data-atributo="fuerza"]');
+    expect(fuerza.dataset.tope).toBe('si');
+    expect(fuerza.querySelector('.atributo-tope')).toBeTruthy();
+  });
+
+  it('no avisa nada en los atributos que todavía pueden subir', () => {
+    const cont = document.createElement('div');
+    renderPanelAtributos(cont, {
+      jugador: jugadorCon({ fuerza: 99, defensa: 90, cardio: 88, agilidad: 85 }),
+    });
+
+    for (const clave of ['defensa', 'cardio', 'agilidad']) {
+      expect(cont.querySelector(`[data-atributo="${clave}"] .atributo-tope`)).toBeNull();
+    }
+  });
+
+  it('el aviso mira el TOTAL, no la base: base 93 + 6 del entrenador ya es tope', () => {
+    const cont = document.createElement('div');
+    // `atributos` ya trae el aporte adentro (así vive en el juego), así que
+    // 99 = 93 de base + 6 del entrenador: el cuadro muestra 93 y avisa tope.
+    renderPanelAtributos(cont, {
+      jugador: jugadorCon(
+        { fuerza: 99, defensa: 90, cardio: 88, agilidad: 85 },
+        { nombre: 'Aldana', iniciales: 'PA', escuela: 'x', frase: 'y', aporte: { fuerza: 6 } },
+      ),
+    });
+
+    const fuerza = cont.querySelector('[data-atributo="fuerza"]');
+    expect(fuerza.querySelector('.valor').textContent).toBe('93');
+    expect(fuerza.querySelector('.atributo-tope')).toBeTruthy();
   });
 });
