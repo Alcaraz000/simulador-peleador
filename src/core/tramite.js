@@ -405,6 +405,11 @@ function cupoBloqueadoPorLesion(jugadorActual, semanasPorIntento) {
  * le costó la lesión" (career.js la usa para decidir si hace falta avisar
  * con el beat 'lesionSinOferta', y scripts/balance-sim.mjs la suma para
  * medir el costo de la regla sobre una carrera completa).
+ *
+ * Y `peleasPuntuables` (v18): las peleas que este lote resolvió, como
+ * `{ rivalId, resultado }`, para que career.js les aplique los puntos de
+ * ranking (ver `aplicarPuntosDeLote`). No incluye ni el marquee ni el
+ * destacado: esos dos se devuelven SIN resolver y puntúan cuando se juegan.
  */
 // `semanaGlobal` (resumen de fin de año, pedido del usuario: "peleas hechas
 // -contrincante, fecha, resultado-"): TODO el lote se resuelve en el momento
@@ -422,6 +427,9 @@ export function armarLotePeleas(rng, {
   const excluidos = [];
   let marqueeOferta = null;
   const resultados = [];
+  // Las peleas de este lote que tienen que mover puntos de ranking, en el
+  // orden en que se resolvieron (ver más abajo, donde se llenan).
+  const peleasPuntuables = [];
   let bloqueados = 0;
   // Reemplaza al viejo `i === 0`: el "primer cupo" (el único que puede
   // volverse jugable/forzar título) ahora es el primero que de verdad se
@@ -502,13 +510,22 @@ export function armarLotePeleas(rng, {
       oferta, resultado, modo: 'tramite', semanaGlobal,
     });
     jugadorActual = paso.jugador;
+    const letra = resultado.ganador === 'jugador' ? 'v' : 'd';
     resultados.push({
       rivalNombre: oferta.rivalNombre,
       rivalApodo: oferta.rivalApodo,
-      resultado: resultado.ganador === 'jugador' ? 'v' : 'd',
+      resultado: letra,
       metodo: resultado.metodo,
       bolsa: oferta.bolsa,
     });
+    // v18: una pelea de trámite mueve el ranking igual que una jugada — el
+    // puesto sale de a quién enfrentaste, no de si la pelea ameritó crónica.
+    // Los puntos NO se aplican acá: este módulo recibe el jugador, no la
+    // partida, y el delta también le toca al RIVAL, que vive en
+    // `mundo.roster`. Se devuelven las peleas resueltas y career.js las aplica
+    // de una sola pasada contra una única foto de rankings (ver
+    // aplicarPuntosDeLote).
+    peleasPuntuables.push({ rivalId: oferta.rivalId, resultado: letra });
   }
 
   const beatTramite = resultados.length > 0
@@ -516,6 +533,13 @@ export function armarLotePeleas(rng, {
     : null;
 
   return {
-    marqueeOferta, destacadoOferta, alMejorDeDestacado, beatTramite, jugador: jugadorActual, rivalidades, bloqueados,
+    marqueeOferta,
+    destacadoOferta,
+    alMejorDeDestacado,
+    beatTramite,
+    jugador: jugadorActual,
+    rivalidades,
+    bloqueados,
+    peleasPuntuables,
   };
 }

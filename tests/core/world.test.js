@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import {
   crearMundo, avanzarMundo, recalcularRankings, buscarRival, rankingDelJugador, tablaRanking,
+  tablasDeDivisiones,
 } from '../../src/core/world.js';
 import { mediaDe, recordTexto, crearPeleador } from '../../src/core/fighter.js';
 
@@ -490,5 +491,76 @@ describe('tablaRanking', () => {
       const tabla = tablaRanking(m, jugador);
       expect(tabla.map((f) => f.ranking)).toEqual(tabla.map((_, i) => i + 1));
     });
+  });
+});
+
+// v18: el campeón sale de la numeración y viaja aparte, para que la pantalla lo
+// pinte en su propio renglón — como en las tablas de verdad, donde el campeón
+// no es "el #1": está fuera de la lista de retadores.
+describe('tablasDeDivisiones — el campeón fuera de la numeración', () => {
+  function mundoConCampeon(division) {
+    const m = crearMundo(createRng(31), {
+      disciplina: 'boxeo', categoria: 'pluma', cantidad: 60, nacionalidadLocal: 'AR',
+    });
+    const { tablas } = tablasDeDivisiones(m, null);
+    const elegido = tablas[division][2];
+    return {
+      mundo: { ...m, campeones: { ...(m.campeones ?? {}), [division]: elegido.id } },
+      elegidoId: elegido.id,
+    };
+  }
+
+  it('el campeón no aparece entre los retadores numerados', () => {
+    const { mundo: m, elegidoId } = mundoConCampeon('regional');
+    const { tablas, campeones } = tablasDeDivisiones(m, null);
+
+    expect(campeones.regional.id).toBe(elegidoId);
+    expect(tablas.regional.some((f) => f.id === elegidoId)).toBe(false);
+  });
+
+  it('los retadores se renumeran desde 1 sin dejar el hueco del campeón', () => {
+    const { mundo: m } = mundoConCampeon('regional');
+    const { tablas } = tablasDeDivisiones(m, null);
+
+    expect(tablas.regional.map((f) => f.ranking)).toEqual(tablas.regional.map((_, i) => i + 1));
+  });
+
+  it('la fila del campeón viene sin puesto y marcada como campeón', () => {
+    const { mundo: m } = mundoConCampeon('nacional');
+    const { campeones } = tablasDeDivisiones(m, null);
+
+    expect(campeones.nacional.ranking).toBeNull();
+    expect(campeones.nacional.esCampeon).toBe(true);
+  });
+
+  it('el amateur nunca tiene campeón (no hay cinturón de formación)', () => {
+    const { mundo: m } = mundoConCampeon('regional');
+    expect(tablasDeDivisiones(m, null).campeones.amateur).toBeNull();
+  });
+
+  // El caso que hace interesante al sistema: los puntos decaen y el campeón se
+  // cae del cupo. Antes desaparecía de la pantalla; ahora sigue en su renglón.
+  it('un campeón que se cayó de su tabla igual viaja como campeón', () => {
+    const { mundo: m, elegidoId } = mundoConCampeon('mundial');
+    // Se lo saca de la tabla vaciándole los puntos, sin sacarlo del roster.
+    const sinPuntos = {
+      ...m,
+      roster: m.roster.map((p) => (p.id === elegidoId
+        ? { ...p, puntosRanking: { regional: 0, nacional: 0, mundial: 0 } }
+        : p)),
+    };
+    const { tablas, campeones } = tablasDeDivisiones(sinPuntos, null);
+
+    expect(tablas.mundial.some((f) => f.id === elegidoId)).toBe(false);
+    expect(campeones.mundial?.id).toBe(elegidoId);
+  });
+
+  it('un campeón retirado deja el renglón vacío', () => {
+    const { mundo: m, elegidoId } = mundoConCampeon('regional');
+    const retirado = {
+      ...m,
+      roster: m.roster.map((p) => (p.id === elegidoId ? { ...p, retirado: true } : p)),
+    };
+    expect(tablasDeDivisiones(retirado, null).campeones.regional).toBeNull();
   });
 });

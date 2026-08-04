@@ -13,6 +13,9 @@ function ofertaDeMuestra() {
     rivalMedia: 61,
     rivalRecord: '10-2',
     rivalRanking: 14,
+    // v18: la card del destacado muestra los mismos chips de puesto divisional
+    // que la pantalla de oferta (ver chipsDePuestos, fight.js).
+    rivalPuestos: { regional: 14 },
     bolsa: 4200,
     fraseEntrenador: 'Va a ser una pelea pareja, prestá atención.',
   };
@@ -32,11 +35,11 @@ beforeEach(() => {
 });
 
 describe('renderCardTramite', () => {
-  it('muestra nombre con apodo, récord, ranking y media del rival', () => {
+  it('muestra nombre con apodo, récord, puesto y media del rival', () => {
     renderCardTramite(cont, { oferta: ofertaDeMuestra(), rival: rivalDeMuestra() });
     expect(cont.textContent).toContain('"El Tanque" Tyrell Carter');
     expect(cont.textContent).toContain('10-2');
-    expect(cont.textContent).toContain('#14');
+    expect(cont.textContent).toContain('Regional #14');
     expect(cont.textContent).toContain('61');
   });
 

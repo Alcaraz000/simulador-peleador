@@ -69,6 +69,48 @@ function prepararPartidaGuardada(tipo, semilla = 1) {
   return storage;
 }
 
+// Una partida guardada parada en un beat 'evento' cuya carta tenga al menos
+// una opción CON azar (`probabilidades`, ver resolverOpcion en events.js), que
+// es el camino que ejercita el roll.
+//
+// Antes esto era una semilla escrita a mano, y se rompía cada vez que algo
+// consumía tiradas distintas en el camino: la secuencia entera de la carrera
+// se corre y esa semilla deja de caer en la carta puntual. Se persiguió seis
+// veces (6->10->16->11->30->83) hasta que quedó claro que el número no es el
+// invariante que el test quiere probar — lo que importa es "una carta con
+// roll", no "la semilla 83". Ahora la busca sola: recorre semillas hasta dar
+// con una que sirva, así cualquier cambio de contenido futuro se acomoda solo.
+// Devuelve además QUÉ opción trae el roll y cuáles son sus ramas, sacadas de
+// la carta que de verdad salió: así los tests afirman sobre la estructura (una
+// rama iluminada, la crónica de esa rama sobre la tarjeta) en vez de sobre el
+// texto de una carta puntual, que era la otra mitad del acoplamiento.
+function prepararPartidaGuardadaEventoConAzar(maxSemillas = 200) {
+  for (let semilla = 1; semilla <= maxSemillas; semilla += 1) {
+    let partida = nuevaPartida(semilla);
+    for (let i = 0; i < 500 && !partida.terminada; i += 1) {
+      const paso = siguienteBeat(partida);
+      const carta = paso.beat?.tipo === 'evento' ? paso.beat.datos.carta : null;
+      const opcion = (carta?.opciones ?? []).find((o) => o.probabilidades);
+      if (opcion) {
+        const storage = crearStorageFalso();
+        // El login es solo un portón de acceso (ver login.js), no
+        // autenticación real: marcarlo como ya pasado deja probar el tablero
+        // directamente, igual que haría un jugador que ya inició sesión antes.
+        storage.setItem(CLAVE_ACCESO, '1');
+        guardar(partida, storage);
+        return {
+          storage,
+          opcionId: opcion.id,
+          ramas: opcion.probabilidades.length,
+          textos: opcion.probabilidades.map((r) => r.texto),
+        };
+      }
+      partida = paso.partida;
+    }
+  }
+  throw new Error(`ninguna de las primeras ${maxSemillas} semillas llega a un evento con azar`);
+}
+
 // Pedido del coordinador (v4, "el mazo de mejora también"): repartirMejoras
 // (cards.js) a veces reparte 2 cartas en vez de 3 (~1 de cada 5, ver
 // decidirCantidadMejoras). Busca el PRIMER 'mejora' que salió con 2, para
@@ -209,18 +251,12 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   });
 
   it('evento con azar: la opcion elegida corre el roll (queda iluminada la crónica ganadora sobre la propia tarjeta) y despues aplica el efecto y pasa a la próxima tarjeta', () => {
-    // semilla 11 -> el PRIMER beat 'evento' de esta carrera es justo la carta
-    // "desafio_de_la_vereda" (Task v3, cartas nuevas con azar — ver
-    // cards-events.js), cuya opción "aceptar" tiene probabilidades
-    // (verificado aparte): ejercita el camino con roll. Esta semilla se
-    // reeligió varias veces por el mismo motivo (cualquier cambio de
-    // contenido que consuma rng en el camino corre la secuencia entera):
-    // 6->10 (v7, "más parodias"), 10->16 (cartas de condiciones
-    // situacionales), 16->11 (v13, simplificación de atributos) y ahora
-    // 11->30 (v17.8, las cuatro divisiones: crearRoster consume tiradas
-    // nuevas por nacionalidad y récord de arranque, más el roster amateur) y
-    // 30->83 (v18, los rankings por puntos cambiaron la generación del mundo).
-    iniciar(cont, prepararPartidaGuardada('evento', 83));
+    // Una carta con `probabilidades` (Task v3, cartas nuevas con azar — ver
+    // cards-events.js): ejercita el camino con roll. La semilla y la opción
+    // las busca el helper, no están escritas acá — ver
+    // prepararPartidaGuardadaEventoConAzar.
+    const { storage, opcionId, ramas, textos } = prepararPartidaGuardadaEventoConAzar();
+    iniciar(cont, storage);
 
     // Referencias de nodo capturadas ANTES de elegir: son la garantía central
     // del rediseño (spec: "el tablero nunca desaparece"). Si el shell se
@@ -229,11 +265,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     const refIzquierda = cont.querySelector('.shell-izquierda');
     const refDerecha = cont.querySelector('.shell-derecha');
 
-    // "desafio_de_la_vereda" tiene exactamente 2 opciones -> grilla de 2
-    // columnas (fix v3), no la de 3 de siempre.
-    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
+    // Una tarjeta de efecto por rama posible del roll.
+    const tarjetaAzar = cont.querySelector(`[data-opcion="${opcionId}"]`);
     expect(tarjetaAzar).toBeTruthy();
-    expect(tarjetaAzar.querySelectorAll('.tarjeta-efecto').length).toBe(2);
+    expect(tarjetaAzar.querySelectorAll('.tarjeta-efecto').length).toBe(ramas);
 
     tarjetaAzar.click();
 
@@ -250,10 +285,10 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
     expect(iluminados).toHaveLength(1);
     const resultado = tarjetaAzar.querySelector('.tarjeta-resultado');
     expect(resultado).toBeTruthy();
-    // Cualquiera de las dos ramas de "desafio_de_la_vereda" (60/40, ver
-    // cards-events.js) es una crónica válida para este test: lo que importa
-    // es que la tarjeta muestre ALGUNA, no cuál en particular ganó el roll.
-    expect(resultado.textContent).toMatch(/El barrio entero se entera|Te agarró de sorpresa/);
+    // Cualquiera de las ramas de la carta es una crónica válida para este
+    // test: lo que importa es que la tarjeta muestre ALGUNA, no cuál en
+    // particular ganó el roll.
+    expect(textos).toContain(resultado.textContent.trim());
 
     // Todavía no se aplicó el efecto ni se pasó a la próxima tarjeta: la
     // tarjeta con el resultado se deja un momento a la vista (pausa de
@@ -290,8 +325,9 @@ describe('main.js: mejora/evento/redes/sparring viven en el shell (Task 3.2)', (
   // cota SUPERIOR para que la lectura no se vuelva tediosa (el roll se repite
   // varias veces por carrera).
   it('la pausa de lectura tras el roll dura bastante más que antes (1100ms), sin volverse tediosa', () => {
-    iniciar(cont, prepararPartidaGuardada('evento', 83));
-    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
+    const { storage, opcionId } = prepararPartidaGuardadaEventoConAzar();
+    iniciar(cont, storage);
+    const tarjetaAzar = cont.querySelector(`[data-opcion="${opcionId}"]`);
     tarjetaAzar.click();
 
     // El roll resolvió en el mismo tick (reduced motion): el resultado ya
@@ -665,9 +701,10 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     // semilla 11 -> carta "desafio_de_la_vereda", la opción "aceptar" SI
     // tiene probabilidades (mismo caso ya usado más arriba para probar el
     // roll — ver el comentario grande ahí).
-    iniciar(cont, prepararPartidaGuardada('evento', 83));
+    const { storage, opcionId } = prepararPartidaGuardadaEventoConAzar();
+    iniciar(cont, storage);
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
+    const tarjetaAzar = cont.querySelector(`[data-opcion="${opcionId}"]`);
     expect(tarjetaAzar).toBeTruthy();
 
     tarjetaAzar.click();
@@ -704,10 +741,11 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
   it('volver de la Ficha después de interrumpir el roll aplica el efecto y deja el tablero en el estado ocioso, no la carta de nuevo', () => {
     window.matchMedia = () => ({ matches: false, addEventListener: () => {}, removeEventListener: () => {} });
 
-    // Mismo caso que arriba ("desafio_de_la_vereda" con roll).
-    iniciar(cont, prepararPartidaGuardada('evento', 83));
+    // Mismo caso que arriba (una carta con roll).
+    const { storage, opcionId } = prepararPartidaGuardadaEventoConAzar();
+    iniciar(cont, storage);
 
-    const tarjetaAzar = cont.querySelector('[data-opcion="aceptar"]');
+    const tarjetaAzar = cont.querySelector(`[data-opcion="${opcionId}"]`);
     tarjetaAzar.click();
     vi.advanceTimersByTime(400);
 
@@ -725,7 +763,7 @@ describe('main.js: el roll de una carta con azar no le puede robar la pantalla a
     // es volver a la MISMA carta.
     expect(cont.querySelector('.shell')).toBeTruthy();
     expect(cont.contains(tarjetaAzar)).toBe(false);
-    expect(cont.querySelector('[data-opcion="aceptar"]')).toBeNull();
+    expect(cont.querySelector(`[data-opcion="${opcionId}"]`)).toBeNull();
     expect(cont.querySelector('[data-bloque="contenido"]').children.length).toBeGreaterThan(0);
   });
 });

@@ -342,7 +342,10 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
   // puesto real, coherente con los rivales que ofrece buscarRival — mismo
   // popup que la tienda: el tablero sigue montado y visible detrás.
   function abrirRanking() {
-    renderRanking({ tablas: tablasDeDivisiones(partida.mundo, partida.jugador) });
+    // v18: el campeón viaja aparte de las filas numeradas — va en su propio
+    // renglón, arriba de la tabla (ver tablasDeDivisiones, world.js).
+    const { tablas, campeones } = tablasDeDivisiones(partida.mundo, partida.jugador);
+    renderRanking({ tablas, campeones });
   }
 
   // Asegura el shell y REFRESCA los tres paneles del tablero con la partida
@@ -852,7 +855,21 @@ export function iniciar(contenedor = document.getElementById('app'), storage = u
             const paso = aplicarResultado(partida.jugador, {
               oferta, resultado: { ganador, metodo, round }, modo: 'tramite', semanaGlobal: partida.semanaGlobal,
             });
-            partida = { ...partida, jugador: paso.jugador, proximaPelea: null };
+            // Los puntos de ranking, para el jugador Y para el rival (v18):
+            // un destacado de trámite es una pelea del jugador como cualquier
+            // otra y mueve las tablas igual. Mismo orden que cerrarPelea: se
+            // calculan sobre `partida` TODAVÍA sin el resultado aplicado,
+            // porque el delta depende de en qué puesto estaba cada uno al
+            // subir al ring, no de cómo quedaron después.
+            const conPuntos = aplicarPuntosDePelea(partida, {
+              rivalId: oferta.rivalId,
+              resultado: ganador === 'jugador' ? 'v' : 'd',
+            });
+            partida = {
+              ...conPuntos,
+              jugador: { ...paso.jugador, puntosRanking: conPuntos.jugador.puntosRanking },
+              proximaPelea: null,
+            };
             resultadoFinal = { detalle, metodo, resultadoLetra: ganador === 'jugador' ? 'v' : 'd' };
             fase = 'resultado';
             centro(pintarTramite);

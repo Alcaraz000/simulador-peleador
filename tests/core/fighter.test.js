@@ -192,15 +192,39 @@ describe('repartirOrigenes', () => {
 });
 
 describe('nacionalidades', () => {
-  it('son exactamente seis', () => {
-    expect(NACIONALIDADES).toHaveLength(6);
-    expect(NACIONALIDADES.map((n) => n.codigo).sort()).toEqual(['AR', 'ES', 'IT', 'JP', 'MX', 'US']);
+  // v18: de 6 a 12 (ver el comentario de NACIONALIDADES, names.js). Lo que
+  // importa no es el número exacto sino que no haya códigos repetidos y que
+  // cada país esté completo — eso lo cubre el test de abajo.
+  it('no hay códigos repetidos', () => {
+    const codigos = NACIONALIDADES.map((n) => n.codigo);
+    expect(new Set(codigos).size).toBe(codigos.length);
+  });
+
+  it('incluye los seis países originales', () => {
+    const codigos = NACIONALIDADES.map((n) => n.codigo);
+    for (const codigo of ['AR', 'ES', 'IT', 'JP', 'MX', 'US']) {
+      expect(codigos).toContain(codigo);
+    }
   });
 
   it('cada una tiene escuela', () => {
     for (const n of NACIONALIDADES) {
       expect(n.escuela.length).toBeGreaterThan(0);
       expect(NOMBRES_POR_PAIS[n.codigo].nombres.length).toBeGreaterThan(0);
+    }
+  });
+
+  // El pool de nombres de un país es lo que le pone techo a cuántos peleadores
+  // suyos pueden convivir: `intentarSumar` (roster.js) rechaza nombres
+  // repetidos, así que con un pool chico la camada nueva no entra y el país se
+  // seca. Doce por doce = 144 combinaciones, el estándar que fijó la v17.
+  it('cada país trae doce nombres y doce apellidos, sin repetir', () => {
+    for (const n of NACIONALIDADES) {
+      const { nombres, apellidos } = NOMBRES_POR_PAIS[n.codigo];
+      expect(nombres).toHaveLength(12);
+      expect(apellidos).toHaveLength(12);
+      expect(new Set(nombres).size).toBe(12);
+      expect(new Set(apellidos).size).toBe(12);
     }
   });
 

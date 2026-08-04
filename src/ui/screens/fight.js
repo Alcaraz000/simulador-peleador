@@ -30,6 +30,25 @@ function tileConIcono({ nombreIcono, color, valorTexto, valorClase = '', etiquet
   ]);
 }
 
+// v18: los puestos divisionales de un rival, como una fila de chips —
+// "REGIONAL #4", "NACIONAL #9". Un chip por división donde el rival de verdad
+// figura; si no está en ninguna, no se dibuja nada (un rival sin rango es
+// información también, pero se lee mejor por ausencia que con un "sin puesto"
+// que ocupa lugar). El orden es el de la escalera: primero el escalón más bajo.
+export const NOMBRE_DIVISION = { regional: 'Regional', nacional: 'Nacional', mundial: 'Mundial' };
+const ORDEN_DIVISIONES = ['regional', 'nacional', 'mundial'];
+
+export function chipsDePuestos(puestos) {
+  const presentes = ORDEN_DIVISIONES.filter((d) => puestos?.[d]);
+  if (presentes.length === 0) return null;
+  return el('div', { class: 'fila rival-puestos', style: 'gap:6px;flex-wrap:wrap;margin-top:6px' },
+    presentes.map((division) => el('div', {
+      class: 'etiqueta dorado rival-puesto-chip',
+      dataset: { division },
+      text: `${NOMBRE_DIVISION[division]} #${puestos[division]}`,
+    })));
+}
+
 export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechazar }) {
   // Pedido v17.3: "si es una pelea PARA GANAR el título no se debería poder
   // rechazar". Es la pelea que la carrera entera venía a buscar — dejar que
@@ -56,14 +75,16 @@ export function renderOferta(contenedor, { oferta, jugador, onAceptar, onRechaza
           style: 'font-size:18px;font-weight:800;flex:1;min-width:0',
           text: oferta.rivalApodo ? `"${oferta.rivalApodo}" ${oferta.rivalNombre}` : oferta.rivalNombre,
         }),
-        // Puesto en el ranking del rival (Task v3, pedido textual): junto al
-        // nombre, así el jugador ve de un vistazo contra quién se mide sin
-        // ir a buscarlo a la tabla de posiciones.
-        oferta.rivalRanking
-          ? el('div', { class: 'etiqueta dorado', style: 'flex:0 0 auto', text: `#${oferta.rivalRanking}` })
-          : null,
       ]),
       el('div', { class: 'etiqueta', text: `Media ${oferta.rivalMedia} · récord ${oferta.rivalRecord} · ${oferta.rivalEstilo}` }),
+      // Los puestos DIVISIONALES del rival (v18, pedido: "que el matchmaking
+      // muestre el/los puesto(s) del rival"). Antes acá iba un solo número
+      // dorado con `rivalRanking`, el índice global del roster por media — un
+      // puesto que no existía en ninguna de las cuatro tablas que el jugador
+      // puede abrir. Ahora son los puestos de verdad, uno por división donde el
+      // rival figure: son los que deciden cuánto vale ganar (puntos-ranking.js)
+      // y por eso son los que hacen falta para decidir si vale la pena.
+      chipsDePuestos(oferta.rivalPuestos),
       el('div', { class: 'fila', style: 'margin-top:10px' }, [
         tileConIcono({
           nombreIcono: 'billete', color: 'var(--verde)', valorTexto: fmtDinero(oferta.bolsa), valorClase: 'verde', etiqueta: 'Bolsa',

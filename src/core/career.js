@@ -3,7 +3,13 @@ import { crearMundo, avanzarMundo, rankingDelJugador, ANIO_INICIAL } from './wor
 import { EDAD_INICIAL } from './fighter.js';
 import { repartirMejoras, recordarCarta } from './cards.js';
 import { elegirEvento, elegirCartaRedes } from './events.js';
-import { CINTURONES } from './offers.js';
+import { CINTURONES, proximoCinturon, puestosDelJugador } from './offers.js';
+
+// Hasta qué puesto de la división de su próximo cinturón se le fuerza la pelea
+// de título a un jugador que todavía no ganó ninguno (ver `forzarTitulo`, más
+// abajo). Antes era el top-3 de la tabla global de ~180; ahora es el top-3 de
+// esa división puntual.
+const PUESTO_FORZAR_TITULO = 3;
 import { intentosDePelea, armarLotePeleas } from './tramite.js';
 import {
   noticiasDeSucesos, agregarNoticias, marcarLeidas, recortarSucesos,
@@ -15,7 +21,7 @@ import { rendimientoDeMejora } from './talento.js';
 import {
   campeonDe, coronarCampeon, rankingsProfesionales, rankingsDondeEsta, puestoEn,
 } from './divisiones.js';
-import { aplicarPuntos, DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
+import { aplicarPuntos, decaerPuntos, DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
 import { fechaDe, mesesDelAnio, SEMANAS_POR_ANIO } from './calendario.js';
 import { armarBeatsCampamento } from './campamento.js';
 import {
@@ -25,7 +31,27 @@ import {
 
 // Pedido 1 (v6, "el ranking está muy pobre... debe de haber al menos 100
 // peleadores, la montaña a subir tiene que sentirse alta"): antes 12.
-export const CANTIDAD_MUNDO = 100;
+//
+// v18: 100 -> 180, al pasar de 6 a 12 países. Con 100 repartidos entre doce
+// banderas, cada país extranjero quedaba con ~5 peleadores (medido: el más
+// chico bajaba a 2), y con tan poca gente el "top 10 de tu país" no filtraba a
+// nadie: la cadena regional -> nacional -> mundial se volvía decorativa y las
+// tablas quedaban a medio llenar (regional 13 de 20, nacional 6 de 10). Con
+// 180 vuelven a llenarse (20/10) y el país más chico conserva ~7.
+//
+// El tamaño también es una palanca de BALANCE, y por eso quedó en 180 y no más
+// abajo: un mundo más chico es un mundo más fácil de escalar. Medido con
+// scripts/balance-sim.mjs, la tasa de "llegó al mundial" da 20,7% con 180,
+// 25,3% con 160 y 27,5% con 140 — el rango pedido es 18-28%, así que 180 es el
+// único que la deja centrada en vez de pegada al techo (y el único que mantiene
+// los minutos estimados dentro de los 27-30 de la spec).
+//
+// El costo es tiempo de test: la suite entera pasa de ~5 a ~9,5 minutos, porque
+// todo lo que recorre el roster (avanzarMundo, los rankings, buscarRival) se
+// paga sobre casi el doble de peleadores y `tests/core/career.test.js` simula
+// 1500 carreras completas. En el juego real no se nota: avanzarMundo mide
+// 1,3ms por año.
+export const CANTIDAD_MUNDO = 180;
 
 // El jugador también sufre el declive de "las piernas" por la edad, igual que
 // los NPC en world.js (ahí es un roll de rng; acá es determinístico para no
@@ -525,15 +551,28 @@ export function aplicarCambioDeCampeon(partida, { oferta, gano }) {
 }
 
 /**
- * Aplica los puntos de ranking de una pelea del JUGADOR, a él y al rival.
+ * Aplica los puntos de ranking de UNA O VARIAS peleas del JUGADOR, a él y a
+ * cada rival.
  *
- * Los puestos se toman ANTES de tocar nada (foto previa), porque el delta
- * depende de en qué puesto estaba cada uno cuando se subieron al ring. Se
- * mueven SOLO las divisiones donde el rival figura: si está en el regional y
- * en el nacional se mueven las dos, si está solo en el mundial solo esa, y si
- * no está en ninguna, ganarle no suma nada (pero perder sí cuesta).
+ * Los puestos salen de UNA SOLA foto de rankings, tomada al entrar: el delta
+ * depende de en qué puesto estaba cada uno cuando se subieron al ring, y todas
+ * las peleas de un mismo lote se puntúan contra la misma tabla — igual que la
+ * tanda anual de los NPC (ver `fotoRankings` en avanzarMundo, world.js). Eso
+ * además es lo que hace barato el camino de trámite: `rankingsProfesionales`
+ * recorre el roster entero y ordena tres veces, así que recalcularlo por cada
+ * pelea de cada lote de cada año se paga carísimo en los tests de balance
+ * (cientos de carreras completas).
+ *
+ * Se mueven SOLO las divisiones donde el rival figura: si está en el regional
+ * y en el nacional se mueven las dos, si está solo en el mundial solo esa, y
+ * si no está en ninguna, ganarle no suma nada (pero perder sí cuesta).
+ *
+ * `peleas` es una lista de `{ rivalId, resultado }` en el orden en que
+ * ocurrieron ('v' | 'd' | 'e', desde la perspectiva del jugador).
  */
-export function aplicarPuntosDePelea(partida, { rivalId, resultado }) {
+export function aplicarPuntosDeLote(partida, peleas) {
+  if (peleas.length === 0) return partida;
+
   const rankings = rankingsProfesionales(partida.mundo, partida.jugador);
   const puestosDe = (id) => Object.fromEntries(
     DIVISIONES_PUNTUABLES
@@ -542,26 +581,45 @@ export function aplicarPuntosDePelea(partida, { rivalId, resultado }) {
   );
 
   const misPuestos = puestosDe(partida.jugador.id);
-  const puestosRival = puestosDe(rivalId);
-  const resultadoRival = resultado === 'v' ? 'd' : resultado === 'd' ? 'v' : 'e';
+  // Los puntos del rival se acumulan por id: un mismo rival no puede repetirse
+  // dentro de un lote (`excluidos`, armarLotePeleas), pero sí puede volver a
+  // aparecer en otro camino, y sumar sobre el mapa ya modificado es lo
+  // correcto en cualquier caso.
+  const puntosRivales = new Map();
+  let puntosJugador = partida.jugador.puntosRanking ?? {};
 
-  const jugador = {
-    ...partida.jugador,
-    puntosRanking: aplicarPuntos(partida.jugador, { resultado, misPuestos, puestosRival }),
-  };
+  for (const { rivalId, resultado } of peleas) {
+    const rival = (partida.mundo.roster ?? []).find((p) => p.id === rivalId);
+    if (!rival) continue;
+    const puestosRival = puestosDe(rivalId);
+    const resultadoRival = resultado === 'v' ? 'd' : resultado === 'd' ? 'v' : 'e';
 
-  // El rival vive en el roster del mundo: su carrera también se mueve con este
-  // resultado. Sin esto, ganarle al #1 lo dejaría intacto en la cima.
-  const roster = (partida.mundo.roster ?? []).map((p) => (p.id === rivalId
-    ? {
-      ...p,
-      puntosRanking: aplicarPuntos(p, {
-        resultado: resultadoRival, misPuestos: puestosRival, puestosRival: misPuestos,
-      }),
-    }
+    puntosJugador = aplicarPuntos({ puntosRanking: puntosJugador }, {
+      resultado, misPuestos, puestosRival,
+    });
+    // El rival vive en el roster del mundo: su carrera también se mueve con
+    // este resultado. Sin esto, ganarle al #1 lo dejaría intacto en la cima.
+    puntosRivales.set(rivalId, aplicarPuntos(
+      { puntosRanking: puntosRivales.get(rivalId) ?? rival.puntosRanking },
+      { resultado: resultadoRival, misPuestos: puestosRival, puestosRival: misPuestos },
+    ));
+  }
+
+  const roster = (partida.mundo.roster ?? []).map((p) => (puntosRivales.has(p.id)
+    ? { ...p, puntosRanking: puntosRivales.get(p.id) }
     : p));
 
-  return { ...partida, jugador, mundo: { ...partida.mundo, roster } };
+  return {
+    ...partida,
+    jugador: { ...partida.jugador, puntosRanking: puntosJugador },
+    mundo: { ...partida.mundo, roster },
+  };
+}
+
+/** El caso de una sola pelea (la que el jugador jugó completa, cerrarPelea en
+ * main.js, y el destacado del minijuego). Mismo criterio que el lote. */
+export function aplicarPuntosDePelea(partida, { rivalId, resultado }) {
+  return aplicarPuntosDeLote(partida, [{ rivalId, resultado }]);
 }
 
 export function crearPartida({ jugador, semilla }) {
@@ -852,6 +910,27 @@ export function avanzarBloque(partida) {
   });
   nueva.mundo = paso.mundo;
 
+  // El ranking no perdona la inactividad, y eso vale para el jugador igual que
+  // para los cien del roster (v18: `avanzarMundo`, arriba, ya les aplicó el
+  // decaimiento a ellos). Sin esto el jugador era el ÚNICO del mundo que podía
+  // quedarse arriba sin subirse al ring: todos los demás perdían su 12% anual
+  // y él conservaba sus puntos para siempre, así que un año sabático lo
+  // ascendía en las tablas sin pelear.
+  //
+  // "Peleó este año" se mide contra el historial PROFESIONAL (las amateurs van
+  // a `historialAmateur`, ver aplicarResultado en offers.js), comparado con la
+  // marca que dejó el enero anterior: `avanzarBloque` corre una vez por año y
+  // ANTES de que `armarCola` arme las peleas del año que empieza, así que lo
+  // que haya entre las dos marcas es exactamente el año que acaba de cerrar.
+  // Mismo criterio grueso que los NPC (`pelearonEsteAnio`, world.js): peleaste
+  // o no peleaste, sin mirar división por división — la misma regla para
+  // todos.
+  const peleasHastaAhora = nueva.jugador.historial.length;
+  if ((nueva.jugador.peleasAlCerrarAnio ?? 0) === peleasHastaAhora) {
+    nueva.jugador.puntosRanking = decaerPuntos(nueva.jugador.puntosRanking, []);
+  }
+  nueva.jugador.peleasAlCerrarAnio = peleasHastaAhora;
+
   // El ranking del jugador se recalcula cada bloque: es lo que habilita
   // las peleas de título y las defensas obligatorias.
   nueva.jugador.ranking = rankingDelJugador(nueva.mundo, nueva.jugador);
@@ -1044,6 +1123,10 @@ function armarCola(partida) {
   // trabajen siempre con el estado más fresco.
   let jugadorActual = partida.jugador;
   let rivalidadesActuales = partida.rivalidades;
+  // v18: el lote de trámite también mueve los puntos de ranking, y el otro
+  // lado de cada una de esas peleas es un rival del roster — así que el MUNDO
+  // también cambia acá dentro, no solo el jugador.
+  let mundoActual = partida.mundo;
 
   // Task 5.1: LA decisión del cuatrimestre — siempre exactamente una, elegida
   // por peso entre mejora/evento/redes (ver PESOS_DECISION, arriba). Ya no es
@@ -1116,9 +1199,18 @@ function armarCola(partida) {
       : (rng.chance(etapa.probPelea) ? 1 : 0);
 
     if (intentos > 0) {
+      // v18: "está tan arriba que el título tiene que llegar" ya no se mide
+      // con el puesto global entre los ~180 del mundo, sino con el puesto en la
+      // división del cinturón que le toca buscar — la misma tabla que decide si
+      // califica (ver puedeDisputar, offers.js). Sin esto, este atajo seguía
+      // corriendo con el ranking viejo y podía forzar un título para el que el
+      // jugador no calificaba por ningún lado.
+      const proximo = proximoCinturon(jugadorActual);
+      const misPuestos = esProfesional ? puestosDelJugador(mundoActual, jugadorActual) : {};
       const forzarTitulo = esProfesional
         && jugadorActual.titulos.length === 0
-        && (jugadorActual.ranking ?? 99) <= 3;
+        && proximo != null
+        && (misPuestos[proximo.id] ?? 99) <= PUESTO_FORZAR_TITULO;
       // Task 5.2: el viejo freno `permiteMarqueeEsteAnio` (el campeón
       // indiscutido "descansaba" el 80% de los años, para que sus defensas
       // no reventaran el presupuesto de minutos) ya no hace falta — un
@@ -1152,6 +1244,17 @@ function armarCola(partida) {
 
       jugadorActual = lote.jugador;
       rivalidadesActuales = lote.rivalidades;
+      // Los puntos de las peleas que el lote resolvió solo (v18), de una sola
+      // pasada y contra una única foto de rankings — ver aplicarPuntosDeLote.
+      // El marquee y el destacado no entran acá: todavía no se jugaron.
+      if (lote.peleasPuntuables.length > 0) {
+        const conPuntos = aplicarPuntosDeLote(
+          { ...partida, jugador: jugadorActual, mundo: mundoActual },
+          lote.peleasPuntuables,
+        );
+        jugadorActual = conPuntos.jugador;
+        mundoActual = conPuntos.mundo;
+      }
       // Las peleas de trámite (si hubo) van ANTES que la jugable: narran "el
       // año fue pasando" antes de llegar a la que de verdad importa.
       //
@@ -1215,7 +1318,7 @@ function armarCola(partida) {
       // en el próximo año (avanzarBloque), igual que cualquier oferta
       // jugable normal.
       if (lote.beatTramite) {
-        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(partida.mundo, jugadorActual) };
+        jugadorActual = { ...jugadorActual, ranking: rankingDelJugador(mundoActual, jugadorActual) };
       }
       // v7: si NINGÚN cupo de este año llegó a jugarse (todos se perdieron
       // por seguir lesionado en su momento — ver `bloqueados`, tramite.js),
@@ -1243,6 +1346,9 @@ function armarCola(partida) {
     rngEstado: rng.estado(),
     ofertaPendiente,
     jugador: jugadorActual,
+    // v18: el lote de trámite le movió los puntos a los rivales que peleó, así
+    // que el mundo vuelve actualizado igual que el jugador.
+    mundo: mundoActual,
     rivalidades: rivalidadesActuales,
     memoriaCartas: { evento: memoriaEvento, redes: memoriaRedes },
   };
@@ -1341,6 +1447,9 @@ export function siguienteBeat(partida) {
     // (ver armarLotePeleas, tramite.js) — jugador/rivalidades vuelven ya
     // actualizados, antes de que el jugador vea ningún beat de este bloque.
     nueva.jugador = armado.jugador;
+    // v18: esas peleas de trámite también movieron los puntos de ranking de
+    // los rivales, que viven en el roster del mundo.
+    nueva.mundo = armado.mundo;
     nueva.rivalidades = armado.rivalidades;
     nueva.memoriaCartas = { ...nueva.memoriaCartas, ...armado.memoriaCartas };
     nueva.bloque += 1;

@@ -100,6 +100,82 @@ function dibujarJP(g) {
   }));
 }
 
+// ---- v18: los seis países nuevos --------------------------------------------
+//
+// Mismo criterio de dibujo que los seis de arriba: formas planas, sin degradés
+// ni detalle fino, porque el tamaño real de uso es 20-24px de ancho — cualquier
+// cosa más chica que una franja se convierte en un píxel sucio. Cada una se
+// eligió además para que se distinga de las que ya estaban a ese tamaño.
+
+// Cinco franjas (no siete como US) y el triángulo al asta: a 20px lo que
+// separa a Cuba de Estados Unidos es el triángulo rojo, no las estrellas.
+function dibujarCU(g) {
+  const franjas = 5;
+  const alto = ALTO_VB / franjas;
+  for (let i = 0; i < franjas; i += 1) {
+    g.appendChild(svgEl('rect', {
+      x: 0, y: i * alto, width: ANCHO_VB, height: alto + 0.2,
+      fill: i % 2 === 0 ? '#2a4a8a' : '#f4f6f0',
+    }));
+  }
+  g.appendChild(svgEl('path', {
+    d: `M0 0 L${ANCHO_VB * 0.42} ${ALTO_VB / 2} L0 ${ALTO_VB} Z`,
+    fill: '#c8352f',
+  }));
+  g.appendChild(svgEl('circle', { cx: ANCHO_VB * 0.12, cy: ALTO_VB / 2, r: 1.5, fill: '#f4f6f0' }));
+}
+
+// La Union Jack, simplificada a lo que de verdad se lee chico: las diagonales
+// blancas, la cruz blanca y la cruz roja encima.
+function dibujarGB(g) {
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: ALTO_VB, fill: '#1e3a70' }));
+  const diagonal = (d, stroke, ancho) => g.appendChild(svgEl('path', {
+    d, stroke, 'stroke-width': ancho, fill: 'none',
+  }));
+  diagonal(`M0 0 L${ANCHO_VB} ${ALTO_VB}`, '#f4f6f0', 3.6);
+  diagonal(`M${ANCHO_VB} 0 L0 ${ALTO_VB}`, '#f4f6f0', 3.6);
+  diagonal(`M0 0 L${ANCHO_VB} ${ALTO_VB}`, '#c8352f', 1.6);
+  diagonal(`M${ANCHO_VB} 0 L0 ${ALTO_VB}`, '#c8352f', 1.6);
+  g.appendChild(svgEl('rect', { x: 0, y: ALTO_VB / 2 - 2.6, width: ANCHO_VB, height: 5.2, fill: '#f4f6f0' }));
+  g.appendChild(svgEl('rect', { x: ANCHO_VB / 2 - 2.6, y: 0, width: 5.2, height: ALTO_VB, fill: '#f4f6f0' }));
+  g.appendChild(svgEl('rect', { x: 0, y: ALTO_VB / 2 - 1.4, width: ANCHO_VB, height: 2.8, fill: '#c8352f' }));
+  g.appendChild(svgEl('rect', { x: ANCHO_VB / 2 - 1.4, y: 0, width: 2.8, height: ALTO_VB, fill: '#c8352f' }));
+}
+
+// Azul arriba, rojo abajo y el triángulo blanco al asta con el sol.
+function dibujarPH(g) {
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: ALTO_VB / 2, fill: '#2a4a8a' }));
+  g.appendChild(svgEl('rect', { x: 0, y: ALTO_VB / 2, width: ANCHO_VB, height: ALTO_VB / 2, fill: '#c8352f' }));
+  g.appendChild(svgEl('path', {
+    d: `M0 0 L${ANCHO_VB * 0.4} ${ALTO_VB / 2} L0 ${ALTO_VB} Z`,
+    fill: '#f4f6f0',
+  }));
+  g.appendChild(svgEl('circle', { cx: ANCHO_VB * 0.13, cy: ALTO_VB / 2, r: 1.7, fill: '#f2c14e' }));
+}
+
+// Dos franjas y nada más: es la más simple del set y por eso la más legible.
+function dibujarUA(g) {
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: ALTO_VB / 2, fill: '#2f6ec4' }));
+  g.appendChild(svgEl('rect', { x: 0, y: ALTO_VB / 2, width: ANCHO_VB, height: ALTO_VB / 2, fill: '#f2c14e' }));
+}
+
+// El amarillo ocupa la mitad de arriba; azul y rojo se reparten la de abajo.
+function dibujarCO(g) {
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: ALTO_VB / 2, fill: '#f2c14e' }));
+  g.appendChild(svgEl('rect', { x: 0, y: ALTO_VB / 2, width: ANCHO_VB, height: ALTO_VB / 4, fill: '#2a4a8a' }));
+  g.appendChild(svgEl('rect', { x: 0, y: (ALTO_VB * 3) / 4, width: ANCHO_VB, height: ALTO_VB / 4, fill: '#c8352f' }));
+}
+
+// Tricolor horizontal con la estrella negra al medio, que es lo que la separa
+// de cualquier otra franja roja-amarilla-verde.
+function dibujarGH(g) {
+  const franja = ALTO_VB / 3;
+  g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: franja, fill: '#c8352f' }));
+  g.appendChild(svgEl('rect', { x: 0, y: franja, width: ANCHO_VB, height: franja, fill: '#f2c14e' }));
+  g.appendChild(svgEl('rect', { x: 0, y: franja * 2, width: ANCHO_VB, height: franja, fill: '#2f8a3a' }));
+  g.appendChild(svgEl('circle', { cx: ANCHO_VB / 2, cy: ALTO_VB / 2, r: 2.2, fill: '#1a1a1a' }));
+}
+
 function dibujarDesconocida(g) {
   g.appendChild(svgEl('rect', { x: 0, y: 0, width: ANCHO_VB, height: ALTO_VB, fill: '#3a2a2a' }));
   g.appendChild(svgEl('circle', {
@@ -118,6 +194,12 @@ const DIBUJANTES = {
   ES: dibujarES,
   IT: dibujarIT,
   JP: dibujarJP,
+  CU: dibujarCU,
+  GB: dibujarGB,
+  PH: dibujarPH,
+  UA: dibujarUA,
+  CO: dibujarCO,
+  GH: dibujarGH,
 };
 
 /** Dibuja la bandera del código dado como un <svg> inline, relación 3:2 y esquinas redondeadas. */

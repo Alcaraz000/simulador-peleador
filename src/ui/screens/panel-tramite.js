@@ -3,6 +3,7 @@ import { bandera } from '../flags.js';
 import { icono } from '../icons.js';
 import { ATRIBUTOS, rangoDeMedia, ETIQUETAS } from '../../core/stats.js';
 import { renderPanelDecision } from './panel-decision.js';
+import { chipsDePuestos } from './fight.js';
 import { animarBarajado } from '../components/roll.js';
 
 // Pedidos 1 y 2 (v7): las peleas de trámite ya no aparecen resueltas de la
@@ -101,7 +102,11 @@ export function renderCardTramite(region, {
         rival ? bandera(rival.nacionalidad, { ancho: 24 }) : null,
         el('div', { style: 'flex:3;min-width:0' }, [
           el('div', { style: 'font-weight:800;font-size:15px;overflow-wrap:break-word', text: nombreMostrado }),
-          el('div', { class: 'etiqueta', text: `Récord ${oferta.rivalRecord}${oferta.rivalRanking ? ` · #${oferta.rivalRanking}` : ''}` }),
+          el('div', { class: 'etiqueta', text: `Récord ${oferta.rivalRecord}` }),
+          // Mismos chips de puesto que la pantalla de oferta (v18): el
+          // destacado de trámite también mueve las tablas, así que el jugador
+          // necesita el mismo dato para saber qué se juega.
+          chipsDePuestos(oferta.rivalPuestos),
         ]),
         el('div', {
           class: 'cabecera-media',

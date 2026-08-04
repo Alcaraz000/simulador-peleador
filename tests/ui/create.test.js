@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { renderCreacion } from '../../src/ui/screens/create.js';
 import { createRng } from '../../src/core/rng.js';
 import { mediaDe } from '../../src/core/fighter.js';
+import { NACIONALIDADES } from '../../src/content/names.js';
 
 let cont;
 beforeEach(() => {
@@ -261,14 +262,16 @@ describe('renderCreacion — nada se "refresca" al elegir una opción (identidad
 });
 
 describe('renderCreacion — el picker de nacionalidad (popup)', () => {
-  it('el botón de nacionalidad abre un popup con las 6 banderas en grilla 3×2', () => {
+  // v18: el picker se arma desde NACIONALIDADES (de 6 a 12 países), así que la
+  // cuenta sale de ahí en vez de estar escrita a mano.
+  it('el botón de nacionalidad abre un popup con una bandera por país', () => {
     irAPaso1();
     cont.querySelector('[data-campo="nacionalidad"]').click();
     const grilla = document.querySelector('.popup-banderas-grilla');
     expect(grilla).toBeTruthy();
     const botones = grilla.querySelectorAll('.popup-bandera-boton');
-    expect(botones).toHaveLength(6);
-    for (const codigo of ['AR', 'MX', 'US', 'ES', 'IT', 'JP']) {
+    expect(botones).toHaveLength(NACIONALIDADES.length);
+    for (const { codigo } of NACIONALIDADES) {
       expect(grilla.querySelector(`[data-pais="${codigo}"]`)).toBeTruthy();
     }
   });

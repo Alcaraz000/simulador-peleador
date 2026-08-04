@@ -11,7 +11,17 @@ import { ATRIBUTOS } from './stats.js';
 // forma de jugador.atributos (tieneAtributosVigentes, más abajo) es la
 // misma red de seguridad de siempre, por si algún día el número vuelve a
 // quedar fijo entre dos versiones.
-export const VERSION_ESQUEMA = 2;
+//
+// v18 (rankings por puntos): sube de nuevo, 2 -> 3, por exactamente el mismo
+// motivo que la vez anterior. Los puntos de ranking (`puntosRanking`) se
+// SIEMBRAN al crear el mundo (`crearRoster`, roster.js) y de ahí en más solo se
+// mueven peleando: una partida guardada con el esquema 2 no los tiene en ningún
+// peleador, ni en el jugador ni en los 180 del roster. Cargarla no explota,
+// pero deja las cuatro tablas con todos en cero, ordenadas por el desempate de
+// id — es decir, un ranking sin ningún sentido, que es peor que un error
+// visible. Y no hay migración razonable: los puntos representan a quién
+// enfrentó cada uno, y esa historia no existe en el guardado viejo.
+export const VERSION_ESQUEMA = 3;
 export const CLAVE_GUARDADO = 'simpeleador:save:v1';
 
 function storagePorDefecto() {

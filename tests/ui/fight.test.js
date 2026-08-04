@@ -21,6 +21,11 @@ const oferta = {
   id: 'of_1', rivalId: rival.id, rivalNombre: rival.nombre, rivalApodo: rival.apodo,
   rivalMedia: 70, rivalRecord: '15-2', rivalEstilo: 'noqueador', rivalPersonalidad: 'agresivo',
   rivalRanking: 4,
+  // v18: los puestos DIVISIONALES son lo que ve el jugador (ver
+  // puestosDivisionalesDe, offers.js). `rivalRanking` sigue viajando en la
+  // oferta pero ya no se pinta: era el índice global del roster por media, un
+  // número que no existía en ninguna de las cuatro tablas.
+  rivalPuestos: { regional: 4, nacional: 9 },
   nivel: 'titulo', nivelPelea: 'titulo', bolsa: 25000, riesgo: 'alto',
   enJuego: 'Título regional', esTitulo: true, esObligatoria: false, esRevancha: false,
   famaBase: 15, textoGancho: 'Dyke Tyzon te quiere cruzar.',
@@ -97,9 +102,19 @@ describe('renderOferta', () => {
     });
   });
 
-  it('muestra el puesto del rival en el ranking', () => {
+  // v18: uno por división donde el rival figura, con el nombre de la tabla al
+  // lado del número — "#4" solo no dice de qué ranking está hablando.
+  it('muestra los puestos divisionales del rival, con el nombre de cada tabla', () => {
     renderOferta(cont, { oferta, jugador, onAceptar: noop, onRechazar: noop });
-    expect(cont.textContent).toContain('#4');
+    const chips = [...cont.querySelectorAll('.rival-puesto-chip')].map((n) => n.textContent);
+    expect(chips).toEqual(['Regional #4', 'Nacional #9']);
+  });
+
+  it('un rival sin rango en ninguna tabla no dibuja ningún chip', () => {
+    renderOferta(cont, {
+      oferta: { ...oferta, rivalPuestos: {} }, jugador, onAceptar: noop, onRechazar: noop,
+    });
+    expect(cont.querySelector('.rival-puesto-chip')).toBeNull();
   });
 
   it('muestra la frase del entrenador sobre esta pelea', () => {
@@ -115,7 +130,9 @@ describe('renderOferta', () => {
   });
 
   it('no rompe si la oferta no trae ranking ni frase de entrenador (compatibilidad)', () => {
-    const ofertaVieja = { ...oferta, rivalRanking: null, fraseEntrenador: null };
+    const ofertaVieja = {
+      ...oferta, rivalRanking: null, rivalPuestos: undefined, fraseEntrenador: null,
+    };
     expect(() => renderOferta(cont, { oferta: ofertaVieja, jugador, onAceptar: noop, onRechazar: noop })).not.toThrow();
     expect(cont.textContent).not.toContain('#4');
   });

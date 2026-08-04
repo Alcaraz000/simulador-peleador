@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador } from '../../src/core/fighter.js';
-import { crearPartida, aplicarPuntosDePelea } from '../../src/core/career.js';
+import {
+  crearPartida, aplicarPuntosDePelea, aplicarPuntosDeLote, avanzarBloque,
+} from '../../src/core/career.js';
+import { armarLotePeleas } from '../../src/core/tramite.js';
 import { rankingsProfesionales, puestoEn } from '../../src/core/divisiones.js';
 import {
   deltaDePelea, aplicarPuntos, decaerPuntos, puntosEn, puntosInicialesDe,
-  PUNTOS_DERROTA_CONTRA_NADIE,
+  PUNTOS_DERROTA_CONTRA_NADIE, DIVISIONES_PUNTUABLES,
 } from '../../src/core/puntos-ranking.js';
 
 function partida(semilla = 7) {
@@ -151,5 +154,125 @@ describe('una pelea del jugador', () => {
 
     const despues = rankingsProfesionales(actual.mundo, actual.jugador);
     expect(puestoEn(despues, 'regional', actual.jugador.id)).not.toBeNull();
+  });
+});
+
+// v18: un lote resuelve varias peleas contra UNA sola foto de rankings — el
+// mismo criterio que la tanda anual de los NPC (avanzarMundo, world.js).
+describe('un lote de peleas del jugador', () => {
+  it('mueve los puntos de cada rival, no solo los del primero', () => {
+    const p = partida();
+    const rankings = rankingsProfesionales(p.mundo, p.jugador);
+    const [unoA, unoB] = [rankings.regional[1], rankings.regional[2]];
+
+    const despues = aplicarPuntosDeLote(p, [
+      { rivalId: unoA.id, resultado: 'v' },
+      { rivalId: unoB.id, resultado: 'v' },
+    ]);
+
+    const finalA = despues.mundo.roster.find((x) => x.id === unoA.id);
+    const finalB = despues.mundo.roster.find((x) => x.id === unoB.id);
+    expect(puntosEn(finalA, 'regional')).toBeLessThan(puntosEn(unoA, 'regional'));
+    expect(puntosEn(finalB, 'regional')).toBeLessThan(puntosEn(unoB, 'regional'));
+  });
+
+  // La foto de puestos se toma UNA vez, al entrar: la segunda pelea del lote
+  // se puntúa contra la tabla de ANTES del lote, no contra la que dejó la
+  // primera. Con el jugador ya lejos del piso de cero (donde el clamp hace que
+  // el orden sí importe, y con razón: perder cuando no tenés nada no cuesta
+  // nada), eso se ve como que el orden no cambia el total.
+  it('las dos peleas se puntúan contra la MISMA foto', () => {
+    const base = partida();
+    const p = {
+      ...base,
+      jugador: { ...base.jugador, puntosRanking: { regional: 800, nacional: 800, mundial: 800 } },
+    };
+    const rankings = rankingsProfesionales(p.mundo, p.jugador);
+    const [unoA, unoB] = [rankings.regional[1], rankings.regional[5]];
+
+    const enOrden = aplicarPuntosDeLote(p, [
+      { rivalId: unoA.id, resultado: 'v' }, { rivalId: unoB.id, resultado: 'd' },
+    ]);
+    const alReves = aplicarPuntosDeLote(p, [
+      { rivalId: unoB.id, resultado: 'd' }, { rivalId: unoA.id, resultado: 'v' },
+    ]);
+
+    expect(enOrden.jugador.puntosRanking).toEqual(alReves.jugador.puntosRanking);
+  });
+
+  it('una lista vacía no toca nada', () => {
+    const p = partida();
+    expect(aplicarPuntosDeLote(p, [])).toBe(p);
+  });
+});
+
+// El agujero que quedaba abierto: las peleas jugadas ya puntuaban, pero las de
+// trámite (la mayoría de una carrera) no movían ninguna tabla.
+describe('las peleas de trámite también puntúan', () => {
+  it('el lote devuelve las peleas que resolvió, con rival y resultado', () => {
+    const p = partida();
+    const lote = armarLotePeleas(createRng(11), {
+      jugador: p.jugador, mundo: p.mundo, etapa: 'profesional', intentos: 3, tono: 'profesional',
+    });
+
+    expect(lote.peleasPuntuables.length).toBe(lote.beatTramite?.datos.resultados.length ?? 0);
+    for (const pelea of lote.peleasPuntuables) {
+      expect(pelea.rivalId).toBeTruthy();
+      expect(['v', 'd', 'e']).toContain(pelea.resultado);
+    }
+  });
+
+  it('ni el marquee ni el destacado entran: esos se puntúan cuando se juegan', () => {
+    // Sobre varias semillas, la cuenta de puntuables NUNCA supera a la de
+    // peleas efectivamente resueltas en el lote.
+    for (let s = 1; s <= 40; s += 1) {
+      const p = partida(s);
+      const lote = armarLotePeleas(createRng(s), {
+        jugador: p.jugador, mundo: p.mundo, etapa: 'profesional', intentos: 3, tono: 'profesional',
+      });
+      const resueltas = lote.beatTramite?.datos.resultados.length ?? 0;
+      expect(lote.peleasPuntuables.length).toBe(resueltas);
+    }
+  });
+});
+
+describe('el decaimiento por inactividad del jugador', () => {
+  // Antes de v18 el jugador era el único del mundo que no decaía: los cien
+  // NPC perdían su 12% anual y él conservaba los puntos para siempre.
+  it('un año sin pelear le baja los puntos, igual que a un NPC', () => {
+    const p = partida();
+    const conPuntos = {
+      ...p,
+      jugador: {
+        ...p.jugador,
+        puntosRanking: { regional: 900, nacional: 600, mundial: 300 },
+        peleasAlCerrarAnio: p.jugador.historial.length,
+      },
+    };
+
+    const despues = avanzarBloque(conPuntos);
+
+    for (const division of DIVISIONES_PUNTUABLES) {
+      expect(despues.jugador.puntosRanking[division])
+        .toBeLessThan(conPuntos.jugador.puntosRanking[division]);
+    }
+  });
+
+  it('un año CON pelea no le baja nada', () => {
+    const p = partida();
+    const conPuntos = {
+      ...p,
+      jugador: {
+        ...p.jugador,
+        puntosRanking: { regional: 900, nacional: 600, mundial: 300 },
+        // Marca de "el año pasado tenía una pelea menos": el historial creció,
+        // así que sí peleó.
+        peleasAlCerrarAnio: p.jugador.historial.length - 1,
+      },
+    };
+
+    const despues = avanzarBloque(conPuntos);
+
+    expect(despues.jugador.puntosRanking).toEqual(conPuntos.jugador.puntosRanking);
   });
 });

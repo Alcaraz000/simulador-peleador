@@ -1313,10 +1313,12 @@ h2 { font-size: 17px; font-weight: 800; }
 .tabla-ranking-boton:hover { color: var(--texto); border-color: var(--borde-fuerte); }
 .tabla-ranking-boton:active { transform: scale(0.94); }
 
-/* Grilla 3×2 de banderas dentro del popup de nacionalidad (Task 5.3). */
+/* Grilla de banderas dentro del popup de nacionalidad (Task 5.3). v18: con 12
+   países en vez de 6, tres columnas dejaban una lista de cuatro filas altas que
+   no entraba de una en el popup; cuatro columnas la dejan en 3×4. */
 .popup-banderas-grilla {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 8px;
 }
 
@@ -3565,6 +3567,35 @@ input.creacion-control { cursor: text; }
    significa "cinturón". No siempre es el #1: se puede tener el título puesto
    y haber bajado en la tabla. */
 .tabla-ranking-fila-campeon { border-left: 2px solid var(--dorado); }
+
+/* v18 — el campeón en su propio renglón, fuera de la numeración (como en las
+   tablas de verdad: el campeón no es "el #1", está aparte y los retadores se
+   numeran entre ellos). Vive FUERA de `.tabla-ranking-lista` a propósito: la
+   lista scrollea debajo suyo y el que tiene el cinturón queda siempre visible.
+   La línea de abajo lo separa de los retadores sin necesidad de un título de
+   sección más. */
+.tabla-ranking-campeon-renglon:not(:empty) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--borde);
+}
+
+.tabla-ranking-campeon-renglon .tabla-ranking-fila {
+  flex: 1;
+  min-width: 0;
+  background: #2a20080f;
+}
+
+.tabla-ranking-campeon-titulo {
+  flex: 0 0 auto;
+  color: var(--dorado);
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
 
 .tabla-ranking-cinturon {
   flex: 0 0 auto;

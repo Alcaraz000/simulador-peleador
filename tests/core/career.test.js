@@ -963,13 +963,20 @@ describe('Bloque 6: el eje de rejugabilidad (reemplaza "3 cinturones")', () => {
   const NOMBRE_MUNDIAL = CINTURONES.find((c) => c.id === 'mundial').nombre;
   const TOTAL = 1500;
 
+  // Las tres mediciones de abajo miran EXACTAMENTE la misma muestra (semillas 1
+  // a TOTAL, todo determinista), así que se calcula una sola vez y se reusa:
+  // simular 1500 carreras completas es lo más caro de toda la suite, y hacerlo
+  // tres veces triplicaba ese costo sin agregar una sola señal nueva.
+  let muestra = null;
   function carrerasDeMuestra() {
+    if (muestra) return muestra;
     const resultados = [];
     for (let semilla = 1; semilla <= TOTAL; semilla += 1) {
       const { partida } = jugarGanandoTodo(crearPartida({ jugador: jugadorConTalentoReal(semilla), semilla }));
       resultados.push(partida.jugador);
     }
-    return resultados;
+    muestra = resultados;
+    return muestra;
   }
 
   it('sobre muchas semillas, entre 83% y 92% de las carreras jugadas de punta a punta ganan al menos un cinturón', () => {

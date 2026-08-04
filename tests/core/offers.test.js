@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { createRng } from '../../src/core/rng.js';
 import { crearPeleador, mediaDe } from '../../src/core/fighter.js';
 import { crearMundo } from '../../src/core/world.js';
+import { CUPO_REGIONAL, CUPO_ELITE_NACIONAL, CUPO_MUNDIAL } from '../../src/core/divisiones.js';
 import {
   NIVELES, CINTURONES, generarOferta, evaluarRiesgo, rechazarOferta, aplicarResultado,
   proximoCinturon, puedeDisputar, cinturonActual, opinionEntrenador, fraseEntrenador,
@@ -300,10 +301,28 @@ describe('cinturones', () => {
     expect(CINTURONES.map((c) => c.id)).toEqual(['regional', 'nacional', 'mundial']);
   });
 
-  it('cada escalon exige mejor ranking y paga mas', () => {
+  // v18: `rankingMax` dejó de ser un puesto en una única lista global y pasó a
+  // ser el puesto DENTRO de la división de ese cinturón — y las tres divisiones
+  // tienen tamaños distintos (20 / 10 / 30, ver los CUPO_* en divisiones.js).
+  // Así que comparar los números crudos entre sí ya no dice nada: el 12 del
+  // mundial (sobre 30) es MUCHO más exigente que el 5 del nacional (sobre 10).
+  // Lo que sigue teniendo que ser cierto —y es lo que este test siempre quiso
+  // probar— es que cada escalón pide una porción más chica de su propia tabla.
+  const CUPO_DE_LA_DIVISION = {
+    regional: CUPO_REGIONAL, nacional: CUPO_ELITE_NACIONAL, mundial: CUPO_MUNDIAL,
+  };
+  const exigencia = (c) => c.rankingMax / CUPO_DE_LA_DIVISION[c.id];
+
+  it('cada escalon exige estar mas arriba de su propia tabla, y paga mas', () => {
     for (let i = 1; i < CINTURONES.length; i++) {
-      expect(CINTURONES[i].rankingMax).toBeLessThan(CINTURONES[i - 1].rankingMax);
+      expect(exigencia(CINTURONES[i])).toBeLessThan(exigencia(CINTURONES[i - 1]));
       expect(CINTURONES[i].multiplicador).toBeGreaterThan(CINTURONES[i - 1].multiplicador);
+    }
+  });
+
+  it('ningun cinturon pide un puesto que su division no tenga', () => {
+    for (const cinturon of CINTURONES) {
+      expect(cinturon.rankingMax).toBeLessThanOrEqual(CUPO_DE_LA_DIVISION[cinturon.id]);
     }
   });
 
@@ -313,36 +332,47 @@ describe('cinturones', () => {
     expect(proximoCinturon(jugador({ titulos: CINTURONES.map((c) => c.nombre) }))).toBeNull();
   });
 
-  it('puedeDisputar depende del ranking (con el minimo de peleas ya cumplido)', () => {
+  // v18: el puesto que decide ya no es el global (`jugador.ranking`) sino el de
+  // la división DEL CINTURÓN — la misma tabla que el jugador ve en el ranking.
+  it('puedeDisputar depende del puesto en la división de ese cinturón', () => {
     const regional = CINTURONES[0];
-    const conMinimo = { record: conPeleas(PELEAS_MINIMAS_TITULO.regional) };
-    expect(puedeDisputar(jugador({ ranking: 3, ...conMinimo }), regional)).toBe(true);
-    // Pedido 1 (v6, roster de 100): regional.rankingMax pasó de 8 a 20.
-    expect(puedeDisputar(jugador({ ranking: 45, ...conMinimo }), regional)).toBe(false);
-    expect(puedeDisputar(jugador({ ranking: 1, ...conMinimo }), null)).toBe(false);
+    const conMinimo = jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
+    expect(puedeDisputar(conMinimo, regional, { regional: 3 })).toBe(true);
+    expect(puedeDisputar(conMinimo, regional, { regional: 19 })).toBe(false);
+    expect(puedeDisputar(conMinimo, null, { regional: 1 })).toBe(false);
+  });
+
+  it('sin puesto en esa división no califica, por más arriba que esté en otra', () => {
+    const [regional, nacional] = CINTURONES;
+    const conMinimo = jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.nacional) });
+    // Puntero del regional, pero todavía no entró a la tabla nacional.
+    expect(puedeDisputar(conMinimo, regional, { regional: 1 })).toBe(true);
+    expect(puedeDisputar(conMinimo, nacional, { regional: 1 })).toBe(false);
   });
 
   // v7 ("un debutante NO puede pelear por el título con 0 peleas"): el
   // ranking solo no alcanza — hace falta el mínimo de peleas profesionales
   // de PELEAS_MINIMAS_TITULO, escalonado por cinturón.
   describe('puedeDisputar exige un minimo de peleas profesionales', () => {
-    it('con ranking de sobra pero 0 peleas, no puede disputar ningun cinturon', () => {
-      const debutante = jugador({ ranking: 1, record: conPeleas(0) });
+    const PUNTERO = { regional: 1, nacional: 1, mundial: 1 };
+
+    it('con puesto de sobra pero 0 peleas, no puede disputar ningun cinturon', () => {
+      const debutante = jugador({ record: conPeleas(0) });
       for (const cinturon of CINTURONES) {
-        expect(puedeDisputar(debutante, cinturon)).toBe(false);
+        expect(puedeDisputar(debutante, cinturon, PUNTERO)).toBe(false);
       }
     });
 
     it('justo por debajo del minimo, todavia no puede', () => {
       const regional = CINTURONES[0];
-      const casiListo = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional - 1) });
-      expect(puedeDisputar(casiListo, regional)).toBe(false);
+      const casiListo = jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional - 1) });
+      expect(puedeDisputar(casiListo, regional, PUNTERO)).toBe(false);
     });
 
-    it('en cuanto llega al minimo, puede (si el ranking tambien alcanza)', () => {
+    it('en cuanto llega al minimo, puede (si el puesto tambien alcanza)', () => {
       const regional = CINTURONES[0];
-      const listo = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
-      expect(puedeDisputar(listo, regional)).toBe(true);
+      const listo = jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
+      expect(puedeDisputar(listo, regional, PUNTERO)).toBe(true);
     });
 
     it('el minimo esta escalonado: regional < nacional < mundial', () => {
@@ -353,9 +383,9 @@ describe('cinturones', () => {
     it('el mundial exige mas peleas que las que ya alcanzan para el regional', () => {
       const regional = CINTURONES[0];
       const mundial = CINTURONES[2];
-      const conMinimoRegional = jugador({ ranking: 1, record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
-      expect(puedeDisputar(conMinimoRegional, regional)).toBe(true);
-      expect(puedeDisputar(conMinimoRegional, mundial)).toBe(false);
+      const conMinimoRegional = jugador({ record: conPeleas(PELEAS_MINIMAS_TITULO.regional) });
+      expect(puedeDisputar(conMinimoRegional, regional, PUNTERO)).toBe(true);
+      expect(puedeDisputar(conMinimoRegional, mundial, PUNTERO)).toBe(false);
     });
   });
 

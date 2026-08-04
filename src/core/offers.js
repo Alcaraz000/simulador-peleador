@@ -4,7 +4,40 @@ import {
 } from './fighter.js';
 import { clamp } from './stats.js';
 import { OPINIONES_ENTRENADOR, OPINIONES_ENTRENADOR_TITULO } from '../content/coach-opinions.js';
-import { campeonDe } from './divisiones.js';
+import { campeonDe, rankingsProfesionales, puestoEn } from './divisiones.js';
+import { DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
+
+/**
+ * En qué puestos divisionales está parado un peleador: `{ regional: 4,
+ * nacional: 9 }`, solo las divisiones donde de verdad figura (nunca claves en
+ * `null`).
+ *
+ * Es el dato central del rediseño v18 y se usa para dos cosas: mostrarle al
+ * jugador contra quién se está midiendo (ver `rivalPuestos`, más abajo) y
+ * decidir para qué cinturón califica (ver `puedeDisputar`).
+ */
+export function puestosDivisionalesDe(mundo, jugador, id) {
+  return puestosEn(rankingsProfesionales(mundo, jugador), id);
+}
+
+/**
+ * La misma cuenta pero sobre unos rankings YA calculados. `rankingsProfesionales`
+ * recorre el roster entero y ordena varias veces, así que quien necesite los
+ * puestos de dos peleadores (una oferta necesita los del jugador y los del
+ * rival) los saca de una sola foto en vez de armarla dos veces.
+ */
+function puestosEn(rankings, id) {
+  return Object.fromEntries(
+    DIVISIONES_PUNTUABLES
+      .map((division) => [division, puestoEn(rankings, division, id)])
+      .filter(([, puesto]) => puesto !== null),
+  );
+}
+
+/** Los puestos divisionales del propio jugador. */
+export function puestosDelJugador(mundo, jugador) {
+  return puestosDivisionalesDe(mundo, jugador, jugador.id);
+}
 
 export const NIVELES = {
   local: { id: 'local', nombre: 'Torneo local', nivelPelea: 'amateur', multiplicadorBolsa: 0.4 },
@@ -35,17 +68,28 @@ export const NIVELES = {
  * top 5 para el mundial. Ver el informe de balance (scripts/balance-sim.mjs)
  * para la tasa de "consigue los tres cinturones" medida con estos números.
  */
+// v18 — `rankingMax` YA NO ES UN PUESTO GLOBAL. Antes era la posición entre los
+// ~180 activos del mundo (top 20 / 10 / 3 de esa lista única). Ahora es el
+// puesto DENTRO DE LA DIVISIÓN de ese mismo cinturón, que es una tabla mucho
+// más chica: el regional tiene 20 lugares, el nacional 10 y el mundial 30 (ver
+// los CUPO_* en divisiones.js). O sea que el número significa otra cosa y hubo
+// que recalibrarlo entero — no se puede leer contra los valores viejos.
+//
+// El criterio es el mismo de siempre: cada escalón tiene que ser un salto real
+// de exigencia. Estar en la mitad de arriba de la escalera de tu país habilita
+// el regional; ser de los mejores de la elite nacional habilita el nacional; y
+// para el mundial hay que ser de los tres mejores del planeta.
 export const CINTURONES = [
-  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 20, multiplicador: 1, defensasObligatorias: 2 },
-  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 10, multiplicador: 1.8, defensasObligatorias: 3 },
-  // v17.8: 7 -> 4. Con el ranking nuevo (donde el récord pesa de verdad, ver
-  // puntajeDe en divisiones.js) un jugador que gana todo trepa al top-7 mucho
-  // antes que antes, y las chances de mundial se multiplicaban: la tasa medida
-  // saltó de ~23% a 36%, muy por encima del "una de cada cuatro o cinco" que
-  // fijó el usuario. Con el tope en 4 vuelve al rango de la spec sin tocar el
-  // resto del balance (al menos un cinturón, media final y dispersión siguen
-  // dentro de sus umbrales).
-  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 3, multiplicador: 3.5, defensasObligatorias: 4 },
+  { id: 'regional', nombre: 'Cinturón regional', rankingMax: 12, multiplicador: 1, defensasObligatorias: 2 },
+  { id: 'nacional', nombre: 'Cinturón nacional', rankingMax: 5, multiplicador: 1.8, defensasObligatorias: 3 },
+  // El mundial pide estar entre los diez mejores del planeta, no entre los
+  // tres. Con el ranking viejo (un puesto entre los ~180 activos, sacado de una
+  // fórmula) el top-3 era alcanzable ganando todo; con puntos que los NPC
+  // acumulan a lo largo de carreras enteras, un jugador de ~31 peleas no llega
+  // nunca — medido: la tasa de mundial se caía al 4,5% contra el 18-28%
+  // pedido. Diez es además el número del boxeo real: se disputa un título
+  // mundial siendo contendiente rankeado, no siendo el aspirante número uno.
+  { id: 'mundial', nombre: 'Cinturón mundial', rankingMax: 12, multiplicador: 3.5, defensasObligatorias: 4 },
 ];
 
 // v7 (pedido textual del usuario: "un debutante NO puede pelear por el
@@ -91,7 +135,14 @@ export const CINTURONES = [
 // menos un cinturón" se derrumbaba): lo que faltaba era EXPERIENCIA. Con 28
 // peleas profesionales exigidas, el mundial vuelve a ser el techo de una
 // carrera larga y no un trámite de mitad de camino.
-export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 13, mundial: 28 };
+// v18: mundial 28 -> 21. Los 28 se pusieron en v17.11 para frenar a un jugador
+// que llegaba al top del ranking con media carrera por delante — el ranking de
+// entonces salía de una fórmula y se trepaba rápido. Ahora el puesto se gana
+// peleando contra gente de esa división, que ya es un freno de por sí: con los
+// dos a la vez, y un promedio de ~31 peleas profesionales por carrera, el
+// jugador recién quedaba habilitado para el mundial en las últimas tres peleas
+// y casi nunca le daba el tiempo (medido: 10% contra el 18-28% pedido).
+export const PELEAS_MINIMAS_TITULO = { regional: 8, nacional: 13, mundial: 21 };
 
 function peleasProfesionales(jugador) {
   const record = jugador.record ?? { v: 0, d: 0, e: 0 };
@@ -110,11 +161,31 @@ function cumpleMinimoDePeleas(jugador, cinturon) {
   return peleasProfesionales(jugador) >= minimo;
 }
 
-/** ¿Puede pelear por ese cinturón? Hace falta ranking Y un mínimo de peleas profesionales. */
-export function puedeDisputar(jugador, cinturon) {
+/**
+ * ¿Puede pelear por ese cinturón? Hace falta puesto Y un mínimo de peleas
+ * profesionales.
+ *
+ * v18 — DE QUÉ RANKING HABLAMOS. Hasta acá esto leía `jugador.ranking`: un
+ * único número global, el puesto entre los ~180 activos del mundo calculado con
+ * una fórmula sobre media y récord. O sea que el rediseño por puntos cambiaba
+ * lo que el jugador VE (las cuatro tablas) pero no lo que decide CUÁNDO pelea
+ * por un cinturón, y las dos cosas podían contradecirse: ser #2 del mundial por
+ * puntos y no calificar para el mundial, o al revés.
+ *
+ * Ahora cada cinturón mira SU propia división: el regional pide puesto en la
+ * tabla regional, el nacional en la nacional y el mundial en la mundial. Es la
+ * misma tabla que el jugador abre en el ranking, y se gana como dice el
+ * rediseño — peleando contra gente de esa división.
+ *
+ * `misPuestos` es `{ regional, nacional, mundial }` con solo las divisiones
+ * donde figura (ver puestosDelJugador). Sin puesto en la división del cinturón,
+ * no califica: todavía no entró a esa escalera.
+ */
+export function puedeDisputar(jugador, cinturon, misPuestos = {}) {
   if (!cinturon) return false;
   if (!cumpleMinimoDePeleas(jugador, cinturon)) return false;
-  return (jugador.ranking ?? 99) <= cinturon.rankingMax;
+  const puesto = misPuestos[cinturon.id];
+  return puesto != null && puesto <= cinturon.rankingMax;
 }
 
 const BOLSA_BASE = 3000;
@@ -229,8 +300,32 @@ export function cinturonActual(jugador) {
 // baja el "cero defensas en toda la carrera" a ~8% jugando de forma realista.
 const PROB_ASCENSO_PRIORITARIO = 0.8;
 
+// Hasta qué puesto de la división del PRÓXIMO cinturón se ofrecen
+// eliminatorias (v18). Antes era `ranking <= 6` sobre la tabla global de ~180;
+// ahora es el puesto dentro de esa división puntual, que es mucho más chica
+// (20 / 10 / 30 lugares), así que el número tiene otro significado: es "estar
+// en la mitad de arriba de la fila de retadores".
+const PUESTO_MAXIMO_ELIMINATORIA = 6;
+
+// Qué proporción de las peleas del jugador son contra compatriotas (v18), según
+// qué cinturón está buscando.
+//
+// Mientras va por el regional o el nacional pelea casi siempre de local: esas
+// dos son escaleras de SU país y solo se sube en ellas contra compatriotas (ver
+// `buscarRival`, world.js). Una vez que va por el mundial, la cartelera se le
+// da vuelta — el mundial es una tabla que cruza países, así que ahí lo que
+// suma es cruzar la frontera. Es el arco de cualquier boxeador: te hacés en el
+// circuito de casa y después salís a buscar al mundo.
+//
+// Sin esta segunda mitad el jugador se quedaba encerrado en su país: medido con
+// 0,75 fijo, "al menos un cinturón" volvía a su rango pero la tasa de mundial
+// se desplomaba a 5% (contra el 18-28% pedido), porque casi nunca enfrentaba a
+// nadie de la tabla mundial y no podía juntar puntos ahí.
+const FRACCION_RIVAL_LOCAL = { regional: 0.85, nacional: 0.8, mundial: 0.25 };
+const FRACCION_RIVAL_LOCAL_SIN_META = 0.5;
+
 function decidirNivel({
-  jugador, etapa, forzarTitulo, rng, soloRegional,
+  jugador, etapa, forzarTitulo, rng, soloRegional, misPuestos = {},
 }) {
   if (etapa === 'juvenil' || etapa === 'amateur') {
     return { nivel: NIVELES.local, cinturon: null };
@@ -250,7 +345,7 @@ function decidirNivel({
     // Si ya califica por ranking para el próximo escalón, escalar le gana a
     // estancarse: la mayoría de las veces le ofrecen ir por el título grande,
     // y solo a veces le cae la defensa del que ya tiene.
-    if (proximo && puedeDisputar(jugador, proximo)) {
+    if (proximo && puedeDisputar(jugador, proximo, misPuestos)) {
       if (rng.chance(PROB_ASCENSO_PRIORITARIO)) {
         return { nivel: NIVELES.titulo, cinturon: proximo };
       }
@@ -268,7 +363,8 @@ function decidirNivel({
   // nunca el mínimo de peleas — un prodigio con ranking altísimo pero 0
   // peleas profesionales no puede saltar la fila (ver PELEAS_MINIMAS_TITULO,
   // arriba), por más que su ranking ya alcance.
-  if (proximo && cumpleMinimoDePeleas(jugador, proximo) && (forzarTitulo || puedeDisputar(jugador, proximo))) {
+  if (proximo && cumpleMinimoDePeleas(jugador, proximo)
+    && (forzarTitulo || puedeDisputar(jugador, proximo, misPuestos))) {
     return { nivel: NIVELES.titulo, cinturon: proximo };
   }
 
@@ -284,7 +380,14 @@ function decidirNivel({
   // nada al eje de cinturones, que ya lo esperaba de todos modos. `!proximo`
   // (ya tiene los tres cinturones) preserva el comportamiento de siempre: no
   // hay "próximo mínimo" contra el cual medir.
-  const calificaParaEliminatoria = (jugador.ranking ?? 99) <= 6
+  //
+  // v18: "estar cerca" ya no es un puesto global sino el puesto EN LA DIVISIÓN
+  // del cinturón que se está buscando — que es contra la que se va a medir para
+  // disputarlo (ver puedeDisputar). Entrar a esa tabla es lo que te pone en la
+  // fila de retadores; una eliminatoria es la pelea que define quién de esa
+  // fila va primero.
+  const puestoEnSuDivision = proximo ? misPuestos[proximo.id] : null;
+  const calificaParaEliminatoria = (puestoEnSuDivision ?? 99) <= PUESTO_MAXIMO_ELIMINATORIA
     && (!proximo || cumpleMinimoDePeleas(jugador, proximo));
   return { nivel: calificaParaEliminatoria ? NIVELES.eliminatoria : NIVELES.regional, cinturon: null };
 }
@@ -304,10 +407,15 @@ export function generarOferta(rng, {
   // cupos de pelea distintos nunca terminen ofreciendo al mismo rival.
   excluirIdsExtra = [],
 }) {
+  // Los rankings se arman UNA sola vez por oferta: de esa misma foto salen los
+  // puestos del jugador (que deciden para qué cinturón califica, ver
+  // decidirNivel) y los del rival (que se le muestran en la pantalla).
+  const rankings = rankingsProfesionales(mundo, jugador);
+  const misPuestos = puestosEn(rankings, jugador.id);
   const {
     nivel, cinturon,
   } = decidirNivel({
-    jugador, etapa, forzarTitulo, rng, soloRegional,
+    jugador, etapa, forzarTitulo, rng, soloRegional, misPuestos,
   });
 
   // Pedido 3 (v6, "nada de revancha inmediata después de una pelea. Que pase
@@ -340,6 +448,13 @@ export function generarOferta(rng, {
   // hundiendo el eje de cinturones incluso jugando perfecto (medido: 3
   // cinturones caía a ~30%, luego a 0% mientras se depuraba esta misma
   // medición).
+  // Cuánto de local es la cartelera hoy: depende del cinturón que está
+  // buscando (ver FRACCION_RIVAL_LOCAL, arriba). Con los tres ya puestos no
+  // queda meta, y el reparto se vuelve mitad y mitad.
+  const metaActual = proximoCinturon(jugador);
+  const fraccionLocal = metaActual
+    ? FRACCION_RIVAL_LOCAL[metaActual.id] ?? FRACCION_RIVAL_LOCAL_SIN_META
+    : FRACCION_RIVAL_LOCAL_SIN_META;
   const disputaAlgoGrande = nivel.id === 'titulo' || nivel.id === 'defensa' || nivel.id === 'eliminatoria';
   const rankingObjetivo = disputaAlgoGrande
     ? clamp((jugador.ranking ?? 10) - rng.int(0, 3), 1, 12)
@@ -359,11 +474,21 @@ export function generarOferta(rng, {
     ))
     : null;
 
+  // v18: la carrera se construye en el circuito de casa. Regional y nacional
+  // son escaleras de UN país (ver divisiones.js), así que pelear contra
+  // extranjeros no mueve ninguna de las dos — y sin peleas locales el jugador
+  // no podía entrar a las tablas que le habilitan los cinturones. Es además lo
+  // que hace el boxeo de verdad: se sube por el ranking de tu país y recién
+  // arriba se cruza la frontera. El resto de las veces sale una internacional,
+  // que mueve el mundial (donde sí conviven todos) y le da variedad a la
+  // cartelera. Una pelea POR un cinturón se salta esto por completo: se pelea
+  // contra quien lo tiene puesto, sea de donde sea (`campeonDelCinturon`).
   const rival = campeonDelCinturon ?? (archirrival && !archirrivalEsElUltimo && !soloRegional && !excluirIdsExtra.includes(archirrival.rivalId) && rng.chance(0.3)
     ? mundo.roster.find((p) => p.id === archirrival.rivalId && !p.retirado)
     : null) ?? buscarRival(mundo, {
     excluirIds: [jugador.id, ultimoRivalId, ...excluirIdsExtra].filter(Boolean),
     rankingCerca: rankingObjetivo,
+    soloNacionalidad: rng.chance(fraccionLocal) ? jugador.nacionalidad : null,
   });
 
   if (!rival) return null;
@@ -416,6 +541,19 @@ export function generarOferta(rng, {
     // nombre en la oferta, para que el jugador no tenga que ir a buscarlo a
     // la tabla de posiciones (ver world.js: crearRoster ya lo asigna).
     rivalRanking: rival.ranking ?? null,
+    // v18: los puestos DIVISIONALES del rival — `{ regional: 4, nacional: 9 }`,
+    // solo las divisiones donde de verdad está. `rivalRanking` (arriba) es el
+    // índice global del roster ordenado por media: un número que no corresponde
+    // a ninguna de las cuatro tablas que el jugador puede abrir, así que verlo
+    // en la oferta no le decía nada. Estos sí son los puestos que va a
+    // encontrar si abre el ranking — y son los que deciden cuántos puntos vale
+    // la pelea (ver puntos-ranking.js), que es justo lo que hace que elegir
+    // rival sea una decisión y no un trámite.
+    rivalPuestos: puestosEn(rankings, rival.id),
+    // Los puestos del propio jugador en el momento de la oferta: sirven para
+    // que la pantalla pueda contrastar "él está #3, vos #11" sin recalcular
+    // nada, y son los mismos que decidieron el nivel de esta pelea.
+    misPuestos,
     nivel: nivel.id,
     nivelPelea: nivel.nivelPelea,
     bolsa,

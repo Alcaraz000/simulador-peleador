@@ -216,3 +216,65 @@ describe('renderRanking — las cuatro divisiones', () => {
     expect(marcados[0].textContent.toLowerCase()).toContain('campeon');
   });
 });
+
+// v18: el campeón sale de la numeración y va en su propio renglón, arriba de
+// la tabla — como WBC/WBA/IBF, donde el campeón no es "el #1": está aparte y
+// los retadores se numeran entre ellos.
+describe('renderRanking — el renglón del campeón', () => {
+  const campeon = (props) => ({ ...fila({ ranking: null, ...props }), esCampeon: true });
+
+  it('el campeón va en su propio renglón, fuera de la lista numerada', () => {
+    renderRanking({
+      tablas: { nacional: [fila({ id: 'a', ranking: 1 }), fila({ id: 'b', ranking: 2 })] },
+      campeones: { nacional: campeon({ id: 'c', nombre: 'El Campeon' }) },
+    });
+
+    const renglon = document.querySelector('.tabla-ranking-campeon-renglon');
+    expect(renglon.querySelector('[data-peleador="c"]')).toBeTruthy();
+    // Y no aparece entre los retadores.
+    expect(document.querySelector('.tabla-ranking-lista [data-peleador="c"]')).toBeNull();
+  });
+
+  it('el campeón no lleva número: los retadores se numeran entre ellos desde 1', () => {
+    renderRanking({
+      tablas: { nacional: [fila({ id: 'a', ranking: 1 }), fila({ id: 'b', ranking: 2 })] },
+      campeones: { nacional: campeon({ id: 'c' }) },
+    });
+
+    const enLista = [...document.querySelectorAll('.tabla-ranking-lista .tabla-ranking-puesto')];
+    expect(enLista.map((n) => n.textContent)).toEqual(['#1', '#2']);
+    const delCampeon = document.querySelector('.tabla-ranking-campeon-renglon .tabla-ranking-puesto');
+    expect(delCampeon.textContent).not.toContain('#');
+  });
+
+  it('sin campeón en esa división, no se dibuja ningún renglón', () => {
+    renderRanking({ tablas: { nacional: [fila({ id: 'a', ranking: 1 })] }, campeones: {} });
+    expect(document.querySelector('.tabla-ranking-campeon-renglon').children).toHaveLength(0);
+  });
+
+  it('el renglón cambia al cambiar de pestaña', () => {
+    renderRanking({
+      tablas: { regional: [fila({ id: 'a' })], nacional: [fila({ id: 'b' })] },
+      campeones: { regional: campeon({ id: 'cr' }), nacional: campeon({ id: 'cn' }) },
+      division: 'regional',
+    });
+
+    expect(document.querySelector('.tabla-ranking-campeon-renglon [data-peleador="cr"]')).toBeTruthy();
+    document.querySelector('.tabla-ranking-pestana[data-division="nacional"]').click();
+    expect(document.querySelector('.tabla-ranking-campeon-renglon [data-peleador="cn"]')).toBeTruthy();
+    expect(document.querySelector('.tabla-ranking-campeon-renglon [data-peleador="cr"]')).toBeNull();
+  });
+
+  // El caso que hace interesante al sistema: el campeón se cayó del cupo por
+  // inactividad y ya no está entre los retadores, pero sigue teniendo el
+  // cinturón — antes de v18 desaparecía de la pantalla por completo.
+  it('un campeón que se cayó de la tabla igual se muestra', () => {
+    renderRanking({
+      tablas: { mundial: [fila({ id: 'a', ranking: 1 })] },
+      campeones: { mundial: campeon({ id: 'caido', nombre: 'El Caido' }) },
+    });
+
+    const renglon = document.querySelector('.tabla-ranking-campeon-renglon');
+    expect(renglon.textContent).toContain('El Caido');
+  });
+});

@@ -168,13 +168,32 @@ export function rankingsProfesionales(mundo, jugador = null) {
   const delPais = pool.filter((p) => p.nacionalidad === local);
   // Cada tabla se ordena por SUS puntos: se puede subir en el mundial sin
   // moverse en el nacional (ganándole a un extranjero) y al revés. El nacional
-  // sale del regional, y solo entran los que además tienen puntos ahí.
-  const regional = ordenarPorPuntos(delPais, 'regional')
-    .filter((p) => puntosEn(p, 'regional') > 0)
-    .slice(0, CUPO_REGIONAL);
-  const nacional = ordenarPorPuntos(regional, 'nacional')
-    .filter((p) => puntosEn(p, 'nacional') > 0)
-    .slice(0, CUPO_ELITE_NACIONAL);
+  // sale del regional.
+  //
+  // v18, segunda vuelta — POR QUÉ NO HAY UN FILTRO `puntos > 0` ACÁ:
+  //
+  // La primera versión solo dejaba entrar a la tabla a quien tuviera puntos en
+  // esa división. Verificado a 12 años parecía sano (20/10/23), pero medido a
+  // 25 —una carrera entera— las tres tablas se derrumbaban a 2/1/5, y el total
+  // de puntos del mundo caía un 94%. La descomposición del flujo, año por año:
+  //
+  //   entre los que siguen activos, el mundo GANA ~400 puntos por año
+  //   los que se retiran se llevan entre 3.000 y 7.400
+  //   los que debutan entran con cero
+  //
+  // O sea que las peleas funcionan bien; lo que no cerraba era el recambio
+  // generacional. Y el filtro convertía ese drenaje en una espiral: menos gente
+  // en la tabla -> menos rivales que puedan dar puntos (solo se suma peleando
+  // contra alguien que ESTÉ en la división) -> menos puntos todavía -> tabla
+  // más chica. Una vez que arrancaba, no había vuelta atrás.
+  //
+  // Sin el filtro, la tabla es siempre el top N de su pool y nunca se vacía,
+  // así que siempre hay contra quién sumar: el bucle se vuelve estabilizador en
+  // vez de explosivo. El orden lo siguen dando los puntos —nada de eso cambia—
+  // y el que está último con cero puntos es exactamente lo que dice ser: el
+  // último de la tabla, al que cualquiera que gane le pasa por arriba.
+  const regional = ordenarPorPuntos(delPais, 'regional').slice(0, CUPO_REGIONAL);
+  const nacional = ordenarPorPuntos(regional, 'nacional').slice(0, CUPO_ELITE_NACIONAL);
 
   const porPais = new Map();
   for (const peleador of pool) {
@@ -184,12 +203,82 @@ export function rankingsProfesionales(mundo, jugador = null) {
   }
   const eliteDeCadaPais = [...porPais.values()].flatMap((peleadores) => ordenarPorPuntos(
     ordenarPorPuntos(peleadores, 'regional').slice(0, CUPO_REGIONAL), 'nacional',
-  ).filter((p) => puntosEn(p, 'nacional') > 0).slice(0, CUPO_ELITE_NACIONAL));
-  const mundial = ordenarPorPuntos(eliteDeCadaPais, 'mundial')
-    .filter((p) => puntosEn(p, 'mundial') > 0)
-    .slice(0, CUPO_MUNDIAL);
+  ).slice(0, CUPO_ELITE_NACIONAL));
+  const mundial = ordenarPorPuntos(eliteDeCadaPais, 'mundial').slice(0, CUPO_MUNDIAL);
 
   return { regional, nacional, mundial };
+}
+
+/**
+ * La foto de rankings que necesita la tanda anual de peleas del mundo: la
+ * escalera regional/nacional DE CADA PAÍS (no solo la del jugador) más el
+ * mundial, que es único y cruza países.
+ *
+ * Hace falta porque "regional" y "nacional" son tablas de UN país: un ghanés
+ * sube o baja en la escalera ghanesa, no en la argentina. `rankingsProfesionales`
+ * arma la del país local, que es la que mira el jugador; esta arma todas, que
+ * es lo que hace falta para que el mundo entero viva. Sin esto los extranjeros
+ * solo podían PERDER puntos nacionales (nunca ganarlos, porque nunca figuraban
+ * en la única tabla que se calculaba), y con los años la elite de cada país
+ * —de donde sale el mundial— se volvía arbitraria.
+ *
+ * @returns {{porPais: Map<string, {regional: object[], nacional: object[]}>, mundial: object[]}}
+ */
+export function fotoDeRankings(roster) {
+  const activos = (roster ?? []).filter((p) => !p.retirado);
+  const porPais = new Map();
+  for (const peleador of activos) {
+    const pais = peleador.nacionalidad ?? '??';
+    if (!porPais.has(pais)) porPais.set(pais, []);
+    porPais.get(pais).push(peleador);
+  }
+
+  const tablas = new Map();
+  const eliteDeCadaPais = [];
+  for (const [pais, peleadores] of porPais) {
+    const regional = ordenarPorPuntos(peleadores, 'regional').slice(0, CUPO_REGIONAL);
+    const nacional = ordenarPorPuntos(regional, 'nacional').slice(0, CUPO_ELITE_NACIONAL);
+    tablas.set(pais, { regional, nacional });
+    eliteDeCadaPais.push(...nacional);
+  }
+
+  return {
+    porPais: tablas,
+    mundial: ordenarPorPuntos(eliteDeCadaPais, 'mundial').slice(0, CUPO_MUNDIAL),
+  };
+}
+
+/**
+ * Los puestos de los DOS peleadores de un cruce, en las divisiones que de
+ * verdad comparten.
+ *
+ * Regional y nacional son escaleras de un país: solo se mueven si los dos
+ * corren la misma (el caso que marcó el usuario al revés — "ganarle a un
+ * extranjero del mundial sube en el mundial y no toca el nacional"). El
+ * mundial, en cambio, es una sola tabla para todos y siempre cuenta.
+ */
+export function puestosDelCruce(foto, a, b) {
+  const puestos = (id) => {
+    const salida = {};
+    const mundial = puestoEn({ mundial: foto.mundial }, 'mundial', id);
+    if (mundial !== null) salida.mundial = mundial;
+    return salida;
+  };
+
+  const puestosA = puestos(a.id);
+  const puestosB = puestos(b.id);
+
+  if (a.nacionalidad === b.nacionalidad) {
+    const tablas = foto.porPais.get(a.nacionalidad ?? '??');
+    for (const division of ['regional', 'nacional']) {
+      const puestoA = puestoEn(tablas ?? {}, division, a.id);
+      const puestoB = puestoEn(tablas ?? {}, division, b.id);
+      if (puestoA !== null) puestosA[division] = puestoA;
+      if (puestoB !== null) puestosB[division] = puestoB;
+    }
+  }
+
+  return [puestosA, puestosB];
 }
 
 /**

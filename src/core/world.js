@@ -1,9 +1,9 @@
 import { crearRoster, generarDebutantes, FRACCION_LOCAL_AMATEUR } from './roster.js';
 import {
   campeonesIniciales, puntajeDe, rankingsDe, DIVISIONES, CUPO_ELITE_NACIONAL,
-  rankingsProfesionales, puestoEn,
+  fotoDeRankings, puestosDelCruce,
 } from './divisiones.js';
-import { aplicarPuntos, decaerPuntos, DIVISIONES_PUNTUABLES } from './puntos-ranking.js';
+import { aplicarPuntos, decaerPuntos } from './puntos-ranking.js';
 import { mediaDe, recordTexto } from './fighter.js';
 import { clamp } from './stats.js';
 import { rendimientoDeMejora } from './talento.js';
@@ -12,6 +12,46 @@ import { rendimientoDeMejora } from './talento.js';
 
 export const EDAD_RETIRO = 40;
 export const ANIO_INICIAL = 2026;
+
+/**
+ * Ordena a los activos de forma que, al tomarlos de a dos, la enorme mayoría de
+ * los cruces caiga DENTRO de un mismo país: se pelea en el circuito de casa, y
+ * de vez en cuando se cruza la frontera.
+ *
+ * Es lo que alimenta las escaleras nacionales (ver fotoDeRankings y
+ * puestosDelCruce, divisiones.js): regional y nacional son tablas de un país,
+ * así que solo un cruce entre compatriotas las mueve. Con el sorteo global de
+ * antes y doce países en juego, casi ningún cruce caía dentro del mismo país y
+ * los rankings nacionales se quedaban sin nada que los moviera.
+ *
+ * Los impares de cada país (uno como mucho por país) se juntan al final y se
+ * emparejan entre ellos: esos son los cruces internacionales, que existen,
+ * mueven solo el mundial, y son minoría — igual que en el boxeo de verdad.
+ *
+ * Determinista con la semilla, como todo acá: usa `rng.shuffle`, nunca
+ * Math.random.
+ */
+export function emparejarPorPais(rng, activos) {
+  const porPais = new Map();
+  for (const peleador of activos) {
+    const pais = peleador.nacionalidad ?? '??';
+    if (!porPais.has(pais)) porPais.set(pais, []);
+    porPais.get(pais).push(peleador);
+  }
+
+  const ordenado = [];
+  const sobrantes = [];
+  // El orden de recorrida sale del array de entrada (que ya viene barajado por
+  // quien llama), no del orden de inserción del Map: así dos años con el mismo
+  // roster pero distinto sorteo no arman siempre las mismas parejas.
+  for (const paisanos of porPais.values()) {
+    const mezclados = rng.shuffle(paisanos);
+    if (mezclados.length % 2 === 1) sobrantes.push(mezclados.pop());
+    ordenado.push(...mezclados);
+  }
+  ordenado.push(...rng.shuffle(sobrantes));
+  return ordenado;
+}
 
 // Cuántos de los activos son "la parte alta de la tabla" (ver avanzarMundo):
 // sus peleas entre sí SÍ generan noticia; el resto de la categoría igual
@@ -28,7 +68,10 @@ export const CANTIDAD_AMATEUR = 24;
 // Cuántos peleadores del país del jugador tiene que haber SIEMPRE en
 // actividad. Es el piso que sostiene las divisiones regional y nacional: por
 // debajo de esto la escalera local se queda sin escalones.
-export const MINIMO_LOCALES = 26;
+// v18: 26 -> 46, escalado junto con CANTIDAD_MUNDO (100 -> 180, career.js). El
+// piso protege exactamente lo mismo que antes — que la escalera local no se
+// quede sin escalones — pero medido contra un mundo casi el doble de grande.
+export const MINIMO_LOCALES = 46;
 
 export function crearMundo(rng, {
   disciplina, categoria, cantidad = 10, apodosReservados = [], nacionalidadLocal = null,
@@ -331,16 +374,21 @@ export function avanzarMundo(mundo, rng, {
       [...activos].sort((x, y) => mediaDe(y) - mediaDe(x)).slice(0, TAMANO_ELITE).map((p) => p.id),
     );
     // Foto de los rankings ANTES de la tanda de peleas del año: todos los
-    // cruces se puntúan contra la misma tabla.
-    const fotoRankings = rankingsProfesionales({ roster, nacionalidadLocal: mundo.nacionalidadLocal ?? null });
-    const puestosDe = (id) => Object.fromEntries(
-      DIVISIONES_PUNTUABLES
-        .map((division) => [division, puestoEn(fotoRankings, division, id)])
-        .filter(([, puesto]) => puesto !== null),
-    );
+    // cruces se puntúan contra la misma tabla. Es la de CADA país (más el
+    // mundial), no solo la del país del jugador — ver fotoDeRankings,
+    // divisiones.js, para por qué eso importa.
+    const fotoRankings = fotoDeRankings(roster);
     const pelearonEsteAnio = new Set();
 
-    const mezclados = rng.shuffle(activos);
+    // Las carteleras se arman sobre todo entre compatriotas: se pelea en el
+    // circuito de tu país y de vez en cuando cruzás la frontera. Antes el
+    // sorteo era global —cualquiera contra cualquiera del planeta—, y eso
+    // dejaba las escaleras nacionales sin alimento: con doce países, casi
+    // ningún cruce caía dentro de un mismo país, así que el ranking nacional
+    // de cada uno se movía poquísimo y sus puntos solo bajaban. Emparejar de
+    // local primero es a la vez lo más creíble y lo que hace que la cadena
+    // regional -> nacional -> mundial tenga de dónde nutrirse.
+    const mezclados = emparejarPorPais(rng, rng.shuffle(activos));
     for (let i = 0; i + 1 < mezclados.length; i += 2) {
       const a = mezclados[i];
       const b = mezclados[i + 1];
@@ -360,8 +408,13 @@ export function avanzarMundo(mundo, rng, {
       // Se calcula con la foto de puestos tomada ANTES de la tanda, para que
       // todos los cruces del año se resuelvan contra el mismo ranking y no
       // dependa del orden en que salieron sorteados.
-      const puestosGanador = puestosDe(ganador.id);
-      const puestosPerdedor = puestosDe(perdedor.id);
+      //
+      // `puestosDelCruce` es el que sabe qué divisiones comparten los dos: el
+      // mundial siempre, y regional/nacional solo entre compatriotas (son
+      // escaleras de un país).
+      const [puestosDeA, puestosDeB] = puestosDelCruce(fotoRankings, a, b);
+      const puestosGanador = ganador === a ? puestosDeA : puestosDeB;
+      const puestosPerdedor = ganador === a ? puestosDeB : puestosDeA;
       ganador.puntosRanking = aplicarPuntos(ganador, {
         resultado: 'v', misPuestos: puestosGanador, puestosRival: puestosPerdedor,
       });
@@ -593,40 +646,85 @@ export function tablaRanking(mundo, jugador) {
  * división, no una posición global recortada — que es lo que hace que "primero
  * en el regional" y "primero en el nacional" sean cosas distintas.
  *
- * Cada fila trae además `esCampeon`: quién tiene ese cinturón puesto hoy
- * (`mundo.campeones`, divisiones.js). No siempre es el #1 — se puede ser
- * campeón y haber bajado en la tabla, que es justo lo que hace que defender
- * signifique algo.
+ * v18: el CAMPEÓN sale de la numeración y viaja aparte (`campeones`), para que
+ * la pantalla lo pinte en su propio renglón arriba de todo mientras tenga el
+ * cinturón puesto — como las tablas de verdad (WBC/WBA/IBF), donde el campeón
+ * no es "el #1", está fuera de la lista de retadores y los retadores se numeran
+ * entre ellos. Esto reemplaza la idea de darle un piso de puntos y arregla de
+ * paso el bug de "el campeón aparece #9".
+ *
+ * El campeón puede NO estar en su propia tabla: si sus puntos decayeron y se
+ * cayó del cupo, `rankings[division]` ya no lo contiene y antes desaparecía de
+ * la pantalla por completo. Por eso se lo busca en el mundo entero, no en la
+ * lista — y es justo el caso que hace interesante al sistema: el que te tiene
+ * que dar la revancha no es el mejor rankeado, es el que lo tiene.
+ *
+ * @returns {{tablas: object, campeones: object}} `tablas` son las filas
+ *   numeradas (sin el campeón); `campeones[division]` es su fila, o `null`.
  */
 export function tablasDeDivisiones(mundo, jugador) {
   const rankings = rankingsDe(mundo, jugador);
-  const campeones = mundo.campeones ?? {};
+  const duenios = mundo.campeones ?? {};
+  // Dónde buscar al campeón si se cayó de su tabla. Incluye al jugador (que no
+  // vive en el roster) y excluye a los retirados: un peleador que colgó los
+  // guantes no sigue ocupando el renglón de campeón.
+  const todos = [...(mundo.roster ?? []), ...(jugador ? [jugador] : [])];
+  const buscar = (id) => (id ? todos.find((p) => p.id === id && !p.retirado) ?? null : null);
+
+  // En la tabla amateur el récord que corresponde es el AMATEUR. El jugador
+  // arrastra los dos (las peleas amateurs nunca tocan `record` — ver
+  // aplicarResultado, offers.js), y sin esto un profesional 14-2 aparecía con
+  // ese récord en el circuito de formación, que es un torneo del que ya se fue.
+  const armarFila = (peleador, division) => {
+    const esJugador = peleador.id === jugador?.id;
+    const conRecordDeLaDivision = division === 'amateur' && esJugador
+      ? { ...peleador, record: peleador.recordAmateur ?? peleador.record }
+      : peleador;
+    return filaDe(conRecordDeLaDivision, esJugador);
+  };
+
   const tablas = {};
+  const campeones = {};
   for (const division of DIVISIONES) {
-    tablas[division] = (rankings[division] ?? []).map((peleador, indice) => {
-      const esJugador = peleador.id === jugador?.id;
-      // En la tabla amateur el récord que corresponde es el AMATEUR. El
-      // jugador arrastra los dos (las peleas amateurs nunca tocan
-      // `record` — ver aplicarResultado, offers.js), y sin esto un
-      // profesional 14-2 aparecía con ese récord en el circuito de
-      // formación, que es un torneo del que ya se fue.
-      const conRecordDeLaDivision = division === 'amateur' && esJugador
-        ? { ...peleador, record: peleador.recordAmateur ?? peleador.record }
-        : peleador;
-      return {
-        ...filaDe(conRecordDeLaDivision, esJugador),
+    const campeon = buscar(duenios[division]);
+    campeones[division] = campeon
+      ? { ...armarFila(campeon, division), esCampeon: true, ranking: null }
+      : null;
+    // Los retadores se numeran ENTRE ELLOS: sacado el campeón, el que estaba
+    // detrás suyo pasa a ser el #1 de la lista.
+    tablas[division] = (rankings[division] ?? [])
+      .filter((peleador) => peleador.id !== campeon?.id)
+      .map((peleador, indice) => ({
+        ...armarFila(peleador, division),
         ranking: indice + 1,
-        esCampeon: campeones[division] === peleador.id,
-      };
-    });
+        esCampeon: false,
+      }));
   }
-  return tablas;
+  return { tablas, campeones };
 }
 
-export function buscarRival(mundo, { excluirIds = [], rankingCerca = null } = {}) {
-  const candidatos = mundo.roster.filter(
+/**
+ * `soloNacionalidad` (v18): restringe la búsqueda a rivales de ese país, con
+ * caída al pool completo si no queda ninguno.
+ *
+ * Es el equivalente, del lado del jugador, del emparejamiento por país de
+ * `avanzarMundo` (ver emparejarPorPais): regional y nacional son escaleras de
+ * UN país, así que solo peleando contra compatriotas se sube en ellas. Sin
+ * esto, al jugador le tocaban rivales de los doce países por igual y casi
+ * ninguna de sus peleas movía la escalera que necesitaba para llegar a un
+ * cinturón — medido: "al menos un cinturón" caía a 62% contra el 83-92%
+ * esperado.
+ */
+export function buscarRival(mundo, {
+  excluirIds = [], rankingCerca = null, soloNacionalidad = null,
+} = {}) {
+  const todos = mundo.roster.filter(
     (p) => !p.retirado && !p.esJugador && !excluirIds.includes(p.id),
   );
+  const delPais = soloNacionalidad
+    ? todos.filter((p) => p.nacionalidad === soloNacionalidad)
+    : [];
+  const candidatos = delPais.length > 0 ? delPais : todos;
   if (candidatos.length === 0) return null;
   if (rankingCerca === null) return candidatos[0];
   return candidatos.reduce((mejor, actual) => {

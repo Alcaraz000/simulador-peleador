@@ -33,12 +33,18 @@ import { nombreConApodo } from '../../core/fighter.js';
 // puede tener el cinturon puesto y haber bajado en la tabla, y ver eso es
 // media gracia del asunto: el que te tiene que dar la revancha no es el mejor
 // rankeado, es el que lo tiene.
+// v18: el campeón ya no lleva número (va en su propio renglón, ver
+// `filaCampeon`), así que el hueco del puesto se rellena con la palabra que
+// ocupa su lugar — "campeon" — en vez de un "#null".
 function filaRanking(fila) {
   return el('div', {
     class: `tabla-ranking-fila${fila.esJugador ? ' tabla-ranking-fila-jugador' : ''}${fila.esCampeon ? ' tabla-ranking-fila-campeon' : ''}`,
     dataset: { peleador: fila.id, campeon: fila.esCampeon ? 'si' : null },
   }, [
-    el('span', { class: 'tabla-ranking-puesto', text: `#${fila.ranking}` }),
+    el('span', {
+      class: 'tabla-ranking-puesto',
+      text: fila.ranking === null || fila.ranking === undefined ? 'CAMP' : `#${fila.ranking}`,
+    }),
     bandera(fila.nacionalidad, { ancho: 20 }),
     el('span', { class: 'tabla-ranking-nombre', text: nombreConApodo(fila) }),
     fila.esCampeon ? el('span', { class: 'tabla-ranking-cinturon', text: 'campeon' }) : null,
@@ -64,12 +70,24 @@ const DIVISIONES_VISIBLES = [
  * parado hoy, que es la que le importa - si todavia no entro a ninguna, en la
  * primera con gente.
  *
- * @param {{ tablas: object, division?: string, onCerrar?: () => void }} props
+ * `campeones` (v18) trae, por division, la fila del que tiene el cinturon
+ * puesto: va en un renglon propio ARRIBA de la numeracion y no ocupa un puesto,
+ * como en las tablas de verdad. Puede no estar en la lista de abajo (si se cayo
+ * del cupo) y eso esta bien: sigue siendo el campeon.
+ *
+ * @param {{ tablas: object, campeones?: object, division?: string, onCerrar?: () => void }} props
  * @returns el handle de abrirPopup (mismo contrato que renderTienda).
  */
-export function renderRanking({ tablas = {}, division = null, onCerrar = () => {} } = {}) {
-  const disponibles = DIVISIONES_VISIBLES.filter((d) => (tablas[d.id] ?? []).length > 0);
-  const tieneAlJugador = (id) => (tablas[id] ?? []).some((f) => f.esJugador);
+export function renderRanking({
+  tablas = {}, campeones = {}, division = null, onCerrar = () => {},
+} = {}) {
+  // Una division se muestra si tiene retadores O un campeon: un cinturon con
+  // dueno y la tabla todavia vacia sigue siendo algo que mostrar.
+  const disponibles = DIVISIONES_VISIBLES.filter(
+    (d) => (tablas[d.id] ?? []).length > 0 || campeones[d.id],
+  );
+  const tieneAlJugador = (id) => (tablas[id] ?? []).some((f) => f.esJugador)
+    || Boolean(campeones[id]?.esJugador);
   // Abre en la división MÁS ALTA donde esté el jugador, no en la primera que
   // lo tenga: un profesional que además figura en el ranking amateur (porque
   // peleó ahí de pibe) quiere ver el mundial, no el circuito del que ya se
@@ -82,8 +100,19 @@ export function renderRanking({ tablas = {}, division = null, onCerrar = () => {
   const lista = el('div', { class: 'stack tabla-ranking-lista' });
   const bajada = el('p', { class: 'medio tabla-ranking-bajada' });
   const pestanas = el('div', { class: 'tabla-ranking-pestanas' });
+  // El renglon del campeon vive FUERA del contenedor con scroll: la lista de
+  // retadores se scrollea debajo suyo y el que tiene el cinturon queda siempre
+  // a la vista, que es la mitad de la gracia de sacarlo de la numeracion.
+  const renglonCampeon = el('div', { class: 'tabla-ranking-campeon-renglon' });
 
   function pintar(def) {
+    const campeon = campeones[def.id] ?? null;
+    renglonCampeon.replaceChildren(...(campeon
+      ? [
+        el('span', { class: 'tabla-ranking-campeon-titulo etiqueta', text: 'Campeon' }),
+        filaRanking(campeon),
+      ]
+      : []));
     const filas = tablas[def.id] ?? [];
     lista.replaceChildren(...(filas.length > 0
       ? filas.map(filaRanking)
@@ -113,7 +142,7 @@ export function renderRanking({ tablas = {}, division = null, onCerrar = () => {
     }));
   }
 
-  const contenido = el('div', { class: 'tabla-ranking' }, [pestanas, bajada, lista]);
+  const contenido = el('div', { class: 'tabla-ranking' }, [pestanas, bajada, renglonCampeon, lista]);
   const popup = abrirPopup({ titulo: 'Rankings', contenido, onCerrar });
   if (inicial) pintar(inicial);
   return popup;
